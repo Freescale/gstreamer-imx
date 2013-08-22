@@ -1,0 +1,16 @@
+#!/usr/bin/env python
+
+
+def configure(conf):
+	pass
+
+
+def build(bld):
+	bld(
+		features = ['c', 'cshlib'],
+		includes = ['.', '../..'],
+		uselib = bld.env['COMMON_USELIB'],
+		target = 'gstfslcommon',
+		source = bld.path.ant_glob('*.c')
+	)
+

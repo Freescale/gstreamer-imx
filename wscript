@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+
 from waflib.Build import BuildContext, CleanContext, InstallContext, UninstallContext
 
 top = '.'
@@ -94,6 +95,8 @@ def configure(conf):
 	conf.check_cfg(package = 'libfslvpuwrap', uselib_store = 'FSLVPUWRAPPER', args = '--cflags --libs', mandatory = 1)
 
 
+	# misc definitions & env vars
+
 	conf.env['PLUGIN_INSTALL_PATH'] = os.path.expanduser(conf.options.plugin_install_path)
 
 	conf.define('GST_PACKAGE_NAME', conf.options.with_package_name)
@@ -101,23 +104,18 @@ def configure(conf):
 	conf.define('PACKAGE', "gst-fsl")
 	conf.define('VERSION', "1.0")
 
+	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_VIDEO', 'FSLVPUWRAPPER', 'PTHREAD', 'M']
+
+
+	conf.recurse('src/common')
+	conf.recurse('src/decoder')
+
 
 	conf.write_config_header('config.h')
 
 
 
 def build(bld):
-	common_source = bld.path.ant_glob('src/common/*.c')
-	common_uselib = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_VIDEO', 'FSLVPUWRAPPER', 'PTHREAD', 'M']
-
-	bld(
-		features = ['c', 'cshlib'],
-		includes = ['.'],
-		uselib = common_uselib,
-		target = 'gstfsl',
-		source = common_source + bld.path.ant_glob('src/decoder/*.c'),
-		install_path = bld.env['PLUGIN_INSTALL_PATH']
-	)
-
-
+	bld.recurse('src/common')
+	bld.recurse('src/decoder')
 
