@@ -995,3 +995,30 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	return TRUE;
 }
 
+
+
+
+
+static gboolean plugin_init(GstPlugin *plugin)
+{
+	gst_fsl_vpu_init_alloc_debug();
+
+	gboolean ret = TRUE;
+	ret = ret && gst_element_register(plugin, "fslvpudec", GST_RANK_PRIMARY + 1, gst_fsl_vpu_dec_get_type());
+	return ret;
+}
+
+
+
+GST_PLUGIN_DEFINE(
+	GST_VERSION_MAJOR,
+	GST_VERSION_MINOR,
+	fslvpudec,
+	"hardware-accelerated video decoding using the Freescale VPU engine",
+	plugin_init,
+	VERSION,
+	"LGPL",
+	GST_PACKAGE_NAME,
+	GST_PACKAGE_ORIGIN
+)
+
