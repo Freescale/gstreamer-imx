@@ -67,7 +67,7 @@ def configure(conf):
 	elif conf.env['LINKFLAGS']:
 		check_compiler_flags_2(conf, '', conf.env['LINKFLAGS'], "Testing linker flags %s" % ' '.join(conf.env['LINKFLAGS']))
 
-	compiler_flags = ['-Wextra', '-Wall', '-std=c99', '-pedantic', '-fPIC', '-DPIC']
+	compiler_flags = ['-Wextra', '-Wall', '-std=gnu99', '-pedantic', '-fPIC', '-DPIC']
 	if conf.options.enable_debug:
 		compiler_flags += ['-O0', '-g3', '-ggdb']
 	else:
