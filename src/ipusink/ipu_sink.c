@@ -191,7 +191,14 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 
 	ipu_sink->priv->task.input.paddr = (dma_addr_t)(fsl_vpu_meta->framebuffer->pbufY);
 
-	GST_DEBUG_OBJECT(ipu_sink, "input size: %d x %d  phys addr: %p", video_meta->width, video_meta->height, ipu_sink->priv->task.input.paddr);
+	GST_DEBUG_OBJECT(
+		ipu_sink,
+		"input size: %d x %d  (actually: %d x %d  X padding: %d  Y padding: %d)  phys addr: %p",
+		video_meta->width, video_meta->height,
+		ipu_sink->priv->task.input.width, ipu_sink->priv->task.input.height,
+		video_meta->stride[0] - video_meta->width, num_extra_rows,
+		ipu_sink->priv->task.input.paddr
+	);
 
 	if (ioctl(ipu_sink->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_sink->priv->task)) == -1)
 	{
