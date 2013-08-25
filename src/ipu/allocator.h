@@ -27,6 +27,46 @@
 G_BEGIN_DECLS
 
 
+typedef struct _GstFslIpuAllocator GstFslIpuAllocator;
+typedef struct _GstFslIpuAllocatorClass GstFslIpuAllocatorClass;
+typedef struct _GstFslIpuMemory GstFslIpuMemory;
+
+
+#define GST_TYPE_FSL_IPU_ALLOCATOR             (gst_fsl_ipu_allocator_get_type())
+#define GST_FSL_IPU_ALLOCATOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_IPU_ALLOCATOR, GstFslIpuAllocator))
+#define GST_FSL_IPU_ALLOCATOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_IPU_ALLOCATOR, GstFslIpuAllocatorClass))
+#define GST_IS_FSL_IPU_ALLOCATOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_IPU_ALLOCATOR))
+#define GST_IS_FSL_IPU_ALLOCATOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_IPU_ALLOCATOR))
+
+#define GST_FSL_IPU_ALLOCATOR_MEM_TYPE "FslIpuMemory"
+
+
+struct _GstFslIpuAllocator
+{
+	GstAllocator parent;
+	int fd;
+};
+
+
+struct _GstFslIpuAllocatorClass
+{
+	GstAllocatorClass parent_class;
+};
+
+
+struct _GstFslIpuMemory
+{
+	GstMemory mem;
+
+	gpointer mapped_virt_addr;
+	gpointer phys_addr;
+};
+
+
+GType gst_fsl_ipu_allocator_get_type(void);
+
+GstAllocator* gst_fsl_ipu_allocator_new(int ipu_fd);
+
 gpointer gst_fsl_ipu_alloc_phys_mem(int ipu_fd, gsize size);
 gboolean gst_fsl_ipu_free_phys_mem(int ipu_fd, gpointer mem);
 
