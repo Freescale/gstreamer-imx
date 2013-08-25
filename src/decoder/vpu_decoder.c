@@ -227,6 +227,7 @@ void gst_fsl_vpu_dec_init(GstFslVpuDec *vpu_dec)
 
 	vpu_dec->codec_data = NULL;
 	vpu_dec->current_framebuffers = NULL;
+	vpu_dec->current_output_state = NULL;
 
 	vpu_dec->virt_dec_mem_blocks = NULL;
 	vpu_dec->phys_dec_mem_blocks = NULL;
@@ -589,6 +590,12 @@ static gboolean gst_fsl_vpu_dec_stop(GstVideoDecoder *decoder)
 		vpu_dec->codec_data = NULL;
 	}
 
+	if (vpu_dec->current_output_state != NULL)
+	{
+		gst_video_codec_state_unref(vpu_dec->current_output_state);
+		vpu_dec->current_output_state = NULL;
+	}
+
 	g_mutex_lock(&inst_counter_mutex);
 	if (klass->inst_counter > 0)
 	{
@@ -641,6 +648,13 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 		vpu_dec->codec_data = NULL;
 	}
 
+	/* Clean up old output state */
+	if (vpu_dec->current_output_state != NULL)
+	{
+		gst_video_codec_state_unref(vpu_dec->current_output_state);
+		vpu_dec->current_output_state = NULL;
+	}
+
 	/* Close old decoder instance */
 	gst_fsl_vpu_dec_close_decoder(vpu_dec);
 
@@ -691,7 +705,8 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 		return FALSE;
 	}
 
-	gst_video_decoder_set_output_state(decoder, GST_VIDEO_FORMAT_I420, state->info.width, state->info.height, state);
+	/* Ref the output state, to be able to add information from the init_info structure to it later */
+	vpu_dec->current_output_state = gst_video_codec_state_ref(state);
 
 	/* Copy the buffer, to make sure the codec_data lifetime does not depend on the caps */
 	if (codec_data != NULL)
@@ -789,6 +804,16 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		 * This point is always reached after set_format() was called,
 		 * and always before a frame is output */
 		vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(vpu_dec->handle, &(vpu_dec->init_info));
+
+		/* Add information from init_info to the output state and set it to be the output state for this decoder */
+		if (vpu_dec->current_output_state != NULL)
+		{
+			GstVideoCodecState *state = vpu_dec->current_output_state;
+			GST_VIDEO_INFO_INTERLACE_MODE(&(state->info)) = vpu_dec->init_info.nInterlace ? GST_VIDEO_INTERLACE_MODE_INTERLEAVED : GST_VIDEO_INTERLACE_MODE_PROGRESSIVE;
+			gst_video_decoder_set_output_state(decoder, GST_VIDEO_FORMAT_I420, state->info.width, state->info.height, state);
+			gst_video_codec_state_unref(vpu_dec->current_output_state);
+			vpu_dec->current_output_state = NULL;
+		}
 	}
 
 	if (buffer_ret_code & VPU_DEC_NO_ENOUGH_INBUF)

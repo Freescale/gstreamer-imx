@@ -59,6 +59,8 @@ struct _GstFslVpuDec
 
 	GstFslVpuFramebuffers *current_framebuffers;
 
+	GstVideoCodecState *current_output_state;
+
 	GSList *virt_dec_mem_blocks, *phys_dec_mem_blocks;
 };
 
