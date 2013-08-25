@@ -113,7 +113,8 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_caps);
-	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_propose_allocation);
+	/* TODO: Disabled for now, until the strange performance drop when using this is explained */
+	/*base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_propose_allocation);*/
 	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_show_frame);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_finalize);
 }
