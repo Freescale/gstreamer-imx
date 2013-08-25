@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <linux/mxcfb.h>
 #include <linux/ipu.h>
@@ -62,9 +63,14 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 struct _GstFslIpuSinkPrivate
 {
 	int ipu_fd, framebuffer_fd;
+
 	struct fb_var_screeninfo fb_var;
 	struct fb_fix_screeninfo fb_fix;
+
 	struct ipu_task task;
+
+	/* only used if upstream isn't sending in buffers with physical memory */
+	dma_addr_t display_mem_block;
 };
 
 
@@ -115,6 +121,8 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 
 	ipu_sink->priv->framebuffer_fd = -1;
 	ipu_sink->priv->ipu_fd = -1;
+
+	ipu_sink->priv->display_mem_block = 0;
 
 	ipu_sink->priv->ipu_fd = open("/dev/mxc_ipu", O_RDWR, 0);
 	if (ipu_sink->priv->ipu_fd < 0)
@@ -173,28 +181,32 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 
 static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 {
-	gboolean ret;
 	GstFslIpuSink *ipu_sink;
 
 	ipu_sink = GST_FSL_IPU_SINK(sink);
 
 	gst_video_info_init(&(ipu_sink->video_info));
-	ret = gst_video_info_from_caps(&(ipu_sink->video_info), caps);
-	if (ret)
+	if (!gst_video_info_from_caps(&(ipu_sink->video_info), caps))
+		return FALSE;
+
+	if (GST_VIDEO_INFO_INTERLACE_MODE(&(ipu_sink->video_info)) == GST_VIDEO_INTERLACE_MODE_INTERLEAVED)
 	{
-		if (GST_VIDEO_INFO_INTERLACE_MODE(&(ipu_sink->video_info)) == GST_VIDEO_INTERLACE_MODE_INTERLEAVED)
-		{
-			ipu_sink->priv->task.input.deinterlace.enable = 1;
-			ipu_sink->priv->task.input.deinterlace.motion = HIGH_MOTION;
-		}
-		else
-		{
-			ipu_sink->priv->task.input.deinterlace.enable = 0;
-			ipu_sink->priv->task.input.deinterlace.motion = MED_MOTION;
-		}
+		ipu_sink->priv->task.input.deinterlace.enable = 1;
+		ipu_sink->priv->task.input.deinterlace.motion = HIGH_MOTION;
+	}
+	else
+	{
+		ipu_sink->priv->task.input.deinterlace.enable = 0;
+		ipu_sink->priv->task.input.deinterlace.motion = MED_MOTION;
 	}
 
-	return ret;
+	if (ipu_sink->priv->display_mem_block != 0)
+	{
+		ioctl(ipu_sink->priv->ipu_fd, IPU_FREE, &(ipu_sink->priv->display_mem_block));
+		ipu_sink->priv->display_mem_block = 0;
+	}
+
+	return TRUE;
 }
 
 
@@ -211,7 +223,6 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 	video_crop_meta = gst_buffer_get_video_crop_meta(buf);
 	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(buf);
 
-	num_extra_rows = phys_mem_meta->padding / GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
 	video_width = GST_VIDEO_INFO_WIDTH(&(ipu_sink->video_info));
 	video_height = GST_VIDEO_INFO_HEIGHT(&(ipu_sink->video_info));
 
@@ -233,6 +244,48 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		ipu_sink->priv->task.input.crop.h = video_height;
 	}
 
+	if (phys_mem_meta != NULL)
+	{
+		num_extra_rows = phys_mem_meta->padding / GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
+		ipu_sink->priv->task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
+	}
+	else
+	{
+		GstMapInfo in_map_info;
+		void *dispmem;
+		gsize dispmem_size;
+
+		dispmem_size = GST_VIDEO_INFO_SIZE(&(ipu_sink->video_info));
+
+		if (ipu_sink->priv->display_mem_block == 0)
+		{
+			int ret;
+
+			ipu_sink->priv->display_mem_block = (dma_addr_t)dispmem_size;
+			ret = ioctl(ipu_sink->priv->ipu_fd, IPU_ALLOC, &(ipu_sink->priv->display_mem_block));
+			if (ret < 0)
+			{
+				GST_ERROR_OBJECT(ipu_sink, "could not allocate memory for frame to display: %s", strerror(errno));
+				return GST_FLOW_ERROR;
+			}
+		}
+
+		gst_buffer_map(buf, &in_map_info, GST_MAP_READ);
+		dispmem = mmap(0, dispmem_size, PROT_READ | PROT_WRITE, MAP_SHARED, ipu_sink->priv->ipu_fd, ipu_sink->priv->display_mem_block);
+
+		GST_DEBUG_OBJECT(ipu_sink, "copying %u bytes from incoming buffer to display mem block", dispmem_size);
+		memcpy(dispmem, in_map_info.data, dispmem_size);
+
+		munmap(dispmem, dispmem_size);
+		gst_buffer_unmap(buf, &in_map_info);
+
+		num_extra_rows = 0;
+		ipu_sink->priv->task.input.paddr = ipu_sink->priv->display_mem_block;
+	}
+
+	ipu_sink->priv->task.input.width = GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
+	ipu_sink->priv->task.input.height = video_height + num_extra_rows;
+
 	GST_DEBUG_OBJECT(
 		ipu_sink,
 		"input size: %d x %d  (actually: %d x %d  X padding: %d  Y padding: %d)  phys addr: %p",
@@ -241,10 +294,6 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		ipu_sink->priv->task.input.width - ipu_sink->priv->task.input.crop.w, num_extra_rows,
 		ipu_sink->priv->task.input.paddr
 	);
-
-	ipu_sink->priv->task.input.width = GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
-	ipu_sink->priv->task.input.height = video_height + num_extra_rows;
-	ipu_sink->priv->task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
 
 	if (ioctl(ipu_sink->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_sink->priv->task)) == -1)
 	{
@@ -262,6 +311,8 @@ static void gst_fsl_ipu_sink_finalize(GObject *object)
 
 	if (ipu_sink->priv != NULL)
 	{
+		if (ipu_sink->priv->display_mem_block != 0)
+			ioctl(ipu_sink->priv->ipu_fd, IPU_FREE, &(ipu_sink->priv->display_mem_block));
 		if (ipu_sink->priv->framebuffer_fd >= 0)
 			close(ipu_sink->priv->framebuffer_fd);
 		if (ipu_sink->priv->ipu_fd >= 0)
