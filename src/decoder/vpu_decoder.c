@@ -975,7 +975,7 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	);
 
 	/* Inform the pool about the framebuffers */
-	gst_fsl_vpu_buffer_pool_set_framebuffer(pool, vpu_dec->current_framebuffers);
+	gst_fsl_vpu_buffer_pool_set_framebuffers(pool, vpu_dec->current_framebuffers);
 
 	/* Now configure the pool. */
 	config = gst_buffer_pool_get_config(pool);

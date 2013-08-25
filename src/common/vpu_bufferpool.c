@@ -333,7 +333,7 @@ GstBufferPool *gst_fsl_vpu_buffer_pool_new(GstFslVpuFramebuffers *framebuffers)
 }
 
 
-void gst_fsl_vpu_buffer_pool_set_framebuffer(GstBufferPool *pool, GstFslVpuFramebuffers *framebuffers)
+void gst_fsl_vpu_buffer_pool_set_framebuffers(GstBufferPool *pool, GstFslVpuFramebuffers *framebuffers)
 {
 	GstFslVpuBufferPool *vpu_pool = GST_FSL_VPU_BUFFER_POOL(pool);
 

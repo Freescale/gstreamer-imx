@@ -100,7 +100,7 @@ GstMetaInfo const * gst_fsl_phys_mem_meta_get_info(void);
 GType gst_fsl_vpu_buffer_pool_get_type(void);
 
 GstBufferPool *gst_fsl_vpu_buffer_pool_new(GstFslVpuFramebuffers *framebuffers);
-void gst_fsl_vpu_buffer_pool_set_framebuffer(GstBufferPool *pool, GstFslVpuFramebuffers *framebuffers);
+void gst_fsl_vpu_buffer_pool_set_framebuffers(GstBufferPool *pool, GstFslVpuFramebuffers *framebuffers);
 
 gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer, gboolean heap_mode);
 void gst_fsl_vpu_mark_buf_as_not_displayed(GstBuffer *buffer);
