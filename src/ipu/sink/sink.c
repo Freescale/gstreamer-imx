@@ -306,8 +306,7 @@ static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *quer
 
 	if (pool)
 	{
-		/* we need at least 2 buffer because we hold on to the last one */
-		gst_query_add_allocation_pool(query, pool, size, 2, 0);
+		gst_query_add_allocation_pool(query, pool, size, 0, 0);
 		gst_object_unref(pool);
 	}
 
@@ -356,6 +355,8 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 
 	if (phys_mem_meta != NULL)
 	{
+		GST_DEBUG_OBJECT(ipu_sink, "using data from the incoming buffer's physical memory address %p to display mem block", phys_mem_meta->phys_addr);
+
 		num_extra_rows = phys_mem_meta->padding / GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
 		ipu_sink->priv->task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
 	}
