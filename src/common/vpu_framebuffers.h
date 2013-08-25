@@ -57,6 +57,8 @@ struct _GstFslVpuFramebuffers
 	int y_stride, uv_stride;
 	int y_size, u_size, v_size, mv_size;
 	int total_size;
+
+	guint pic_width, pic_height;
 };
 
 

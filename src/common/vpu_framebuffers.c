@@ -112,6 +112,9 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 		framebuffers->mv_size = ALIGN_VAL_TO(framebuffers->mv_size, alignment);
 	}
 
+	framebuffers->pic_width = init_info->nPicWidth;
+	framebuffers->pic_height = init_info->nPicHeight;
+
 	framebuffers->total_size = framebuffers->y_size + framebuffers->u_size + framebuffers->v_size + framebuffers->mv_size + alignment;
 	GST_DEBUG_OBJECT(framebuffers, "num framebuffers:  total: %u  reserved: %u  available: %d", framebuffers->num_framebuffers, framebuffers->num_reserve_framebuffers, framebuffers->num_available_framebuffers);
 	GST_DEBUG_OBJECT(framebuffers, "framebuffer memory block size:  total: %d  Y: %d  U: %d  V: %d  Mv:  %d  alignment: %d", framebuffers->total_size, framebuffers->y_size, framebuffers->u_size, framebuffers->v_size, framebuffers->mv_size, alignment);
