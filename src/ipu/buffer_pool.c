@@ -82,7 +82,6 @@ static gboolean gst_fsl_ipu_buffer_pool_set_config(GstBufferPool *pool, GstStruc
 	fsl_ipu_pool->video_info.size = size;
 
 	fsl_ipu_pool->add_video_meta = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-	fsl_ipu_pool->add_phys_mem_meta = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM);
 
 	return GST_BUFFER_POOL_CLASS(gst_fsl_ipu_buffer_pool_parent_class)->set_config(pool, config);
 }
@@ -141,7 +140,6 @@ static GstFlowReturn gst_fsl_ipu_buffer_pool_alloc_buffer(GstBufferPool *pool, G
 		video_crop_meta->height = GST_VIDEO_INFO_HEIGHT(info);
 	}
 
-	if (fsl_ipu_pool->add_phys_mem_meta)
 	{
 		GstFslIpuMemory *fsl_ipu_mem = (GstFslIpuMemory *)mem;
 		GstFslPhysMemMeta *phys_mem_meta = (GstFslPhysMemMeta *)GST_FSL_PHYS_MEM_META_ADD(buf);
@@ -187,7 +185,6 @@ static void gst_fsl_ipu_buffer_pool_class_init(GstFslIpuBufferPoolClass *klass)
 static void gst_fsl_ipu_buffer_pool_init(GstFslIpuBufferPool *pool)
 {
 	pool->add_video_meta = FALSE;
-	pool->add_phys_mem_meta = FALSE;
 
 	GST_DEBUG_OBJECT(pool, "initializing IPU buffer pool");
 }

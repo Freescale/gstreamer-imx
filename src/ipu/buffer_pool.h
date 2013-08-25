@@ -48,7 +48,7 @@ struct _GstFslIpuBufferPool
 
 	GstAllocator *allocator;
 	GstVideoInfo video_info;
-	gboolean add_video_meta, add_phys_mem_meta;
+	gboolean add_video_meta;
 	gboolean read_only;
 };
 
