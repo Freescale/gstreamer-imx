@@ -201,19 +201,37 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
 	GstFslIpuSink *ipu_sink;
+	GstVideoCropMeta *video_crop_meta;
 	GstFslPhysMemMeta *phys_mem_meta;
-	unsigned int num_extra_rows;
+	guint num_extra_rows;
+	guint video_width, video_height;
 
 	ipu_sink = GST_FSL_IPU_SINK(video_sink);
+
+	video_crop_meta = gst_buffer_get_video_crop_meta(buf);
 	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(buf);
 
 	num_extra_rows = phys_mem_meta->padding / GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
+	video_width = GST_VIDEO_INFO_WIDTH(&(ipu_sink->video_info));
+	video_height = GST_VIDEO_INFO_HEIGHT(&(ipu_sink->video_info));
 
-	ipu_sink->priv->task.input.width = GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
-	ipu_sink->priv->task.input.height = GST_VIDEO_INFO_HEIGHT(&(ipu_sink->video_info)) + num_extra_rows;
-	ipu_sink->priv->task.input.crop.w = GST_VIDEO_INFO_WIDTH(&(ipu_sink->video_info));
-	ipu_sink->priv->task.input.crop.h = GST_VIDEO_INFO_HEIGHT(&(ipu_sink->video_info));
-	ipu_sink->priv->task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
+	if (video_crop_meta != NULL)
+	{
+		if ((video_crop_meta->x >= video_width) || (video_crop_meta->y > video_height))
+			return GST_FLOW_OK;
+
+		ipu_sink->priv->task.input.crop.pos.x = video_crop_meta->x;
+		ipu_sink->priv->task.input.crop.pos.y = video_crop_meta->y;
+		ipu_sink->priv->task.input.crop.w = MIN(video_crop_meta->width, video_width - video_crop_meta->x);
+		ipu_sink->priv->task.input.crop.h = MIN(video_crop_meta->height, video_height - video_crop_meta->y);
+	}
+	else
+	{
+		ipu_sink->priv->task.input.crop.pos.x = 0;
+		ipu_sink->priv->task.input.crop.pos.y = 0;
+		ipu_sink->priv->task.input.crop.w = video_width;
+		ipu_sink->priv->task.input.crop.h = video_height;
+	}
 
 	GST_DEBUG_OBJECT(
 		ipu_sink,
@@ -223,6 +241,10 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		ipu_sink->priv->task.input.width - ipu_sink->priv->task.input.crop.w, num_extra_rows,
 		ipu_sink->priv->task.input.paddr
 	);
+
+	ipu_sink->priv->task.input.width = GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
+	ipu_sink->priv->task.input.height = video_height + num_extra_rows;
+	ipu_sink->priv->task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
 
 	if (ioctl(ipu_sink->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_sink->priv->task)) == -1)
 	{
