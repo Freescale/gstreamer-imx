@@ -46,6 +46,7 @@ struct _GstFslIpuSink
 	GstVideoSink parent;
 	GstFslIpuSinkPrivate *priv;
 	GstVideoInfo video_info;
+	GstBufferPool *pool;
 };
 
 

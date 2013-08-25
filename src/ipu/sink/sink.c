@@ -37,6 +37,7 @@
 
 #include "../../common/phys_mem_meta.h"
 #include "../allocator.h"
+#include "../buffer_pool.h"
 
 
 
@@ -79,6 +80,7 @@ G_DEFINE_TYPE(GstFslIpuSink, gst_fsl_ipu_sink, GST_TYPE_VIDEO_SINK)
 
 
 static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
+static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query);
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 static void gst_fsl_ipu_sink_finalize(GObject *object);
 
@@ -111,6 +113,7 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_caps);
+	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_propose_allocation);
 	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_show_frame);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_finalize);
 }
@@ -183,6 +186,8 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 {
 	GstFslIpuSink *ipu_sink;
+	GstStructure *structure;
+	GstBufferPool *new_pool, *old_pool;
 
 	ipu_sink = GST_FSL_IPU_SINK(sink);
 
@@ -206,6 +211,110 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 		gst_fsl_ipu_free_phys_mem(ipu_sink->priv->ipu_fd, ipu_sink->priv->display_mem_block);
 		ipu_sink->priv->display_mem_block = 0;
 	}
+
+	new_pool = gst_fsl_ipu_buffer_pool_new(ipu_sink->priv->ipu_fd, FALSE);
+	structure = gst_buffer_pool_get_config(new_pool);
+	gst_buffer_pool_config_set_params(structure, caps, ipu_sink->video_info.size, 2, 0);
+	if (!gst_buffer_pool_set_config(new_pool, structure))
+	{
+		GST_ERROR_OBJECT(ipu_sink, "failed to set pool configuration");
+		return FALSE;
+	}
+
+	old_pool = ipu_sink->pool;
+	/* we don't activate the pool; this will be done by downstream after it
+	 * has configured the pool. If downstream does not use our pool, it stays unused. */
+	ipu_sink->pool = new_pool;
+
+	/* unref the old sink */
+	if (old_pool)
+	{
+		/* we don't deactivate, some elements might still be using it, it will
+		 * be deactivated when the last ref is gone */
+		gst_object_unref(old_pool);
+	}
+
+	return TRUE;
+}
+
+
+static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query)
+{
+	GstFslIpuSink *ipu_sink;
+	GstBufferPool *pool;
+	GstStructure *config;
+	GstCaps *caps;
+	guint size;
+	gboolean need_pool;
+
+	ipu_sink = GST_FSL_IPU_SINK(sink);
+
+	gst_query_parse_allocation(query, &caps, &need_pool);
+
+	if (caps == NULL)
+	{
+		GST_DEBUG_OBJECT(ipu_sink, "no caps specified");
+		return FALSE;
+	}
+
+	if ((pool = ipu_sink->pool) != NULL)
+		gst_object_ref(pool);
+
+	if (pool != NULL)
+	{
+		GstCaps *pcaps;
+
+		/* we had a pool, check caps */
+		GST_DEBUG_OBJECT(ipu_sink, "check existing pool caps");
+		config = gst_buffer_pool_get_config(pool);
+		gst_buffer_pool_config_get_params(config, &pcaps, &size, NULL, NULL);
+
+		if (!gst_caps_is_equal(caps, pcaps))
+		{
+			GST_DEBUG_OBJECT(ipu_sink, "pool has different caps");
+			/* different caps, we can't use this pool */
+			gst_object_unref(pool);
+			pool = NULL;
+		}
+		gst_structure_free(config);
+	}
+
+	if ((pool == NULL) && need_pool)
+	{
+		GstVideoInfo info;
+
+		if (!gst_video_info_from_caps(&info, caps))
+		{
+			GST_DEBUG_OBJECT(ipu_sink, "invalid caps specified");
+			return FALSE;
+		}
+
+		pool = gst_fsl_ipu_buffer_pool_new(ipu_sink->priv->ipu_fd, FALSE);
+
+		/* the normal size of a frame */
+		size = info.size;
+
+		config = gst_buffer_pool_get_config(pool);
+		gst_buffer_pool_config_set_params(config, caps, size, 0, 0);
+		if (!gst_buffer_pool_set_config(pool, config))
+		{
+			GST_DEBUG_OBJECT(ipu_sink, "failed setting config");
+			gst_object_unref(pool);
+			return FALSE;
+		}
+	}
+
+	if (pool)
+	{
+		/* we need at least 2 buffer because we hold on to the last one */
+		gst_query_add_allocation_pool(query, pool, size, 2, 0);
+		gst_object_unref(pool);
+	}
+
+	/* we also support various metadata */
+	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, NULL);
+	gst_query_add_allocation_meta(query, GST_VIDEO_CROP_META_API_TYPE, NULL);
+	gst_query_add_allocation_meta(query, gst_fsl_phys_mem_meta_api_get_type(), NULL);
 
 	return TRUE;
 }
