@@ -38,8 +38,8 @@ def build(bld):
 			includes = ['.', '../..'],
 			uselib = bld.env['COMMON_USELIB'] + ['FSLIPU'],
 			use = 'gstfslcommon',
-			target = 'gstfslipusink',
-			source = bld.path.ant_glob('*.c'),
+			target = 'gstfslipu',
+			source = bld.path.ant_glob('*.c') + bld.path.ant_glob('sink/*.c'),
 			install_path = bld.env['PLUGIN_INSTALL_PATH']
 		)
 

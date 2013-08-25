@@ -19,8 +19,11 @@
 
 #include <vpu_wrapper.h>
 #include <string.h>
-#include "vpu_bufferpool.h"
-#include "vpu_utils.h"
+#include "../common/alloc.h"
+#include "../common/phys_mem_meta.h"
+#include "buffer_pool.h"
+#include "utils.h"
+#include "vpu_buffer_meta.h"
 
 
 GST_DEBUG_CATEGORY_STATIC(vpubufferpool_debug);

@@ -17,7 +17,7 @@
  */
 
 
-#include "ipu_sink.h"
+#include "sink.h"
 
 #include <config.h>
 
@@ -34,7 +34,7 @@
 #include <gst/video/video.h>
 #include <gst/video/gstvideometa.h>
 
-#include "../common/gst_fslmeta.h"
+#include "../../common/phys_mem_meta.h"
 
 
 
@@ -271,27 +271,4 @@ static void gst_fsl_ipu_sink_finalize(GObject *object)
 
 	G_OBJECT_CLASS(gst_fsl_ipu_sink_parent_class)->finalize(object);
 }
-
-
-
-
-
-static gboolean plugin_init(GstPlugin *plugin)
-{
-	return gst_element_register(plugin, "fslipusink", GST_RANK_PRIMARY + 1, gst_fsl_ipu_sink_get_type());
-}
-
-
-
-GST_PLUGIN_DEFINE(
-	GST_VERSION_MAJOR,
-	GST_VERSION_MINOR,
-	fslipusink,
-	"Video output using the Freescale IPU",
-	plugin_init,
-	VERSION,
-	"LGPL",
-	GST_PACKAGE_NAME,
-	GST_PACKAGE_ORIGIN
-)
 

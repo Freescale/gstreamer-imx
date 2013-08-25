@@ -24,9 +24,11 @@
 #include <gst/video/gstvideometa.h>
 #include <gst/video/gstvideopool.h>
 #include <vpu_wrapper.h>
-#include "vpu_decoder.h"
-#include "../common/vpu_utils.h"
-#include "../common/vpu_bufferpool.h"
+#include "decoder.h"
+#include "../common/alloc.h"
+#include "../common/phys_mem_meta.h"
+#include "../utils.h"
+#include "../buffer_pool.h"
 
 
 
@@ -252,23 +254,23 @@ static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec)
  
 		if (vpu_dec->mem_info.MemSubBlock[i].MemType == VPU_MEM_VIRT)
 		{
-			if (!gst_fsl_vpu_alloc_virt_mem_block(&ptr, size))
+			if (!gst_fsl_alloc_virt_mem_block(&ptr, size))
 				return FALSE;
 
 			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO(ptr, vpu_dec->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_vpu_append_virt_mem_block(ptr, &(vpu_dec->virt_dec_mem_blocks));
+			gst_fsl_append_virt_mem_block(ptr, &(vpu_dec->virt_dec_mem_blocks));
 		}
 		else if (vpu_dec->mem_info.MemSubBlock[i].MemType == VPU_MEM_PHY)
 		{
-			VpuMemDesc *mem_block;
-			if (!gst_fsl_vpu_alloc_phys_mem_block(&mem_block, size))
+			gst_fsl_phys_mem_block *mem_block;
+			if (!gst_fsl_alloc_phys_mem_block(&mem_block, size))
 				return FALSE;
 
-			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO(mem_block->nVirtAddr, vpu_dec->mem_info.MemSubBlock[i].nAlignment);
-			vpu_dec->mem_info.MemSubBlock[i].pPhyAddr = (unsigned char *)ALIGN_VAL_TO(mem_block->nPhyAddr, vpu_dec->mem_info.MemSubBlock[i].nAlignment);
+			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(mem_block->virt_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
+			vpu_dec->mem_info.MemSubBlock[i].pPhyAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(mem_block->phys_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_vpu_append_phys_mem_block(mem_block, &(vpu_dec->phys_dec_mem_blocks));
+			gst_fsl_append_phys_mem_block(mem_block, &(vpu_dec->phys_dec_mem_blocks));
 		}
 		else
 		{
@@ -286,8 +288,8 @@ static gboolean gst_fsl_vpu_dec_free_dec_mem_blocks(GstFslVpuDec *vpu_dec)
 	/* NOT using the two calls with && directly, since otherwise an early exit could happen; in other words,
 	 * if the first call failed, the second one wouldn't even be invoked
 	 * doing the logical AND afterwards fixes this */
-	ret1 = gst_fsl_vpu_free_virt_mem_blocks(&(vpu_dec->virt_dec_mem_blocks));
-	ret2 = gst_fsl_vpu_free_phys_mem_blocks(&(vpu_dec->phys_dec_mem_blocks));
+	ret1 = gst_fsl_free_virt_mem_blocks(&(vpu_dec->virt_dec_mem_blocks));
+	ret2 = gst_fsl_free_phys_mem_blocks(&(vpu_dec->phys_dec_mem_blocks));
 	return ret1 && ret2;
 }
 
@@ -1019,31 +1021,4 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 
 	return TRUE;
 }
-
-
-
-
-
-static gboolean plugin_init(GstPlugin *plugin)
-{
-	gst_fsl_vpu_init_alloc_debug();
-
-	gboolean ret = TRUE;
-	ret = ret && gst_element_register(plugin, "fslvpudec", GST_RANK_PRIMARY + 1, gst_fsl_vpu_dec_get_type());
-	return ret;
-}
-
-
-
-GST_PLUGIN_DEFINE(
-	GST_VERSION_MAJOR,
-	GST_VERSION_MINOR,
-	fslvpudec,
-	"hardware-accelerated video decoding using the Freescale VPU engine",
-	plugin_init,
-	VERSION,
-	"LGPL",
-	GST_PACKAGE_NAME,
-	GST_PACKAGE_ORIGIN
-)
 

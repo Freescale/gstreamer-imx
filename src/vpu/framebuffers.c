@@ -20,8 +20,9 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 
-#include "vpu_framebuffers.h"
-#include "vpu_utils.h"
+#include "../common/alloc.h"
+#include "framebuffers.h"
+#include "utils.h"
 
 
 GST_DEBUG_CATEGORY_STATIC(vpu_framebuffers_debug);
@@ -121,17 +122,17 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 
 	for (i = 0; i < framebuffers->num_framebuffers; ++i)
 	{
-		VpuMemDesc *mem_block;
+		gst_fsl_phys_mem_block *mem_block;
 		VpuFrameBuffer *framebuffer;
 
 		framebuffer = &(framebuffers->framebuffers[i]);
 
-		if (!gst_fsl_vpu_alloc_phys_mem_block(&mem_block, framebuffers->total_size))
+		if (!gst_fsl_alloc_phys_mem_block(&mem_block, framebuffers->total_size))
 			return FALSE;
-		gst_fsl_vpu_append_phys_mem_block(mem_block, &(framebuffers->fb_mem_blocks));
+		gst_fsl_append_phys_mem_block(mem_block, &(framebuffers->fb_mem_blocks));
 
-		phys_ptr = (unsigned char*)(mem_block->nPhyAddr);
-		virt_ptr = (unsigned char*)(mem_block->nVirtAddr);
+		phys_ptr = (unsigned char*)(mem_block->phys_addr);
+		virt_ptr = (unsigned char*)(mem_block->virt_addr);
 
 		if (alignment > 1)
 		{
@@ -185,7 +186,7 @@ static void gst_fsl_vpu_framebuffers_finalize(GObject *object)
 		framebuffers->framebuffers = NULL;
 	}
 
-	gst_fsl_vpu_free_phys_mem_blocks(&(framebuffers->fb_mem_blocks));
+	gst_fsl_free_phys_mem_blocks(&(framebuffers->fb_mem_blocks));
 
 	G_OBJECT_CLASS(gst_fsl_vpu_framebuffers_parent_class)->finalize(object);
 }

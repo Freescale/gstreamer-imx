@@ -17,8 +17,8 @@
  */
 
 
-#ifndef VPU_FRAMEBUFFERS_H
-#define VPU_FRAMEBUFFERS_H
+#ifndef GST_FSL_VPU_FRAMEBUFFERS_H
+#define GST_FSL_VPU_FRAMEBUFFERS_H
 
 #include <glib.h>
 #include <gst/gst.h>

@@ -17,8 +17,8 @@
  */
 
 
-#ifndef VPU_DECODER_H
-#define VPU_DECODER_H
+#ifndef GST_FSL_VPU_DECODER_H
+#define GST_FSL_VPU_DECODER_H
 
 #include <glib.h>
 #include <gst/gst.h>
@@ -27,7 +27,7 @@
 
 #include <vpu_wrapper.h>
 
-#include "../common/vpu_framebuffers.h"
+#include "../framebuffers.h"
 
 
 G_BEGIN_DECLS

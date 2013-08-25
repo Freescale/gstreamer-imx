@@ -17,8 +17,8 @@
  */
 
 
-#ifndef IPU_SINK_H
-#define IPU_SINK_H
+#ifndef GST_FSL_IPU_SINK_H
+#define GST_FSL_IPU_SINK_H
 
 #include <glib.h>
 #include <gst/gst.h>

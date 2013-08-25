@@ -51,7 +51,7 @@ def options(opt):
 	opt.add_option('--with-package-origin', action = 'store', default = "Unknown package origin", help = 'specify package origin URL to use in plugin [default: %default]')
 	opt.add_option('--plugin-install-path', action = 'store', default = "${PREFIX}/lib/gstreamer-1.0", help = 'where to install the plugin for GStreamer 1.0 [default: %default]')
 	opt.load('compiler_c')
-	opt.recurse('src/ipusink')
+	opt.recurse('src/ipu')
 
 
 def configure(conf):
@@ -109,8 +109,8 @@ def configure(conf):
 
 
 	conf.recurse('src/common')
-	conf.recurse('src/decoder')
-	conf.recurse('src/ipusink')
+	conf.recurse('src/ipu')
+	conf.recurse('src/vpu')
 
 
 	conf.write_config_header('config.h')
@@ -119,6 +119,6 @@ def configure(conf):
 
 def build(bld):
 	bld.recurse('src/common')
-	bld.recurse('src/decoder')
-	bld.recurse('src/ipusink')
+	bld.recurse('src/ipu')
+	bld.recurse('src/vpu')
 

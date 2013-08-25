@@ -1,4 +1,4 @@
-/* Miscellanous utility functions for VPU operations
+/* Freescale VPU GStreamer 1.0 plugin definition
  * Copyright (C) 2013  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
@@ -17,31 +17,30 @@
  */
 
 
-#ifndef VPU_UTILS_H
-#define VPU_UTILS_H
-
-#include <glib.h>
-#include <vpu_wrapper.h>
+#include <config.h>
+#include <gst/gst.h>
+#include "decoder/decoder.h"
 
 
-G_BEGIN_DECLS
+
+static gboolean plugin_init(GstPlugin *plugin)
+{
+	gboolean ret = TRUE;
+	ret = ret && gst_element_register(plugin, "fslvpudec", GST_RANK_PRIMARY + 1, gst_fsl_vpu_dec_get_type());
+	return ret;
+}
 
 
-gchar const *gst_fsl_vpu_strerror(VpuDecRetCode code);
 
-void gst_fsl_vpu_init_alloc_debug(void);
-
-gboolean gst_fsl_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size);
-void gst_fsl_vpu_append_virt_mem_block(unsigned char *mem_block, GSList **virt_mem_blocks);
-gboolean gst_fsl_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks);
-
-gboolean gst_fsl_vpu_alloc_phys_mem_block(VpuMemDesc **mem_block, int size);
-void gst_fsl_vpu_append_phys_mem_block(VpuMemDesc *mem_block, GSList **phys_mem_blocks);
-gboolean gst_fsl_vpu_free_phys_mem_blocks(GSList **phys_mem_blocks);
-
-
-G_END_DECLS
-
-
-#endif
+GST_PLUGIN_DEFINE(
+	GST_VERSION_MAJOR,
+	GST_VERSION_MINOR,
+	fslvpu,
+	"video en- and decoder elements using the Freescale i.MX VPU",
+	plugin_init,
+	VERSION,
+	"LGPL",
+	GST_PACKAGE_NAME,
+	GST_PACKAGE_ORIGIN
+)
 

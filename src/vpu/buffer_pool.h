@@ -17,15 +17,14 @@
  */
 
 
-#ifndef VPU_BUFFERPOOL_H
-#define VPU_BUFFERPOOL_H
+#ifndef GST_FSL_VPU_BUFFER_POOL_H
+#define GST_FSL_VPU_BUFFER_POOL_H
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideometa.h>
 #include <gst/video/gstvideopool.h>
-#include "vpu_framebuffers.h"
-#include "gst_fslmeta.h"
+#include "framebuffers.h"
 
 
 G_BEGIN_DECLS

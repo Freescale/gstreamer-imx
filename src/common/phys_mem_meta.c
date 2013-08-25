@@ -1,4 +1,4 @@
-/* Freescale i.MX specific GStreamer meta data structures
+/* GStreamer meta data structure for physical memory information
  * Copyright (C) 2013  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
@@ -17,69 +17,7 @@
  */
 
 
-#include "gst_fslmeta.h"
-
-
-static gboolean gst_fsl_vpu_buffer_meta_init(GstMeta *meta, gpointer params, GstBuffer *buffer);
-static void gst_fsl_vpu_buffer_meta_free(GstMeta *meta, GstBuffer *buffer);
-
-static gboolean gst_fsl_phys_mem_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer);
-
-
-
-
-static gboolean gst_fsl_vpu_buffer_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
-{
-	GstFslVpuBufferMeta *fsl_vpu_meta = (GstFslVpuBufferMeta *)meta;
-	fsl_vpu_meta->framebuffer = NULL;
-	fsl_vpu_meta->not_displayed_yet = FALSE;
-	return TRUE;
-}
-
-
-static void gst_fsl_vpu_buffer_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
-{
-	GstFslVpuBufferMeta *fsl_vpu_meta = (GstFslVpuBufferMeta *)meta;
-	fsl_vpu_meta->framebuffer = NULL;
-}
-
-
-GType gst_fsl_vpu_buffer_meta_api_get_type(void)
-{
-	static volatile GType type;
-	static gchar const *tags[] = { "fsl_vpu", NULL };
-
-	if (g_once_init_enter(&type))
-	{
-		GType _type = gst_meta_api_type_register("GstFslVpuBufferMetaAPI", tags);
-		g_once_init_leave(&type, _type);
-	}
-
-	return type;
-}
-
-
-GstMetaInfo const * gst_fsl_vpu_buffer_meta_get_info(void)
-{
-	static GstMetaInfo const *meta_buffer_fsl_vpu_info = NULL;
-
-	if (g_once_init_enter(&meta_buffer_fsl_vpu_info))
-	{
-		GstMetaInfo const *meta = gst_meta_register(
-			gst_fsl_vpu_buffer_meta_api_get_type(),
-			"GstFslVpuBufferMeta",
-			sizeof(GstFslVpuBufferMeta),
-			GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_meta_init),
-			GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_meta_free),
-			(GstMetaTransformFunction)NULL
-		);
-		g_once_init_leave(&meta_buffer_fsl_vpu_info, meta);
-	}
-
-	return meta_buffer_fsl_vpu_info;
-}
-
-
+#include "phys_mem_meta.h"
 
 
 static gboolean gst_fsl_phys_mem_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
