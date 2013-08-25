@@ -71,6 +71,7 @@ struct _GstFslIpuSinkPrivate
 G_DEFINE_TYPE(GstFslIpuSink, gst_fsl_ipu_sink, GST_TYPE_VIDEO_SINK)
 
 
+static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 static void gst_fsl_ipu_sink_finalize(GObject *object);
 
@@ -82,12 +83,14 @@ static void gst_fsl_ipu_sink_finalize(GObject *object);
 void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 {
 	GObjectClass *object_class;
+	GstBaseSinkClass *base_class;
 	GstVideoSinkClass *parent_class;
 	GstElementClass *element_class;
 
 	GST_DEBUG_CATEGORY_INIT(ipusink_debug, "ipusink", 0, "Freescale IPU video sink");
 
 	object_class = G_OBJECT_CLASS(klass);
+	base_class = GST_BASE_SINK_CLASS(klass);
 	parent_class = GST_VIDEO_SINK_CLASS(klass);
 	element_class = GST_ELEMENT_CLASS(klass);
 
@@ -100,7 +103,7 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 	);
 
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
-
+	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_caps);
 	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_show_frame);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_finalize);
 }
@@ -168,6 +171,34 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 }
 
 
+static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
+{
+	gboolean ret;
+	GstFslIpuSink *ipu_sink;
+	GstVideoInfo video_info;
+
+	ipu_sink = GST_FSL_IPU_SINK(sink);
+
+	gst_video_info_init(&video_info);
+	ret = gst_video_info_from_caps(&video_info, caps);
+	if (ret)
+	{
+		if (GST_VIDEO_INFO_INTERLACE_MODE(&video_info) == GST_VIDEO_INTERLACE_MODE_INTERLEAVED)
+		{
+			ipu_sink->priv->task.input.deinterlace.enable = 1;
+			ipu_sink->priv->task.input.deinterlace.motion = HIGH_MOTION;
+		}
+		else
+		{
+			ipu_sink->priv->task.input.deinterlace.enable = 0;
+			ipu_sink->priv->task.input.deinterlace.motion = MED_MOTION;
+		}
+	}
+
+	return ret;
+}
+
+
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
 	GstFslIpuSink *ipu_sink;
@@ -185,7 +216,6 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 	ipu_sink->priv->task.input.height = video_meta->height + num_extra_rows;
 	ipu_sink->priv->task.input.crop.w = video_meta->width;
 	ipu_sink->priv->task.input.crop.h = video_meta->height;
-
 	ipu_sink->priv->task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
 
 	GST_DEBUG_OBJECT(
