@@ -123,15 +123,22 @@ static GstFlowReturn gst_fsl_ipu_buffer_pool_alloc_buffer(GstBufferPool *pool, G
 
 	if (fsl_ipu_pool->add_video_meta)
 	{
+		GstVideoCropMeta *video_crop_meta;
+
 		gst_buffer_add_video_meta_full(
 			buf,
 			GST_VIDEO_FRAME_FLAG_NONE,
 			GST_VIDEO_INFO_FORMAT(info),
-			GST_VIDEO_INFO_WIDTH (info), GST_VIDEO_INFO_HEIGHT (info),
+			GST_VIDEO_INFO_WIDTH(info), GST_VIDEO_INFO_HEIGHT(info),
 			GST_VIDEO_INFO_N_PLANES(info),
 			info->offset,
 			info->stride
 		);
+		video_crop_meta = gst_buffer_add_video_crop_meta(buf);
+		video_crop_meta->x = 0;
+		video_crop_meta->y = 0;
+		video_crop_meta->width = GST_VIDEO_INFO_WIDTH(info);
+		video_crop_meta->height = GST_VIDEO_INFO_HEIGHT(info);
 	}
 
 	if (fsl_ipu_pool->add_phys_mem_meta)
