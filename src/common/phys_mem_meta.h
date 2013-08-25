@@ -36,6 +36,9 @@ typedef struct _GstFslPhysMemMeta GstFslPhysMemMeta;
 #define GST_FSL_PHYS_MEM_META_DEL(buffer)      (gst_buffer_remove_meta((buffer), gst_buffer_get_meta((buffer), gst_fsl_phys_mem_meta_api_get_type())))
 
 
+#define GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM "GstBufferPoolOptionFslPhysMem"
+
+
 struct _GstFslPhysMemMeta
 {
 	GstMeta meta;
