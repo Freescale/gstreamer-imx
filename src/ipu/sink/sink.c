@@ -36,6 +36,7 @@
 #include <gst/video/gstvideometa.h>
 
 #include "../../common/phys_mem_meta.h"
+#include "../allocator.h"
 
 
 
@@ -70,7 +71,7 @@ struct _GstFslIpuSinkPrivate
 	struct ipu_task task;
 
 	/* only used if upstream isn't sending in buffers with physical memory */
-	dma_addr_t display_mem_block;
+	gpointer display_mem_block;
 };
 
 
@@ -202,7 +203,7 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 	if (ipu_sink->priv->display_mem_block != 0)
 	{
-		ioctl(ipu_sink->priv->ipu_fd, IPU_FREE, &(ipu_sink->priv->display_mem_block));
+		gst_fsl_ipu_free_phys_mem(ipu_sink->priv->ipu_fd, ipu_sink->priv->display_mem_block);
 		ipu_sink->priv->display_mem_block = 0;
 	}
 
@@ -259,19 +260,13 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 
 		if (ipu_sink->priv->display_mem_block == 0)
 		{
-			int ret;
-
-			ipu_sink->priv->display_mem_block = (dma_addr_t)dispmem_size;
-			ret = ioctl(ipu_sink->priv->ipu_fd, IPU_ALLOC, &(ipu_sink->priv->display_mem_block));
-			if (ret < 0)
-			{
-				GST_ERROR_OBJECT(ipu_sink, "could not allocate memory for frame to display: %s", strerror(errno));
+			ipu_sink->priv->display_mem_block = gst_fsl_ipu_alloc_phys_mem(ipu_sink->priv->ipu_fd, dispmem_size);
+			if (ipu_sink->priv->display_mem_block == NULL)
 				return GST_FLOW_ERROR;
-			}
 		}
 
 		gst_buffer_map(buf, &in_map_info, GST_MAP_READ);
-		dispmem = mmap(0, dispmem_size, PROT_READ | PROT_WRITE, MAP_SHARED, ipu_sink->priv->ipu_fd, ipu_sink->priv->display_mem_block);
+		dispmem = mmap(0, dispmem_size, PROT_READ | PROT_WRITE, MAP_SHARED, ipu_sink->priv->ipu_fd, (dma_addr_t)(ipu_sink->priv->display_mem_block));
 
 		GST_DEBUG_OBJECT(ipu_sink, "copying %u bytes from incoming buffer to display mem block", dispmem_size);
 		memcpy(dispmem, in_map_info.data, dispmem_size);
@@ -280,7 +275,7 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		gst_buffer_unmap(buf, &in_map_info);
 
 		num_extra_rows = 0;
-		ipu_sink->priv->task.input.paddr = ipu_sink->priv->display_mem_block;
+		ipu_sink->priv->task.input.paddr = (dma_addr_t)(ipu_sink->priv->display_mem_block);
 	}
 
 	ipu_sink->priv->task.input.width = GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
@@ -312,7 +307,7 @@ static void gst_fsl_ipu_sink_finalize(GObject *object)
 	if (ipu_sink->priv != NULL)
 	{
 		if (ipu_sink->priv->display_mem_block != 0)
-			ioctl(ipu_sink->priv->ipu_fd, IPU_FREE, &(ipu_sink->priv->display_mem_block));
+			gst_fsl_ipu_free_phys_mem(ipu_sink->priv->ipu_fd, ipu_sink->priv->display_mem_block);
 		if (ipu_sink->priv->framebuffer_fd >= 0)
 			close(ipu_sink->priv->framebuffer_fd);
 		if (ipu_sink->priv->ipu_fd >= 0)
