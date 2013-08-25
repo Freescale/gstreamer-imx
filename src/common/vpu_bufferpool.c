@@ -61,7 +61,7 @@ static void gst_fsl_vpu_buffer_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer 
 GType gst_fsl_vpu_buffer_meta_api_get_type(void)
 {
 	static volatile GType type;
-	static gchar const *tags[] = { "memory", "fsl_vpu", NULL };
+	static gchar const *tags[] = { "fsl_vpu", NULL };
 
 	if (g_once_init_enter(&type))
 	{
@@ -91,6 +91,54 @@ GstMetaInfo const * gst_fsl_vpu_buffer_meta_get_info(void)
 	}
 
 	return meta_buffer_fsl_vpu_info;
+}
+
+
+
+
+static gboolean gst_fsl_phys_mem_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
+{
+	GstFslPhysMemMeta *fsl_phys_mem_meta = (GstFslPhysMemMeta *)meta;
+	fsl_phys_mem_meta->virt_addr = NULL;
+	fsl_phys_mem_meta->phys_addr = NULL;
+	fsl_phys_mem_meta->padding = 0;
+	return TRUE;
+}
+
+
+GType gst_fsl_phys_mem_meta_api_get_type(void)
+{
+	static volatile GType type;
+	static gchar const *tags[] = { "memory", "phys_mem", NULL };
+
+	if (g_once_init_enter(&type))
+	{
+		GType _type = gst_meta_api_type_register("GstFslPhysMemMetaAPI", tags);
+		g_once_init_leave(&type, _type);
+	}
+
+	return type;
+}
+
+
+GstMetaInfo const * gst_fsl_phys_mem_meta_get_info(void)
+{
+	static GstMetaInfo const *gst_fsl_phys_mem_meta_info = NULL;
+
+	if (g_once_init_enter(&gst_fsl_phys_mem_meta_info))
+	{
+		GstMetaInfo const *meta = gst_meta_register(
+			gst_fsl_phys_mem_meta_api_get_type(),
+			"GstFslPhysMemMeta",
+			sizeof(GstFslPhysMemMeta),
+			GST_DEBUG_FUNCPTR(gst_fsl_phys_mem_meta_init),
+			(GstMetaFreeFunction)NULL,
+			(GstMetaTransformFunction)NULL
+		);
+		g_once_init_leave(&gst_fsl_phys_mem_meta_info, meta);
+	}
+
+	return gst_fsl_phys_mem_meta_info;
 }
 
 
@@ -184,6 +232,7 @@ static GstFlowReturn gst_fsl_vpu_buffer_pool_alloc_buffer(GstBufferPool *pool, G
 	}
 
 	GST_FSL_VPU_BUFFER_META_ADD(buf);
+	GST_FSL_PHYS_MEM_META_ADD(buf);
 
 	if (vpu_pool->add_videometa)
 	{

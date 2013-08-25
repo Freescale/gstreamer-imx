@@ -31,6 +31,7 @@ G_BEGIN_DECLS
 
 
 typedef struct _GstFslVpuBufferMeta GstFslVpuBufferMeta;
+typedef struct _GstFslPhysMemMeta GstFslPhysMemMeta;
 typedef struct _GstFslVpuBufferPool GstFslVpuBufferPool;
 typedef struct _GstFslVpuBufferPoolClass GstFslVpuBufferPoolClass;
 typedef struct _GstFslVpuFrameBufferExt GstFslVpuFrameBufferExt;
@@ -45,6 +46,11 @@ typedef struct _GstFslVpuFrameBufferExt GstFslVpuFrameBufferExt;
 #define GST_FSL_VPU_BUFFER_META_DEL(buffer)      (gst_buffer_remove_meta((buffer), gst_buffer_get_meta((buffer), gst_fsl_vpu_buffer_meta_api_get_type())))
 
 
+#define GST_FSL_PHYS_MEM_META_GET(buffer)      ((GstFslPhysMemMeta *)gst_buffer_get_meta((buffer), gst_fsl_phys_mem_meta_api_get_type()))
+#define GST_FSL_PHYS_MEM_META_ADD(buffer)      (gst_buffer_add_meta((buffer), gst_fsl_phys_mem_meta_get_info(), NULL))
+#define GST_FSL_PHYS_MEM_META_DEL(buffer)      (gst_buffer_remove_meta((buffer), gst_buffer_get_meta((buffer), gst_fsl_phys_mem_meta_api_get_type())))
+
+
 #define GST_BUFFER_POOL_OPTION_FSL_VPU_FRAMEBUFFER "GstBufferPoolOptionFslVpuFramebuffer"
 
 
@@ -54,6 +60,15 @@ struct _GstFslVpuBufferMeta
 
 	VpuFrameBuffer *framebuffer;
 	gboolean not_displayed_yet;
+};
+
+
+struct _GstFslPhysMemMeta
+{
+	GstMeta meta;
+
+	gpointer virt_addr, phys_addr;
+	gsize padding;
 };
 
 
@@ -78,6 +93,9 @@ G_END_DECLS
 
 GType gst_fsl_vpu_buffer_meta_api_get_type(void);
 GstMetaInfo const * gst_fsl_vpu_buffer_meta_get_info(void);
+
+GType gst_fsl_phys_mem_meta_api_get_type(void);
+GstMetaInfo const * gst_fsl_phys_mem_meta_get_info(void);
 
 GType gst_fsl_vpu_buffer_pool_get_type(void);
 
