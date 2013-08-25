@@ -173,23 +173,21 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 {
 	GstFslIpuSink *ipu_sink;
 	GstVideoMeta *video_meta;
-	GstFslVpuBufferMeta *fsl_vpu_meta;
-	unsigned int num_extra_rows = 0;
+	GstFslPhysMemMeta *phys_mem_meta;
+	unsigned int num_extra_rows;
 
 	ipu_sink = GST_FSL_IPU_SINK(video_sink);
 	video_meta = gst_buffer_get_video_meta(buf);
-	fsl_vpu_meta = GST_FSL_VPU_BUFFER_META_GET(buf);
+	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(buf);
 
-	if (video_meta->offset[1] >= video_meta->offset[0])
-		num_extra_rows = (video_meta->offset[1] - video_meta->offset[0]) / video_meta->stride[0];
-	num_extra_rows = (num_extra_rows > video_meta->height) ? (num_extra_rows - video_meta->height) : 0;
+	num_extra_rows = phys_mem_meta->padding / video_meta->stride[0];
 
 	ipu_sink->priv->task.input.width = video_meta->stride[0];
 	ipu_sink->priv->task.input.height = video_meta->height + num_extra_rows;
 	ipu_sink->priv->task.input.crop.w = video_meta->width;
 	ipu_sink->priv->task.input.crop.h = video_meta->height;
 
-	ipu_sink->priv->task.input.paddr = (dma_addr_t)(fsl_vpu_meta->framebuffer->pbufY);
+	ipu_sink->priv->task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
 
 	GST_DEBUG_OBJECT(
 		ipu_sink,
