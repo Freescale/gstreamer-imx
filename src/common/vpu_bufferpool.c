@@ -356,13 +356,29 @@ void gst_fsl_vpu_buffer_pool_set_framebuffers(GstBufferPool *pool, GstFslVpuFram
 gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer, gboolean heap_mode)
 {
 	VpuDecRetCode dec_ret;
+	GstVideoMeta *video_meta;
 	GstFslVpuBufferMeta *vpu_meta;
+	GstFslPhysMemMeta *phys_mem_meta;
 	GstMemory *memory;
+
+	video_meta = gst_buffer_get_video_meta(buffer);
+	if (video_meta == NULL)
+	{
+		GST_ERROR("buffer with pointer %p has no video metadata", buffer);
+		return FALSE;
+	}
 
 	vpu_meta = GST_FSL_VPU_BUFFER_META_GET(buffer);
 	if (vpu_meta == NULL)
 	{
 		GST_ERROR("buffer with pointer %p has no VPU metadata", buffer);
+		return FALSE;
+	}
+
+	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(buffer);
+	if (phys_mem_meta == NULL)
+	{
+		GST_ERROR("buffer with pointer %p has no phys mem metadata", buffer);
 		return FALSE;
 	}
 
@@ -379,19 +395,32 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 
 		vpu_meta->framebuffer = NULL;
 
+		phys_mem_meta->virt_addr = NULL;
+		phys_mem_meta->phys_addr = NULL;
+		phys_mem_meta->padding = 0;
+
 		dec_ret = VPU_DecOutFrameDisplayed(framebuffers->handle, framebuffer);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 			GST_ERROR("clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
 	}
 	else
 	{
+		gint y_padding = 0;
+
+		if (framebuffers->pic_height > video_meta->height)
+			y_padding = framebuffers->pic_height - video_meta->height;
+
 		vpu_meta->framebuffer = framebuffer;
+
+		phys_mem_meta->virt_addr = framebuffer->pbufVirtY;
+		phys_mem_meta->phys_addr = framebuffer->pbufY;
+		phys_mem_meta->padding = framebuffers->y_stride * y_padding;
 
 		memory = gst_memory_new_wrapped(
 			GST_MEMORY_FLAG_NO_SHARE,
 			framebuffer->pbufVirtY,
 			framebuffers->total_size,
-			0, 
+			0,
 			framebuffers->total_size,
 			NULL,
 			NULL
