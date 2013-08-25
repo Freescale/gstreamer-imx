@@ -293,7 +293,6 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 
 		vpu_meta->framebuffer = NULL;
 
-		phys_mem_meta->virt_addr = NULL;
 		phys_mem_meta->phys_addr = NULL;
 		phys_mem_meta->padding = 0;
 
@@ -310,7 +309,6 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 
 		vpu_meta->framebuffer = framebuffer;
 
-		phys_mem_meta->virt_addr = framebuffer->pbufVirtY;
 		phys_mem_meta->phys_addr = framebuffer->pbufY;
 		phys_mem_meta->padding = framebuffers->y_stride * y_padding;
 

@@ -43,7 +43,7 @@ struct _GstFslPhysMemMeta
 {
 	GstMeta meta;
 
-	gpointer virt_addr, phys_addr;
+	gpointer phys_addr;
 	gsize padding;
 };
 

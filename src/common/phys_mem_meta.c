@@ -23,7 +23,6 @@
 static gboolean gst_fsl_phys_mem_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
 {
 	GstFslPhysMemMeta *fsl_phys_mem_meta = (GstFslPhysMemMeta *)meta;
-	fsl_phys_mem_meta->virt_addr = NULL;
 	fsl_phys_mem_meta->phys_addr = NULL;
 	fsl_phys_mem_meta->padding = 0;
 	return TRUE;
