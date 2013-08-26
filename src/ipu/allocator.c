@@ -148,6 +148,7 @@ static GstFslIpuMemory* gst_fsl_ipu_mem_new_internal(GstFslIpuAllocator *fsl_ipu
 {
 	GstFslIpuMemory *fsl_ipu_mem;
 	fsl_ipu_mem = g_slice_alloc(sizeof(GstFslIpuMemory));
+	fsl_ipu_mem->mapped_virt_addr = NULL;
 	fsl_ipu_mem->phys_addr = NULL;
 
 	gst_memory_init(GST_MEMORY_CAST(fsl_ipu_mem), flags, GST_ALLOCATOR_CAST(fsl_ipu_alloc), parent, maxsize, align, offset, size);
@@ -217,6 +218,9 @@ static gpointer gst_fsl_ipu_allocator_map(GstMemory *mem, gsize maxsize, GstMapF
 	GstFslIpuMemory *fsl_ipu_mem = (GstFslIpuMemory *)mem;
 	GstFslIpuAllocator *fsl_ipu_alloc = GST_FSL_IPU_ALLOCATOR(mem->allocator);
 
+	if (fsl_ipu_mem->mapped_virt_addr != NULL)
+		return fsl_ipu_mem->mapped_virt_addr;
+
 	if (flags & GST_MAP_READ)
 		prot |= PROT_READ;
 	if (flags & GST_MAP_WRITE)
@@ -231,7 +235,11 @@ static gpointer gst_fsl_ipu_allocator_map(GstMemory *mem, gsize maxsize, GstMapF
 static void gst_fsl_ipu_allocator_unmap(GstMemory *mem)
 {
 	GstFslIpuMemory *fsl_ipu_mem = (GstFslIpuMemory *)mem;
-	munmap(fsl_ipu_mem->mapped_virt_addr, mem->maxsize);
+	if (fsl_ipu_mem->mapped_virt_addr != NULL)
+	{
+		munmap(fsl_ipu_mem->mapped_virt_addr, mem->maxsize);
+		fsl_ipu_mem->mapped_virt_addr = NULL;
+	}
 }
 
 
