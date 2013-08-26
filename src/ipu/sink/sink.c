@@ -46,6 +46,19 @@ GST_DEBUG_CATEGORY_STATIC(ipusink_debug);
 #define GST_CAT_DEFAULT ipusink_debug
 
 
+/* TODO: Memory-mapped writes into physically contiguous memory blocks are quite slow. This is
+ * probably caused by the mapping type: if for example it is not mapped with write combining
+ * enabled, random access to the memory will cause lots of wasteful cycles, explaining the
+ * slowdown. Until this can be verified, the buffer pool is disabled; upstream does not get a
+ * proposal for its allocation, and buffer contents end up copied over to a local physical
+ * memory block by using memcpy(). Currently, doing that is ~3 times faster than letting
+ * upstream write directly into physical memory blocks allocated by the proposed buffer pool.
+ */
+#if 0
+#define USE_IPU_BUFFER_POOL
+#endif
+
+
 
 
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
@@ -80,7 +93,9 @@ G_DEFINE_TYPE(GstFslIpuSink, gst_fsl_ipu_sink, GST_TYPE_VIDEO_SINK)
 
 
 static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
+#ifdef USE_IPU_BUFFER_POOL
 static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query);
+#endif
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 static void gst_fsl_ipu_sink_finalize(GObject *object);
 
@@ -113,8 +128,9 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_caps);
-	/* TODO: Disabled for now, until the strange performance drop when using this is explained */
-	/*base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_propose_allocation);*/
+#ifdef USE_IPU_BUFFER_POOL
+	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_propose_allocation);
+#endif
 	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_show_frame);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_finalize);
 }
@@ -239,6 +255,7 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 }
 
 
+#ifdef USE_IPU_BUFFER_POOL
 static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query)
 {
 	GstFslIpuSink *ipu_sink;
@@ -318,6 +335,7 @@ static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *quer
 
 	return TRUE;
 }
+#endif
 
 
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
