@@ -202,15 +202,16 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 {
 	GstFslIpuSink *ipu_sink;
 	GstStructure *structure;
+	GstVideoInfo video_info;
 	GstBufferPool *new_pool, *old_pool;
 
 	ipu_sink = GST_FSL_IPU_SINK(sink);
 
-	gst_video_info_init(&(ipu_sink->video_info));
-	if (!gst_video_info_from_caps(&(ipu_sink->video_info), caps))
+	gst_video_info_init(&video_info);
+	if (!gst_video_info_from_caps(&video_info, caps))
 		return FALSE;
 
-	if (GST_VIDEO_INFO_INTERLACE_MODE(&(ipu_sink->video_info)) == GST_VIDEO_INTERLACE_MODE_INTERLEAVED)
+	if (GST_VIDEO_INFO_INTERLACE_MODE(&video_info) == GST_VIDEO_INTERLACE_MODE_INTERLEAVED)
 	{
 		ipu_sink->priv->task.input.deinterlace.enable = 1;
 		ipu_sink->priv->task.input.deinterlace.motion = HIGH_MOTION;
@@ -229,7 +230,7 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 	new_pool = gst_fsl_ipu_buffer_pool_new(ipu_sink->priv->ipu_fd, FALSE);
 	structure = gst_buffer_pool_get_config(new_pool);
-	gst_buffer_pool_config_set_params(structure, caps, ipu_sink->video_info.size, 2, 0);
+	gst_buffer_pool_config_set_params(structure, caps, video_info.size, 2, 0);
 	if (!gst_buffer_pool_set_config(new_pool, structure))
 	{
 		GST_ERROR_OBJECT(ipu_sink, "failed to set pool configuration");
@@ -404,6 +405,7 @@ static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *quer
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
 	GstFslIpuSink *ipu_sink;
+	GstVideoMeta *video_meta;
 	GstVideoCropMeta *video_crop_meta;
 	GstFslPhysMemMeta *phys_mem_meta;
 	guint num_extra_rows;
@@ -411,11 +413,12 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 
 	ipu_sink = GST_FSL_IPU_SINK(video_sink);
 
+	video_meta = gst_buffer_get_video_meta(buf);
 	video_crop_meta = gst_buffer_get_video_crop_meta(buf);
 	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(buf);
 
-	video_width = GST_VIDEO_INFO_WIDTH(&(ipu_sink->video_info));
-	video_height = GST_VIDEO_INFO_HEIGHT(&(ipu_sink->video_info));
+	video_width = video_meta->width;
+	video_height = video_meta->height;
 
 	if (video_crop_meta != NULL)
 	{
@@ -439,7 +442,7 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 	{
 		GST_DEBUG_OBJECT(ipu_sink, "using data from the incoming buffer's physical memory address %p to display mem block", phys_mem_meta->phys_addr);
 
-		num_extra_rows = phys_mem_meta->padding / GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
+		num_extra_rows = phys_mem_meta->padding / video_meta->stride[0];
 		ipu_sink->priv->task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
 	}
 	else
@@ -473,7 +476,7 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		ipu_sink->priv->task.input.paddr = (dma_addr_t)(ipu_sink->priv->display_mem_block);
 	}
 
-	ipu_sink->priv->task.input.width = GST_VIDEO_INFO_PLANE_STRIDE(&(ipu_sink->video_info), 0);
+	ipu_sink->priv->task.input.width = video_meta->stride[0];
 	ipu_sink->priv->task.input.height = video_height + num_extra_rows;
 
 	GST_DEBUG_OBJECT(
