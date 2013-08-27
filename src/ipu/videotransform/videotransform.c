@@ -406,14 +406,6 @@ static gboolean gst_ipu_video_transform_set_info(GstVideoFilter *filter, G_GNUC_
 {
 	GstFslIpuVideoTransform *ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(filter);
 
-	ipu_video_transform->priv->task.input.format = gst_ipu_video_transform_conv_format(GST_VIDEO_INFO_FORMAT(in_info));
-	ipu_video_transform->priv->task.input.width = GST_VIDEO_INFO_WIDTH(in_info);
-	ipu_video_transform->priv->task.input.height = GST_VIDEO_INFO_HEIGHT(in_info);
-
-	ipu_video_transform->priv->task.output.format = gst_ipu_video_transform_conv_format(GST_VIDEO_INFO_FORMAT(out_info));
-	ipu_video_transform->priv->task.output.width = GST_VIDEO_INFO_WIDTH(out_info);
-	ipu_video_transform->priv->task.output.height = GST_VIDEO_INFO_HEIGHT(out_info);
-
 	if (ipu_video_transform->priv->display_mem_block != NULL)
 	{
 		gst_fsl_ipu_free_phys_mem(ipu_video_transform->priv->ipu_fd, ipu_video_transform->priv->display_mem_block);
@@ -432,6 +424,16 @@ static GstFlowReturn gst_ipu_video_transform_transform_frame(GstVideoFilter *fil
 	ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(filter);
 
 	out_phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(out->buffer);
+
+	ipu_video_transform->priv->task.input.format = gst_ipu_video_transform_conv_format(GST_VIDEO_INFO_FORMAT(&(in->info)));
+	ipu_video_transform->priv->task.input.width = GST_VIDEO_INFO_WIDTH(&(in->info));
+	ipu_video_transform->priv->task.input.height = GST_VIDEO_INFO_HEIGHT(&(in->info));
+
+	ipu_video_transform->priv->task.output.format = gst_ipu_video_transform_conv_format(GST_VIDEO_INFO_FORMAT(&(out->info)));
+	ipu_video_transform->priv->task.output.width = GST_VIDEO_INFO_PLANE_STRIDE(&(out->info), 0);
+	ipu_video_transform->priv->task.output.height = GST_VIDEO_INFO_HEIGHT(&(out->info));
+	ipu_video_transform->priv->task.output.crop.w = GST_VIDEO_INFO_WIDTH(&(out->info));
+	ipu_video_transform->priv->task.output.crop.h = GST_VIDEO_INFO_HEIGHT(&(out->info));
 
 	{
 		GstMapInfo in_map_info;
