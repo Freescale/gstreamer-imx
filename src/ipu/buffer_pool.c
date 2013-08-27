@@ -58,6 +58,7 @@ static gboolean gst_fsl_ipu_buffer_pool_set_config(GstBufferPool *pool, GstStruc
 {
 	GstFslIpuBufferPool *fsl_ipu_pool;
 	GstVideoInfo info;
+	GstVideoAlignment align;
 	GstCaps *caps;
 	gsize size;
 
@@ -83,6 +84,10 @@ static gboolean gst_fsl_ipu_buffer_pool_set_config(GstBufferPool *pool, GstStruc
 
 	fsl_ipu_pool->video_info = info;
 	GST_VIDEO_INFO_SIZE(&(fsl_ipu_pool->video_info)) = size;
+
+	gst_video_alignment_reset(&align);
+	align.padding_right = (8 - (GST_VIDEO_INFO_WIDTH(&(fsl_ipu_pool->video_info)) & 7)) & 7;
+	gst_video_info_align(&(fsl_ipu_pool->video_info), &align);
 
 	fsl_ipu_pool->add_video_meta = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
