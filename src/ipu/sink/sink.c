@@ -94,9 +94,7 @@ G_DEFINE_TYPE(GstFslIpuSink, gst_fsl_ipu_sink, GST_TYPE_VIDEO_SINK)
 
 
 static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
-#ifdef USE_IPU_BUFFER_POOL
 static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query);
-#endif
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 static void gst_fsl_ipu_sink_finalize(GObject *object);
 
@@ -129,9 +127,7 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_caps);
-#ifdef USE_IPU_BUFFER_POOL
 	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_propose_allocation);
-#endif
 	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_show_frame);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_finalize);
 }
@@ -258,6 +254,7 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 
 #ifdef USE_IPU_BUFFER_POOL
+
 static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query)
 {
 	GstFslIpuSink *ipu_sink;
@@ -337,6 +334,70 @@ static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *quer
 
 	return TRUE;
 }
+
+#else
+
+static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query)
+{
+	GstCaps *caps;
+	GstVideoInfo info;
+	GstBufferPool *pool;
+	guint size;
+
+	gst_query_parse_allocation(query, &caps, NULL);
+
+	if (caps == NULL)
+	{
+		GST_DEBUG_OBJECT(sink, "no caps specified");
+		return FALSE;
+	}
+
+	if (!gst_video_info_from_caps(&info, caps))
+		return FALSE;
+
+	size = GST_VIDEO_INFO_SIZE(&info);
+
+	if (gst_query_get_n_allocation_pools(query) == 0)
+	{
+		GstStructure *structure;
+		GstAllocationParams params;
+		GstAllocator *allocator = NULL;
+
+		memset(&params, 0, sizeof(params));
+		params.flags = 0;
+		params.align = 15;
+		params.prefix = 0;
+		params.padding = 0;
+
+		if (gst_query_get_n_allocation_params(query) > 0)
+			gst_query_parse_nth_allocation_param(query, 0, &allocator, &params);
+		else
+			gst_query_add_allocation_param(query, allocator, &params);
+
+		pool = gst_video_buffer_pool_new();
+
+		structure = gst_buffer_pool_get_config(pool);
+		gst_buffer_pool_config_set_params(structure, caps, size, 0, 0);
+		gst_buffer_pool_config_set_allocator(structure, allocator, &params);
+
+		if (allocator)
+			gst_object_unref(allocator);
+
+		if (!gst_buffer_pool_set_config(pool, structure))
+		{
+			GST_ERROR_OBJECT(sink, "failed to set config");
+			gst_object_unref(pool);
+			return FALSE;
+		}
+
+		gst_query_add_allocation_pool(query, pool, size, 0, 0);
+		gst_object_unref(pool);
+		gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, NULL);
+	}
+
+	return TRUE;
+}
+
 #endif
 
 
