@@ -86,6 +86,7 @@ struct _GstFslIpuSinkPrivate
 
 	/* only used if upstream isn't sending in buffers with physical memory */
 	gpointer display_mem_block;
+	gsize display_mem_block_size;
 };
 
 
@@ -143,7 +144,8 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 	ipu_sink->priv->framebuffer_fd = -1;
 	ipu_sink->priv->ipu_fd = -1;
 
-	ipu_sink->priv->display_mem_block = 0;
+	ipu_sink->priv->display_mem_block = NULL;
+	ipu_sink->priv->display_mem_block_size = 0;
 
 	ipu_sink->priv->ipu_fd = open("/dev/mxc_ipu", O_RDWR, 0);
 	if (ipu_sink->priv->ipu_fd < 0)
@@ -223,7 +225,7 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 		ipu_sink->priv->task.input.deinterlace.motion = MED_MOTION;
 	}
 
-	if (ipu_sink->priv->display_mem_block != 0)
+	if (ipu_sink->priv->display_mem_block != NULL)
 	{
 		gst_fsl_ipu_free_phys_mem(ipu_sink->priv->ipu_fd, ipu_sink->priv->display_mem_block);
 		ipu_sink->priv->display_mem_block = 0;
@@ -385,10 +387,13 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		void *dispmem;
 		gsize dispmem_size;
 
-		dispmem_size = GST_VIDEO_INFO_SIZE(&(ipu_sink->video_info));
+		dispmem_size = gst_buffer_get_size(buf);
 
-		if (ipu_sink->priv->display_mem_block == 0)
+		if ((ipu_sink->priv->display_mem_block == NULL) || (ipu_sink->priv->display_mem_block_size != dispmem_size))
 		{
+			ipu_sink->priv->display_mem_block_size = dispmem_size;
+			if (ipu_sink->priv->display_mem_block != NULL)
+				gst_fsl_ipu_free_phys_mem(ipu_sink->priv->ipu_fd, ipu_sink->priv->display_mem_block);
 			ipu_sink->priv->display_mem_block = gst_fsl_ipu_alloc_phys_mem(ipu_sink->priv->ipu_fd, dispmem_size);
 			if (ipu_sink->priv->display_mem_block == NULL)
 				return GST_FLOW_ERROR;
@@ -435,7 +440,7 @@ static void gst_fsl_ipu_sink_finalize(GObject *object)
 
 	if (ipu_sink->priv != NULL)
 	{
-		if (ipu_sink->priv->display_mem_block != 0)
+		if (ipu_sink->priv->display_mem_block != NULL)
 			gst_fsl_ipu_free_phys_mem(ipu_sink->priv->ipu_fd, ipu_sink->priv->display_mem_block);
 		if (ipu_sink->priv->framebuffer_fd >= 0)
 			close(ipu_sink->priv->framebuffer_fd);

@@ -27,6 +27,9 @@ GST_DEBUG_CATEGORY (fsl_ipubufferpool_debug);
 #define GST_CAT_DEFAULT fsl_ipubufferpool_debug
 
 
+/* TODO: add 8-pixel alignment in X and Y directions */
+
+
 static const gchar ** gst_fsl_ipu_buffer_pool_get_options(GstBufferPool *pool);
 static gboolean gst_fsl_ipu_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config);
 static GstFlowReturn gst_fsl_ipu_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, GstBufferPoolAcquireParams *params);
@@ -79,7 +82,7 @@ static gboolean gst_fsl_ipu_buffer_pool_set_config(GstBufferPool *pool, GstStruc
 	}
 
 	fsl_ipu_pool->video_info = info;
-	fsl_ipu_pool->video_info.size = size;
+	GST_VIDEO_INFO_SIZE(&(fsl_ipu_pool->video_info)) = size;
 
 	fsl_ipu_pool->add_video_meta = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
