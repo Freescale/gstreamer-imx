@@ -20,12 +20,16 @@
 #include <config.h>
 #include <gst/gst.h>
 #include "sink/sink.h"
+#include "videotransform/videotransform.h"
 
 
 
 static gboolean plugin_init(GstPlugin *plugin)
 {
-	return gst_element_register(plugin, "fslipusink", GST_RANK_PRIMARY + 1, gst_fsl_ipu_sink_get_type());
+	gboolean ret = TRUE;
+	ret = ret && gst_element_register(plugin, "fslipuvideotransform", GST_RANK_NONE, gst_fsl_ipu_video_transform_get_type());
+	ret = ret && gst_element_register(plugin, "fslipusink", GST_RANK_PRIMARY + 1, gst_fsl_ipu_sink_get_type());
+	return ret;
 }
 
 
