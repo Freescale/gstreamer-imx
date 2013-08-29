@@ -97,6 +97,7 @@ static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
 static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query);
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 static void gst_fsl_ipu_sink_finalize(GObject *object);
+static guint32 gst_fsl_ipu_sink_get_v4l_format(GstFslIpuSink *ipu_sink, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
 
 
 
@@ -179,7 +180,7 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 
 	ipu_sink->priv->task.input.format = IPU_PIX_FMT_YUV420P;
 
-	ipu_sink->priv->task.output.format = v4l2_fourcc('R', 'G', 'B', 'P');
+	ipu_sink->priv->task.output.format = gst_fsl_ipu_sink_get_v4l_format(ipu_sink, &(ipu_sink->priv->fb_var), &(ipu_sink->priv->fb_fix));
 	ipu_sink->priv->task.output.paddr = (dma_addr_t)(ipu_sink->priv->fb_fix.smem_start);
 	ipu_sink->priv->task.output.width = ipu_sink->priv->fb_var.xres;
 	ipu_sink->priv->task.output.height = ipu_sink->priv->fb_var.yres;
@@ -192,6 +193,11 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 #endif
 
 	GST_INFO_OBJECT(ipu_sink, "initialized IPU sink with output screen resolution %d x %d and start phys address %p", ipu_sink->priv->task.output.width, ipu_sink->priv->task.output.height, ipu_sink->priv->task.output.paddr);
+
+	if (ipu_sink->priv->task.output.format == 0)
+	{
+		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("framebuffer uses unknown or unsupported pixel format"), (NULL));
+	}
 
 	ipu_sink->parent.width = ipu_sink->priv->task.output.width;
 	ipu_sink->parent.height = ipu_sink->priv->task.output.height;
@@ -514,5 +520,65 @@ static void gst_fsl_ipu_sink_finalize(GObject *object)
 	}
 
 	G_OBJECT_CLASS(gst_fsl_ipu_sink_parent_class)->finalize(object);
+}
+
+
+static guint32 gst_fsl_ipu_sink_get_v4l_format(GstFslIpuSink *ipu_sink, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix)
+{
+	guint32 fmt = 0;
+	guint rlen = fb_var->red.length, glen = fb_var->green.length, blen = fb_var->blue.length, alen = fb_var->transp.length;
+	guint rofs = fb_var->red.offset, gofs = fb_var->green.offset, bofs = fb_var->blue.offset, aofs = fb_var->transp.offset;
+
+	if (fb_fix->type != FB_TYPE_PACKED_PIXELS)
+	{
+		GST_DEBUG_OBJECT(ipu_sink, "unknown framebuffer type %d", fb_fix->type);
+		return fmt;
+	}
+
+	switch (fb_var->bits_per_pixel)
+	{
+		case 15:
+		{
+			if ((rlen == 5) && (glen == 5) && (blen == 5) && (rofs == 0))
+				fmt = IPU_PIX_FMT_RGB555;
+			break;
+		}
+		case 16:
+		{
+			if ((rlen == 5) && (glen == 6) && (blen == 5) && (rofs == 0))
+				fmt = IPU_PIX_FMT_RGB565;
+			break;
+		}
+		case 24:
+		{
+			if ((rlen == 8) && (glen == 8) && (blen == 8))
+			{
+				if ((rofs == 0) && (gofs == 8) && (bofs == 16))
+					fmt = IPU_PIX_FMT_RGB24;
+				else if ((rofs == 16) && (gofs == 8) && (bofs == 0))
+					fmt = IPU_PIX_FMT_BGR24;
+				else if ((rofs == 16) && (gofs == 0) && (bofs == 8))
+					fmt = IPU_PIX_FMT_GBR24;
+			}
+			break;
+		}
+		case 32:
+		{
+			if ((rlen == 8) && (glen == 8) && (blen == 8) && (alen == 8))
+			{
+				if ((rofs == 0) && (gofs == 8) && (bofs == 16) && (aofs == 24))
+					fmt = IPU_PIX_FMT_RGBA32;
+				else if ((rofs == 16) && (gofs == 8) && (bofs == 0) && (aofs == 24))
+					fmt = IPU_PIX_FMT_BGRA32;
+				else if ((rofs == 24) && (gofs == 16) && (bofs == 8) && (aofs == 0))
+					fmt = IPU_PIX_FMT_ABGR32;
+			}
+			break;
+		}
+		default:
+			break;
+	}
+
+	return fmt;
 }
 
