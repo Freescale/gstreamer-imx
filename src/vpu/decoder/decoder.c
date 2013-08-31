@@ -183,8 +183,14 @@ static gboolean gst_fsl_vpu_dec_start(GstVideoDecoder *decoder);
 static gboolean gst_fsl_vpu_dec_stop(GstVideoDecoder *decoder);
 static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state);
 static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *frame);
-static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard);
+/*static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard);*/
 static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
+
+/* TODO: reset() is disabled because the VPU_DecFlushAll() inside it
+ * causes the imx6 to freeze.
+ * Tests show that clean seeking is possible even without calling this.
+ * Disabling for now, until the reason for the freezes is better understood.
+ */
 
 
 
@@ -216,7 +222,7 @@ void gst_fsl_vpu_dec_class_init(GstFslVpuDecClass *klass)
 	base_class->stop              = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_stop);
 	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_set_format);
 	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_handle_frame);
-	base_class->reset             = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_reset);
+	/*base_class->reset             = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_reset);*/
 	base_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_decide_allocation);
 
 	klass->inst_counter = 0;
@@ -818,6 +824,18 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		}
 	}
 
+	if (buffer_ret_code & VPU_DEC_FLUSH)
+	{
+		dec_ret = VPU_DecFlushAll(vpu_dec->handle);
+		if (dec_ret != VPU_DEC_RET_SUCCESS)
+		{
+			GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_fsl_vpu_strerror(dec_ret));
+			return GST_FLOW_ERROR;
+		}
+
+		return GST_FLOW_OK;
+	}
+
 	if (buffer_ret_code & VPU_DEC_NO_ENOUGH_INBUF)
 	{
 		/* Not dropping frame here on purpose; the next input frame may
@@ -908,6 +926,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_DROPPED)
 	{
 		GST_DEBUG_OBJECT(vpu_dec, "dropping frame");
+		vpu_dec->current_framebuffers->num_available_framebuffers++;
 		gst_video_decoder_drop_frame(decoder, frame);
 	}
 	else if (buffer_ret_code & VPU_DEC_NO_ENOUGH_BUF)
@@ -919,6 +938,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 }
 
 
+#if 0
 static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard)
 {
 	VpuDecRetCode ret;
@@ -926,9 +946,6 @@ static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard)
 
 	if (!vpu_dec->vpu_inst_opened)
 		return TRUE;
-
-	/* TODO: does the num_available_framebuffers counter have to be
-	 * reset here? */
 
 	ret = VPU_DecFlushAll(vpu_dec->handle);
 	if (ret != VPU_DEC_RET_SUCCESS)
@@ -939,6 +956,7 @@ static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard)
 
 	return TRUE;
 }
+#endif
 
 
 static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query)
