@@ -151,6 +151,8 @@ void gst_fsl_ipu_video_transform_class_init(GstFslIpuVideoTransformClass *klass)
 	base_transform_class->decide_allocation  = GST_DEBUG_FUNCPTR(gst_fsl_ipu_video_transform_decide_allocation);
 	video_filter_class->set_info             = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_set_info);
 	video_filter_class->transform_frame      = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_frame);
+
+	base_transform_class->passthrough_on_same_caps = TRUE;
 }
 
 
