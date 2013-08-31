@@ -539,13 +539,13 @@ static guint32 gst_fsl_ipu_sink_get_v4l_format(GstFslIpuSink *ipu_sink, struct f
 	{
 		case 15:
 		{
-			if ((rlen == 5) && (glen == 5) && (blen == 5) && (rofs == 0))
+			if ((rlen == 5) && (glen == 5) && (blen == 5))
 				fmt = IPU_PIX_FMT_RGB555;
 			break;
 		}
 		case 16:
 		{
-			if ((rlen == 5) && (glen == 6) && (blen == 5) && (rofs == 0))
+			if ((rlen == 5) && (glen == 6) && (blen == 5))
 				fmt = IPU_PIX_FMT_RGB565;
 			break;
 		}
@@ -578,6 +578,15 @@ static guint32 gst_fsl_ipu_sink_get_v4l_format(GstFslIpuSink *ipu_sink, struct f
 		default:
 			break;
 	}
+
+	GST_DEBUG_OBJECT(
+		ipu_sink,
+		"framebuffer uses %u bpp (sizes: r %u g %u b %u  offsets: r %u g %u b %u) => format 0x%08x",
+		fb_var->bits_per_pixel,
+		rlen, glen, blen,
+		rofs, gofs, bofs,
+		fmt
+	);
 
 	return fmt;
 }
