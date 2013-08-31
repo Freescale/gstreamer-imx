@@ -883,7 +883,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	/* Unlock the mutex; the subsequent steps are safe */
 	g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
 
-	if ((buffer_ret_code & VPU_DEC_OUTPUT_DIS) || (buffer_ret_code & VPU_DEC_OUTPUT_MOSAIC_DIS))
+	if (buffer_ret_code & VPU_DEC_OUTPUT_DIS)
 	{
 		GstBuffer *buffer;
 		VpuDecOutFrameInfo out_frame_info;
@@ -922,6 +922,27 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		frame->output_buffer = buffer;
 
 		gst_video_decoder_finish_frame(decoder, frame);
+	}
+	else if (buffer_ret_code & VPU_DEC_OUTPUT_MOSAIC_DIS)
+	{
+		VpuDecOutFrameInfo out_frame_info;
+
+		/* Retrieve the decoded frame */
+		dec_ret = VPU_DecGetOutputFrame(vpu_dec->handle, &out_frame_info);
+		if (dec_ret != VPU_DEC_RET_SUCCESS)
+		{
+			GST_ERROR_OBJECT(vpu_dec, "could not get decoded output frame: %s", gst_fsl_vpu_strerror(dec_ret));
+			return GST_FLOW_ERROR;
+		}
+
+		dec_ret = VPU_DecOutFrameDisplayed(vpu_dec->handle, out_frame_info.pDisplayFrameBuf);
+		if (dec_ret != VPU_DEC_RET_SUCCESS)
+		{
+			GST_ERROR_OBJECT(vpu_dec, "clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
+			return GST_FLOW_ERROR;
+		}
+
+		vpu_dec->current_framebuffers->num_available_framebuffers++;
 	}
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_DROPPED)
 	{
