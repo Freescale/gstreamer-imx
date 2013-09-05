@@ -32,7 +32,7 @@ typedef struct _GstFslPhysMemMeta GstFslPhysMemMeta;
 
 
 #define GST_FSL_PHYS_MEM_META_GET(buffer)      ((GstFslPhysMemMeta *)gst_buffer_get_meta((buffer), gst_fsl_phys_mem_meta_api_get_type()))
-#define GST_FSL_PHYS_MEM_META_ADD(buffer)      (gst_buffer_add_meta((buffer), gst_fsl_phys_mem_meta_get_info(), NULL))
+#define GST_FSL_PHYS_MEM_META_ADD(buffer)      ((GstFslPhysMemMeta *)gst_buffer_add_meta((buffer), gst_fsl_phys_mem_meta_get_info(), NULL))
 #define GST_FSL_PHYS_MEM_META_DEL(buffer)      (gst_buffer_remove_meta((buffer), gst_buffer_get_meta((buffer), gst_fsl_phys_mem_meta_api_get_type())))
 
 
