@@ -227,6 +227,12 @@ static gpointer gst_fsl_ipu_allocator_map(GstMemory *mem, gsize maxsize, GstMapF
 		prot |= PROT_WRITE;
 
 	fsl_ipu_mem->mapped_virt_addr = mmap(0, maxsize, prot, MAP_SHARED, fsl_ipu_alloc->fd, (dma_addr_t)(fsl_ipu_mem->phys_addr));
+	if (fsl_ipu_mem->mapped_virt_addr == MAP_FAILED)
+	{
+		fsl_ipu_mem->mapped_virt_addr = NULL;
+		GST_ERROR_OBJECT(mem->allocator, "memory-mapping the IPU framebuffer failed: %s", strerror(errno));
+		return NULL;
+	}
 
 	return fsl_ipu_mem->mapped_virt_addr;
 }
@@ -237,7 +243,8 @@ static void gst_fsl_ipu_allocator_unmap(GstMemory *mem)
 	GstFslIpuMemory *fsl_ipu_mem = (GstFslIpuMemory *)mem;
 	if (fsl_ipu_mem->mapped_virt_addr != NULL)
 	{
-		munmap(fsl_ipu_mem->mapped_virt_addr, mem->maxsize);
+		if (munmap(fsl_ipu_mem->mapped_virt_addr, mem->maxsize) == -1)
+			GST_ERROR_OBJECT(mem->allocator, "unmapping memory-mapped IPU framebuffer failed: %s", strerror(errno));
 		fsl_ipu_mem->mapped_virt_addr = NULL;
 	}
 }
