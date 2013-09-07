@@ -87,6 +87,7 @@ static gboolean gst_fsl_ipu_buffer_pool_set_config(GstBufferPool *pool, GstStruc
 
 	gst_video_alignment_reset(&align);
 	align.padding_right = (8 - (GST_VIDEO_INFO_WIDTH(&(fsl_ipu_pool->video_info)) & 7)) & 7;
+	align.padding_bottom = (8 - (GST_VIDEO_INFO_HEIGHT(&(fsl_ipu_pool->video_info)) & 7)) & 7;
 	gst_video_info_align(&(fsl_ipu_pool->video_info), &align);
 
 	fsl_ipu_pool->add_video_meta = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
@@ -149,10 +150,15 @@ static GstFlowReturn gst_fsl_ipu_buffer_pool_alloc_buffer(GstBufferPool *pool, G
 	}
 
 	{
+		guint num_extra_lines;
+
 		GstFslIpuMemory *fsl_ipu_mem = (GstFslIpuMemory *)mem;
 		GstFslPhysMemMeta *phys_mem_meta = (GstFslPhysMemMeta *)GST_FSL_PHYS_MEM_META_ADD(buf);
 
 		phys_mem_meta->phys_addr = fsl_ipu_mem->phys_addr;
+
+		num_extra_lines = (8 - (GST_VIDEO_INFO_HEIGHT(&(fsl_ipu_pool->video_info)) & 7)) & 7;
+		phys_mem_meta->padding = fsl_ipu_pool->video_info.stride[0] * num_extra_lines;
 	}
 
 	*buffer = buf;
