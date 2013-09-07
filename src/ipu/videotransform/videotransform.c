@@ -17,23 +17,20 @@
  */
 
 
-#include "videotransform.h"
-
-#include <config.h>
-
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <fcntl.h>
-#include <errno.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <linux/mxcfb.h>
-#include <linux/ipu.h>
+#include <gst/gst.h>
+#include <gst/video/video.h>
+#include <gst/video/gstvideopool.h>
+#include <gst/video/gstvideometa.h>
 
+#include "videotransform.h"
 #include "../common/phys_mem_meta.h"
-#include "../allocator.h"
+#include "../blitter.h"
 #include "../buffer_pool.h"
+#include "../allocator.h"
 
 
 
@@ -42,65 +39,25 @@ GST_DEBUG_CATEGORY_STATIC(ipuvideotransform_debug);
 #define GST_CAT_DEFAULT ipuvideotransform_debug
 
 
-
-
-#define IPU_VIDEO_FORMATS \
-	" { " \
-	"   RGB15 " \
-	" , RGB16 " \
-	" , BGR " \
-	" , RGB " \
-	" , BGRx " \
-	" , BGRA " \
-	" , RGBx " \
-	" , RGBA " \
-	" , ABGR " \
-	" , UYVY " \
-	" , YVYU " \
-	" , IYU1 " \
-	" , v308 " \
-	" , NV12 " \
-	" , GRAY8 " \
-	" , YVU9 " \
-	" , YUV9 " \
-	" , YV12 " \
-	" , I420 " \
-	" , Y42B " \
-	" , Y444 " \
-	" } "
-
-#define IPU_VIDEO_TRANSFORM_CAPS \
-	GST_STATIC_CAPS( \
-		"video/x-raw, " \
-		"format = (string) " IPU_VIDEO_FORMATS ", " \
-		"width = (int) [ 64, MAX ], " \
-		"height = (int) [ 64, MAX ], " \
-		"framerate = (fraction) [ 0, MAX ]; " \
-	)
-
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	"sink",
 	GST_PAD_SINK,
 	GST_PAD_ALWAYS,
-	IPU_VIDEO_TRANSFORM_CAPS
+	GST_FSL_IPU_BLITTER_CAPS
 );
+
 
 static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	"src",
 	GST_PAD_SRC,
 	GST_PAD_ALWAYS,
-	IPU_VIDEO_TRANSFORM_CAPS
+	GST_FSL_IPU_BLITTER_CAPS
 );
 
 
 struct _GstFslIpuVideoTransformPrivate
 {
-	int ipu_fd;
-	struct ipu_task task;
-
-	/* only used if upstream isn't sending in buffers with physical memory */
-	gpointer display_mem_block;
-	gsize display_mem_block_size;
+	GstFslIpuBlitter *blitter;
 };
 
 
@@ -120,6 +77,8 @@ static GstFlowReturn gst_ipu_video_transform_transform_frame(GstVideoFilter *fil
 
 
 
+
+/* required function declared by G_DEFINE_TYPE */
 
 void gst_fsl_ipu_video_transform_class_init(GstFslIpuVideoTransformClass *klass)
 {
@@ -147,9 +106,9 @@ void gst_fsl_ipu_video_transform_class_init(GstFslIpuVideoTransformClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
 	object_class->finalize                   = GST_DEBUG_FUNCPTR(gst_fsl_ipu_video_transform_finalize);
+	base_transform_class->src_event          = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_src_event);
 	base_transform_class->transform_caps     = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_caps);
 	base_transform_class->fixate_caps        = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_fixate_caps);
-	base_transform_class->src_event          = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_src_event);
 	base_transform_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_video_transform_propose_allocation);
 	base_transform_class->decide_allocation  = GST_DEBUG_FUNCPTR(gst_fsl_ipu_video_transform_decide_allocation);
 	video_filter_class->set_info             = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_set_info);
@@ -162,18 +121,7 @@ void gst_fsl_ipu_video_transform_class_init(GstFslIpuVideoTransformClass *klass)
 void gst_fsl_ipu_video_transform_init(GstFslIpuVideoTransform *ipu_video_transform)
 {
 	ipu_video_transform->priv = g_slice_alloc(sizeof(GstFslIpuVideoTransformPrivate));
-
-	ipu_video_transform->priv->display_mem_block = NULL;
-	ipu_video_transform->priv->display_mem_block_size = 0;
-
-	ipu_video_transform->priv->ipu_fd = open("/dev/mxc_ipu", O_RDWR, 0);
-	if (ipu_video_transform->priv->ipu_fd < 0)
-	{
-		GST_ELEMENT_ERROR(ipu_video_transform, RESOURCE, OPEN_READ_WRITE, ("could not open /dev/mxc_ipu: %s", strerror(errno)), (NULL));
-		return;
-	}
-
-	memset(&(ipu_video_transform->priv->task), 0, sizeof(struct ipu_task));
+	ipu_video_transform->priv->blitter = g_object_new(gst_fsl_ipu_blitter_get_type(), NULL);
 }
 
 
@@ -183,10 +131,8 @@ static void gst_fsl_ipu_video_transform_finalize(GObject *object)
 
 	if (ipu_video_transform->priv != NULL)
 	{
-		if (ipu_video_transform->priv->display_mem_block != 0)
-			gst_fsl_ipu_free_phys_mem(ipu_video_transform->priv->ipu_fd, ipu_video_transform->priv->display_mem_block);
-		if (ipu_video_transform->priv->ipu_fd >= 0)
-			close(ipu_video_transform->priv->ipu_fd);
+		if (ipu_video_transform->priv->blitter != NULL)
+			gst_object_unref(ipu_video_transform->priv->blitter);
 		g_slice_free1(sizeof(GstFslIpuVideoTransformPrivate), ipu_video_transform->priv);
 	}
 
@@ -908,7 +854,15 @@ static gboolean gst_fsl_ipu_video_transform_decide_allocation(GstBaseTransform *
 			GST_DEBUG_OBJECT(ipu_video_transform, "no pool present; creating new pool");
 		else
 			GST_DEBUG_OBJECT(ipu_video_transform, "no pool supports physical memory buffers; creating new pool");
-		pool = gst_fsl_ipu_buffer_pool_new(ipu_video_transform->priv->ipu_fd, FALSE);
+		pool = gst_fsl_ipu_blitter_create_bufferpool(ipu_video_transform->priv->blitter, outcaps, size, min, max, NULL, NULL);
+	}
+	else
+	{
+		config = gst_buffer_pool_get_config(pool);
+		gst_buffer_pool_config_set_params(config, outcaps, size, min, max);
+		gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM);
+		gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+		gst_buffer_pool_set_config(pool, config);
 	}
 
 	GST_DEBUG_OBJECT(
@@ -919,13 +873,6 @@ static gboolean gst_fsl_ipu_video_transform_decide_allocation(GstBaseTransform *
 		min,
 		max
 	);
-
-	/* Now configure the pool. */
-	config = gst_buffer_pool_get_config(pool);
-	gst_buffer_pool_config_set_params(config, outcaps, size, min, max);
-	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM);
-	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-	gst_buffer_pool_set_config(pool, config);
 
 	if (update_pool)
 		gst_query_set_nth_allocation_pool(query, 0, pool, size, min, max);
@@ -939,121 +886,25 @@ static gboolean gst_fsl_ipu_video_transform_decide_allocation(GstBaseTransform *
 }
 
 
-static u32 gst_ipu_video_transform_conv_format(GstVideoFormat format)
-{
-	switch (format)
-	{
-		case GST_VIDEO_FORMAT_RGB15: return IPU_PIX_FMT_RGB555;
-		case GST_VIDEO_FORMAT_RGB16: return IPU_PIX_FMT_RGB565;
-		case GST_VIDEO_FORMAT_BGR: return IPU_PIX_FMT_BGR24;
-		case GST_VIDEO_FORMAT_RGB: return IPU_PIX_FMT_RGB24;
-		case GST_VIDEO_FORMAT_BGRx: return IPU_PIX_FMT_BGR32;
-		case GST_VIDEO_FORMAT_BGRA: return IPU_PIX_FMT_BGRA32;
-		case GST_VIDEO_FORMAT_RGBx: return IPU_PIX_FMT_RGB32;
-		case GST_VIDEO_FORMAT_RGBA: return IPU_PIX_FMT_RGBA32;
-		case GST_VIDEO_FORMAT_ABGR: return IPU_PIX_FMT_ABGR32;
-		case GST_VIDEO_FORMAT_UYVY: return IPU_PIX_FMT_UYVY;
-		case GST_VIDEO_FORMAT_YVYU: return IPU_PIX_FMT_YVYU;
-		case GST_VIDEO_FORMAT_IYU1: return IPU_PIX_FMT_Y41P;
-		case GST_VIDEO_FORMAT_v308: return IPU_PIX_FMT_YUV444;
-		case GST_VIDEO_FORMAT_NV12: return IPU_PIX_FMT_NV12;
-		case GST_VIDEO_FORMAT_GRAY8: return IPU_PIX_FMT_GREY;
-		case GST_VIDEO_FORMAT_YVU9: return IPU_PIX_FMT_YVU410P;
-		case GST_VIDEO_FORMAT_YUV9: return IPU_PIX_FMT_YUV410P;
-		case GST_VIDEO_FORMAT_YV12: return IPU_PIX_FMT_YVU420P;
-		case GST_VIDEO_FORMAT_I420: return IPU_PIX_FMT_YUV420P;
-		case GST_VIDEO_FORMAT_Y42B: return IPU_PIX_FMT_YUV422P;
-		case GST_VIDEO_FORMAT_Y444: return IPU_PIX_FMT_YUV444P;
-		default:
-			GST_WARNING("Unknown format %d (%s)", (gint)format, gst_video_format_to_string(format));
-			return 0;
-	}
-}
-
-
-static gboolean gst_ipu_video_transform_set_info(GstVideoFilter *filter, G_GNUC_UNUSED GstCaps *in, GstVideoInfo *in_info, G_GNUC_UNUSED GstCaps *out, GstVideoInfo *out_info)
+static gboolean gst_ipu_video_transform_set_info(GstVideoFilter *filter, G_GNUC_UNUSED GstCaps *in, GstVideoInfo *in_info, G_GNUC_UNUSED GstCaps *out, G_GNUC_UNUSED GstVideoInfo *out_info)
 {
 	GstFslIpuVideoTransform *ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(filter);
-
-	if (ipu_video_transform->priv->display_mem_block != NULL)
-	{
-		gst_fsl_ipu_free_phys_mem(ipu_video_transform->priv->ipu_fd, ipu_video_transform->priv->display_mem_block);
-		ipu_video_transform->priv->display_mem_block = NULL;
-	}
-
+	gst_fsl_ipu_blitter_set_input_info(ipu_video_transform->priv->blitter, in_info);
 	return TRUE;
 }
 
 
 static GstFlowReturn gst_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out)
 {
-	GstFslIpuVideoTransform *ipu_video_transform;
-	GstFslPhysMemMeta *out_phys_mem_meta;
+	GstFslIpuVideoTransform *ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(filter);
 
-	ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(filter);
-
-	out_phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(out->buffer);
-
-	ipu_video_transform->priv->task.input.format = gst_ipu_video_transform_conv_format(GST_VIDEO_INFO_FORMAT(&(in->info)));
-	ipu_video_transform->priv->task.input.width = GST_VIDEO_INFO_WIDTH(&(in->info));
-	ipu_video_transform->priv->task.input.height = GST_VIDEO_INFO_HEIGHT(&(in->info));
-
-	ipu_video_transform->priv->task.output.format = gst_ipu_video_transform_conv_format(GST_VIDEO_INFO_FORMAT(&(out->info)));
-	ipu_video_transform->priv->task.output.width = GST_VIDEO_INFO_PLANE_STRIDE(&(out->info), 0);
-	ipu_video_transform->priv->task.output.height = GST_VIDEO_INFO_HEIGHT(&(out->info));
-	ipu_video_transform->priv->task.output.crop.w = GST_VIDEO_INFO_WIDTH(&(out->info));
-	ipu_video_transform->priv->task.output.crop.h = GST_VIDEO_INFO_HEIGHT(&(out->info));
-
-	GST_DEBUG_OBJECT(
-		ipu_video_transform,
-		"IPU task params:  input: format 0x%x size %u x %u  output: format 0x%x size %u x %u crop size %u x %u",
-		ipu_video_transform->priv->task.input.format,
-		ipu_video_transform->priv->task.input.width,
-		ipu_video_transform->priv->task.input.height,
-		ipu_video_transform->priv->task.output.format,
-		ipu_video_transform->priv->task.output.width,
-		ipu_video_transform->priv->task.output.height,
-		ipu_video_transform->priv->task.output.crop.w,
-		ipu_video_transform->priv->task.output.crop.h
-	);
-
-	{
-		GstMapInfo in_map_info;
-		void *dispmem;
-		gsize dispmem_size;
-
-		dispmem_size = gst_buffer_get_size(in->buffer);
-
-		if ((ipu_video_transform->priv->display_mem_block == NULL) || (ipu_video_transform->priv->display_mem_block_size != dispmem_size))
-		{
-			ipu_video_transform->priv->display_mem_block_size = dispmem_size;
-			if (ipu_video_transform->priv->display_mem_block != NULL)
-				gst_fsl_ipu_free_phys_mem(ipu_video_transform->priv->ipu_fd, ipu_video_transform->priv->display_mem_block);
-			ipu_video_transform->priv->display_mem_block = gst_fsl_ipu_alloc_phys_mem(ipu_video_transform->priv->ipu_fd, dispmem_size);
-			if (ipu_video_transform->priv->display_mem_block == NULL)
-				return GST_FLOW_ERROR;
-		}
-
-		gst_buffer_map(in->buffer, &in_map_info, GST_MAP_READ);
-		dispmem = mmap(0, dispmem_size, PROT_READ | PROT_WRITE, MAP_SHARED, ipu_video_transform->priv->ipu_fd, (dma_addr_t)(ipu_video_transform->priv->display_mem_block));
-
-		GST_DEBUG_OBJECT(ipu_video_transform, "copying %u bytes from incoming buffer to display mem block", dispmem_size);
-		memcpy(dispmem, in_map_info.data, dispmem_size);
-
-		munmap(dispmem, dispmem_size);
-		gst_buffer_unmap(in->buffer, &in_map_info);
-
-		ipu_video_transform->priv->task.input.paddr = (dma_addr_t)(ipu_video_transform->priv->display_mem_block);
-	}
-
-	ipu_video_transform->priv->task.output.paddr = (dma_addr_t)(out_phys_mem_meta->phys_addr);
-
-	if (ioctl(ipu_video_transform->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_video_transform->priv->task)) == -1)
-	{
-		GST_ERROR_OBJECT(ipu_video_transform, "queuing IPU task failed: %s", strerror(errno));
+	if (
+		gst_fsl_ipu_blitter_set_incoming_frame(ipu_video_transform->priv->blitter, in) &&
+		gst_fsl_ipu_blitter_set_output_frame(ipu_video_transform->priv->blitter, out) &&
+		gst_fsl_ipu_blitter_blit(ipu_video_transform->priv->blitter)
+	)
+		return GST_FLOW_OK;
+	else
 		return GST_FLOW_ERROR;
-	}
-
-	return GST_FLOW_OK;
 }
 
