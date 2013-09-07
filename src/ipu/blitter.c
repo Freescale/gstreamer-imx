@@ -1,3 +1,22 @@
+/* Common Freescale IPU blitter code for GStreamer
+ * Copyright (C) 2013  Carlos Rafael Giani
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Library General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Library General Public
+ * License along with this library; if not, write to the Free
+ * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
+
+
 #include "blitter.h"
 
 #include <string.h>
@@ -69,8 +88,6 @@ void gst_fsl_ipu_blitter_init(GstFslIpuBlitter *ipu_blitter)
 
 	ipu_blitter->internal_bufferpool = NULL;
 	ipu_blitter->internal_input_buffer = NULL;
-	ipu_blitter->input_frame = NULL;
-	ipu_blitter->output_frame = NULL;
 
 	memset(&(ipu_blitter->priv->task), 0, sizeof(struct ipu_task));
 }
@@ -80,17 +97,13 @@ static void gst_fsl_ipu_blitter_finalize(GObject *object)
 {
 	GstFslIpuBlitter *ipu_blitter = GST_FSL_IPU_BLITTER(object);
 
-	G_OBJECT_CLASS(gst_fsl_ipu_blitter_parent_class)->finalize(object);
-
-	if (ipu_blitter->input_frame != NULL)
-		gst_video_frame_unmap(ipu_blitter->input_frame);
-	if (ipu_blitter->output_frame != NULL)
-		gst_video_frame_unmap(ipu_blitter->output_frame);
 	if (ipu_blitter->internal_input_buffer != NULL)
+	{
+		gst_video_frame_unmap(&(ipu_blitter->temp_input_video_frame));
 		gst_buffer_unref(ipu_blitter->internal_input_buffer);
+	}
 	if (ipu_blitter->internal_bufferpool != NULL)
 		gst_object_unref(ipu_blitter->internal_bufferpool);
-
 
 	if (ipu_blitter->priv != NULL)
 	{
@@ -98,6 +111,8 @@ static void gst_fsl_ipu_blitter_finalize(GObject *object)
 			close(ipu_blitter->priv->ipu_fd);
 		g_slice_free1(sizeof(GstFslIpuBlitterPrivate), ipu_blitter->priv);
 	}
+
+	G_OBJECT_CLASS(gst_fsl_ipu_blitter_parent_class)->finalize(object);
 }
 
 
@@ -105,7 +120,9 @@ static guint32 gst_fsl_ipu_blitter_get_v4l_format(GstVideoFormat format)
 {
 	switch (format)
 	{
+#if 0
 		case GST_VIDEO_FORMAT_RGB15: return IPU_PIX_FMT_RGB555;
+#endif
 		case GST_VIDEO_FORMAT_RGB16: return IPU_PIX_FMT_RGB565;
 		case GST_VIDEO_FORMAT_BGR: return IPU_PIX_FMT_BGR24;
 		case GST_VIDEO_FORMAT_RGB: return IPU_PIX_FMT_RGB24;
@@ -118,13 +135,17 @@ static guint32 gst_fsl_ipu_blitter_get_v4l_format(GstVideoFormat format)
 		case GST_VIDEO_FORMAT_RGBA: return IPU_PIX_FMT_RGBA32;
 		case GST_VIDEO_FORMAT_ABGR: return IPU_PIX_FMT_ABGR32;
 		case GST_VIDEO_FORMAT_UYVY: return IPU_PIX_FMT_UYVY;
+#if 0
 		case GST_VIDEO_FORMAT_YVYU: return IPU_PIX_FMT_YVYU;
 		case GST_VIDEO_FORMAT_IYU1: return IPU_PIX_FMT_Y41P;
+#endif
 		case GST_VIDEO_FORMAT_v308: return IPU_PIX_FMT_YUV444;
 		case GST_VIDEO_FORMAT_NV12: return IPU_PIX_FMT_NV12;
+#if 0
 		case GST_VIDEO_FORMAT_GRAY8: return IPU_PIX_FMT_GREY;
 		case GST_VIDEO_FORMAT_YVU9: return IPU_PIX_FMT_YVU410P;
 		case GST_VIDEO_FORMAT_YUV9: return IPU_PIX_FMT_YUV410P;
+#endif
 		case GST_VIDEO_FORMAT_YV12: return IPU_PIX_FMT_YVU420P;
 		case GST_VIDEO_FORMAT_I420: return IPU_PIX_FMT_YUV420P;
 		case GST_VIDEO_FORMAT_Y42B: return IPU_PIX_FMT_YUV422P;
@@ -213,6 +234,31 @@ static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *i
 }
 
 
+static int gst_fsl_ipu_video_bpp(GstVideoFormat fmt)
+{
+	switch (fmt)
+	{
+		case GST_VIDEO_FORMAT_RGBx: return 4;
+		case GST_VIDEO_FORMAT_BGRx: return 4;
+		case GST_VIDEO_FORMAT_xRGB: return 4;
+		case GST_VIDEO_FORMAT_xBGR: return 4;
+		case GST_VIDEO_FORMAT_RGBA: return 4;
+		case GST_VIDEO_FORMAT_BGRA: return 4;
+		case GST_VIDEO_FORMAT_ARGB: return 4;
+		case GST_VIDEO_FORMAT_ABGR: return 4;
+		case GST_VIDEO_FORMAT_RGB: return 3;
+		case GST_VIDEO_FORMAT_BGR: return 3;
+		case GST_VIDEO_FORMAT_RGB16: return 2;
+		case GST_VIDEO_FORMAT_BGR16: return 2;
+		case GST_VIDEO_FORMAT_RGB15: return 2;
+		case GST_VIDEO_FORMAT_BGR15: return 2;
+		case GST_VIDEO_FORMAT_ARGB64: return 8;
+		case GST_VIDEO_FORMAT_UYVY: return 2;
+		default: return 1;
+	}
+}
+
+
 #define GST_FSL_FILL_IPU_TASK(ipu_blitter, frame, taskio) \
 do { \
  \
@@ -226,7 +272,7 @@ do { \
 	g_assert(phys_mem_meta != NULL); \
  \
 	num_extra_lines = phys_mem_meta->padding / (frame)->info.stride[0]; \
-	(taskio).width = (frame)->info.stride[0]; \
+	(taskio).width = (frame)->info.stride[0] / gst_fsl_ipu_video_bpp((frame)->info.finfo->format); \
 	(taskio).height = (frame)->info.height + num_extra_lines; \
  \
 	if ((video_crop_meta != NULL)) \
@@ -256,16 +302,7 @@ gboolean gst_fsl_ipu_blitter_set_input_frame(GstFslIpuBlitter *ipu_blitter, GstV
 {
 	g_assert(input_frame != NULL);
 
-	if ((ipu_blitter->input_frame != input_frame) && (ipu_blitter->input_frame != NULL))
-	{
-		gst_video_frame_unmap(ipu_blitter->input_frame);
-		ipu_blitter->input_frame = NULL;
-	}
-
 	GST_FSL_FILL_IPU_TASK(ipu_blitter, input_frame, ipu_blitter->priv->task.input);
-
-	/* NOT a deep copy - these are pointers! Frames must exist at least until the blit() call is invoked */
-	ipu_blitter->input_frame = input_frame; 
 
 	return TRUE;
 }
@@ -275,16 +312,7 @@ gboolean gst_fsl_ipu_blitter_set_output_frame(GstFslIpuBlitter *ipu_blitter, Gst
 {
 	g_assert(output_frame != NULL);
 
-	if ((ipu_blitter->output_frame != output_frame) && (ipu_blitter->output_frame != NULL))
-	{
-		gst_video_frame_unmap(ipu_blitter->output_frame);
-		ipu_blitter->output_frame = NULL;
-	}
-
 	GST_FSL_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output);
-
-	/* NOT a deep copy - these are pointers! Frames must exist at least until the blit() call is invoked */
-	ipu_blitter->output_frame = output_frame; 
 
 	return TRUE;
 }
@@ -321,9 +349,9 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 					NULL
 				);
 
-				gst_caps_unref(caps); // TODO: necessary?
+				gst_caps_unref(caps);
 
-				if (ipu_blitter->internal_bufferpool)
+				if (ipu_blitter->internal_bufferpool == NULL)
 				{
 					GST_ERROR_OBJECT(ipu_blitter, "failed to create internal bufferpool");
 					return FALSE;
@@ -340,11 +368,11 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 				GST_ERROR_OBJECT(ipu_blitter, "error acquiring input frame buffer: %s", gst_pad_mode_get_name(flow_ret));
 				return FALSE;
 			}
+
+			gst_video_frame_map(&(ipu_blitter->temp_input_video_frame), &(ipu_blitter->input_video_info), ipu_blitter->internal_input_buffer, GST_MAP_WRITE);
 		}
 
-		gst_video_frame_map(&(ipu_blitter->temp_input_video_frame), &(ipu_blitter->input_video_info), ipu_blitter->internal_input_buffer, GST_MAP_WRITE);
 		gst_video_frame_copy(&(ipu_blitter->temp_input_video_frame), incoming_frame);
-		gst_video_frame_unmap(&(ipu_blitter->temp_input_video_frame));
 
 		gst_fsl_ipu_blitter_set_input_frame(ipu_blitter, &(ipu_blitter->temp_input_video_frame));
 	}
@@ -367,9 +395,6 @@ void gst_fsl_ipu_blitter_set_input_info(GstFslIpuBlitter *ipu_blitter, GstVideoI
 
 gboolean gst_fsl_ipu_blitter_blit(GstFslIpuBlitter *ipu_blitter)
 {
-	g_assert(ipu_blitter->input_frame != NULL);
-	g_assert(ipu_blitter->output_frame != NULL);
-
 	if (ioctl(ipu_blitter->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_blitter->priv->task)) == -1)
 	{
 		GST_ERROR_OBJECT(ipu_blitter, "queuing IPU task failed: %s", strerror(errno));
@@ -435,9 +460,11 @@ GstBuffer* gst_fsl_ipu_blitter_wrap_framebuffer(GstFslIpuBlitter *ipu_blitter, i
 	fb_format = gst_fsl_ipu_blitter_get_format_from_fb(ipu_blitter, &fb_var, &fb_fix);
 	fb_size = fb_var.xres * fb_var.yres * fb_var.bits_per_pixel / 8;
 
+	GST_DEBUG_OBJECT(ipu_blitter, "framebuffer resolution is %u x %u", fb_width, fb_height);
+
 	map_data = g_slice_alloc(sizeof(FBMapData));
 	map_data->fb_size = fb_size;
-	map_data->mapped_fb_address = mmap(NULL, fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, framebuffer_fd, fb_fix.smem_start);
+	map_data->mapped_fb_address = mmap(NULL, fb_fix.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, framebuffer_fd, 0);
 	if (map_data->mapped_fb_address == MAP_FAILED)
 	{
 		GST_ERROR_OBJECT(ipu_blitter, "memory-mapping the Linux framebuffer failed: %s", strerror(errno));
