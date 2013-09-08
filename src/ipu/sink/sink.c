@@ -36,6 +36,17 @@ GST_DEBUG_CATEGORY_STATIC(ipusink_debug);
 #define GST_CAT_DEFAULT ipusink_debug
 
 
+enum
+{
+	PROP_0,
+	PROP_OUTPUT_ROTATION,
+	PROP_INPUT_CROP
+};
+
+#define DEFAULT_INPUT_CROP TRUE
+#define DEFAULT_OUTPUT_ROTATION GST_FSL_IPU_BLITTER_ROTATION_NONE
+
+
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	"sink",
 	GST_PAD_SINK,
@@ -57,6 +68,8 @@ G_DEFINE_TYPE(GstFslIpuSink, gst_fsl_ipu_sink, GST_TYPE_VIDEO_SINK)
 
 
 static void gst_fsl_ipu_sink_finalize(GObject *object);
+void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
 static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query);
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
@@ -88,11 +101,38 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 		"Carlos Rafael Giani <dv@pseudoterminal.org>"
 	);
 
+
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_caps);
 	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_propose_allocation);
 	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_show_frame);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_finalize);
+	object_class->set_property = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_property);
+	object_class->get_property = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_get_property);
+
+	g_object_class_install_property(
+		object_class,
+		PROP_OUTPUT_ROTATION,
+		g_param_spec_enum(
+			"output-rotation",
+			"Output rotation",
+			"Rotation that shall be applied to output frames",
+			gst_fsl_ipu_blitter_rotation_mode_get_type(),
+			DEFAULT_OUTPUT_ROTATION,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_INPUT_CROP,
+		g_param_spec_boolean(
+			"enable-crop",
+			"Enable input frame cropping",
+			"Whether or not to crop input frames based on their video crop metadata",
+			DEFAULT_INPUT_CROP,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -151,6 +191,52 @@ static void gst_fsl_ipu_sink_finalize(GObject *object)
 	}
 
 	G_OBJECT_CLASS(gst_fsl_ipu_sink_parent_class)->finalize(object);
+}
+
+
+void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+{
+	GstFslIpuSink *ipu_sink = GST_FSL_IPU_SINK(object);
+
+	switch (prop_id)
+	{
+		case PROP_OUTPUT_ROTATION:
+		{
+			gst_fsl_ipu_blitter_set_output_rotation_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
+			break;
+		}
+		case PROP_INPUT_CROP:
+		{
+			gst_fsl_ipu_blitter_enable_crop(ipu_sink->priv->blitter, g_value_get_boolean(value));
+			break;
+		}
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
+}
+
+
+void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	GstFslIpuSink *ipu_sink = GST_FSL_IPU_SINK(object);
+
+	switch (prop_id)
+	{
+		case PROP_OUTPUT_ROTATION:
+		{
+			g_value_set_enum(value, gst_fsl_ipu_blitter_get_output_rotation_mode(ipu_sink->priv->blitter));
+			break;
+		}
+		case PROP_INPUT_CROP:
+		{
+			g_value_set_boolean(value, gst_fsl_ipu_blitter_is_crop_enabled(ipu_sink->priv->blitter));
+			break;
+		}
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
 }
 
 

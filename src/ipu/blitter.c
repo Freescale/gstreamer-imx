@@ -82,6 +82,9 @@ GST_DEBUG_CATEGORY_STATIC(ipu_blitter_debug);
 G_DEFINE_TYPE(GstFslIpuBlitter, gst_fsl_ipu_blitter, GST_TYPE_OBJECT)
 
 
+#define DEFAULT_INPUT_CROP TRUE
+
+
 /* Private structure storing IPU specific data */
 struct _GstFslIpuBlitterPrivate
 {
@@ -105,6 +108,38 @@ static guint32 gst_fsl_ipu_blitter_get_v4l_format(GstVideoFormat format);
 static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *ipu_blitter, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
 static int gst_fsl_ipu_video_bpp(GstVideoFormat fmt);
 static void gst_fsl_ipu_blitter_unmap_wrapped_framebuffer(gpointer data);
+
+
+
+
+
+GType gst_fsl_ipu_blitter_rotation_mode_get_type(void)
+{
+	static GType gst_fsl_ipu_blitter_rotation_mode_type = 0;
+
+	if (!gst_fsl_ipu_blitter_rotation_mode_type)
+	{
+		static GEnumValue rotation_mode_values[] =
+		{
+			{ GST_FSL_IPU_BLITTER_ROTATION_NONE, "No rotation", "none" },
+			{ GST_FSL_IPU_BLITTER_ROTATION_HFLIP, "Flip horizontally", "horizontal-flip" },
+			{ GST_FSL_IPU_BLITTER_ROTATION_VFLIP, "Flip vertically", "vertical-flip" },
+			{ GST_FSL_IPU_BLITTER_ROTATION_180, "Rotate 180 degrees", "rotate-180" },
+			{ GST_FSL_IPU_BLITTER_ROTATION_90CW, "Rotate clockwise 90 degrees", "rotate-90cw" },
+			{ GST_FSL_IPU_BLITTER_ROTATION_90CW_HFLIP, "Rotate 180 degrees and flip horizontally", "rotate-90cw-hflip" },
+			{ GST_FSL_IPU_BLITTER_ROTATION_90CW_VFLIP, "Rotate 180 degrees and flip vertically", "rotate-90cw-vflip" },
+			{ GST_FSL_IPU_BLITTER_ROTATION_90CCW, "Rotate counter-clockwise 90 degrees", "rotate-90ccw" },
+			{ 0, NULL, NULL },
+		};
+
+		gst_fsl_ipu_blitter_rotation_mode_type = g_enum_register_static(
+			"FslIpuBlitterRotationMode",
+			rotation_mode_values
+		);
+	}
+
+	return gst_fsl_ipu_blitter_rotation_mode_type;
+}
 
 
 
@@ -135,6 +170,7 @@ void gst_fsl_ipu_blitter_init(GstFslIpuBlitter *ipu_blitter)
 
 	ipu_blitter->internal_bufferpool = NULL;
 	ipu_blitter->internal_input_buffer = NULL;
+	ipu_blitter->apply_crop_metadata = DEFAULT_INPUT_CROP;
 
 	memset(&(ipu_blitter->priv->task), 0, sizeof(struct ipu_task));
 }
@@ -160,6 +196,51 @@ static void gst_fsl_ipu_blitter_finalize(GObject *object)
 	}
 
 	G_OBJECT_CLASS(gst_fsl_ipu_blitter_parent_class)->finalize(object);
+}
+
+
+void gst_fsl_ipu_blitter_enable_crop(GstFslIpuBlitter *ipu_blitter, gboolean crop)
+{
+	ipu_blitter->apply_crop_metadata = crop;
+}
+
+
+gboolean gst_fsl_ipu_blitter_is_crop_enabled(GstFslIpuBlitter *ipu_blitter)
+{
+	return ipu_blitter->apply_crop_metadata;
+}
+
+
+void gst_fsl_ipu_blitter_set_output_rotation_mode(GstFslIpuBlitter *ipu_blitter, GstFslIpuBlitterRotationMode rotation_mode)
+{
+	switch (rotation_mode)
+	{
+		case GST_FSL_IPU_BLITTER_ROTATION_NONE:       ipu_blitter->priv->task.output.rotate = IPU_ROTATE_NONE; break;
+		case GST_FSL_IPU_BLITTER_ROTATION_HFLIP:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_HORIZ_FLIP; break;
+		case GST_FSL_IPU_BLITTER_ROTATION_VFLIP:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_VERT_FLIP; break;
+		case GST_FSL_IPU_BLITTER_ROTATION_180:        ipu_blitter->priv->task.output.rotate = IPU_ROTATE_180; break;
+		case GST_FSL_IPU_BLITTER_ROTATION_90CW:       ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT; break;
+		case GST_FSL_IPU_BLITTER_ROTATION_90CW_HFLIP: ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT_HFLIP; break;
+		case GST_FSL_IPU_BLITTER_ROTATION_90CW_VFLIP: ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT_VFLIP; break;
+		case GST_FSL_IPU_BLITTER_ROTATION_90CCW:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_LEFT; break;
+	}
+}
+
+
+GstFslIpuBlitterRotationMode gst_fsl_ipu_blitter_get_output_rotation_mode(GstFslIpuBlitter *ipu_blitter)
+{
+	switch (ipu_blitter->priv->task.output.rotate)
+	{
+		case IPU_ROTATE_NONE:           return GST_FSL_IPU_BLITTER_ROTATION_NONE;
+		case IPU_ROTATE_HORIZ_FLIP:     return GST_FSL_IPU_BLITTER_ROTATION_HFLIP;
+		case IPU_ROTATE_VERT_FLIP:      return GST_FSL_IPU_BLITTER_ROTATION_VFLIP;
+		case IPU_ROTATE_180:            return GST_FSL_IPU_BLITTER_ROTATION_180;
+		case IPU_ROTATE_90_RIGHT:       return GST_FSL_IPU_BLITTER_ROTATION_90CW;
+		case IPU_ROTATE_90_RIGHT_HFLIP: return GST_FSL_IPU_BLITTER_ROTATION_90CW_HFLIP;
+		case IPU_ROTATE_90_RIGHT_VFLIP: return GST_FSL_IPU_BLITTER_ROTATION_90CW_VFLIP;
+		case IPU_ROTATE_90_LEFT:        return GST_FSL_IPU_BLITTER_ROTATION_90CCW;
+		default:                        return GST_FSL_IPU_BLITTER_ROTATION_NONE;
+	}
 }
 
 
@@ -350,7 +431,7 @@ do { \
 	(taskio).width = (frame)->info.stride[0] / gst_fsl_ipu_video_bpp((frame)->info.finfo->format); \
 	(taskio).height = (frame)->info.height + num_extra_lines; \
  \
-	if ((video_crop_meta != NULL)) \
+	if (ipu_blitter->apply_crop_metadata && (video_crop_meta != NULL)) \
 	{ \
 		if ((video_crop_meta->x >= (guint)((frame)->info.width)) || (video_crop_meta->y >= (guint)((frame)->info.height))) \
 			return FALSE; \

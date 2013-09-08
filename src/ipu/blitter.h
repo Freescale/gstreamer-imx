@@ -69,6 +69,20 @@ typedef struct _GstFslIpuBlitterPrivate GstFslIpuBlitterPrivate;
 	)
 
 
+typedef enum
+{
+	GST_FSL_IPU_BLITTER_ROTATION_NONE,
+	GST_FSL_IPU_BLITTER_ROTATION_HFLIP,
+	GST_FSL_IPU_BLITTER_ROTATION_VFLIP,
+	GST_FSL_IPU_BLITTER_ROTATION_180,
+	GST_FSL_IPU_BLITTER_ROTATION_90CW,
+	GST_FSL_IPU_BLITTER_ROTATION_90CW_HFLIP,
+	GST_FSL_IPU_BLITTER_ROTATION_90CW_VFLIP,
+	GST_FSL_IPU_BLITTER_ROTATION_90CCW
+}
+GstFslIpuBlitterRotationMode;
+
+
 struct _GstFslIpuBlitter
 {
 	GstObject parent;
@@ -78,6 +92,7 @@ struct _GstFslIpuBlitter
 	GstBuffer *internal_input_buffer;
 	GstVideoFrame temp_input_video_frame;
 	GstVideoInfo input_video_info;
+	gboolean apply_crop_metadata;
 };
 
 
@@ -87,7 +102,15 @@ struct _GstFslIpuBlitterClass
 };
 
 
+GType gst_fsl_ipu_blitter_rotation_mode_get_type(void);
+
+
 GType gst_fsl_ipu_blitter_get_type(void);
+
+void gst_fsl_ipu_blitter_enable_crop(GstFslIpuBlitter *ipu_blitter, gboolean crop);
+gboolean gst_fsl_ipu_blitter_is_crop_enabled(GstFslIpuBlitter *ipu_blitter);
+void gst_fsl_ipu_blitter_set_output_rotation_mode(GstFslIpuBlitter *ipu_blitter, GstFslIpuBlitterRotationMode rotation_mode);
+GstFslIpuBlitterRotationMode gst_fsl_ipu_blitter_get_output_rotation_mode(GstFslIpuBlitter *ipu_blitter);
 
 gboolean gst_fsl_ipu_blitter_set_input_frame(GstFslIpuBlitter *ipu_blitter, GstVideoFrame *input_frame);
 gboolean gst_fsl_ipu_blitter_set_output_frame(GstFslIpuBlitter *ipu_blitter, GstVideoFrame *output_frame);

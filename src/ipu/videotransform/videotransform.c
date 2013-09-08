@@ -39,6 +39,17 @@ GST_DEBUG_CATEGORY_STATIC(ipuvideotransform_debug);
 #define GST_CAT_DEFAULT ipuvideotransform_debug
 
 
+enum
+{
+	PROP_0,
+	PROP_OUTPUT_ROTATION,
+	PROP_INPUT_CROP
+};
+
+#define DEFAULT_INPUT_CROP TRUE
+#define DEFAULT_OUTPUT_ROTATION GST_FSL_IPU_BLITTER_ROTATION_NONE
+
+
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	"sink",
 	GST_PAD_SINK,
@@ -65,6 +76,8 @@ G_DEFINE_TYPE(GstFslIpuVideoTransform, gst_fsl_ipu_video_transform, GST_TYPE_VID
 
 
 static void gst_fsl_ipu_video_transform_finalize(GObject *object);
+void gst_fsl_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+void gst_fsl_ipu_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static gboolean gst_ipu_video_transform_src_event(GstBaseTransform *transform, GstEvent *event);
 static GstCaps* gst_ipu_video_transform_transform_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *filter);
 static GstCaps* gst_ipu_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
@@ -106,6 +119,8 @@ void gst_fsl_ipu_video_transform_class_init(GstFslIpuVideoTransformClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
 	object_class->finalize                   = GST_DEBUG_FUNCPTR(gst_fsl_ipu_video_transform_finalize);
+	object_class->set_property               = GST_DEBUG_FUNCPTR(gst_fsl_ipu_video_transform_set_property);
+	object_class->get_property               = GST_DEBUG_FUNCPTR(gst_fsl_ipu_video_transform_get_property);
 	base_transform_class->src_event          = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_src_event);
 	base_transform_class->transform_caps     = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_caps);
 	base_transform_class->fixate_caps        = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_fixate_caps);
@@ -115,7 +130,30 @@ void gst_fsl_ipu_video_transform_class_init(GstFslIpuVideoTransformClass *klass)
 	video_filter_class->transform_frame      = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_frame);
 
 	base_transform_class->passthrough_on_same_caps = TRUE;
-}
+
+	g_object_class_install_property(
+		object_class,
+		PROP_OUTPUT_ROTATION,
+		g_param_spec_enum(
+			"output-rotation",
+			"Output rotation",
+			"Rotation that shall be applied to output frames",
+			gst_fsl_ipu_blitter_rotation_mode_get_type(),
+			DEFAULT_OUTPUT_ROTATION,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_INPUT_CROP,
+		g_param_spec_boolean(
+			"enable-crop",
+			"Enable input frame cropping",
+			"Whether or not to crop input frames based on their video crop metadata",
+			DEFAULT_INPUT_CROP,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);}
 
 
 void gst_fsl_ipu_video_transform_init(GstFslIpuVideoTransform *ipu_video_transform)
@@ -137,6 +175,52 @@ static void gst_fsl_ipu_video_transform_finalize(GObject *object)
 	}
 
 	G_OBJECT_CLASS(gst_fsl_ipu_video_transform_parent_class)->finalize(object);
+}
+
+
+void gst_fsl_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+{
+	GstFslIpuVideoTransform *ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(object);
+
+	switch (prop_id)
+	{
+		case PROP_OUTPUT_ROTATION:
+		{
+			gst_fsl_ipu_blitter_set_output_rotation_mode(ipu_video_transform->priv->blitter, g_value_get_enum(value));
+			break;
+		}
+		case PROP_INPUT_CROP:
+		{
+			gst_fsl_ipu_blitter_enable_crop(ipu_video_transform->priv->blitter, g_value_get_boolean(value));
+			break;
+		}
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
+}
+
+
+void gst_fsl_ipu_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	GstFslIpuVideoTransform *ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(object);
+
+	switch (prop_id)
+	{
+		case PROP_OUTPUT_ROTATION:
+		{
+			g_value_set_enum(value, gst_fsl_ipu_blitter_get_output_rotation_mode(ipu_video_transform->priv->blitter));
+			break;
+		}
+		case PROP_INPUT_CROP:
+		{
+			g_value_set_boolean(value, gst_fsl_ipu_blitter_is_crop_enabled(ipu_video_transform->priv->blitter));
+			break;
+		}
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
 }
 
 
