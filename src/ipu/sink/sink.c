@@ -40,11 +40,9 @@ enum
 {
 	PROP_0,
 	PROP_OUTPUT_ROTATION,
-	PROP_INPUT_CROP
+	PROP_INPUT_CROP,
+	PROP_DEINTERLACE_MODE
 };
-
-#define DEFAULT_INPUT_CROP TRUE
-#define DEFAULT_OUTPUT_ROTATION GST_FSL_IPU_BLITTER_ROTATION_NONE
 
 
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
@@ -118,7 +116,7 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 			"Output rotation",
 			"Rotation that shall be applied to output frames",
 			gst_fsl_ipu_blitter_rotation_mode_get_type(),
-			DEFAULT_OUTPUT_ROTATION,
+			GST_FSL_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -129,7 +127,19 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 			"enable-crop",
 			"Enable input frame cropping",
 			"Whether or not to crop input frames based on their video crop metadata",
-			DEFAULT_INPUT_CROP,
+			GST_FSL_IPU_BLITTER_CROP_DEFAULT,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_DEINTERLACE_MODE,
+		g_param_spec_enum(
+			"deinterlace-mode",
+			"Deinterlace mode",
+			"Deinterlacing mode to be used for incoming frames (ignored if frames are not interlaced)",
+			gst_fsl_ipu_blitter_deinterlace_mode_get_type(),
+			GST_FSL_IPU_BLITTER_DEINTERLACE_DEFAULT,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -201,15 +211,14 @@ void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const 
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
-		{
 			gst_fsl_ipu_blitter_set_output_rotation_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
 			break;
-		}
 		case PROP_INPUT_CROP:
-		{
 			gst_fsl_ipu_blitter_enable_crop(ipu_sink->priv->blitter, g_value_get_boolean(value));
 			break;
-		}
+		case PROP_DEINTERLACE_MODE:
+			gst_fsl_ipu_blitter_set_deinterlace_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
+			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -224,15 +233,14 @@ void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
-		{
 			g_value_set_enum(value, gst_fsl_ipu_blitter_get_output_rotation_mode(ipu_sink->priv->blitter));
 			break;
-		}
 		case PROP_INPUT_CROP:
-		{
 			g_value_set_boolean(value, gst_fsl_ipu_blitter_is_crop_enabled(ipu_sink->priv->blitter));
 			break;
-		}
+		case PROP_DEINTERLACE_MODE:
+			g_value_set_enum(value, gst_fsl_ipu_blitter_get_deinterlace_mode(ipu_sink->priv->blitter));
+			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;

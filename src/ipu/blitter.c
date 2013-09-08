@@ -82,9 +82,6 @@ GST_DEBUG_CATEGORY_STATIC(ipu_blitter_debug);
 G_DEFINE_TYPE(GstFslIpuBlitter, gst_fsl_ipu_blitter, GST_TYPE_OBJECT)
 
 
-#define DEFAULT_INPUT_CROP TRUE
-
-
 /* Private structure storing IPU specific data */
 struct _GstFslIpuBlitterPrivate
 {
@@ -142,6 +139,29 @@ GType gst_fsl_ipu_blitter_rotation_mode_get_type(void)
 }
 
 
+GType gst_fsl_ipu_blitter_deinterlace_mode_get_type(void)
+{
+	static GType gst_fsl_ipu_blitter_deinterlace_mode_type = 0;
+
+	if (!gst_fsl_ipu_blitter_deinterlace_mode_type)
+	{
+		static GEnumValue deinterlace_mode_values[] =
+		{
+			{ GST_FSL_IPU_BLITTER_DEINTERLACE_NONE, "No deinterlacing", "none" },
+			{ GST_FSL_IPU_BLITTER_DEINTERLACE_FAST_MOTION, "Fast-motion deinterlacing (uses one input frames for one output frame)", "fast-motion" },
+			{ 0, NULL, NULL },
+		};
+
+		gst_fsl_ipu_blitter_deinterlace_mode_type = g_enum_register_static(
+			"FslIpuBlitterDeinterlaceMode",
+			deinterlace_mode_values
+		);
+	}
+
+	return gst_fsl_ipu_blitter_deinterlace_mode_type;
+}
+
+
 
 
 
@@ -170,7 +190,8 @@ void gst_fsl_ipu_blitter_init(GstFslIpuBlitter *ipu_blitter)
 
 	ipu_blitter->internal_bufferpool = NULL;
 	ipu_blitter->internal_input_buffer = NULL;
-	ipu_blitter->apply_crop_metadata = DEFAULT_INPUT_CROP;
+	ipu_blitter->apply_crop_metadata = GST_FSL_IPU_BLITTER_CROP_DEFAULT;
+	ipu_blitter->deinterlace_mode = GST_FSL_IPU_BLITTER_DEINTERLACE_DEFAULT;
 
 	memset(&(ipu_blitter->priv->task), 0, sizeof(struct ipu_task));
 }
@@ -241,6 +262,28 @@ GstFslIpuBlitterRotationMode gst_fsl_ipu_blitter_get_output_rotation_mode(GstFsl
 		case IPU_ROTATE_90_LEFT:        return GST_FSL_IPU_BLITTER_ROTATION_90CCW;
 		default:                        return GST_FSL_IPU_BLITTER_ROTATION_NONE;
 	}
+}
+
+
+void gst_fsl_ipu_blitter_set_deinterlace_mode(GstFslIpuBlitter *ipu_blitter, GstFslIpuBlitterDeinterlaceMode deinterlace_mode)
+{
+	switch (deinterlace_mode)
+	{
+		case GST_FSL_IPU_BLITTER_DEINTERLACE_NONE:
+			ipu_blitter->priv->task.input.deinterlace.motion = MED_MOTION;
+			break;
+		case GST_FSL_IPU_BLITTER_DEINTERLACE_FAST_MOTION:
+			ipu_blitter->priv->task.input.deinterlace.motion = HIGH_MOTION;
+			break;
+	}
+
+	ipu_blitter->deinterlace_mode = deinterlace_mode;
+}
+
+
+GstFslIpuBlitterDeinterlaceMode gst_fsl_ipu_blitter_get_deinterlace_mode(GstFslIpuBlitter *ipu_blitter)
+{
+	return ipu_blitter->deinterlace_mode;
 }
 
 
@@ -551,6 +594,51 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 
 		/* Finally, set the temp input frame as the input frame */
 		gst_fsl_ipu_blitter_set_input_frame(ipu_blitter, &(ipu_blitter->temp_input_video_frame));
+	}
+
+	ipu_blitter->priv->task.input.deinterlace.enable = 0;
+
+	if (ipu_blitter->deinterlace_mode != GST_FSL_IPU_BLITTER_DEINTERLACE_NONE)
+	{
+		switch (incoming_frame->info.interlace_mode)
+		{
+			case GST_VIDEO_INTERLACE_MODE_INTERLEAVED:
+				GST_TRACE_OBJECT(ipu_blitter, "input stream uses interlacing -> deinterlacing enabled");
+				ipu_blitter->priv->task.input.deinterlace.enable = 1;
+				break;
+			case GST_VIDEO_INTERLACE_MODE_MIXED:
+			{
+				GstVideoMeta *video_meta;
+
+				GST_TRACE_OBJECT(ipu_blitter, "input stream uses mixed interlacing -> need to check video metadata deinterlacing flag");
+
+				video_meta = gst_buffer_get_video_meta(incoming_frame->buffer);
+				if (video_meta != NULL)
+				{
+					if (video_meta->flags & GST_VIDEO_FRAME_FLAG_INTERLACED)
+					{
+						GST_TRACE_OBJECT(ipu_blitter, "frame has video metadata and deinterlacing flag");
+						ipu_blitter->priv->task.input.deinterlace.enable = 1;
+					}
+					else
+						GST_TRACE_OBJECT(ipu_blitter, "frame has video metadata but no deinterlacing flag");
+				}
+				else
+					GST_TRACE_OBJECT(ipu_blitter, "frame has no video metadata -> no deinterlacing done");
+
+				break;
+			}
+			case GST_VIDEO_INTERLACE_MODE_PROGRESSIVE:
+			{
+				GST_TRACE_OBJECT(ipu_blitter, "input stream is progressive -> no deinterlacing necessary");
+				break;
+			}
+			case GST_VIDEO_INTERLACE_MODE_FIELDS:
+				GST_FIXME_OBJECT(ipu_blitter, "2-fields deinterlacing not supported (yet)");
+				break;
+			default:
+				break;
+		}
 	}
 
 	return TRUE;
