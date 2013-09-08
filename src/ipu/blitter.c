@@ -26,7 +26,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/types.h>
-#include <linux/mxcfb.h>
+#include <linux/fb.h>
 #include <linux/ipu.h>
 #include <gst/video/gstvideometa.h>
 #include "../common/phys_mem_meta.h"
@@ -68,7 +68,7 @@
  * be made, the frames must continue exist at least until then. (The one exception is the internal temporary
  * input frame, which is managed by GstFslIpuBlitter.)
  *
- * TODO: Currently, this code includes headers that reside in the kernel (linux/ipu.h and linux/mxcfb.h).
+ * TODO: Currently, this code includes the linux/ipu.h header, which resides in the kernel.
  * Responses from Freescale indicate there is currently no other way how to do it. Fix this once there is#
  * a better mechanism.
  */
