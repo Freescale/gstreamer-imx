@@ -33,6 +33,48 @@
 #include "buffer_pool.h"
 
 
+
+/* Information about the blitter:
+ *
+ * The Freescale i.MX IPU provides 2D blitting functionality. It can scale, convert between
+ * colorspaces, deinterlace, rotate in one step. Frames are read from and blitted into DMA buffers
+ * (= physically contiguous memory blocks).
+ * It is much more efficient to use the IPU for the aforementioned operations, since it avoids
+ * transfers through the main bus, and avoids having to deal with DMA page cache invalidations.
+ *
+ * In GStreamer, the IPU is useful video frame output to the Linux framebuffer, and for
+ * video transformation operations (the ones mentioned earlier). As a consequence, a sink and a
+ * videotransform element have been created. Both essentially do the same thing (blitting with
+ * transformation operations). The only difference is the destination: in the sink, it is
+ * the Linux framebuffer; in the videotransform element, it is an output DMA buffer wrapped in a
+ * GstBuffer. To reuse code, the GstFslIpuBlitter object was introduced. It takes care of setting
+ * up the IPU and performing the blitting. All the sink and videotransform element have to do is
+ * to set up the input and output frames.
+ *
+ * The GstFslIpuBlitter object also takes care of a special case: when the input isn't a DMA buffer.
+ * Then, a memory copy has to be done. For this reason, the object identifies three types of frames:
+ * incoming, input, and output frames. Input and output frames are tied directly to the IPU and
+ * must be backed by a DMA buffer. Incoming frames will be tested; if they are backed by a DMA
+ * buffer, then they are set as input frames. If not, an internal input frame is allocated, and the
+ * contents of the incoming frame are copied into it.
+ * The reason for this is that in GStreamer, elements can freely decide how they create their own
+ * buffers and what allocators they use for this, but cannot force upstream elements to use a
+ * specific allocator. In other words, downstream can only accept or refuse incoming GstBuffers;
+ * it cannot dictate upstream how these shall allocate the memory inside the buffers. Upstream can
+ * respect proposals sent by downstream, but is free to ignore them.
+ *
+ * Incoming, input, and output data is expected in form of GstVideoFrame instances. The GstFslIpuBlitter
+ * object does not take ownership over these frames. Therefore, if a gst_fsl_ipu_blitter_blit() call is to
+ * be made, the frames must continue exist at least until then. (The one exception is the internal temporary
+ * input frame, which is managed by GstFslIpuBlitter.)
+ *
+ * TODO: Currently, this code includes headers that reside in the kernel (linux/ipu.h and linux/mxcfb.h).
+ * Responses from Freescale indicate there is currently no other way how to do it. Fix this once there is#
+ * a better mechanism.
+ */
+
+
+
 GST_DEBUG_CATEGORY_STATIC(ipu_blitter_debug);
 #define GST_CAT_DEFAULT ipu_blitter_debug
 
@@ -40,6 +82,7 @@ GST_DEBUG_CATEGORY_STATIC(ipu_blitter_debug);
 G_DEFINE_TYPE(GstFslIpuBlitter, gst_fsl_ipu_blitter, GST_TYPE_OBJECT)
 
 
+/* Private structure storing IPU specific data */
 struct _GstFslIpuBlitterPrivate
 {
 	int ipu_fd;
@@ -47,6 +90,8 @@ struct _GstFslIpuBlitterPrivate
 };
 
 
+/* Linux Framebuffer data; this struct is used with the gst_fsl_ipu_blitter_unmap_wrapped_framebuffer()
+ * call */
 typedef struct
 {
 	guint fb_size;
@@ -58,6 +103,7 @@ FBMapData;
 static void gst_fsl_ipu_blitter_finalize(GObject *object);
 static guint32 gst_fsl_ipu_blitter_get_v4l_format(GstVideoFormat format);
 static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *ipu_blitter, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
+static int gst_fsl_ipu_video_bpp(GstVideoFormat fmt);
 static void gst_fsl_ipu_blitter_unmap_wrapped_framebuffer(gpointer data);
 
 
@@ -79,6 +125,7 @@ void gst_fsl_ipu_blitter_init(GstFslIpuBlitter *ipu_blitter)
 {
 	ipu_blitter->priv = g_slice_alloc(sizeof(GstFslIpuBlitterPrivate));
 
+	/* This FD is necessary for using the IPU ioctls */
 	ipu_blitter->priv->ipu_fd = open("/dev/mxc_ipu", O_RDWR, 0);
 	if (ipu_blitter->priv->ipu_fd < 0)
 	{
@@ -120,32 +167,31 @@ static guint32 gst_fsl_ipu_blitter_get_v4l_format(GstVideoFormat format)
 {
 	switch (format)
 	{
+		/* These formats are defined in ipu.h , but the IPU reports them as
+		 * being unsupported.
+		 * TODO: It is currently not known how to find out which formats are supported,
+		 * or if different i.MX versions support different formats.
+		 */
 #if 0
 		case GST_VIDEO_FORMAT_RGB15: return IPU_PIX_FMT_RGB555;
+		case GST_VIDEO_FORMAT_GBR: return IPU_PIX_FMT_GBR24;
+		case GST_VIDEO_FORMAT_YVYU: return IPU_PIX_FMT_YVYU;
+		case GST_VIDEO_FORMAT_IYU1: return IPU_PIX_FMT_Y41P;
+		case GST_VIDEO_FORMAT_GRAY8: return IPU_PIX_FMT_GREY;
+		case GST_VIDEO_FORMAT_YVU9: return IPU_PIX_FMT_YVU410P;
+		case GST_VIDEO_FORMAT_YUV9: return IPU_PIX_FMT_YUV410P;
 #endif
 		case GST_VIDEO_FORMAT_RGB16: return IPU_PIX_FMT_RGB565;
 		case GST_VIDEO_FORMAT_BGR: return IPU_PIX_FMT_BGR24;
 		case GST_VIDEO_FORMAT_RGB: return IPU_PIX_FMT_RGB24;
-#if 0
-		case GST_VIDEO_FORMAT_GBR: return IPU_PIX_FMT_GBR24;
-#endif
 		case GST_VIDEO_FORMAT_BGRx: return IPU_PIX_FMT_BGR32;
 		case GST_VIDEO_FORMAT_BGRA: return IPU_PIX_FMT_BGRA32;
 		case GST_VIDEO_FORMAT_RGBx: return IPU_PIX_FMT_RGB32;
 		case GST_VIDEO_FORMAT_RGBA: return IPU_PIX_FMT_RGBA32;
 		case GST_VIDEO_FORMAT_ABGR: return IPU_PIX_FMT_ABGR32;
 		case GST_VIDEO_FORMAT_UYVY: return IPU_PIX_FMT_UYVY;
-#if 0
-		case GST_VIDEO_FORMAT_YVYU: return IPU_PIX_FMT_YVYU;
-		case GST_VIDEO_FORMAT_IYU1: return IPU_PIX_FMT_Y41P;
-#endif
 		case GST_VIDEO_FORMAT_v308: return IPU_PIX_FMT_YUV444;
 		case GST_VIDEO_FORMAT_NV12: return IPU_PIX_FMT_NV12;
-#if 0
-		case GST_VIDEO_FORMAT_GRAY8: return IPU_PIX_FMT_GREY;
-		case GST_VIDEO_FORMAT_YVU9: return IPU_PIX_FMT_YVU410P;
-		case GST_VIDEO_FORMAT_YUV9: return IPU_PIX_FMT_YUV410P;
-#endif
 		case GST_VIDEO_FORMAT_YV12: return IPU_PIX_FMT_YVU420P;
 		case GST_VIDEO_FORMAT_I420: return IPU_PIX_FMT_YUV420P;
 		case GST_VIDEO_FORMAT_Y42B: return IPU_PIX_FMT_YUV422P;
@@ -175,14 +221,19 @@ static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *i
 		return fmt;
 	}
 
+	/* TODO: Some cases are commented out, corresponding to the disabled pixel formats in
+	 * gst_fsl_ipu_blitter_get_v4l_format(). Re-enable them if and when there is a way to autodetect
+	 * supported formats. */
 	switch (fb_var->bits_per_pixel)
 	{
+#if 0
 		case 15:
 		{
 			if ((rlen == 5) && (glen == 5) && (blen == 5))
 				fmt = GST_VIDEO_FORMAT_RGB15;
 			break;
 		}
+#endif
 		case 16:
 		{
 			if ((rlen == 5) && (glen == 6) && (blen == 5))
@@ -234,6 +285,8 @@ static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *i
 }
 
 
+/* Determines the number of bytes per pixel used by the IPU for the given formats;
+ * necessary for calculations in the GST_FSL_FILL_IPU_TASK macro */
 static int gst_fsl_ipu_video_bpp(GstVideoFormat fmt)
 {
 	switch (fmt)
@@ -259,6 +312,28 @@ static int gst_fsl_ipu_video_bpp(GstVideoFormat fmt)
 }
 
 
+/* Since the steps for setting input and output buffers are the same,
+ * their code is put in a macro, to be able to use one generic version.
+ * In C++, templates would allow for cleaner generic programming, but
+ * we are using C here.
+ */
+/* Of special note is the IPU task width & height values. The IPU does not
+ * allow for setting stride and padding values directly. In fact, it assumes
+ * a stride that equals the frame width, and zero padding.
+ * However, the IPU task has the crop struct, making it possible to
+ * read from & write to a rectangular region inside a frame.
+ * A trick is used: width is set to the stride value, height is set to include
+ * padding rows. crop width & height are set to the actual width and height
+ * of the frame. (Or, if the video crop metadata is defined, it is set to the
+ * metadata's coordinates.)
+ * One limitation of this trick is that it assumes a specific video frame
+ * layout. In particular, planes with nonstandard positions inside the buffer
+ * are not supported. But this is circumvented by copying frames that do not
+ * contain DMA buffers (frames that do are very unlikely to use such nonstandard
+ * layouts).
+ * Since the stride is given in bytes, not pixels, it needs to be divided by
+ * whatever gst_fsl_ipu_video_bpp() returns.
+ */
 #define GST_FSL_FILL_IPU_TASK(ipu_blitter, frame, taskio) \
 do { \
  \
@@ -326,18 +401,30 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 
 	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(incoming_frame->buffer);
 
+	/* Test if the incoming frame uses DMA memory */
 	if (phys_mem_meta != NULL)
+	{
+		/* DMA memory present - the incoming can be used as an input frame directly */
 		gst_fsl_ipu_blitter_set_input_frame(ipu_blitter, incoming_frame);
+	}
 	else
 	{
-		/* Create temp input frame using our bufferpool and copy the incoming frame into it */
+		/* No DMA memory present; the incoming frame needs to be copied to an internal
+		 * temporary input frame */
 
 		if (ipu_blitter->internal_input_buffer == NULL)
 		{
+			/* The internal input buffer is the temp input frame's DMA memory.
+			 * If it does not exist yet, it needs to be created here. The temp input
+			 * frame is then mapped. */
+
 			GstFlowReturn flow_ret;
 
 			if (ipu_blitter->internal_bufferpool == NULL)
 			{
+				/* Internal bufferpool does not exist yet - create it now,
+				 * so that it can in turn create the internal input buffer */
+
 				GstCaps *caps = gst_video_info_to_caps(&(ipu_blitter->input_video_info));
 
 				ipu_blitter->internal_bufferpool = gst_fsl_ipu_blitter_create_bufferpool(
@@ -358,10 +445,12 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 				}
 			}
 
-
+			/* Future versions of this code may propose the internal bufferpool upstream;
+			 * hence the is_active check */
 			if (!gst_buffer_pool_is_active(ipu_blitter->internal_bufferpool))
 				gst_buffer_pool_set_active(ipu_blitter->internal_bufferpool, TRUE);
 
+			/* Create the internal input buffer */
 			flow_ret = gst_buffer_pool_acquire_buffer(ipu_blitter->internal_bufferpool, &(ipu_blitter->internal_input_buffer), NULL);
 			if (flow_ret != GST_FLOW_OK)
 			{
@@ -369,11 +458,17 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 				return FALSE;
 			}
 
+			/* The temp input video frame is mapped and remains mapped until
+			 * either new input videoinfo is set or the blitter is discarded */
 			gst_video_frame_map(&(ipu_blitter->temp_input_video_frame), &(ipu_blitter->input_video_info), ipu_blitter->internal_input_buffer, GST_MAP_WRITE);
 		}
 
+		/* Copy the incoming frame's pixels to the temp input frame
+		 * The gst_video_frame_copy() makes sure stride and plane offset values from both
+		 * frames are respected */
 		gst_video_frame_copy(&(ipu_blitter->temp_input_video_frame), incoming_frame);
 
+		/* Finally, set the temp input frame as the input frame */
 		gst_fsl_ipu_blitter_set_input_frame(ipu_blitter, &(ipu_blitter->temp_input_video_frame));
 	}
 
@@ -385,6 +480,16 @@ void gst_fsl_ipu_blitter_set_input_info(GstFslIpuBlitter *ipu_blitter, GstVideoI
 {
 	ipu_blitter->input_video_info = *info;
 
+	/* New videoinfo means new frame sizes, new strides etc.
+	 * making existing internal bufferpools and temp video frames unusable
+	 * -> shut them down; they will be recreated on-demand in the
+	 * gst_fsl_ipu_blitter_set_incoming_frame() call */
+	if (ipu_blitter->internal_input_buffer != NULL)
+	{
+		gst_video_frame_unmap(&(ipu_blitter->temp_input_video_frame));
+		gst_buffer_unref(ipu_blitter->internal_input_buffer);
+		ipu_blitter->internal_input_buffer = NULL;
+	}
 	if (ipu_blitter->internal_bufferpool != NULL)
 	{
 		gst_object_unref(ipu_blitter->internal_bufferpool);
@@ -395,6 +500,9 @@ void gst_fsl_ipu_blitter_set_input_info(GstFslIpuBlitter *ipu_blitter, GstVideoI
 
 gboolean gst_fsl_ipu_blitter_blit(GstFslIpuBlitter *ipu_blitter)
 {
+	/* The actual blit operation
+	 * Input and output frame are assumed to be set up properly at this point
+	 */
 	if (ioctl(ipu_blitter->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_blitter->priv->task)) == -1)
 	{
 		GST_ERROR_OBJECT(ipu_blitter, "queuing IPU task failed: %s", strerror(errno));
@@ -414,6 +522,8 @@ GstBufferPool* gst_fsl_ipu_blitter_create_bufferpool(GstFslIpuBlitter *ipu_blitt
 
 	config = gst_buffer_pool_get_config(pool);
 	gst_buffer_pool_config_set_params(config, caps, size, min_buffers, max_buffers);
+	/* If the allocator value is NULL, the pool will create its own internal allocator,
+	 * which uses the IPU calls to allocate DMA memory */
 	if (allocator != NULL)
 	{
 		g_assert(alloc_params != NULL);
@@ -458,13 +568,18 @@ GstBuffer* gst_fsl_ipu_blitter_wrap_framebuffer(GstFslIpuBlitter *ipu_blitter, i
 	fb_width = fb_var.xres;
 	fb_height = fb_var.yres;
 	fb_format = gst_fsl_ipu_blitter_get_format_from_fb(ipu_blitter, &fb_var, &fb_fix);
-	fb_size = fb_var.xres * fb_var.yres * fb_var.bits_per_pixel / 8;
+	fb_size = fb_fix.smem_len;
 
 	GST_DEBUG_OBJECT(ipu_blitter, "framebuffer resolution is %u x %u", fb_width, fb_height);
 
+	/* mmap the framebuffer
+	 * Strictly speaking, this is unnecessary in most cases, since the CPU will rarely want to access
+	 * the framebuffer; the IPU shall do that. So, a GstBuffer with no memory blocks and phys_mem_meta
+	 * metadata would be enough. However, GStreamer video frame map logic requires buffers that can be mapped,
+	 * and a GstBuffer with no memory blocks cannot be mapped. */
 	map_data = g_slice_alloc(sizeof(FBMapData));
 	map_data->fb_size = fb_size;
-	map_data->mapped_fb_address = mmap(NULL, fb_fix.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, framebuffer_fd, 0);
+	map_data->mapped_fb_address = mmap(NULL, fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, framebuffer_fd, 0);
 	if (map_data->mapped_fb_address == MAP_FAILED)
 	{
 		GST_ERROR_OBJECT(ipu_blitter, "memory-mapping the Linux framebuffer failed: %s", strerror(errno));
