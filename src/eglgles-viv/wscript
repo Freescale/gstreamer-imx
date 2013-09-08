@@ -1,0 +1,65 @@
+#!/usr/bin/env python
+
+
+# Try to find one library of a given list
+# The first library found is stored in the given uselib_store
+def check_lib_list(conf, uselib, uselib_store, lib_list):
+	for lib in lib_list:
+		if conf.check_cc(mandatory = 0, lib = lib, uselib = uselib, uselib_store = uselib_store):
+			return True
+	return False
+
+def check_x11(conf, uselib = ''):
+	return \
+	  conf.check_cc(mandatory = 0, lib = 'X11', uselib = uselib, uselib_store = 'X11') and \
+	  conf.check_cc(mandatory = 0, header_name = 'X11/Xlib.h', uselib = uselib, uselib_store = 'X11')
+
+def check_egl(conf, uselib = ''):
+	return \
+	  conf.check_cc(mandatory = 0, lib = 'EGL', uselib = uselib, uselib_store = 'EGL') and \
+	  conf.check_cc(mandatory = 0, header_name = 'EGL/egl.h', uselib = uselib, uselib_store = 'EGL')
+
+def check_openvg(conf, uselib = 'EGL'):
+	return \
+	  conf.check_cc(mandatory = 0, lib = 'OpenVG', uselib = uselib, uselib_store = 'OPENVG') and \
+	  conf.check_cc(mandatory = 0, header_name = 'VG/openvg.h', uselib = uselib, uselib_store = 'OPENVG')
+
+def check_gles1(conf, uselib = 'EGL', lib_list = ['GLESv1_CM', 'GLESV1_CL']):
+	retval = \
+	  check_lib_list(conf = conf, uselib = uselib, uselib_store = 'GLES1', lib_list = lib_list) and \
+	  conf.check_cc(mandatory = 0, header_name = 'GLES/gl.h', uselib = uselib, uselib_store = 'GLES1')
+	return retval
+
+def check_gles2(conf, uselib = 'EGL', lib_list = ['GLESv2']):
+	retval = \
+	  check_lib_list(conf = conf, uselib = uselib, uselib_store = 'GLES2', lib_list = lib_list) and \
+	  conf.check_cc(mandatory = 0, header_name = 'GLES2/gl2.h', uselib = uselib, uselib_store = 'GLES2')
+	conf.check_cc(mandatory = 0, header_name = ['GLES2/gl2.h', 'GLES2/gl2ext.h'], uselib = uselib, define_name = 'WITH_GL2EXT_H', uselib_store = 'GLES2')
+	return retval
+
+
+def configure(conf):
+	from waflib.Build import Logs
+	conf.env['DEFINES_EGL'] = ['LINUX']
+	if check_x11(conf) and \
+	  check_egl(conf, 'EGL') and \
+	  check_gles2(conf, lib_list = ['GLESv2', 'GLESv2x', 'GLESv2SC']):
+		Logs.pprint('GREEN', 'Modified EGL GLES sink will be built')
+		conf.env['EGLGLESSINK_ENABLED'] = 1
+	else:
+		Logs.pprint('RED', 'Modified EGL GLES sink will not be built - dependencies not found')
+
+
+def build(bld):
+	if bld.env['EGLGLESSINK_ENABLED']:
+		bld(
+			features = ['c', 'cshlib'],
+			includes = ['../..'],
+			use = 'gstfslcommon',
+			uselib = ['X11', 'GLES1', 'GLES2', 'EGL', 'VIVANTE', 'GSTREAMER_VIDEO'] + bld.env['COMMON_USELIB'],
+			target = 'gsteglglesvivsink',
+			defines = ['HAVE_CONFIG_H', 'USE_EGL_X11', 'GST_LICENSE="LGPL"'],
+			source = bld.path.ant_glob('*.c'),
+			install_path = bld.env['PLUGIN_INSTALL_PATH']
+		)
+
