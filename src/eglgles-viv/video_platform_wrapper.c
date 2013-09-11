@@ -104,7 +104,7 @@ platform_create_native_window (gint width, gint height, gpointer * window_data)
 }
 
 gboolean
-platform_destroy_native_window (EGLNativeDisplayType display,
+platform_destroy_native_window (G_GNUC_UNUSED EGLNativeDisplayType display,
     EGLNativeWindowType window, gpointer * window_data)
 {
   X11WindowData *data = *window_data;

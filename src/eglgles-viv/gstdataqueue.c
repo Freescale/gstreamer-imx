@@ -585,7 +585,7 @@ egl_gst_data_queue_drop_head (EGLGstDataQueue * queue, GType type)
   EGL_GST_DATA_QUEUE_MUTEX_LOCK (queue);
   idx = egl_gst_queue_array_find (priv->queue, is_of_type, GSIZE_TO_POINTER (type));
 
-  if (idx == -1)
+  if (idx == (guint)-1)
     goto done;
 
   leak = egl_gst_queue_array_drop_element (priv->queue, idx);
@@ -650,7 +650,7 @@ egl_gst_data_queue_get_level (EGLGstDataQueue * queue, EGLGstDataQueueSize * lev
 
 static void
 egl_gst_data_queue_set_property (GObject * object,
-    guint prop_id, const GValue * value, GParamSpec * pspec)
+    guint prop_id, G_GNUC_UNUSED const GValue * value, GParamSpec * pspec)
 {
   switch (prop_id) {
     default:

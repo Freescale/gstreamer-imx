@@ -226,7 +226,7 @@ egl_gst_queue_array_drop_element (EGLGstQueueArray * array, guint idx)
   element = array->array[idx];
 
   /* simple case idx == first item */
-  if (idx == first_item_index) {
+  if ((int)idx == first_item_index) {
     /* move the head plus one */
     array->head++;
     array->head %= array->size;
@@ -235,7 +235,7 @@ egl_gst_queue_array_drop_element (EGLGstQueueArray * array, guint idx)
   }
 
   /* simple case idx == last item */
-  if (idx == last_item_index) {
+  if ((int)idx == last_item_index) {
     /* move tail minus one, potentially wrapping */
     array->tail = (array->tail - 1 + array->size) % array->size;
     array->length--;
@@ -244,7 +244,7 @@ egl_gst_queue_array_drop_element (EGLGstQueueArray * array, guint idx)
 
   /* non-wrapped case */
   if (first_item_index < last_item_index) {
-    g_assert (first_item_index < idx && idx < last_item_index);
+    g_assert ((first_item_index < (int)idx) && ((int)idx < last_item_index));
     /* move everything beyond idx one step towards zero in array */
     memmove (&array->array[idx],
         &array->array[idx + 1], (last_item_index - idx) * sizeof (gpointer));
@@ -257,7 +257,7 @@ egl_gst_queue_array_drop_element (EGLGstQueueArray * array, guint idx)
   /* only wrapped cases left */
   g_assert (first_item_index > last_item_index);
 
-  if (idx < last_item_index) {
+  if ((int)idx < last_item_index) {
     /* idx is before last_item_index, move data towards zero */
     memmove (&array->array[idx],
         &array->array[idx + 1], (last_item_index - idx) * sizeof (gpointer));
@@ -268,7 +268,7 @@ egl_gst_queue_array_drop_element (EGLGstQueueArray * array, guint idx)
     return element;
   }
 
-  if (idx > first_item_index) {
+  if ((int)idx > first_item_index) {
     element = array->array[idx];
     /* idx is after first_item_index, move data to higher indices */
     memmove (&array->array[first_item_index + 1],

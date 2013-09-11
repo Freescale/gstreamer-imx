@@ -1578,10 +1578,10 @@ gst_eglglessink_crop_changed (GstEglGlesSink * eglglessink,
     GstVideoCropMeta * crop)
 {
   if (crop) {
-    return (crop->x != eglglessink->crop.x ||
-        crop->y != eglglessink->crop.y ||
-        crop->width != eglglessink->crop.w ||
-        crop->height != eglglessink->crop.h);
+    return ((gint)(crop->x) != eglglessink->crop.x ||
+        (gint)(crop->y) != eglglessink->crop.y ||
+        (gint)(crop->width) != eglglessink->crop.w ||
+        (gint)(crop->height) != eglglessink->crop.h);
   }
 
   return (eglglessink->crop.x != 0 || eglglessink->crop.y != 0 ||
@@ -2268,7 +2268,7 @@ gst_eglglessink_getcaps (GstBaseSink * bsink, GstCaps * filter)
 }
 
 static gboolean
-gst_eglglessink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
+gst_eglglessink_propose_allocation (G_GNUC_UNUSED GstBaseSink * bsink, GstQuery * query)
 {
   gst_query_add_allocation_meta (query, GST_VIDEO_META_API_TYPE, NULL);
   gst_query_add_allocation_meta (query, GST_VIDEO_CROP_META_API_TYPE, NULL);
@@ -2574,8 +2574,8 @@ gst_eglglessink_class_init (GstEglGlesSinkClass * klass)
 }
 
 static gboolean
-queue_check_full_func (EGLGstDataQueue * queue, guint visible, guint bytes,
-    guint64 time, gpointer checkdata)
+queue_check_full_func (G_GNUC_UNUSED EGLGstDataQueue * queue, guint visible, G_GNUC_UNUSED guint bytes,
+    G_GNUC_UNUSED guint64 time, G_GNUC_UNUSED gpointer checkdata)
 {
   return visible != 0;
 }
