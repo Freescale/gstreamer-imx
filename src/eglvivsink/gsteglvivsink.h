@@ -43,8 +43,8 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_EGLGLESSINK_H__
-#define __GST_EGLGLESSINK_H__
+#ifndef __GST_EGLVIVSINK_H__
+#define __GST_EGLVIVSINK_H__
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
@@ -57,20 +57,20 @@
 #include <GLES2/gl2ext.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_EGLGLESSINK \
-  (gst_eglglessink_get_type())
-#define GST_EGLGLESSINK(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_EGLGLESSINK,GstEglGlesSink))
-#define GST_EGLGLESSINK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_EGLGLESSINK,GstEglGlesSinkClass))
-#define GST_IS_EGLGLESSINK(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_EGLGLESSINK))
-#define GST_IS_EGLGLESSINK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_EGLGLESSINK))
+#define GST_TYPE_EGLVIVSINK \
+  (gst_eglvivsink_get_type())
+#define GST_EGLVIVSINK(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_EGLVIVSINK,GstEglVivSink))
+#define GST_EGLVIVSINK_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_EGLVIVSINK,GstEglVivSinkClass))
+#define GST_IS_EGLVIVSINK(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_EGLVIVSINK))
+#define GST_IS_EGLVIVSINK_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_EGLVIVSINK))
 
-#define GST_EGLGLESSINK_EGL_MIN_VERSION 1
-typedef struct _GstEglGlesSink GstEglGlesSink;
-typedef struct _GstEglGlesSinkClass GstEglGlesSinkClass;
+#define GST_EGLVIVSINK_EGL_MIN_VERSION 1
+typedef struct _GstEglVivSink GstEglVivSink;
+typedef struct _GstEglVivSinkClass GstEglVivSinkClass;
 typedef struct _GstEglGlesRenderContext GstEglGlesRenderContext;
 
 typedef struct _GstEglGlesImageFmt GstEglGlesImageFmt;
@@ -142,7 +142,7 @@ struct _GstEglGlesRenderContext
 };
 
 /*
- * GstEglGlesSink:
+ * GstEglVivSink:
  * @format: Caps' video format field
  * @display_region: Surface region to use as rendering canvas
  * @sinkcaps: Full set of suported caps
@@ -160,9 +160,9 @@ struct _GstEglGlesRenderContext
  * @force_rendering_slow: Property value holder to force slow rendering path
  * @force_aspect_ratio: Property value holder to consider PAR/DAR when scaling
  *
- * The #GstEglGlesSink data structure.
+ * The #GstEglVivSink data structure.
  */
-struct _GstEglGlesSink
+struct _GstEglVivSink
 {
   GstVideoSink videosink;       /* Element hook */
 
@@ -206,12 +206,12 @@ struct _GstEglGlesSink
   gboolean force_aspect_ratio;
 };
 
-struct _GstEglGlesSinkClass
+struct _GstEglVivSinkClass
 {
   GstVideoSinkClass parent_class;
 };
 
-GType gst_eglglessink_get_type (void);
+GType gst_eglvivsink_get_type (void);
 
 G_END_DECLS
-#endif /* __GST_EGLGLESSINK_H__ */
+#endif /* __GST_EGLVIVSINK_H__ */

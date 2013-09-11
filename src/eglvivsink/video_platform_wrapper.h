@@ -53,9 +53,9 @@
 #include <gst/gst.h>
 #include <EGL/egl.h>
 
-gboolean platform_wrapper_init (void);
-EGLNativeWindowType platform_create_native_window (gint width, gint height, gpointer * window_data);
-gboolean platform_destroy_native_window (EGLNativeDisplayType display,
+G_GNUC_INTERNAL gboolean platform_wrapper_init (void);
+G_GNUC_INTERNAL EGLNativeWindowType platform_create_native_window (gint width, gint height, gpointer * window_data);
+G_GNUC_INTERNAL gboolean platform_destroy_native_window (EGLNativeDisplayType display,
     EGLNativeWindowType w, gpointer * window_data);
 
 

@@ -111,7 +111,7 @@ def configure(conf):
 	conf.recurse('src/common')
 	conf.recurse('src/ipu')
 	conf.recurse('src/vpu')
-	conf.recurse('src/eglgles-viv')
+	conf.recurse('src/eglvivsink')
 
 
 	conf.write_config_header('config.h')
@@ -122,5 +122,5 @@ def build(bld):
 	bld.recurse('src/common')
 	bld.recurse('src/ipu')
 	bld.recurse('src/vpu')
-	bld.recurse('src/eglgles-viv')
+	bld.recurse('src/eglvivsink')
 
