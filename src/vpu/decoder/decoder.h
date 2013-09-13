@@ -53,7 +53,7 @@ struct _GstFslVpuDec
 	VpuDecInitInfo init_info;
 	VpuMemInfo mem_info;
 
-	gboolean vpu_inst_opened;
+	gboolean vpu_inst_opened, is_mjpeg;
 
 	GstBuffer *codec_data;
 

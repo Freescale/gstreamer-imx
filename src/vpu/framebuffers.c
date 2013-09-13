@@ -101,8 +101,23 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 	else
 		framebuffers->y_size = framebuffers->y_stride * ALIGN_VAL_TO(init_info->nPicHeight, FRAME_ALIGN);
 
-	framebuffers->uv_stride = framebuffers->y_stride / 2;
-	framebuffers->u_size = framebuffers->v_size = framebuffers->mv_size = framebuffers->y_size / 4;
+	switch (init_info->nMjpgSourceFormat)
+	{
+		case 0: /* I420 (4:2:0) */
+			framebuffers->uv_stride = framebuffers->y_stride / 2;
+			framebuffers->u_size = framebuffers->v_size = framebuffers->mv_size = framebuffers->y_size / 4;
+			break;
+		case 1: /* Y42B (4:2:2 horizontal) */
+			framebuffers->uv_stride = framebuffers->y_stride / 2;
+			framebuffers->u_size = framebuffers->v_size = framebuffers->mv_size = framebuffers->y_size / 2;
+			break;
+		case 3: /* Y444 (4:4:4) */
+			framebuffers->uv_stride = framebuffers->y_stride;
+			framebuffers->u_size = framebuffers->v_size = framebuffers->mv_size = framebuffers->y_size;
+			break;
+		default:
+			g_assert_not_reached();
+	}
 
 	alignment = init_info->nAddressAlignment;
 	if (alignment > 1)

@@ -142,6 +142,9 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 		"video/x-h263, "
 		"parsed = (boolean) true; "
 
+		/* VPU_V_MJPG */
+		"image/jpeg; "
+
 /* TODO: WMV disabled for now, since it does not work properly.
  * It is necessary to find out how to prepare WMV3/VC1 data for the VPU first. */
 		/* VPU_V_VC1_AP and VPU_V_VC1 */
@@ -162,9 +165,9 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
 		"video/x-raw,"
-		"format = (string) I420, "
-		"width = (int) [ 16, 2048 ], "
-		"height = (int) [ 16, 2048 ], "
+		"format = (string) { I420, I42B, Y444 }, "
+		"width = (int) [ 16, MAX ], "
+		"height = (int) [ 16, MAX ], "
 		"framerate = (fraction) [ 0, MAX ]"
 	)
 );
@@ -392,6 +395,11 @@ static gboolean gst_fsl_vpu_dec_fill_param_set(GstFslVpuDec *vpu_dec, GstVideoCo
 		{
 			open_param->CodecFormat = VPU_V_H263;
 			GST_INFO_OBJECT(vpu_dec, "setting h.263 as stream format");
+		}
+		else if (g_strcmp0(name, "image/jpeg") == 0)
+		{
+			open_param->CodecFormat = VPU_V_MJPG;
+			GST_INFO_OBJECT(vpu_dec, "setting motion JPEG as stream format");
 		}
 		else if (g_strcmp0(name, "video/x-wmv") == 0)
 		{
@@ -674,6 +682,7 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 		GST_ERROR_OBJECT(vpu_dec, "could not fill open params: state info incompatible");
 		return FALSE;
 	}
+	vpu_dec->is_mjpeg = (open_param.CodecFormat == VPU_V_MJPG);
 
 	/* The actual initialization; requires bitstream information (such as the codec type), which
 	 * is determined by the fill_param_set call before */
@@ -801,12 +810,31 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 	if (buffer_ret_code & VPU_DEC_INIT_OK)
 	{
+		GstVideoFormat fmt;
+
 		dec_ret = VPU_DecGetInitialInfo(vpu_dec->handle, &(vpu_dec->init_info));
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 		{
 			GST_ERROR_OBJECT(vpu_dec, "could not get init info: %s", gst_fsl_vpu_strerror(dec_ret));
 			return GST_FLOW_ERROR;
 		}
+
+		if (vpu_dec->is_mjpeg)
+		{
+			switch (vpu_dec->init_info.nMjpgSourceFormat)
+			{
+				case 0: fmt = GST_VIDEO_FORMAT_I420; break;
+				case 1: fmt = GST_VIDEO_FORMAT_Y42B; break;
+				case 3: fmt = GST_VIDEO_FORMAT_Y444; break;
+				default:
+					GST_ERROR_OBJECT(vpu_dec, "unsupported MJPEG output format %d", vpu_dec->init_info.nMjpgSourceFormat);
+					return GST_FLOW_ERROR;
+			}
+		}
+		else
+			fmt = GST_VIDEO_FORMAT_I420;
+
+		GST_LOG_OBJECT(vpu_dec, "using %s as video output format", gst_video_format_to_string(fmt));
 
 		/* Allocate and register a new set of framebuffers for decoding
 		 * This point is always reached after set_format() was called,
@@ -817,9 +845,11 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		if (vpu_dec->current_output_state != NULL)
 		{
 			GstVideoCodecState *state = vpu_dec->current_output_state;
+
 			GST_VIDEO_INFO_INTERLACE_MODE(&(state->info)) = vpu_dec->init_info.nInterlace ? GST_VIDEO_INTERLACE_MODE_INTERLEAVED : GST_VIDEO_INTERLACE_MODE_PROGRESSIVE;
-			gst_video_decoder_set_output_state(decoder, GST_VIDEO_FORMAT_I420, state->info.width, state->info.height, state);
+			gst_video_decoder_set_output_state(decoder, fmt, state->info.width, state->info.height, state);
 			gst_video_codec_state_unref(vpu_dec->current_output_state);
+
 			vpu_dec->current_output_state = NULL;
 		}
 	}
