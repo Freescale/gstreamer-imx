@@ -3,6 +3,7 @@
  * Copyright (C) 2012 Collabora Ltd.
  *   @author: Reynaldo H. Verdejo Pinochet <reynaldo@collabora.com>
  *   @author: Sebastian Dröge <sebastian.droege@collabora.co.uk>
+ *   @author: Carlos Rafael Giani <dv@pseudoterminal.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -122,6 +123,8 @@
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
+#include <GLES/gl.h>
+#include <GLES/glext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
@@ -132,6 +135,8 @@
 #include "video_platform_wrapper.h"
 
 #include "gsteglvivsink.h"
+
+#include "../common/phys_mem_meta.h"
 
 /* Some EGL implementations are reporting wrong
  * values for the display's EGL_PIXEL_ASPECT_RATIO.
@@ -295,11 +300,10 @@ static const char *frag_NV12_NV21_prog = {
 };
 /* *INDENT-ON* */
 
-static const EGLint eglvivsink_RGBA8888_attribs[] = {
-  EGL_RED_SIZE, 8,
-  EGL_GREEN_SIZE, 8,
-  EGL_BLUE_SIZE, 8,
-  EGL_ALPHA_SIZE, 8,
+static const EGLint eglvivsink_config_attribs[] = {
+  EGL_RED_SIZE, 1,
+  EGL_GREEN_SIZE, 1,
+  EGL_BLUE_SIZE, 1,
   EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
   EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
   EGL_NONE
@@ -310,11 +314,16 @@ static GstStaticPadTemplate gst_eglvivsink_sink_template_factory =
 GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE ("{ "
-            "RGBA, BGRA, ARGB, ABGR, "
-            "RGBx, BGRx, xRGB, xBGR, "
-            "AYUV, Y444, I420, YV12, "
-            "NV12, NV21, Y41B, RGB, " "BGR, RGB16 }")));
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (
+            "{ "
+            "I420, YV12, NV12, NV21, "
+            "RGB16, RGB, RGBA, BGRA, RGBx, BGRx, "
+            "BGR, ARGB, ABGR, xRGB, xBGR, AYUV, Y444, Y41B"
+            " }"
+    )));
+    /* TODO: YUY2 and UYVY are supported by the Vivante direct textures,
+     * but not by the fallback fragment shaders. Add such shaders for
+     * these formats, then put them back in the caps */
 
 /* Filter signals and args */
 enum
@@ -380,6 +389,9 @@ static gboolean gst_eglvivsink_context_make_current (GstEglVivSink *
     eglvivsink, gboolean bind);
 static void gst_eglvivsink_wipe_eglglesctx (GstEglVivSink * eglvivsink);
 
+static GLenum gst_eglvivsink_is_format_supported (GstVideoFormat format);
+static GLenum gst_eglvivsink_get_viv_format (GstVideoFormat format);
+
 #define parent_class gst_eglvivsink_parent_class
 G_DEFINE_TYPE_WITH_CODE (GstEglVivSink, gst_eglvivsink, GST_TYPE_VIDEO_SINK,
     G_IMPLEMENT_INTERFACE (GST_TYPE_VIDEO_OVERLAY,
@@ -409,31 +421,7 @@ gst_eglvivsink_fill_supported_fbuffer_configs (GstEglVivSink * eglvivsink)
   caps = gst_caps_new_empty ();
 
   if (eglChooseConfig (eglvivsink->eglglesctx.display,
-          eglvivsink_RGBA8888_attribs, NULL, 1, &cfg_number) != EGL_FALSE) {
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_RGBA));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_BGRA));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_ARGB));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_ABGR));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_RGBx));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_BGRx));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_xRGB));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_xBGR));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_AYUV));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_Y444));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_RGB));
-    gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_BGR));
+          eglvivsink_config_attribs, NULL, 1, &cfg_number) != EGL_FALSE) {
     gst_caps_append (caps,
         _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_I420));
     gst_caps_append (caps,
@@ -443,15 +431,41 @@ gst_eglvivsink_fill_supported_fbuffer_configs (GstEglVivSink * eglvivsink)
     gst_caps_append (caps,
         _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_NV21));
     gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_Y42B));
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_YUY2));
     gst_caps_append (caps,
-        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_Y41B));
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_UYVY));
     gst_caps_append (caps,
         _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_RGB16));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_RGB));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_RGBA));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_BGRA));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_RGBx));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_BGRx));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_BGR));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_ARGB));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_ABGR));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_xRGB));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_xBGR));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_AYUV));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_Y444));
+    gst_caps_append (caps,
+        _gst_video_format_new_template_caps (GST_VIDEO_FORMAT_Y41B));
     ret = TRUE;
   } else {
     GST_INFO_OBJECT (eglvivsink,
-        "EGL display doesn't support RGBA8888 config");
+        "EGL display doesn't support config");
   }
 
   GST_OBJECT_LOCK (eglvivsink);
@@ -625,6 +639,45 @@ gst_eglvivsink_wipe_eglglesctx (GstEglVivSink * eglvivsink)
     eglDestroyContext (eglvivsink->eglglesctx.display,
         eglvivsink->eglglesctx.eglcontext);
     eglvivsink->eglglesctx.eglcontext = NULL;
+  }
+}
+
+static GLenum gst_eglvivsink_is_format_supported (GstVideoFormat format)
+{
+  return gst_eglvivsink_get_viv_format(format) != 0;
+}
+
+static GLenum gst_eglvivsink_get_viv_format (GstVideoFormat format)
+{
+  switch (format) {
+    case GST_VIDEO_FORMAT_I420:  return GL_VIV_I420;
+    case GST_VIDEO_FORMAT_YV12:  return GL_VIV_YV12;
+    case GST_VIDEO_FORMAT_NV12:  return GL_VIV_NV12;
+    case GST_VIDEO_FORMAT_NV21:  return GL_VIV_NV21;
+    case GST_VIDEO_FORMAT_YUY2:  return GL_VIV_YUY2;
+    case GST_VIDEO_FORMAT_UYVY:  return GL_VIV_UYVY;
+    case GST_VIDEO_FORMAT_RGB16: return GL_RGB565;
+    case GST_VIDEO_FORMAT_RGB:   return GL_RGB;
+    case GST_VIDEO_FORMAT_RGBA:  return GL_RGBA;
+    case GST_VIDEO_FORMAT_BGRA:  return GL_BGRA_EXT;
+    case GST_VIDEO_FORMAT_RGBx:  return GL_RGBA;
+    case GST_VIDEO_FORMAT_BGRx:  return GL_BGRA_EXT;
+    default: return 0;
+  }
+}
+
+static gint gst_eglvivsink_video_bpp (GstVideoFormat fmt)
+{
+  switch (fmt)
+  {
+    case GST_VIDEO_FORMAT_RGB16: return 2;
+    case GST_VIDEO_FORMAT_RGB: return 3;
+    case GST_VIDEO_FORMAT_RGBA: return 4;
+    case GST_VIDEO_FORMAT_BGRA: return 4;
+    case GST_VIDEO_FORMAT_RGBx: return 4;
+    case GST_VIDEO_FORMAT_BGRx: return 4;
+    case GST_VIDEO_FORMAT_UYVY: return 2;
+    default: return 1;
   }
 }
 
@@ -1221,73 +1274,85 @@ gst_eglvivsink_init_egl_surface (GstEglVivSink * eglvivsink)
 
   /* Build shader program for video texture rendering */
 
-  switch (eglvivsink->configured_info.finfo->format) {
-    case GST_VIDEO_FORMAT_AYUV:
-      frag_prog = (gchar *) frag_AYUV_prog;
-      free_frag_prog = FALSE;
-      eglvivsink->eglglesctx.n_textures = 1;
-      texnames[0] = "tex";
-      break;
-    case GST_VIDEO_FORMAT_Y444:
-    case GST_VIDEO_FORMAT_I420:
-    case GST_VIDEO_FORMAT_YV12:
-    case GST_VIDEO_FORMAT_Y42B:
-    case GST_VIDEO_FORMAT_Y41B:
-      frag_prog = (gchar *) frag_PLANAR_YUV_prog;
-      free_frag_prog = FALSE;
-      eglvivsink->eglglesctx.n_textures = 3;
-      texnames[0] = "Ytex";
-      texnames[1] = "Utex";
-      texnames[2] = "Vtex";
-      break;
-    case GST_VIDEO_FORMAT_NV12:
-      frag_prog = g_strdup_printf (frag_NV12_NV21_prog, 'r', 'a');
-      free_frag_prog = TRUE;
-      eglvivsink->eglglesctx.n_textures = 2;
-      texnames[0] = "Ytex";
-      texnames[1] = "UVtex";
-      break;
-    case GST_VIDEO_FORMAT_NV21:
-      frag_prog = g_strdup_printf (frag_NV12_NV21_prog, 'a', 'r');
-      free_frag_prog = TRUE;
-      eglvivsink->eglglesctx.n_textures = 2;
-      texnames[0] = "Ytex";
-      texnames[1] = "UVtex";
-      break;
-    case GST_VIDEO_FORMAT_BGR:
-    case GST_VIDEO_FORMAT_BGRx:
-    case GST_VIDEO_FORMAT_BGRA:
-      frag_prog = g_strdup_printf (frag_REORDER_prog, 'b', 'g', 'r');
-      free_frag_prog = TRUE;
-      eglvivsink->eglglesctx.n_textures = 1;
-      texnames[0] = "tex";
-      break;
-    case GST_VIDEO_FORMAT_xRGB:
-    case GST_VIDEO_FORMAT_ARGB:
-      frag_prog = g_strdup_printf (frag_REORDER_prog, 'g', 'b', 'a');
-      free_frag_prog = TRUE;
-      eglvivsink->eglglesctx.n_textures = 1;
-      texnames[0] = "tex";
-      break;
-    case GST_VIDEO_FORMAT_xBGR:
-    case GST_VIDEO_FORMAT_ABGR:
-      frag_prog = g_strdup_printf (frag_REORDER_prog, 'a', 'b', 'g');
-      free_frag_prog = TRUE;
-      eglvivsink->eglglesctx.n_textures = 1;
-      texnames[0] = "tex";
-      break;
-    case GST_VIDEO_FORMAT_RGB:
-    case GST_VIDEO_FORMAT_RGBx:
-    case GST_VIDEO_FORMAT_RGBA:
-    case GST_VIDEO_FORMAT_RGB16:
-      frag_prog = (gchar *) frag_COPY_prog;
-      free_frag_prog = FALSE;
-      eglvivsink->eglglesctx.n_textures = 1;
-      texnames[0] = "tex";
-      break;
-    default:
-      g_assert_not_reached ();
-      break;
+  /* If the video frame is stored in a physically contiguous buffer and
+   * uses a format that can be used with glTexDirectVIVMap, then the COPY
+   * shader is used, since the GPU does the color space conversion
+   * internally */
+  // TODO: what if the incoming video frame is not using a phys buffer?
+  if (gst_eglvivsink_is_format_supported (eglvivsink->configured_info.finfo->format)) {
+    frag_prog = (gchar *) frag_COPY_prog;
+    free_frag_prog = FALSE;
+    eglvivsink->eglglesctx.n_textures = 1;
+    texnames[0] = "tex";
+  } else {
+    switch (eglvivsink->configured_info.finfo->format) {
+      case GST_VIDEO_FORMAT_AYUV:
+        frag_prog = (gchar *) frag_AYUV_prog;
+        free_frag_prog = FALSE;
+        eglvivsink->eglglesctx.n_textures = 1;
+        texnames[0] = "tex";
+        break;
+      case GST_VIDEO_FORMAT_Y444:
+      case GST_VIDEO_FORMAT_I420:
+      case GST_VIDEO_FORMAT_YV12:
+      case GST_VIDEO_FORMAT_Y42B:
+      case GST_VIDEO_FORMAT_Y41B:
+        frag_prog = (gchar *) frag_PLANAR_YUV_prog;
+        free_frag_prog = FALSE;
+        eglvivsink->eglglesctx.n_textures = 3;
+        texnames[0] = "Ytex";
+        texnames[1] = "Utex";
+        texnames[2] = "Vtex";
+        break;
+      case GST_VIDEO_FORMAT_NV12:
+        frag_prog = g_strdup_printf (frag_NV12_NV21_prog, 'r', 'a');
+        free_frag_prog = TRUE;
+        eglvivsink->eglglesctx.n_textures = 2;
+        texnames[0] = "Ytex";
+        texnames[1] = "UVtex";
+        break;
+      case GST_VIDEO_FORMAT_NV21:
+        frag_prog = g_strdup_printf (frag_NV12_NV21_prog, 'a', 'r');
+        free_frag_prog = TRUE;
+        eglvivsink->eglglesctx.n_textures = 2;
+        texnames[0] = "Ytex";
+        texnames[1] = "UVtex";
+        break;
+      case GST_VIDEO_FORMAT_BGR:
+      case GST_VIDEO_FORMAT_BGRx:
+      case GST_VIDEO_FORMAT_BGRA:
+        frag_prog = g_strdup_printf (frag_REORDER_prog, 'b', 'g', 'r');
+        free_frag_prog = TRUE;
+        eglvivsink->eglglesctx.n_textures = 1;
+        texnames[0] = "tex";
+        break;
+      case GST_VIDEO_FORMAT_xRGB:
+      case GST_VIDEO_FORMAT_ARGB:
+        frag_prog = g_strdup_printf (frag_REORDER_prog, 'g', 'b', 'a');
+        free_frag_prog = TRUE;
+        eglvivsink->eglglesctx.n_textures = 1;
+        texnames[0] = "tex";
+        break;
+      case GST_VIDEO_FORMAT_xBGR:
+      case GST_VIDEO_FORMAT_ABGR:
+        frag_prog = g_strdup_printf (frag_REORDER_prog, 'a', 'b', 'g');
+        free_frag_prog = TRUE;
+        eglvivsink->eglglesctx.n_textures = 1;
+        texnames[0] = "tex";
+        break;
+      case GST_VIDEO_FORMAT_RGB:
+      case GST_VIDEO_FORMAT_RGBx:
+      case GST_VIDEO_FORMAT_RGBA:
+      case GST_VIDEO_FORMAT_RGB16:
+        frag_prog = (gchar *) frag_COPY_prog;
+        free_frag_prog = FALSE;
+        eglvivsink->eglglesctx.n_textures = 1;
+        texnames[0] = "tex";
+        break;
+      default:
+        g_assert_not_reached ();
+        break;
+    }
   }
 
   if (!create_shader_program (eglvivsink,
@@ -1452,7 +1517,7 @@ gst_eglvivsink_choose_config (GstEglVivSink * eglvivsink)
   GLint egl_configs;
 
   if ((eglChooseConfig (eglvivsink->eglglesctx.display,
-              eglvivsink_RGBA8888_attribs,
+              eglvivsink_config_attribs,
               &eglvivsink->eglglesctx.config, 1, &egl_configs)) == EGL_FALSE) {
     got_egl_error ("eglChooseConfig");
     GST_ERROR_OBJECT (eglvivsink, "eglChooseConfig failed");
@@ -1589,6 +1654,67 @@ gst_eglvivsink_crop_changed (GstEglVivSink * eglvivsink,
       eglvivsink->crop.h != eglvivsink->configured_info.height);
 }
 
+static gboolean
+gst_eglvivsink_map_viv_texture (GstEglVivSink * eglvivsink, GstVideoFormat fmt, GLvoid *virt_addr, GLuint phys_addr, GLuint stride, GLuint num_extra_lines)
+{
+  GLenum gl_format = gst_eglvivsink_get_viv_format (fmt);
+  GLuint w = eglvivsink->configured_info.width;
+  GLuint h = eglvivsink->configured_info.height;
+
+  /* stride is in bytes, we need pixels */
+  GLuint total_w = stride / gst_eglvivsink_video_bpp (fmt);
+  GLuint total_h = h + num_extra_lines;
+
+  /* The glTexDirectVIVMap call has no explicit stride and padding arguments.
+   * The trick is to pass width and height values that include stride and padding.
+   * These are stored in total_w & total_h.
+   * The ratio of length to length+stride eventually gets sent to the fragment shader
+   * as a uniform. In other words, the full frame (with extra stride and padding pixels) is
+   * stored in the texture, and using texture coordinate scaling, these extra pixels are
+   * clipped.
+   * The ratios are stored only for the first plane (-> index #0), since the direct texture
+   * reads the entirety of the frame buffer (that is: all planes) automatically, so the shader
+   * does not need to care about multiple planes. */
+
+  eglvivsink->stride[0] = (gdouble) total_w / (gdouble) w;
+  eglvivsink->stride[1] = 1.0;
+  eglvivsink->stride[2] = 1.0;
+  eglvivsink->y_stride[0] = (gdouble) total_h / (gdouble) h;
+  eglvivsink->y_stride[1] = 1.0;
+  eglvivsink->y_stride[2] = 1.0;
+
+  GST_DEBUG_OBJECT (
+    eglvivsink,
+    "using Vivante direct texture for displaying frame:  %d x %d pixels  gst format %s  GL format 0x%x  virt addr %p  phys addr 0x%x  stride %u  extra padding lines %u  (rel strides: x %.03f y %.03f)",
+    w, h,
+    gst_video_format_to_string (fmt), gl_format,
+    virt_addr, phys_addr,
+    stride, num_extra_lines,
+    eglvivsink->stride[0], eglvivsink->y_stride[0]
+  );
+
+  glActiveTexture (GL_TEXTURE0);
+  if (got_gl_error ("glActiveTexture"))
+    return FALSE;
+
+  glBindTexture (GL_TEXTURE_2D, eglvivsink->eglglesctx.texture[0]);
+  if (got_gl_error ("glBindTexture"))
+    return FALSE;
+
+  glTexDirectVIVMap (GL_TEXTURE_2D,
+    total_w, total_h,
+    gl_format,
+    (GLvoid **)(&virt_addr), &phys_addr);
+  if (got_gl_error ("glTexDirectVIVMap"))
+    return FALSE;
+
+  glTexDirectInvalidateVIV (GL_TEXTURE_2D);
+  if (got_gl_error ("glTexDirectInvalidateVIV"))
+    return FALSE;
+
+  return TRUE;
+}
+
 /* Rendering and display */
 static gboolean
 gst_eglvivsink_fill_texture (GstEglVivSink * eglvivsink, GstBuffer * buf)
@@ -1609,6 +1735,10 @@ gst_eglvivsink_fill_texture (GstEglVivSink * eglvivsink, GstBuffer * buf)
 
   GST_DEBUG_OBJECT (eglvivsink,
       "Got buffer %p: %dx%d size %d", buf, w, h, gst_buffer_get_size (buf));
+
+  eglvivsink->y_stride[0] = 1;
+  eglvivsink->y_stride[1] = 1;
+  eglvivsink->y_stride[2] = 1;
 
   switch (eglvivsink->configured_info.finfo->format) {
     case GST_VIDEO_FORMAT_BGR:
@@ -2020,7 +2150,9 @@ HANDLE_ERROR:
 static GstFlowReturn
 gst_eglvivsink_upload (GstEglVivSink * eglvivsink, GstBuffer * buf)
 {
+  GstVideoFormat fmt;
   GstVideoCropMeta *crop = NULL;
+  GstFslPhysMemMeta *phys_mem_meta = NULL;
 
   if (!buf) {
     GST_DEBUG_OBJECT (eglvivsink, "Rendering previous buffer again");
@@ -2042,8 +2174,40 @@ gst_eglvivsink_upload (GstEglVivSink * eglvivsink, GstBuffer * buf)
       eglvivsink->crop_changed = TRUE;
     }
 
-    if (!gst_eglvivsink_fill_texture (eglvivsink, buf))
-      goto HANDLE_ERROR;
+    fmt = eglvivsink->configured_info.finfo->format;
+
+  /* If the video frame is stored in a physically contiguous buffer and
+   * uses a format that can be used with glTexDirectVIVMap, do so,
+   * otherwise use gst_eglvivsink_fill_texture as a fallback */
+    if (gst_eglvivsink_is_format_supported (fmt) && ((phys_mem_meta = GST_FSL_PHYS_MEM_META_GET (buf)) != 0)) {
+      gboolean ret;
+      GstMapInfo map_info;
+      guint num_extra_lines;
+      GstVideoMeta *video_meta;
+      guint stride;
+
+      /* Get the stride and number of extra lines */
+      video_meta = gst_buffer_get_video_meta (buf);
+      if (video_meta != NULL)
+        stride = video_meta->stride[0];
+      else
+        stride = GST_VIDEO_INFO_PLANE_STRIDE(&(eglvivsink->configured_info), 0);
+
+      num_extra_lines = phys_mem_meta->padding / stride;
+
+      /* Map the buffer to get a virtual address
+       * glTexDirectVIVMap() only needs this to find a corresponding physical
+       * address (even when one is specified) */
+      gst_buffer_map(buf, &map_info, GST_MAP_READ);
+      ret = gst_eglvivsink_map_viv_texture (eglvivsink, fmt, map_info.data, (GLuint)(phys_mem_meta->phys_addr), stride, num_extra_lines);
+      gst_buffer_unmap (buf, &map_info);
+
+      if (!ret)
+        goto HANDLE_ERROR;
+    } else {
+      if (!gst_eglvivsink_fill_texture (eglvivsink, buf))
+        goto HANDLE_ERROR;
+    }
   }
 
   return GST_FLOW_OK;
@@ -2182,11 +2346,11 @@ gst_eglvivsink_render (GstEglVivSink * eglvivsink)
   glUseProgram (eglvivsink->eglglesctx.glslprogram[0]);
 
   glUniform2f (eglvivsink->eglglesctx.tex_scale_loc[0][0],
-      eglvivsink->stride[0], 1);
+      eglvivsink->stride[0], eglvivsink->y_stride[0]);
   glUniform2f (eglvivsink->eglglesctx.tex_scale_loc[0][1],
-      eglvivsink->stride[1], 1);
+      eglvivsink->stride[1], eglvivsink->y_stride[1]);
   glUniform2f (eglvivsink->eglglesctx.tex_scale_loc[0][2],
-      eglvivsink->stride[2], 1);
+      eglvivsink->stride[2], eglvivsink->y_stride[2]);
 
   for (i = 0; i < eglvivsink->eglglesctx.n_textures; i++) {
     glUniform1i (eglvivsink->eglglesctx.tex_loc[0][i], i);
@@ -2567,7 +2731,8 @@ gst_eglvivsink_class_init (GstEglVivSinkClass * klass)
       "Sink/Video",
       "An EGL/GLES Video Output Sink Implementing the VideoOverlay interface, using Vivante direct textures",
       "Reynaldo H. Verdejo Pinochet <reynaldo@collabora.com>, "
-      "Sebastian Dröge <sebastian.droege@collabora.co.uk>");
+      "Sebastian Dröge <sebastian.droege@collabora.co.uk>, "
+      "Carlos Rafael Giani <dv@pseudoterminal.org>");
 
   gst_element_class_add_pad_template (gstelement_class,
       gst_static_pad_template_get (&gst_eglvivsink_sink_template_factory));

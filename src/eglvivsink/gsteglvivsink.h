@@ -181,6 +181,7 @@ struct _GstEglVivSink
   GstCaps *current_caps, *configured_caps;
   GstVideoInfo configured_info;
   gfloat stride[3];
+  gfloat y_stride[3];
 
   GstEglGlesRenderContext eglglesctx;
 
