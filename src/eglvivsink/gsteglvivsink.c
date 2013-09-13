@@ -2792,7 +2792,7 @@ eglvivsink_plugin_init (GstPlugin * plugin)
   bcm_host_init ();
 #endif
 
-  return gst_element_register (plugin, "eglvivsink", GST_RANK_PRIMARY,
+  return gst_element_register (plugin, "eglvivsink", GST_RANK_PRIMARY + 5,
       GST_TYPE_EGLVIVSINK);
 }
 
