@@ -1,4 +1,4 @@
-/* Allocation functions for virtual and physical memory
+/* Common allocation functions
  * Copyright (C) 2013  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
@@ -34,17 +34,25 @@ typedef struct
 gst_fsl_phys_mem_block;
 
 
-/* TODO: separte the list from the actual allocators */
+typedef gboolean (*gst_fsl_alloc_phys_mem_block_func)(gsize size, gst_fsl_phys_mem_block *block);
+typedef gboolean (*gst_fsl_free_phys_mem_blockfunc)(gst_fsl_phys_mem_block *block);
+
+typedef struct
+{
+	gst_fsl_alloc_phys_mem_block_func alloc_phys_mem;
+	gst_fsl_free_phys_mem_blockfunc free_phys_mem;
+} gst_fsl_phys_mem_allocator;
 
 
 gboolean gst_fsl_alloc_virt_mem_block(unsigned char **mem_block, int size);
 void gst_fsl_append_virt_mem_block(unsigned char *mem_block, GSList **virt_mem_blocks);
 gboolean gst_fsl_free_virt_mem_blocks(GSList **virt_mem_blocks);
 
-gboolean gst_fsl_alloc_phys_mem_block(gst_fsl_phys_mem_block **mem_block, int size);
-gboolean gst_fsl_free_phys_mem_block(gst_fsl_phys_mem_block *mem_block);
+
+gboolean gst_fsl_alloc_phys_mem_block(gst_fsl_phys_mem_allocator *phys_mem_allocator, gst_fsl_phys_mem_block **mem_block, int size);
+gboolean gst_fsl_free_phys_mem_block(gst_fsl_phys_mem_allocator *phys_mem_allocator, gst_fsl_phys_mem_block *mem_block);
 void gst_fsl_append_phys_mem_block(gst_fsl_phys_mem_block *mem_block, GSList **phys_mem_blocks);
-gboolean gst_fsl_free_phys_mem_blocks(GSList **phys_mem_blocks);
+gboolean gst_fsl_free_phys_mem_blocks(gst_fsl_phys_mem_allocator *phys_mem_allocator, GSList **phys_mem_blocks);
 
 
 G_END_DECLS

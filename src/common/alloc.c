@@ -1,4 +1,4 @@
-/* Allocation functions for virtual and physical memory
+/* Common allocation functions
  * Copyright (C) 2013  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
@@ -19,16 +19,11 @@
 
 #include <gst/gst.h>
 #include <string.h>
-#include <vpu_wrapper.h>
 #include "alloc.h"
 
 
 GST_DEBUG_CATEGORY_STATIC(fslalloc_debug);
 #define GST_CAT_DEFAULT fslalloc_debug
-
-
-/* TODO: allocate physical memory without the VPU wrapper if possible
- * (gets rid of the somewhat odd-looking dependency of gstfslcommon on the VPU wrapper) */
 
 
 static void setup_debug_category(void)
@@ -93,11 +88,9 @@ gboolean gst_fsl_free_virt_mem_blocks(GSList **virt_mem_blocks)
 }
 
 
-gboolean gst_fsl_alloc_phys_mem_block(gst_fsl_phys_mem_block **mem_block, int size)
-{
-	VpuDecRetCode ret;
-	VpuMemDesc mem_desc;
 
+gboolean gst_fsl_alloc_phys_mem_block(gst_fsl_phys_mem_allocator *phys_mem_allocator, gst_fsl_phys_mem_block **mem_block, int size)
+{
 	setup_debug_category();
 
 	*mem_block = g_slice_alloc(sizeof(gst_fsl_phys_mem_block));
@@ -107,19 +100,12 @@ gboolean gst_fsl_alloc_phys_mem_block(gst_fsl_phys_mem_block **mem_block, int si
 		return FALSE;
 	}
 
-	memset(&mem_desc, 0, sizeof(VpuMemDesc));
-	mem_desc.nSize = size;
-	ret = VPU_DecGetMem(&mem_desc);
-	if (ret != VPU_DEC_RET_SUCCESS)
+	g_assert(phys_mem_allocator->alloc_phys_mem != NULL);
+	if (!phys_mem_allocator->alloc_phys_mem(size, *mem_block))
 	{
 		GST_ERROR("failed to allocate %d bytes of physical memory", size);
 		return FALSE;
 	}
-
-	(*mem_block)->size = mem_desc.nSize;
-	(*mem_block)->virt_addr = (gpointer)(mem_desc.nVirtAddr);
-	(*mem_block)->phys_addr = (gpointer)(mem_desc.nPhyAddr);
-	(*mem_block)->cpu_addr  = (gpointer)(mem_desc.nCpuAddr);
 
 	GST_DEBUG("allocated %d bytes of physical memory at virt addr %p phys addr %p cpu addr %p", size, (*mem_block)->virt_addr, (*mem_block)->phys_addr, (*mem_block)->cpu_addr);
 
@@ -127,21 +113,12 @@ gboolean gst_fsl_alloc_phys_mem_block(gst_fsl_phys_mem_block **mem_block, int si
 }
 
 
-gboolean gst_fsl_free_phys_mem_block(gst_fsl_phys_mem_block *mem_block)
+gboolean gst_fsl_free_phys_mem_block(gst_fsl_phys_mem_allocator *phys_mem_allocator, gst_fsl_phys_mem_block *mem_block)
 {
-	VpuDecRetCode ret;
-	VpuMemDesc mem_desc;
-
 	setup_debug_category();
 
-	memset(&mem_desc, 0, sizeof(VpuMemDesc));
-	mem_desc.nSize = mem_block->size;
-	mem_desc.nVirtAddr = (unsigned long)(mem_block->virt_addr);
-	mem_desc.nPhyAddr = (unsigned long)(mem_block->phys_addr);
-	mem_desc.nCpuAddr = (unsigned long)(mem_block->cpu_addr);
-
-	ret = VPU_DecFreeMem(&mem_desc);
-	if (ret != VPU_DEC_RET_SUCCESS)
+	g_assert(phys_mem_allocator->free_phys_mem != NULL);
+	if (!phys_mem_allocator->free_phys_mem(mem_block))
 	{
 		GST_ERROR("failed to free %u bytes of physical memory at virt addr %p phys addr %p cpu addr %p", mem_block->size, mem_block->virt_addr, mem_block->phys_addr, mem_block->cpu_addr);
 		return FALSE;
@@ -162,7 +139,7 @@ void gst_fsl_append_phys_mem_block(gst_fsl_phys_mem_block *mem_block, GSList **p
 }
 
 
-gboolean gst_fsl_free_phys_mem_blocks(GSList **phys_mem_blocks)
+gboolean gst_fsl_free_phys_mem_blocks(gst_fsl_phys_mem_allocator *phys_mem_allocator, GSList **phys_mem_blocks)
 {
 	GSList *mem_block_node;
 
@@ -177,7 +154,7 @@ gboolean gst_fsl_free_phys_mem_blocks(GSList **phys_mem_blocks)
 	for (; mem_block_node != NULL; mem_block_node = mem_block_node->next)
 	{
 		gst_fsl_phys_mem_block *mem_block = (gst_fsl_phys_mem_block *)(mem_block_node->data);
-		gst_fsl_free_phys_mem_block(mem_block);
+		gst_fsl_free_phys_mem_block(phys_mem_allocator, mem_block);
 		g_slice_free1(sizeof(gst_fsl_phys_mem_block), mem_block);
 	}
 

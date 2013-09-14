@@ -25,7 +25,7 @@
 #include <gst/video/gstvideopool.h>
 #include <vpu_wrapper.h>
 #include "decoder.h"
-#include "../common/alloc.h"
+#include "alloc.h"
 #include "../common/phys_mem_meta.h"
 #include "../utils.h"
 #include "../buffer_pool.h"
@@ -273,7 +273,7 @@ static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec)
 		else if (vpu_dec->mem_info.MemSubBlock[i].MemType == VPU_MEM_PHY)
 		{
 			gst_fsl_phys_mem_block *mem_block;
-			if (!gst_fsl_alloc_phys_mem_block(&mem_block, size))
+			if (!gst_fsl_alloc_phys_mem_block(&gst_fsl_vpu_dec_alloc, &mem_block, size))
 				return FALSE;
 
 			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(mem_block->virt_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
@@ -298,7 +298,7 @@ static gboolean gst_fsl_vpu_dec_free_dec_mem_blocks(GstFslVpuDec *vpu_dec)
 	 * if the first call failed, the second one wouldn't even be invoked
 	 * doing the logical AND afterwards fixes this */
 	ret1 = gst_fsl_free_virt_mem_blocks(&(vpu_dec->virt_dec_mem_blocks));
-	ret2 = gst_fsl_free_phys_mem_blocks(&(vpu_dec->phys_dec_mem_blocks));
+	ret2 = gst_fsl_free_phys_mem_blocks(&gst_fsl_vpu_dec_alloc, &(vpu_dec->phys_dec_mem_blocks));
 	return ret1 && ret2;
 }
 
@@ -839,7 +839,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		/* Allocate and register a new set of framebuffers for decoding
 		 * This point is always reached after set_format() was called,
 		 * and always before a frame is output */
-		vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(vpu_dec->handle, &(vpu_dec->init_info));
+		vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(vpu_dec->handle, &(vpu_dec->init_info), &gst_fsl_vpu_dec_alloc);
 
 		/* Add information from init_info to the output state and set it to be the output state for this decoder */
 		if (vpu_dec->current_output_state != NULL)
