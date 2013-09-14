@@ -71,8 +71,23 @@ struct _GstFslVpuFramebuffersClass
 };
 
 
+typedef struct
+{
+	gint
+		pic_width,
+		pic_height,
+		min_framebuffer_count,
+		mjpeg_source_format,
+		interlace,
+		address_alignment;
+}
+GstFslVpuFramebufferParams;
+
+
 GType gst_fsl_vpu_framebuffers_get_type(void);
-GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(VpuDecHandle handle, VpuDecInitInfo *init_info, gst_fsl_phys_mem_allocator *phys_mem_alloc);
+GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(VpuDecHandle handle, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc);
+void gst_fsl_vpu_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params);
+void gst_fsl_vpu_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFramebufferParams *params);
 
 
 G_END_DECLS

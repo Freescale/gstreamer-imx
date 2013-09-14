@@ -178,6 +178,7 @@ G_DEFINE_TYPE(GstFslVpuDec, gst_fsl_vpu_dec, GST_TYPE_VIDEO_DECODER)
 
 /* miscellaneous functions */
 static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec);
+static gboolean gst_fsl_vpu_dec_free_dec_mem_blocks(GstFslVpuDec *vpu_dec);
 static gboolean gst_fsl_vpu_dec_fill_param_set(GstFslVpuDec *vpu_dec, GstVideoCodecState *state, VpuDecOpenParam *open_param, GstBuffer **codec_data);
 static void gst_fsl_vpu_dec_close_decoder(GstFslVpuDec *vpu_dec);
 
@@ -839,7 +840,11 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		/* Allocate and register a new set of framebuffers for decoding
 		 * This point is always reached after set_format() was called,
 		 * and always before a frame is output */
-		vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(vpu_dec->handle, &(vpu_dec->init_info), &gst_fsl_vpu_dec_alloc);
+		{
+			GstFslVpuFramebufferParams fbparams;
+			gst_fsl_vpu_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
+		vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(vpu_dec->handle, &fbparams, &gst_fsl_vpu_dec_alloc);
+		}
 
 		/* Add information from init_info to the output state and set it to be the output state for this decoder */
 		if (vpu_dec->current_output_state != NULL)

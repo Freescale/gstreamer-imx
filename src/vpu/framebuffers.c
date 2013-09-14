@@ -35,7 +35,7 @@ GST_DEBUG_CATEGORY_STATIC(vpu_framebuffers_debug);
 G_DEFINE_TYPE(GstFslVpuFramebuffers, gst_fsl_vpu_framebuffers, GST_TYPE_OBJECT)
 
 
-static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle, VpuDecInitInfo *init_info, gst_fsl_phys_mem_allocator *phys_mem_alloc);
+static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc);
 static void gst_fsl_vpu_framebuffers_finalize(GObject *object);
 
 
@@ -69,26 +69,48 @@ void gst_fsl_vpu_framebuffers_init(GstFslVpuFramebuffers *framebuffers)
 }
 
 
-GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(VpuDecHandle handle, VpuDecInitInfo *init_info, gst_fsl_phys_mem_allocator *phys_mem_alloc)
+GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(VpuDecHandle handle, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc)
 {
 	GstFslVpuFramebuffers *framebuffers;
 	framebuffers = g_object_new(gst_fsl_vpu_framebuffers_get_type(), NULL);
-	if (gst_fsl_vpu_framebuffers_configure(framebuffers, handle, init_info, phys_mem_alloc))
+	if (gst_fsl_vpu_framebuffers_configure(framebuffers, handle, params, phys_mem_alloc))
 		return framebuffers;
 	else
 		return NULL;
 }
 
 
-static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle, VpuDecInitInfo *init_info, gst_fsl_phys_mem_allocator *phys_mem_alloc)
+void gst_fsl_vpu_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params)
+{
+	params->pic_width = init_info->nPicWidth;
+	params->pic_height = init_info->nPicHeight;
+	params->min_framebuffer_count = init_info->nMinFrameBufferCount;
+	params->mjpeg_source_format = init_info->nMjpgSourceFormat;
+	params->interlace = init_info->nInterlace;
+	params->address_alignment = init_info->nAddressAlignment;
+}
+
+
+void gst_fsl_vpu_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFramebufferParams *params)
+{
+	params->pic_width = 0;
+	params->pic_height = 0;
+	params->min_framebuffer_count = init_info->nMinFrameBufferCount;
+	params->mjpeg_source_format = 0;
+	params->interlace = 0;
+	params->address_alignment = init_info->nAddressAlignment;
+}
+
+
+static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc)
 {
 	int alignment;
 	unsigned char *phys_ptr, *virt_ptr;
 	guint i;
 	VpuDecRetCode vpu_ret;
 
-	framebuffers->num_reserve_framebuffers = init_info->nMinFrameBufferCount;
-	framebuffers->num_framebuffers = MAX((guint)(init_info->nMinFrameBufferCount), (guint)10) + framebuffers->num_reserve_framebuffers;
+	framebuffers->num_reserve_framebuffers = params->min_framebuffer_count;
+	framebuffers->num_framebuffers = MAX((guint)(params->min_framebuffer_count), (guint)10) + framebuffers->num_reserve_framebuffers;
 	framebuffers->num_available_framebuffers = framebuffers->num_framebuffers - framebuffers->num_reserve_framebuffers;
 	framebuffers->framebuffers = (VpuFrameBuffer *)g_slice_alloc(sizeof(VpuFrameBuffer) * framebuffers->num_framebuffers);
 
@@ -96,13 +118,13 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 
 	framebuffers->phys_mem_alloc = phys_mem_alloc;
 
-	framebuffers->y_stride = ALIGN_VAL_TO(init_info->nPicWidth, FRAME_ALIGN);
-	if (init_info->nInterlace)
-		framebuffers->y_size = framebuffers->y_stride * ALIGN_VAL_TO(init_info->nPicHeight, (2 * FRAME_ALIGN));
+	framebuffers->y_stride = ALIGN_VAL_TO(params->pic_width, FRAME_ALIGN);
+	if (params->interlace)
+		framebuffers->y_size = framebuffers->y_stride * ALIGN_VAL_TO(params->pic_height, (2 * FRAME_ALIGN));
 	else
-		framebuffers->y_size = framebuffers->y_stride * ALIGN_VAL_TO(init_info->nPicHeight, FRAME_ALIGN);
+		framebuffers->y_size = framebuffers->y_stride * ALIGN_VAL_TO(params->pic_height, FRAME_ALIGN);
 
-	switch (init_info->nMjpgSourceFormat)
+	switch (params->mjpeg_source_format)
 	{
 		case 0: /* I420 (4:2:0) */
 			framebuffers->uv_stride = framebuffers->y_stride / 2;
@@ -120,7 +142,7 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 			g_assert_not_reached();
 	}
 
-	alignment = init_info->nAddressAlignment;
+	alignment = params->address_alignment;
 	if (alignment > 1)
 	{
 		framebuffers->y_size = ALIGN_VAL_TO(framebuffers->y_size, alignment);
@@ -129,8 +151,8 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 		framebuffers->mv_size = ALIGN_VAL_TO(framebuffers->mv_size, alignment);
 	}
 
-	framebuffers->pic_width = init_info->nPicWidth;
-	framebuffers->pic_height = init_info->nPicHeight;
+	framebuffers->pic_width = params->pic_width;
+	framebuffers->pic_height = params->pic_height;
 
 	framebuffers->total_size = framebuffers->y_size + framebuffers->u_size + framebuffers->v_size + framebuffers->mv_size + alignment;
 	GST_DEBUG_OBJECT(framebuffers, "num framebuffers:  total: %u  reserved: %u  available: %d", framebuffers->num_framebuffers, framebuffers->num_reserve_framebuffers, framebuffers->num_available_framebuffers);

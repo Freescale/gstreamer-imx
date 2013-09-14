@@ -1,4 +1,4 @@
-/* VPU decoder specific common allocation functions
+/* VPU decoder specific allocation functions
  * Copyright (C) 2013  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
