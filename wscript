@@ -105,7 +105,7 @@ def configure(conf):
 	conf.define('PACKAGE', "gst-fsl")
 	conf.define('VERSION', "1.0")
 
-	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_VIDEO', 'FSLVPUWRAPPER', 'PTHREAD', 'M']
+	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_VIDEO', 'PTHREAD', 'M']
 
 
 	conf.recurse('src/common')

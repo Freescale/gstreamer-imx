@@ -9,7 +9,7 @@ def build(bld):
 	bld(
 		features = ['c', 'cshlib'],
 		includes = ['.', '../..'],
-		uselib = bld.env['COMMON_USELIB'],
+		uselib = bld.env['COMMON_USELIB'] + ['FSLVPUWRAPPER'],
 		use = 'gstfslcommon',
 		target = 'gstfslvpu',
 		source = bld.path.ant_glob('*.c') + bld.path.ant_glob('decoder/*.c'),
