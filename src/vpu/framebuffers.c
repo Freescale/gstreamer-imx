@@ -35,7 +35,7 @@ GST_DEBUG_CATEGORY_STATIC(vpu_framebuffers_debug);
 G_DEFINE_TYPE(GstFslVpuFramebuffers, gst_fsl_vpu_framebuffers, GST_TYPE_OBJECT)
 
 
-static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc);
+static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc);
 static void gst_fsl_vpu_framebuffers_finalize(GObject *object);
 
 
@@ -69,14 +69,46 @@ void gst_fsl_vpu_framebuffers_init(GstFslVpuFramebuffers *framebuffers)
 }
 
 
-GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(VpuDecHandle handle, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc)
+GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc)
 {
 	GstFslVpuFramebuffers *framebuffers;
 	framebuffers = g_object_new(gst_fsl_vpu_framebuffers_get_type(), NULL);
-	if (gst_fsl_vpu_framebuffers_configure(framebuffers, handle, params, phys_mem_alloc))
+	if (gst_fsl_vpu_framebuffers_configure(framebuffers, params, phys_mem_alloc))
 		return framebuffers;
 	else
 		return NULL;
+}
+
+
+gboolean gst_fsl_vpu_framebuffers_register_with_decoder(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle)
+{
+	VpuDecRetCode vpu_ret;
+
+	framebuffers->handle = handle;
+
+	vpu_ret = VPU_DecRegisterFrameBuffer(handle, framebuffers->framebuffers, framebuffers->num_framebuffers);
+	if (vpu_ret != VPU_DEC_RET_SUCCESS)
+	{
+		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_fsl_vpu_strerror(vpu_ret));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
+gboolean gst_fsl_vpu_framebuffers_register_with_encoder(GstFslVpuFramebuffers *framebuffers, VpuEncHandle handle, guint src_stride)
+{
+	VpuEncRetCode vpu_ret;
+
+	vpu_ret = VPU_EncRegisterFrameBuffer(handle, framebuffers->framebuffers, framebuffers->num_framebuffers, src_stride);
+	if (vpu_ret != VPU_ENC_RET_SUCCESS)
+	{
+		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_fsl_vpu_strerror(vpu_ret));
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 
@@ -102,19 +134,16 @@ void gst_fsl_vpu_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFra
 }
 
 
-static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc)
+static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc)
 {
 	int alignment;
 	unsigned char *phys_ptr, *virt_ptr;
 	guint i;
-	VpuDecRetCode vpu_ret;
 
 	framebuffers->num_reserve_framebuffers = params->min_framebuffer_count;
 	framebuffers->num_framebuffers = MAX((guint)(params->min_framebuffer_count), (guint)10) + framebuffers->num_reserve_framebuffers;
 	framebuffers->num_available_framebuffers = framebuffers->num_framebuffers - framebuffers->num_reserve_framebuffers;
 	framebuffers->framebuffers = (VpuFrameBuffer *)g_slice_alloc(sizeof(VpuFrameBuffer) * framebuffers->num_framebuffers);
-
-	framebuffers->handle = handle;
 
 	framebuffers->phys_mem_alloc = phys_mem_alloc;
 
@@ -197,13 +226,6 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 		framebuffer->pbufCb_tilebot = 0;
 		framebuffer->pbufVirtY_tilebot = 0;
 		framebuffer->pbufVirtCb_tilebot = 0;
-	}
-
-	vpu_ret = VPU_DecRegisterFrameBuffer(framebuffers->handle, framebuffers->framebuffers, framebuffers->num_framebuffers);
-	if (vpu_ret != VPU_DEC_RET_SUCCESS)
-	{
-		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_fsl_vpu_strerror(vpu_ret));
-		return FALSE;
 	}
 
 	framebuffers->decoder_open = TRUE;
