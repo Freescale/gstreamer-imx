@@ -153,39 +153,45 @@ static GstFlowReturn gst_fsl_vpu_buffer_pool_alloc_buffer(GstBufferPool *pool, G
 
 static void gst_fsl_vpu_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer)
 {
-	VpuDecRetCode dec_ret;
 	GstFslVpuBufferPool *vpu_pool;
-	GstFslVpuBufferMeta *vpu_meta;
 
 	vpu_pool = GST_FSL_VPU_BUFFER_POOL(pool);
-	vpu_meta = GST_FSL_VPU_BUFFER_META_GET(buffer);
+	g_assert(vpu_pool->framebuffers != NULL);
 
-	if (vpu_meta->framebuffer == NULL)
+	if (vpu_pool->framebuffers->registration_state == GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
 	{
-		GST_DEBUG_OBJECT(pool, "buffer %p does not have VPU metadata - nothing to clear", buffer);
-		return;
-	}
+		VpuDecRetCode dec_ret;
+		GstFslVpuBufferMeta *vpu_meta;
 
-	g_mutex_lock(&(vpu_pool->framebuffers->available_fb_mutex));
+		vpu_meta = GST_FSL_VPU_BUFFER_META_GET(buffer);
 
-	if (vpu_meta->not_displayed_yet && vpu_pool->framebuffers->decoder_open)
-	{	
-		dec_ret = VPU_DecOutFrameDisplayed(vpu_pool->framebuffers->handle, vpu_meta->framebuffer);
-		if (dec_ret != VPU_DEC_RET_SUCCESS)
-			GST_ERROR_OBJECT(pool, "clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
-		else
+		if (vpu_meta->framebuffer == NULL)
 		{
-			vpu_meta->not_displayed_yet = FALSE;
-			vpu_pool->framebuffers->num_available_framebuffers++;
-			GST_DEBUG_OBJECT(pool, "cleared buffer %p", buffer);
+			GST_DEBUG_OBJECT(pool, "buffer %p does not have VPU metadata - nothing to clear", buffer);
+			return;
 		}
-	}
-	else if (!vpu_pool->framebuffers->decoder_open)
-		GST_DEBUG_OBJECT(pool, "not clearing buffer %p, since VPU decodr is closed", buffer);
-	else
-		GST_DEBUG_OBJECT(pool, "buffer %p already cleared", buffer);
 
-	g_mutex_unlock(&(vpu_pool->framebuffers->available_fb_mutex));
+		g_mutex_lock(&(vpu_pool->framebuffers->available_fb_mutex));
+
+		if (vpu_meta->not_displayed_yet && vpu_pool->framebuffers->decenc_states.dec.decoder_open)
+		{	
+			dec_ret = VPU_DecOutFrameDisplayed(vpu_pool->framebuffers->decenc_states.dec.handle, vpu_meta->framebuffer);
+			if (dec_ret != VPU_DEC_RET_SUCCESS)
+				GST_ERROR_OBJECT(pool, "clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
+			else
+			{
+				vpu_meta->not_displayed_yet = FALSE;
+				vpu_pool->framebuffers->num_available_framebuffers++;
+				GST_DEBUG_OBJECT(pool, "cleared buffer %p", buffer);
+			}
+		}
+		else if (!vpu_pool->framebuffers->decenc_states.dec.decoder_open)
+			GST_DEBUG_OBJECT(pool, "not clearing buffer %p, since VPU decodr is closed", buffer);
+		else
+			GST_DEBUG_OBJECT(pool, "buffer %p already cleared", buffer);
+
+		g_mutex_unlock(&(vpu_pool->framebuffers->available_fb_mutex));
+	}
 
 	GST_BUFFER_POOL_CLASS(gst_fsl_vpu_buffer_pool_parent_class)->release_buffer(pool, buffer);
 }
@@ -296,9 +302,12 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 		phys_mem_meta->phys_addr = NULL;
 		phys_mem_meta->padding = 0;
 
-		dec_ret = VPU_DecOutFrameDisplayed(framebuffers->handle, framebuffer);
-		if (dec_ret != VPU_DEC_RET_SUCCESS)
-			GST_ERROR("clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
+		if (framebuffers->registration_state == GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
+		{
+			dec_ret = VPU_DecOutFrameDisplayed(framebuffers->decenc_states.dec.handle, framebuffer);
+			if (dec_ret != VPU_DEC_RET_SUCCESS)
+				GST_ERROR("clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
+		}
 	}
 	else
 	{

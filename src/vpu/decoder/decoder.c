@@ -591,7 +591,7 @@ static gboolean gst_fsl_vpu_dec_stop(GstVideoDecoder *decoder)
 		/* Using mutexes here to prevent race conditions when decoder_open is set to
 		 * FALSE at the same time as it is checked in the buffer pool release() function */
 		g_mutex_lock(&(vpu_dec->current_framebuffers->available_fb_mutex));
-		vpu_dec->current_framebuffers->decoder_open = FALSE;
+		vpu_dec->current_framebuffers->decenc_states.dec.decoder_open = FALSE;
 		g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
 
 		gst_object_unref(vpu_dec->current_framebuffers);
@@ -651,7 +651,7 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 		/* Using mutexes here to prevent race conditions when decoder_open is set to
 		 * FALSE at the same time as it is checked in the buffer pool release() function */
 		g_mutex_lock(&(vpu_dec->current_framebuffers->available_fb_mutex));
-		vpu_dec->current_framebuffers->decoder_open = FALSE;
+		vpu_dec->current_framebuffers->decenc_states.dec.decoder_open = FALSE;
 		g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
 
 		gst_object_unref(vpu_dec->current_framebuffers);
@@ -847,7 +847,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			if (vpu_dec->current_framebuffers == NULL)
 				return GST_FLOW_ERROR;
 
-			if (gst_fsl_vpu_framebuffers_register_with_decoder(vpu_dec->current_framebuffers, vpu_dec->handle))
+			if (!gst_fsl_vpu_framebuffers_register_with_decoder(vpu_dec->current_framebuffers, vpu_dec->handle))
 				return GST_FLOW_ERROR;
 		}
 

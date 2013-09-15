@@ -41,12 +41,37 @@ typedef struct _GstFslVpuFramebuffersClass GstFslVpuFramebuffersClass;
 #define GST_IS_FSL_VPU_FRAMEBUFFERS_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_VPU_FRAMEBUFFERS))
 
 
+typedef enum
+{
+	GST_FSL_VPU_FRAMEBUFFERS_UNREGISTERED,
+	GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED,
+	GST_FSL_VPU_FRAMEBUFFERS_ENCODER_REGISTERED
+} GstFslVpuFramebuffersRegistrationState;
+
+
+typedef union
+{
+	struct
+	{
+		VpuDecHandle handle;
+		gboolean decoder_open;
+	} dec;
+	struct
+	{
+		VpuEncHandle handle;
+		gboolean encoder_open;
+	} enc;
+}
+GstFslVpuFramebuffersDecEncStates;
+
+
 struct _GstFslVpuFramebuffers
 {
 	GstObject parent;
 
-	VpuDecHandle handle;
-	gboolean decoder_open;
+	GstFslVpuFramebuffersDecEncStates decenc_states;
+
+	GstFslVpuFramebuffersRegistrationState registration_state;
 
 	gst_fsl_phys_mem_allocator *phys_mem_alloc;
 

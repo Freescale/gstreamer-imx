@@ -17,6 +17,7 @@
  */
 
 
+#include <string.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
 
@@ -54,7 +55,8 @@ void gst_fsl_vpu_framebuffers_class_init(GstFslVpuFramebuffersClass *klass)
 
 void gst_fsl_vpu_framebuffers_init(GstFslVpuFramebuffers *framebuffers)
 {
-	framebuffers->decoder_open = FALSE;
+	framebuffers->registration_state = GST_FSL_VPU_FRAMEBUFFERS_UNREGISTERED;
+	memset(&(framebuffers->decenc_states), 0, sizeof(GstFslVpuFramebuffersDecEncStates));
 
 	framebuffers->framebuffers = NULL;
 	framebuffers->num_framebuffers = 0;
@@ -84,7 +86,13 @@ gboolean gst_fsl_vpu_framebuffers_register_with_decoder(GstFslVpuFramebuffers *f
 {
 	VpuDecRetCode vpu_ret;
 
-	framebuffers->handle = handle;
+	if (framebuffers->registration_state != GST_FSL_VPU_FRAMEBUFFERS_UNREGISTERED)
+	{
+		GST_ERROR_OBJECT(framebuffers, "framebuffers already registered");
+		return FALSE;
+	}
+
+	framebuffers->decenc_states.dec.handle = handle;
 
 	vpu_ret = VPU_DecRegisterFrameBuffer(handle, framebuffers->framebuffers, framebuffers->num_framebuffers);
 	if (vpu_ret != VPU_DEC_RET_SUCCESS)
@@ -92,6 +100,9 @@ gboolean gst_fsl_vpu_framebuffers_register_with_decoder(GstFslVpuFramebuffers *f
 		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_fsl_vpu_strerror(vpu_ret));
 		return FALSE;
 	}
+
+	framebuffers->registration_state = GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED;
+	framebuffers->decenc_states.dec.decoder_open = TRUE;
 
 	return TRUE;
 }
@@ -101,12 +112,23 @@ gboolean gst_fsl_vpu_framebuffers_register_with_encoder(GstFslVpuFramebuffers *f
 {
 	VpuEncRetCode vpu_ret;
 
+	if (framebuffers->registration_state != GST_FSL_VPU_FRAMEBUFFERS_UNREGISTERED)
+	{
+		GST_ERROR_OBJECT(framebuffers, "framebuffers already registered");
+		return FALSE;
+	}
+
+	framebuffers->decenc_states.enc.handle = handle;
+
 	vpu_ret = VPU_EncRegisterFrameBuffer(handle, framebuffers->framebuffers, framebuffers->num_framebuffers, src_stride);
 	if (vpu_ret != VPU_ENC_RET_SUCCESS)
 	{
 		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_fsl_vpu_strerror(vpu_ret));
 		return FALSE;
 	}
+
+	framebuffers->registration_state = GST_FSL_VPU_FRAMEBUFFERS_ENCODER_REGISTERED;
+	framebuffers->decenc_states.enc.encoder_open = TRUE;
 
 	return TRUE;
 }
@@ -227,8 +249,6 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 		framebuffer->pbufVirtY_tilebot = 0;
 		framebuffer->pbufVirtCb_tilebot = 0;
 	}
-
-	framebuffers->decoder_open = TRUE;
 
 	return TRUE;
 }
