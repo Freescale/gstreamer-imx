@@ -842,7 +842,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		 * and always before a frame is output */
 		{
 			GstFslVpuFramebufferParams fbparams;
-			gst_fsl_vpu_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
+			gst_fsl_vpu_framebuffers_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
 			vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(&fbparams, &gst_fsl_vpu_dec_alloc);
 			if (vpu_dec->current_framebuffers == NULL)
 				return GST_FLOW_ERROR;

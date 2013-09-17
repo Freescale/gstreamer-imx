@@ -113,8 +113,8 @@ GType gst_fsl_vpu_framebuffers_get_type(void);
 GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc);
 gboolean gst_fsl_vpu_framebuffers_register_with_decoder(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle);
 gboolean gst_fsl_vpu_framebuffers_register_with_encoder(GstFslVpuFramebuffers *framebuffers, VpuEncHandle handle, guint src_stride);
-void gst_fsl_vpu_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params);
-void gst_fsl_vpu_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFramebufferParams *params);
+void gst_fsl_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params);
+void gst_fsl_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFramebufferParams *params);
 
 
 G_END_DECLS

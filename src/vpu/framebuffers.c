@@ -134,7 +134,7 @@ gboolean gst_fsl_vpu_framebuffers_register_with_encoder(GstFslVpuFramebuffers *f
 }
 
 
-void gst_fsl_vpu_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params)
+void gst_fsl_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params)
 {
 	params->pic_width = init_info->nPicWidth;
 	params->pic_height = init_info->nPicHeight;
@@ -145,7 +145,7 @@ void gst_fsl_vpu_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFra
 }
 
 
-void gst_fsl_vpu_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFramebufferParams *params)
+void gst_fsl_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFramebufferParams *params)
 {
 	params->pic_width = 0;
 	params->pic_height = 0;
