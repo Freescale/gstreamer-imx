@@ -12,7 +12,7 @@ def build(bld):
 		uselib = bld.env['COMMON_USELIB'] + ['FSLVPUWRAPPER'],
 		use = 'gstfslcommon',
 		target = 'gstfslvpu',
-		source = bld.path.ant_glob('*.c') + bld.path.ant_glob('decoder/*.c'),
+		source = bld.path.ant_glob('*.c') + bld.path.ant_glob('decoder/*.c') + bld.path.ant_glob('encoder/*.c'),
 		install_path = bld.env['PLUGIN_INSTALL_PATH']
 	)
 

@@ -1,4 +1,4 @@
-/* Freescale VPU GStreamer 1.0 plugin definition
+/* VPU encoder specific allocation functions
  * Copyright (C) 2013  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
@@ -17,32 +17,21 @@
  */
 
 
-#include <config.h>
-#include <gst/gst.h>
-#include "decoder/decoder.h"
-#include "encoder/encoder_h264.h"
+#ifndef GST_FSL_VPU_ENCODER_ALLOC_H
+#define GST_FSL_VPU_ENCODER_ALLOC_H
+
+#include <glib.h>
+#include "../../common/alloc.h"
 
 
-
-static gboolean plugin_init(GstPlugin *plugin)
-{
-	gboolean ret = TRUE;
-	ret = ret && gst_element_register(plugin, "fslvpudec", GST_RANK_PRIMARY + 1, gst_fsl_vpu_dec_get_type());
-	ret = ret && gst_element_register(plugin, "fslvpuenc_h264", GST_RANK_PRIMARY + 1, gst_fsl_vpu_h264_enc_get_type());
-	return ret;
-}
+G_BEGIN_DECLS
 
 
+extern gst_fsl_phys_mem_allocator gst_fsl_vpu_enc_alloc;
 
-GST_PLUGIN_DEFINE(
-	GST_VERSION_MAJOR,
-	GST_VERSION_MINOR,
-	fslvpu,
-	"video en- and decoder elements using the Freescale i.MX VPU",
-	plugin_init,
-	VERSION,
-	"LGPL",
-	GST_PACKAGE_NAME,
-	GST_PACKAGE_ORIGIN
-)
+
+G_END_DECLS
+
+
+#endif
 
