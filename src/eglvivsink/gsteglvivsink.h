@@ -188,7 +188,7 @@ struct _GstEglVivSink
   /* Runtime flags */
   gboolean have_window;
   gboolean using_own_window;
-  gboolean have_surface;;
+  gboolean have_surface;
   gboolean have_vbo;
   gboolean have_texture;
   gboolean egl_started;

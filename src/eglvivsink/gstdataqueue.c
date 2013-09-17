@@ -128,7 +128,7 @@ static guint egl_gst_data_queue_signals[LAST_SIGNAL] = { 0 };
 }
 
 #define parent_class egl_gst_data_queue_parent_class
-G_DEFINE_TYPE_WITH_CODE (EGLGstDataQueue, egl_gst_data_queue, G_TYPE_OBJECT, _do_init);
+G_DEFINE_TYPE_WITH_CODE (EGLGstDataQueue, egl_gst_data_queue, G_TYPE_OBJECT, _do_init)
 
 static void
 egl_gst_data_queue_class_init (EGLGstDataQueueClass * klass)

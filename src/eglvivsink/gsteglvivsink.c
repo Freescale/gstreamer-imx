@@ -395,7 +395,7 @@ static GLenum gst_eglvivsink_get_viv_format (GstVideoFormat format);
 #define parent_class gst_eglvivsink_parent_class
 G_DEFINE_TYPE_WITH_CODE (GstEglVivSink, gst_eglvivsink, GST_TYPE_VIDEO_SINK,
     G_IMPLEMENT_INTERFACE (GST_TYPE_VIDEO_OVERLAY,
-        gst_eglvivsink_videooverlay_init));
+        gst_eglvivsink_videooverlay_init))
 
 static GstCaps *
 _gst_video_format_new_template_caps (GstVideoFormat format)
