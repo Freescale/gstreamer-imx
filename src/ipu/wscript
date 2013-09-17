@@ -14,7 +14,7 @@ def configure(conf):
 		incpaths += [os.path.abspath(os.path.expanduser(conf.options.kernel_headers))]
 	if conf.check_cc(fragment = '''
 		#include <sys/types.h>
-		#include <linux/mxcfb.h>
+		#include <linux/fb.h>
 		#include <linux/ipu.h>
 
 		int main() { return 0; }
@@ -23,7 +23,7 @@ def configure(conf):
 		includes = incpaths,
 		mandatory = False,
 		execute = False,
-		msg = 'checking for IPU headers linux/mcxfb.h and linux/ipu.h'
+		msg = 'checking for linux/fb.h and the IPU header linux/ipu.h'
 	):
 		Logs.pprint('GREEN', 'IPU sink will be built')
 		conf.env['IPUSINK_ENABLED'] = 1
