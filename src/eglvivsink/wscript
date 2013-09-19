@@ -38,12 +38,32 @@ def check_gles2(conf, uselib = 'EGL', lib_list = ['GLESv2']):
 	return retval
 
 
+def check_viv_texformat(conf, texformat):
+	test_code = """
+		#include <EGL/egl.h>
+		#include <EGL/eglext.h>
+		#include <GLES/gl.h>
+		#include <GLES/glext.h>
+		#include <GLES2/gl2.h>
+		#include <GLES2/gl2ext.h>
+
+		int main()
+		{
+			return (GL_%s) * 0;
+		}
+	"""
+	return conf.check(fragment = (test_code % texformat), mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for GLES texture format %s' % texformat, uselib = ['EGL', 'GLES'], okmsg = 'yes', errmsg = 'no')  
+
+
 def configure(conf):
 	from waflib.Build import Logs
 	conf.env['DEFINES_EGL'] = ['LINUX']
 	if check_x11(conf) and \
 	  check_egl(conf, 'EGL') and \
 	  check_gles2(conf, lib_list = ['GLESv2', 'GLESv2x', 'GLESv2SC']):
+		for texfmt in ['VIV_I420', 'VIV_YV12', 'VIV_NV12', 'VIV_NV21', 'VIV_YUY2', 'VIV_UYVY']:
+			if check_viv_texformat(conf, texfmt):
+				conf.define('HAVE_' + texfmt, 1)
 		Logs.pprint('GREEN', 'Modified EGL GLES sink will be built')
 		conf.env['EGLVIVSINK_ENABLED'] = 1
 	else:

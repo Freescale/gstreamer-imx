@@ -316,7 +316,24 @@ GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_ALWAYS,
     GST_STATIC_CAPS (GST_VIDEO_CAPS_MAKE (
             "{ "
-            "I420, YV12, NV12, NV21, "
+#ifdef HAVE_VIV_I420
+            "I420, "
+#endif
+#ifdef HAVE_VIV_YV12
+            "YV12, "
+#endif
+#ifdef HAVE_VIV_NV12
+            "YV21, "
+#endif
+#ifdef HAVE_VIV_NV21
+            "NV12, "
+#endif
+/*#ifdef HAVE_VIV_YUY2
+            "NV21, "
+#endif
+#ifdef HAVE_VIV_UYVY
+            "UYVY, "
+#endif*/
             "RGB16, RGB, RGBA, BGRA, RGBx, BGRx, "
             "BGR, ARGB, ABGR, xRGB, xBGR, AYUV, Y444, Y41B"
             " }"
@@ -650,12 +667,24 @@ static GLenum gst_eglvivsink_is_format_supported (GstVideoFormat format)
 static GLenum gst_eglvivsink_get_viv_format (GstVideoFormat format)
 {
   switch (format) {
+#ifdef HAVE_VIV_I420
     case GST_VIDEO_FORMAT_I420:  return GL_VIV_I420;
+#endif
+#ifdef HAVE_VIV_YV12
     case GST_VIDEO_FORMAT_YV12:  return GL_VIV_YV12;
+#endif
+#ifdef HAVE_VIV_NV12
     case GST_VIDEO_FORMAT_NV12:  return GL_VIV_NV12;
+#endif
+#ifdef HAVE_VIV_NV21
     case GST_VIDEO_FORMAT_NV21:  return GL_VIV_NV21;
+#endif
+#ifdef HAVE_VIV_YUY2
     case GST_VIDEO_FORMAT_YUY2:  return GL_VIV_YUY2;
+#endif
+#ifdef HAVE_VIV_UYVY
     case GST_VIDEO_FORMAT_UYVY:  return GL_VIV_UYVY;
+#endif
     case GST_VIDEO_FORMAT_RGB16: return GL_RGB565;
     case GST_VIDEO_FORMAT_RGB:   return GL_RGB;
     case GST_VIDEO_FORMAT_RGBA:  return GL_RGBA;
