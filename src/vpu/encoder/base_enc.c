@@ -407,11 +407,13 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		phys_ptr = (unsigned char*)(phys_mem_meta->phys_addr);
 
 		input_framebuf.pbufY = phys_ptr;
-		input_framebuf.pbufCb = phys_ptr + plane_offsets[0];
-		input_framebuf.pbufCr = phys_ptr + plane_offsets[0] + plane_offsets[1];
-		input_framebuf.pbufMvCol = phys_ptr + plane_offsets[0] + plane_offsets[1] + plane_offsets[2];
+		input_framebuf.pbufCb = phys_ptr + plane_offsets[1];
+		input_framebuf.pbufCr = phys_ptr + plane_offsets[2];
+		input_framebuf.pbufMvCol = NULL;
 		input_framebuf.nStrideY = plane_strides[0];
 		input_framebuf.nStrideC = plane_strides[1];
+
+		GST_DEBUG_OBJECT(vpu_base_enc, "width: %d   height: %d   stride 0: %d   stride 1: %d   offset 0: %d   offset 1: %d   offset 2: %d", GST_VIDEO_INFO_WIDTH(&(vpu_base_enc->video_info)), GST_VIDEO_INFO_HEIGHT(&(vpu_base_enc->video_info)), plane_strides[0], plane_strides[1], plane_offsets[0], plane_offsets[1], plane_offsets[2]);
 
 		if (vpu_base_enc->framebuffers == NULL)
 		{
@@ -430,10 +432,6 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 				GST_ERROR_OBJECT(vpu_base_enc, "could not allocate physical buffer for output data");
 				return GST_FLOW_ERROR;
 			}
-
-			enc_enc_param.nInVirtOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->virt_addr);
-			enc_enc_param.nInPhyOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->phys_addr);
-			enc_enc_param.nInOutputBufLen = vpu_base_enc->output_phys_buffer->size;
 		}
 	}
 	else
@@ -442,6 +440,9 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		return GST_FLOW_ERROR;
 	}
 
+	enc_enc_param.nInVirtOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->virt_addr);
+	enc_enc_param.nInPhyOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->phys_addr);
+	enc_enc_param.nInOutputBufLen = vpu_base_enc->output_phys_buffer->size;
 	enc_enc_param.nPicWidth = vpu_base_enc->framebuffers->pic_width;
 	enc_enc_param.nPicHeight = vpu_base_enc->framebuffers->pic_height;
 	enc_enc_param.nFrameRate = vpu_base_enc->open_param.nFrameRate;
