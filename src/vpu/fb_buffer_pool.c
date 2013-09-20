@@ -21,41 +21,41 @@
 #include <string.h>
 #include "../common/alloc.h"
 #include "../common/phys_mem_meta.h"
-#include "buffer_pool.h"
+#include "fb_buffer_pool.h"
 #include "utils.h"
 #include "vpu_buffer_meta.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(vpubufferpool_debug);
-#define GST_CAT_DEFAULT vpubufferpool_debug
+GST_DEBUG_CATEGORY_STATIC(vpufbbufferpool_debug);
+#define GST_CAT_DEFAULT vpufbbufferpool_debug
 
 
-static void gst_fsl_vpu_buffer_pool_finalize(GObject *object);
-static const gchar ** gst_fsl_vpu_buffer_pool_get_options(GstBufferPool *pool);
-static gboolean gst_fsl_vpu_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config);
-static GstFlowReturn gst_fsl_vpu_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, GstBufferPoolAcquireParams *params);
-static void gst_fsl_vpu_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer);
+static void gst_fsl_vpu_fb_buffer_pool_finalize(GObject *object);
+static const gchar ** gst_fsl_vpu_fb_buffer_pool_get_options(GstBufferPool *pool);
+static gboolean gst_fsl_vpu_fb_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config);
+static GstFlowReturn gst_fsl_vpu_fb_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, GstBufferPoolAcquireParams *params);
+static void gst_fsl_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer);
 
 
-G_DEFINE_TYPE(GstFslVpuBufferPool, gst_fsl_vpu_buffer_pool, GST_TYPE_BUFFER_POOL)
+G_DEFINE_TYPE(GstFslVpuFbBufferPool, gst_fsl_vpu_fb_buffer_pool, GST_TYPE_BUFFER_POOL)
 
 
 
 
-static void gst_fsl_vpu_buffer_pool_finalize(GObject *object)
+static void gst_fsl_vpu_fb_buffer_pool_finalize(GObject *object)
 {
-	GstFslVpuBufferPool *vpu_pool = GST_FSL_VPU_BUFFER_POOL(object);
+	GstFslVpuFbBufferPool *vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(object);
 
 	if (vpu_pool->framebuffers != NULL)
 		gst_object_unref(vpu_pool->framebuffers);
 
 	GST_TRACE_OBJECT(vpu_pool, "shutting down buffer pool");
 
-	G_OBJECT_CLASS(gst_fsl_vpu_buffer_pool_parent_class)->finalize(object);
+	G_OBJECT_CLASS(gst_fsl_vpu_fb_buffer_pool_parent_class)->finalize(object);
 }
 
 
-static const gchar ** gst_fsl_vpu_buffer_pool_get_options(G_GNUC_UNUSED GstBufferPool *pool)
+static const gchar ** gst_fsl_vpu_fb_buffer_pool_get_options(G_GNUC_UNUSED GstBufferPool *pool)
 {
 	static const gchar *options[] =
 	{
@@ -68,15 +68,15 @@ static const gchar ** gst_fsl_vpu_buffer_pool_get_options(G_GNUC_UNUSED GstBuffe
 }
 
 
-static gboolean gst_fsl_vpu_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config)
+static gboolean gst_fsl_vpu_fb_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config)
 {
-	GstFslVpuBufferPool *vpu_pool;
+	GstFslVpuFbBufferPool *vpu_pool;
 	GstVideoInfo info;
 	GstCaps *caps;
 	gsize size;
 	guint min, max;
 
-	vpu_pool = GST_FSL_VPU_BUFFER_POOL(pool);
+	vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(pool);
 
 	if (!gst_buffer_pool_config_get_params(config, &caps, &size, &min, &max))
 	{
@@ -108,17 +108,17 @@ static gboolean gst_fsl_vpu_buffer_pool_set_config(GstBufferPool *pool, GstStruc
 
 	vpu_pool->add_videometa = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
-	return GST_BUFFER_POOL_CLASS(gst_fsl_vpu_buffer_pool_parent_class)->set_config(pool, config);
+	return GST_BUFFER_POOL_CLASS(gst_fsl_vpu_fb_buffer_pool_parent_class)->set_config(pool, config);
 }
 
 
-static GstFlowReturn gst_fsl_vpu_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, G_GNUC_UNUSED GstBufferPoolAcquireParams *params)
+static GstFlowReturn gst_fsl_vpu_fb_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, G_GNUC_UNUSED GstBufferPoolAcquireParams *params)
 {
 	GstBuffer *buf;
-	GstFslVpuBufferPool *vpu_pool;
+	GstFslVpuFbBufferPool *vpu_pool;
 	GstVideoInfo *info;
 
-	vpu_pool = GST_FSL_VPU_BUFFER_POOL(pool);
+	vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(pool);
 
 	info = &(vpu_pool->video_info);
 
@@ -151,11 +151,11 @@ static GstFlowReturn gst_fsl_vpu_buffer_pool_alloc_buffer(GstBufferPool *pool, G
 }
 
 
-static void gst_fsl_vpu_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer)
+static void gst_fsl_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer)
 {
-	GstFslVpuBufferPool *vpu_pool;
+	GstFslVpuFbBufferPool *vpu_pool;
 
-	vpu_pool = GST_FSL_VPU_BUFFER_POOL(pool);
+	vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(pool);
 	g_assert(vpu_pool->framebuffers != NULL);
 
 	if (vpu_pool->framebuffers->registration_state == GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
@@ -193,11 +193,11 @@ static void gst_fsl_vpu_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffe
 		g_mutex_unlock(&(vpu_pool->framebuffers->available_fb_mutex));
 	}
 
-	GST_BUFFER_POOL_CLASS(gst_fsl_vpu_buffer_pool_parent_class)->release_buffer(pool, buffer);
+	GST_BUFFER_POOL_CLASS(gst_fsl_vpu_fb_buffer_pool_parent_class)->release_buffer(pool, buffer);
 }
 
 
-static void gst_fsl_vpu_buffer_pool_class_init(GstFslVpuBufferPoolClass *klass)
+static void gst_fsl_vpu_fb_buffer_pool_class_init(GstFslVpuFbBufferPoolClass *klass)
 {
 	GObjectClass *object_class;
 	GstBufferPoolClass *parent_class;
@@ -205,17 +205,17 @@ static void gst_fsl_vpu_buffer_pool_class_init(GstFslVpuBufferPoolClass *klass)
 	object_class = G_OBJECT_CLASS(klass);
 	parent_class = GST_BUFFER_POOL_CLASS(klass);
 
-	GST_DEBUG_CATEGORY_INIT(vpubufferpool_debug, "vpubufferpool", 0, "Freescale VPU DMA buffer pool");
+	GST_DEBUG_CATEGORY_INIT(vpufbbufferpool_debug, "vpufbbufferpool", 0, "Freescale VPU framebuffers buffer pool");
 
-	object_class->finalize       = GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_pool_finalize);
-	parent_class->get_options    = GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_pool_get_options);
-	parent_class->set_config     = GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_pool_set_config);
-	parent_class->alloc_buffer   = GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_pool_alloc_buffer);
-	parent_class->release_buffer = GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_pool_release_buffer);
+	object_class->finalize       = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_finalize);
+	parent_class->get_options    = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_get_options);
+	parent_class->set_config     = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_set_config);
+	parent_class->alloc_buffer   = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_alloc_buffer);
+	parent_class->release_buffer = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_release_buffer);
 }
 
 
-static void gst_fsl_vpu_buffer_pool_init(GstFslVpuBufferPool *pool)
+static void gst_fsl_vpu_fb_buffer_pool_init(GstFslVpuFbBufferPool *pool)
 {
 	pool->framebuffers = NULL;
 	pool->add_videometa = FALSE;
@@ -224,22 +224,22 @@ static void gst_fsl_vpu_buffer_pool_init(GstFslVpuBufferPool *pool)
 }
 
 
-GstBufferPool *gst_fsl_vpu_buffer_pool_new(GstFslVpuFramebuffers *framebuffers)
+GstBufferPool *gst_fsl_vpu_fb_buffer_pool_new(GstFslVpuFramebuffers *framebuffers)
 {
-	GstFslVpuBufferPool *vpu_pool;
+	GstFslVpuFbBufferPool *vpu_pool;
 
 	g_assert(framebuffers != NULL);
 
-	vpu_pool = g_object_new(gst_fsl_vpu_buffer_pool_get_type(), NULL);
+	vpu_pool = g_object_new(gst_fsl_vpu_fb_buffer_pool_get_type(), NULL);
 	vpu_pool->framebuffers = gst_object_ref(framebuffers);
 
 	return GST_BUFFER_POOL_CAST(vpu_pool);
 }
 
 
-void gst_fsl_vpu_buffer_pool_set_framebuffers(GstBufferPool *pool, GstFslVpuFramebuffers *framebuffers)
+void gst_fsl_vpu_fb_buffer_pool_set_framebuffers(GstBufferPool *pool, GstFslVpuFramebuffers *framebuffers)
 {
-	GstFslVpuBufferPool *vpu_pool = GST_FSL_VPU_BUFFER_POOL(pool);
+	GstFslVpuFbBufferPool *vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(pool);
 
 	g_assert(framebuffers != NULL);
 

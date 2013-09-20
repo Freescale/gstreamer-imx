@@ -28,7 +28,7 @@
 #include "alloc.h"
 #include "../common/phys_mem_meta.h"
 #include "../utils.h"
-#include "../buffer_pool.h"
+#include "../fb_buffer_pool.h"
 
 
 
@@ -1068,7 +1068,7 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 			GST_DEBUG_OBJECT(decoder, "no pool present; creating new pool");
 		else
 			GST_DEBUG_OBJECT(decoder, "no pool supports VPU buffers; creating new pool");
-		pool = gst_fsl_vpu_buffer_pool_new(vpu_dec->current_framebuffers);
+		pool = gst_fsl_vpu_fb_buffer_pool_new(vpu_dec->current_framebuffers);
 	}
 
 	GST_DEBUG_OBJECT(
@@ -1081,7 +1081,7 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	);
 
 	/* Inform the pool about the framebuffers */
-	gst_fsl_vpu_buffer_pool_set_framebuffers(pool, vpu_dec->current_framebuffers);
+	gst_fsl_vpu_fb_buffer_pool_set_framebuffers(pool, vpu_dec->current_framebuffers);
 
 	/* Now configure the pool. */
 	config = gst_buffer_pool_get_config(pool);
