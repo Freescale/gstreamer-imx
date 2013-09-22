@@ -498,7 +498,7 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		input_framebuf.nStrideY = plane_strides[0];
 		input_framebuf.nStrideC = plane_strides[1];
 
-		GST_DEBUG_OBJECT(vpu_base_enc, "width: %d   height: %d   stride 0: %d   stride 1: %d   offset 0: %d   offset 1: %d   offset 2: %d", GST_VIDEO_INFO_WIDTH(&(vpu_base_enc->video_info)), GST_VIDEO_INFO_HEIGHT(&(vpu_base_enc->video_info)), plane_strides[0], plane_strides[1], plane_offsets[0], plane_offsets[1], plane_offsets[2]);
+		GST_TRACE_OBJECT(vpu_base_enc, "width: %d   height: %d   stride 0: %d   stride 1: %d   offset 0: %d   offset 1: %d   offset 2: %d", GST_VIDEO_INFO_WIDTH(&(vpu_base_enc->video_info)), GST_VIDEO_INFO_HEIGHT(&(vpu_base_enc->video_info)), plane_strides[0], plane_strides[1], plane_offsets[0], plane_offsets[1], plane_offsets[2]);
 
 		if (vpu_base_enc->framebuffers == NULL)
 		{

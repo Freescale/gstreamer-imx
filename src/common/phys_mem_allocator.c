@@ -101,7 +101,7 @@ static GstFslPhysMemory* gst_fsl_phys_mem_allocator_alloc_internal(GstAllocator 
 
 	GST_DEBUG_OBJECT(
 		allocator,
-		"allocating block with maxsize: %u, align: %u, offset: %u, size: %u",
+		"alloc_internal called: maxsize: %u, align: %u, offset: %u, size: %u",
 		maxsize,
 		align,
 		offset,
@@ -134,6 +134,8 @@ static GstMemory* gst_fsl_phys_mem_allocator_alloc(GstAllocator *allocator, gsiz
 	maxsize = size + params->prefix + params->padding;
 	phys_mem = gst_fsl_phys_mem_allocator_alloc_internal(allocator, NULL, maxsize, params->flags, params->align, params->prefix, size);
 
+	GST_DEBUG_OBJECT(allocator, "allocated memory block %p at phys addr 0x%x with %u bytes", (gpointer)phys_mem, phys_mem->phys_addr, size);
+
 	return (GstMemory *)phys_mem;
 }
 
@@ -144,9 +146,9 @@ static void gst_fsl_phys_mem_allocator_free(GstAllocator *allocator, GstMemory *
 	GstFslPhysMemAllocator *phys_mem_alloc = GST_FSL_PHYS_MEM_ALLOCATOR(allocator);
 	GstFslPhysMemAllocatorClass *klass = GST_FSL_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(allocator));
 
-	GST_DEBUG_OBJECT(allocator, "freeing block with size: %u", memory->size);
-
 	klass->free_phys_mem(phys_mem_alloc, phys_mem);
+
+	GST_DEBUG_OBJECT(allocator, "freed block %p at phys addr 0x%x with size: %u", (gpointer)memory, phys_mem->phys_addr, memory->size);
 }
 
 
@@ -155,6 +157,9 @@ static gpointer gst_fsl_phys_mem_allocator_map(GstMemory *mem, gsize maxsize, Gs
 	GstFslPhysMemory *phys_mem = (GstFslPhysMemory *)mem;
 	GstFslPhysMemAllocator *phys_mem_alloc = GST_FSL_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstFslPhysMemAllocatorClass *klass = GST_FSL_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
+
+	GST_TRACE_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p", maxsize, (gpointer)mem);
+
 	return klass->map_phys_mem(phys_mem_alloc, phys_mem, maxsize, flags);
 }
 
@@ -164,6 +169,9 @@ static void gst_fsl_phys_mem_allocator_unmap(GstMemory *mem)
 	GstFslPhysMemory *phys_mem = (GstFslPhysMemory *)mem;
 	GstFslPhysMemAllocator *phys_mem_alloc = GST_FSL_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstFslPhysMemAllocatorClass *klass = GST_FSL_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
+
+	GST_TRACE_OBJECT(phys_mem_alloc, "unmapping memory block %p", (gpointer)mem);
+
 	klass->unmap_phys_mem(phys_mem_alloc, phys_mem);
 }
 
@@ -193,7 +201,8 @@ static GstMemory* gst_fsl_phys_mem_allocator_copy(GstMemory *mem, gssize offset,
 
 	GST_DEBUG_OBJECT(
 		mem->allocator,
-		"copied block; offset: %d, size: %d; source block maxsize: %u, align: %u, offset: %u, size: %u",
+		"copied block %p, new copied block %p; offset: %d, size: %d; source block maxsize: %u, align: %u, offset: %u, size: %u",
+		(gpointer)mem, (gpointer)copy,
 		offset,
 		size,
 		mem->maxsize,
@@ -234,7 +243,8 @@ static GstMemory* gst_fsl_phys_mem_allocator_share(GstMemory *mem, gssize offset
 
 	GST_DEBUG_OBJECT(
 		mem->allocator,
-		"shared block; offset: %d, size: %d; source block maxsize: %u, align: %u, offset: %u, size: %u",
+		"shared block %p, new sub block %p; offset: %d, size: %d; source block maxsize: %u, align: %u, offset: %u, size: %u",
+		(gpointer)mem, (gpointer)sub,
 		offset,
 		size,
 		mem->maxsize,

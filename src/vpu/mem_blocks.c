@@ -110,6 +110,7 @@ gboolean gst_fsl_vpu_free_phys_mem_blocks(GstFslPhysMemAllocator *phys_mem_alloc
 	{
 		GstMemory *memory = (GstMemory *)(mem_block_node->data);
 		gst_allocator_free((GstAllocator *)phys_mem_allocator, memory);
+		GST_DEBUG("freed phys memory block with %u bytes at phys addr 0x%x", memory->size, ((GstFslPhysMemory *)memory)->phys_addr);
 	}
 
 	g_slist_free(*phys_mem_blocks);
