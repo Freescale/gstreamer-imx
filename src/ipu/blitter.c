@@ -30,7 +30,8 @@
 #include <linux/ipu.h>
 #include <gst/video/gstvideometa.h>
 #include "../common/phys_mem_meta.h"
-#include "buffer_pool.h"
+#include "../common/phys_mem_buffer_pool.h"
+#include "allocator.h"
 
 
 
@@ -687,15 +688,14 @@ GstBufferPool* gst_fsl_ipu_blitter_create_bufferpool(GstFslIpuBlitter *ipu_blitt
 	GstBufferPool *pool;
 	GstStructure *config;
 	
-	pool = gst_fsl_ipu_buffer_pool_new(ipu_blitter->priv->ipu_fd, FALSE);
+	pool = gst_fsl_phys_mem_buffer_pool_new(FALSE);
 
 	config = gst_buffer_pool_get_config(pool);
 	gst_buffer_pool_config_set_params(config, caps, size, min_buffers, max_buffers);
-	/* If the allocator value is NULL, the pool will create its own internal allocator,
-	 * which uses the IPU calls to allocate DMA memory */
-	if (allocator != NULL)
+	/* If the allocator value is NULL, create an allocator */
+	if (allocator == NULL)
 	{
-		g_assert(alloc_params != NULL);
+		allocator = gst_fsl_ipu_allocator_new(ipu_blitter->priv->ipu_fd);
 		gst_buffer_pool_config_set_allocator(config, allocator, alloc_params);
 	}
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM);
@@ -770,7 +770,7 @@ GstBuffer* gst_fsl_ipu_blitter_wrap_framebuffer(GstFslIpuBlitter *ipu_blitter, i
 	}
 
 	phys_mem_meta = GST_FSL_PHYS_MEM_META_ADD(buffer);
-	phys_mem_meta->phys_addr = (gpointer)(fb_fix.smem_start);
+	phys_mem_meta->phys_addr = (guintptr)(fb_fix.smem_start);
 
 	return buffer;
 }

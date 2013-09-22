@@ -43,8 +43,8 @@ struct _GstFslPhysMemMeta
 {
 	GstMeta meta;
 
-	gpointer phys_addr;
-	gsize padding;
+	guintptr phys_addr;
+	gsize x_padding, y_padding, padding; /* TODO: remove padding member (obsolete) */
 };
 
 

@@ -299,7 +299,7 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 
 		vpu_meta->framebuffer = NULL;
 
-		phys_mem_meta->phys_addr = NULL;
+		phys_mem_meta->phys_addr = 0;
 		phys_mem_meta->padding = 0;
 
 		if (framebuffers->registration_state == GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
@@ -318,7 +318,7 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 
 		vpu_meta->framebuffer = framebuffer;
 
-		phys_mem_meta->phys_addr = framebuffer->pbufY;
+		phys_mem_meta->phys_addr = (guintptr)(framebuffer->pbufY);
 		phys_mem_meta->padding = framebuffers->y_stride * y_padding;
 
 		memory = gst_memory_new_wrapped(

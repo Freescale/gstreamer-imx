@@ -21,7 +21,7 @@
 #define GST_FSL_IPU_ALLOCATOR_H
 
 #include <gst/gst.h>
-#include <gst/gstallocator.h>
+#include "../common/phys_mem_allocator.h"
 
 
 G_BEGIN_DECLS
@@ -43,32 +43,19 @@ typedef struct _GstFslIpuMemory GstFslIpuMemory;
 
 struct _GstFslIpuAllocator
 {
-	GstAllocator parent;
+	GstFslPhysMemAllocator parent;
 	int fd;
 };
 
 
 struct _GstFslIpuAllocatorClass
 {
-	GstAllocatorClass parent_class;
-};
-
-
-struct _GstFslIpuMemory
-{
-	GstMemory mem;
-
-	gpointer mapped_virt_addr;
-	gpointer phys_addr;
+	GstFslPhysMemAllocatorClass parent_class;
 };
 
 
 GType gst_fsl_ipu_allocator_get_type(void);
-
 GstAllocator* gst_fsl_ipu_allocator_new(int ipu_fd);
-
-gpointer gst_fsl_ipu_alloc_phys_mem(int ipu_fd, gsize size);
-gboolean gst_fsl_ipu_free_phys_mem(int ipu_fd, gpointer mem);
 
 
 G_END_DECLS
