@@ -68,6 +68,11 @@ struct _GstFslVpuBaseEnc
 	GstBuffer *internal_input_buffer;
 
 	GSList *virt_enc_mem_blocks, *phys_enc_mem_blocks;
+
+	guint gop_size;
+	gdouble qp_smoothing;
+	gboolean intra_16x16_only;
+	guint bitrate;
 };
 
 

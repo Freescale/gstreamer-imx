@@ -31,6 +31,22 @@ GST_DEBUG_CATEGORY_STATIC(vpu_base_enc_debug);
 #define GST_CAT_DEFAULT vpu_base_enc_debug
 
 
+enum
+{
+	PROP_0,
+	PROP_GOP_SIZE,
+	PROP_QP_SMOOTHING,
+	PROP_INTRA_16X16_ONLY,
+	PROP_BITRATE
+};
+
+
+#define DEFAULT_GOP_SIZE          16
+#define DEFAULT_QP_SMOOTHING      0.75
+#define DEFAULT_INTRA_16X16_ONLY  FALSE
+#define DEFAULT_BITRATE           0
+
+
 #define ALIGN_VAL_TO(LENGTH, ALIGN_SIZE)  ( ((guintptr)((LENGTH) + (ALIGN_SIZE) - 1) / (ALIGN_SIZE)) * (ALIGN_SIZE) )
 
 
@@ -44,6 +60,8 @@ G_DEFINE_ABSTRACT_TYPE(GstFslVpuBaseEnc, gst_fsl_vpu_base_enc, GST_TYPE_VIDEO_EN
 static gboolean gst_fsl_vpu_base_enc_alloc_enc_mem_blocks(GstFslVpuBaseEnc *vpu_base_enc);
 static gboolean gst_fsl_vpu_base_enc_free_enc_mem_blocks(GstFslVpuBaseEnc *vpu_base_enc);
 static void gst_fsl_vpu_base_enc_close_encoder(GstFslVpuBaseEnc *vpu_base_enc);
+static void gst_fsl_vpu_base_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_fsl_vpu_base_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
 /* functions for the base class */
 static gboolean gst_fsl_vpu_base_enc_start(GstVideoEncoder *encoder);
@@ -58,19 +76,70 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 
 void gst_fsl_vpu_base_enc_class_init(GstFslVpuBaseEncClass *klass)
 {
+	GObjectClass *object_class;
 	GstVideoEncoderClass *base_class;
 
 	GST_DEBUG_CATEGORY_INIT(vpu_base_enc_debug, "vpubaseenc", 0, "Freescale VPU video encoder base class");
 
+	object_class = G_OBJECT_CLASS(klass);
 	base_class = GST_VIDEO_ENCODER_CLASS(klass);
 
+	object_class->set_property    = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_set_property);
+	object_class->get_property    = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_get_property);
 	base_class->start             = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_start);
 	base_class->stop              = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_stop);
 	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_set_format);
 	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_handle_frame);
-
 	
 	klass->inst_counter = 0;
+
+	g_object_class_install_property(
+		object_class,
+		PROP_GOP_SIZE,
+		g_param_spec_uint(
+			"gop-size",
+			"Group-of-picture size",
+			"How many frames a group-of-picture shall contain",
+			0, 32767,
+			DEFAULT_GOP_SIZE,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_QP_SMOOTHING,
+		g_param_spec_double(
+			"qp-smoothing",
+			"Quantization parameter smoothing",
+			"How fast the quantization parameter shall change; higher value means faster change (unused if qp is fixed)",
+			0.0, 1.0,
+			DEFAULT_QP_SMOOTHING,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_INTRA_16X16_ONLY,
+		g_param_spec_boolean(
+			"intra-16x16-only",
+			"Intra 16x16 only mode",
+			"Whether or not to use the 16x16 intra only mode",
+			DEFAULT_INTRA_16X16_ONLY,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_BITRATE,
+		g_param_spec_uint(
+			"bitrate",
+			"Bitrate",
+			"Bitrate to use, in kbps (0 = no bitrate control; constant quality mode is used)",
+			0, G_MAXUINT,
+			DEFAULT_BITRATE,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -86,6 +155,11 @@ void gst_fsl_vpu_base_enc_init(GstFslVpuBaseEnc *vpu_base_enc)
 
 	vpu_base_enc->virt_enc_mem_blocks = NULL;
 	vpu_base_enc->phys_enc_mem_blocks = NULL;
+
+	vpu_base_enc->gop_size         = DEFAULT_GOP_SIZE;
+	vpu_base_enc->qp_smoothing     = DEFAULT_QP_SMOOTHING;
+	vpu_base_enc->intra_16x16_only = DEFAULT_INTRA_16X16_ONLY;
+	vpu_base_enc->bitrate          = DEFAULT_BITRATE;
 }
 
 
@@ -173,6 +247,56 @@ static void gst_fsl_vpu_base_enc_close_encoder(GstFslVpuBaseEnc *vpu_base_enc)
 			GST_ERROR_OBJECT(vpu_base_enc, "closing encoder failed: %s", gst_fsl_vpu_strerror(enc_ret));
 
 		vpu_base_enc->vpu_inst_opened = FALSE;
+	}
+}
+
+
+static void gst_fsl_vpu_base_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+{
+	GstFslVpuBaseEnc *vpu_base_enc = GST_FSL_VPU_BASE_ENC(object);
+
+	switch (prop_id)
+	{
+		case PROP_GOP_SIZE:
+			vpu_base_enc->gop_size = g_value_get_uint(value);
+			break;
+		case PROP_QP_SMOOTHING:
+			vpu_base_enc->qp_smoothing = g_value_get_double(value);
+			break;
+		case PROP_INTRA_16X16_ONLY:
+			vpu_base_enc->intra_16x16_only = g_value_get_boolean(value);
+			break;
+		case PROP_BITRATE:
+			vpu_base_enc->bitrate = g_value_get_uint(value);
+			break;
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
+}
+
+
+static void gst_fsl_vpu_base_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	GstFslVpuBaseEnc *vpu_base_enc = GST_FSL_VPU_BASE_ENC(object);
+
+	switch (prop_id)
+	{
+		case PROP_GOP_SIZE:
+			g_value_set_uint(value, vpu_base_enc->gop_size);
+			break;
+		case PROP_QP_SMOOTHING:
+			g_value_set_double(value, vpu_base_enc->qp_smoothing);
+			break;
+		case PROP_INTRA_16X16_ONLY:
+			g_value_set_boolean(value, vpu_base_enc->intra_16x16_only);
+			break;
+		case PROP_BITRATE:
+			g_value_set_uint(value, vpu_base_enc->bitrate);
+			break;
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
 	}
 }
 
@@ -329,18 +453,21 @@ static gboolean gst_fsl_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	memset(&(vpu_base_enc->open_param), 0, sizeof(VpuEncOpenParam));
 
 	/* These params are usually not set by derived classes */
-	// TODO: do width&height have to be aligned to 16-pixel boundaries here?
 	vpu_base_enc->open_param.nPicWidth = GST_VIDEO_INFO_WIDTH(&(state->info));
 	vpu_base_enc->open_param.nPicHeight = GST_VIDEO_INFO_HEIGHT(&(state->info));
 	vpu_base_enc->open_param.nFrameRate = (GST_VIDEO_INFO_FPS_N(&(state->info)) & 0xffffUL) | (((GST_VIDEO_INFO_FPS_D(&(state->info)) - 1) & 0xffffUL) << 16);
-	/* These params are defaults, and are usually overwritten by derived classes */
-	vpu_base_enc->open_param.sMirror = VPU_ENC_MIRDIR_NONE;
-	vpu_base_enc->open_param.nGOPSize = 16;
+	vpu_base_enc->open_param.sMirror = VPU_ENC_MIRDIR_NONE; /* don't use VPU rotation (IPU has better performance) */
+	vpu_base_enc->open_param.nBitRate = vpu_base_enc->bitrate;
+	vpu_base_enc->open_param.nGOPSize = vpu_base_enc->gop_size;
+	vpu_base_enc->open_param.nUserGamma = (int)(32768 * vpu_base_enc->qp_smoothing);
+	vpu_base_enc->open_param.nAvcIntra16x16OnlyModeEnable = vpu_base_enc->intra_16x16_only ? 1 : 0;
+	vpu_base_enc->open_param.nRcIntervalMode = 1;
+	/* These params are defaults, and are often overwritten by derived classes */
 	vpu_base_enc->open_param.nUserQpMax = -1;
 	vpu_base_enc->open_param.nUserQpMin = -1;
 	vpu_base_enc->open_param.nRcIntraQp = -1;
-	vpu_base_enc->open_param.nUserGamma = 75 * 32768 / 100;
-	vpu_base_enc->open_param.nRcIntervalMode = 1;
+
+	GST_DEBUG_OBJECT(vpu_base_enc, "setting bitrate to %u kbps and GOP size to %u", vpu_base_enc->open_param.nBitRate, vpu_base_enc->open_param.nGOPSize);
 
 	/* Give the derived class a chance to set params */
 	if (!klass->set_open_params(vpu_base_enc, &(vpu_base_enc->open_param)))
