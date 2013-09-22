@@ -23,7 +23,6 @@
 #include <glib.h>
 #include <gst/gst.h>
 #include <vpu_wrapper.h>
-#include "../common/alloc.h"
 
 
 G_BEGIN_DECLS
@@ -73,7 +72,7 @@ struct _GstFslVpuFramebuffers
 
 	GstFslVpuFramebuffersRegistrationState registration_state;
 
-	gst_fsl_phys_mem_allocator *phys_mem_alloc;
+	GstAllocator *allocator;
 
 	VpuFrameBuffer *framebuffers;
 	guint num_framebuffers;
@@ -110,7 +109,7 @@ GstFslVpuFramebufferParams;
 
 
 GType gst_fsl_vpu_framebuffers_get_type(void);
-GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc);
+GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(GstFslVpuFramebufferParams *params, GstAllocator *allocator);
 gboolean gst_fsl_vpu_framebuffers_register_with_decoder(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle);
 gboolean gst_fsl_vpu_framebuffers_register_with_encoder(GstFslVpuFramebuffers *framebuffers, VpuEncHandle handle, guint src_stride);
 void gst_fsl_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params);

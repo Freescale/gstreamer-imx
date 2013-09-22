@@ -19,7 +19,6 @@
 
 #include <vpu_wrapper.h>
 #include <string.h>
-#include "../common/alloc.h"
 #include "../common/phys_mem_meta.h"
 #include "fb_buffer_pool.h"
 #include "utils.h"

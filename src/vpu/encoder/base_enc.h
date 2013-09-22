@@ -27,7 +27,7 @@
 
 #include <vpu_wrapper.h>
 
-#include "../common/alloc.h"
+#include "../../common/phys_mem_allocator.h"
 #include "../framebuffers.h"
 
 
@@ -62,7 +62,7 @@ struct _GstFslVpuBaseEnc
 	gboolean vpu_inst_opened;
 
 	GstFslVpuFramebuffers *framebuffers;
-	gst_fsl_phys_mem_block *output_phys_buffer;
+	GstFslPhysMemory *output_phys_buffer;
 
 	GSList *virt_enc_mem_blocks, *phys_enc_mem_blocks;
 };

@@ -25,7 +25,8 @@
 #include <gst/video/gstvideopool.h>
 #include <vpu_wrapper.h>
 #include "decoder.h"
-#include "alloc.h"
+#include "allocator.h"
+#include "../mem_blocks.h"
 #include "../common/phys_mem_meta.h"
 #include "../utils.h"
 #include "../fb_buffer_pool.h"
@@ -264,23 +265,27 @@ static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec)
  
 		if (vpu_dec->mem_info.MemSubBlock[i].MemType == VPU_MEM_VIRT)
 		{
-			if (!gst_fsl_alloc_virt_mem_block(&ptr, size))
+			if (!gst_fsl_vpu_alloc_virt_mem_block(&ptr, size))
 				return FALSE;
 
 			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO(ptr, vpu_dec->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_append_virt_mem_block(ptr, &(vpu_dec->virt_dec_mem_blocks));
+			gst_fsl_vpu_append_virt_mem_block(ptr, &(vpu_dec->virt_dec_mem_blocks));
 		}
 		else if (vpu_dec->mem_info.MemSubBlock[i].MemType == VPU_MEM_PHY)
 		{
-			gst_fsl_phys_mem_block *mem_block;
-			if (!gst_fsl_alloc_phys_mem_block(&gst_fsl_vpu_dec_alloc, &mem_block, size))
+			GstFslPhysMemory *memory = (GstFslPhysMemory *)gst_allocator_alloc(gst_fsl_vpu_dec_allocator_obtain(), size, NULL);
+			if (memory == NULL)
 				return FALSE;
 
-			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(mem_block->virt_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
-			vpu_dec->mem_info.MemSubBlock[i].pPhyAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(mem_block->phys_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
+			/* it is OK to use mapped_virt_addr directly without explicit mapping here,
+			 * since the VPU decoder allocation functions define a virtual address upon
+			 * allocation, so an actual "mapping" does not exist (map just returns
+			 * mapped_virt_addr, unmap does nothing) */
+			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(memory->mapped_virt_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
+			vpu_dec->mem_info.MemSubBlock[i].pPhyAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(memory->phys_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_append_phys_mem_block(mem_block, &(vpu_dec->phys_dec_mem_blocks));
+			gst_fsl_vpu_append_phys_mem_block(memory, &(vpu_dec->phys_dec_mem_blocks));
 		}
 		else
 		{
@@ -298,8 +303,8 @@ static gboolean gst_fsl_vpu_dec_free_dec_mem_blocks(GstFslVpuDec *vpu_dec)
 	/* NOT using the two calls with && directly, since otherwise an early exit could happen; in other words,
 	 * if the first call failed, the second one wouldn't even be invoked
 	 * doing the logical AND afterwards fixes this */
-	ret1 = gst_fsl_free_virt_mem_blocks(&(vpu_dec->virt_dec_mem_blocks));
-	ret2 = gst_fsl_free_phys_mem_blocks(&gst_fsl_vpu_dec_alloc, &(vpu_dec->phys_dec_mem_blocks));
+	ret1 = gst_fsl_vpu_free_virt_mem_blocks(&(vpu_dec->virt_dec_mem_blocks));
+	ret2 = gst_fsl_vpu_free_phys_mem_blocks((GstFslPhysMemAllocator *)gst_fsl_vpu_dec_allocator_obtain(), &(vpu_dec->phys_dec_mem_blocks));
 	return ret1 && ret2;
 }
 
@@ -843,7 +848,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		{
 			GstFslVpuFramebufferParams fbparams;
 			gst_fsl_vpu_framebuffers_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
-			vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(&fbparams, &gst_fsl_vpu_dec_alloc);
+			vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(&fbparams, gst_fsl_vpu_dec_allocator_obtain());
 			if (vpu_dec->current_framebuffers == NULL)
 				return GST_FLOW_ERROR;
 

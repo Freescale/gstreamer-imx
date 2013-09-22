@@ -19,9 +19,10 @@
 
 #include <string.h>
 #include "base_enc.h"
-#include "alloc.h"
-#include "../common/phys_mem_meta.h"
+#include "allocator.h"
+#include "../mem_blocks.h"
 #include "../utils.h"
+#include "../../common/phys_mem_meta.h"
 
 
 
@@ -102,23 +103,27 @@ static gboolean gst_fsl_vpu_base_enc_alloc_enc_mem_blocks(GstFslVpuBaseEnc *vpu_
  
 		if (vpu_base_enc->mem_info.MemSubBlock[i].MemType == VPU_MEM_VIRT)
 		{
-			if (!gst_fsl_alloc_virt_mem_block(&ptr, size))
+			if (!gst_fsl_vpu_alloc_virt_mem_block(&ptr, size))
 				return FALSE;
 
 			vpu_base_enc->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO(ptr, vpu_base_enc->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_append_virt_mem_block(ptr, &(vpu_base_enc->virt_enc_mem_blocks));
+			gst_fsl_vpu_append_virt_mem_block(ptr, &(vpu_base_enc->virt_enc_mem_blocks));
 		}
 		else if (vpu_base_enc->mem_info.MemSubBlock[i].MemType == VPU_MEM_PHY)
 		{
-			gst_fsl_phys_mem_block *mem_block;
-			if (!gst_fsl_alloc_phys_mem_block(&gst_fsl_vpu_enc_alloc, &mem_block, size))
+			GstFslPhysMemory *memory = (GstFslPhysMemory *)gst_allocator_alloc(gst_fsl_vpu_enc_allocator_obtain(), size, NULL);
+			if (memory == NULL)
 				return FALSE;
 
-			vpu_base_enc->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(mem_block->virt_addr), vpu_base_enc->mem_info.MemSubBlock[i].nAlignment);
-			vpu_base_enc->mem_info.MemSubBlock[i].pPhyAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(mem_block->phys_addr), vpu_base_enc->mem_info.MemSubBlock[i].nAlignment);
+			/* it is OK to use mapped_virt_addr directly without explicit mapping here,
+			 * since the VPU encoder allocation functions define a virtual address upon
+			 * allocation, so an actual "mapping" does not exist (map just returns
+			 * mapped_virt_addr, unmap does nothing) */
+			vpu_base_enc->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(memory->mapped_virt_addr), vpu_base_enc->mem_info.MemSubBlock[i].nAlignment);
+			vpu_base_enc->mem_info.MemSubBlock[i].pPhyAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(memory->phys_addr), vpu_base_enc->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_append_phys_mem_block(mem_block, &(vpu_base_enc->phys_enc_mem_blocks));
+			gst_fsl_vpu_append_phys_mem_block(memory, &(vpu_base_enc->phys_enc_mem_blocks));
 		}
 		else
 		{
@@ -136,8 +141,8 @@ static gboolean gst_fsl_vpu_base_enc_free_enc_mem_blocks(GstFslVpuBaseEnc *vpu_b
 	/* NOT using the two calls with && directly, since otherwise an early exit could happen; in other words,
 	 * if the first call failed, the second one wouldn't even be invoked
 	 * doing the logical AND afterwards fixes this */
-	ret1 = gst_fsl_free_virt_mem_blocks(&(vpu_base_enc->virt_enc_mem_blocks));
-	ret2 = gst_fsl_free_phys_mem_blocks(&gst_fsl_vpu_enc_alloc, &(vpu_base_enc->phys_enc_mem_blocks));
+	ret1 = gst_fsl_vpu_free_virt_mem_blocks(&(vpu_base_enc->virt_enc_mem_blocks));
+	ret2 = gst_fsl_vpu_free_phys_mem_blocks((GstFslPhysMemAllocator *)gst_fsl_vpu_enc_allocator_obtain(), &(vpu_base_enc->phys_enc_mem_blocks));
 	return ret1 && ret2;
 }
 
@@ -148,7 +153,7 @@ static void gst_fsl_vpu_base_enc_close_encoder(GstFslVpuBaseEnc *vpu_base_enc)
 
 	if (vpu_base_enc->output_phys_buffer != NULL)
 	{
-		gst_fsl_free_phys_mem_block(&gst_fsl_vpu_enc_alloc, vpu_base_enc->output_phys_buffer);
+		gst_allocator_free(gst_fsl_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
 		vpu_base_enc->output_phys_buffer = NULL;
 	}
 
@@ -297,7 +302,7 @@ static gboolean gst_fsl_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 
 	if (vpu_base_enc->output_phys_buffer != NULL)
 	{
-		gst_fsl_free_phys_mem_block(&gst_fsl_vpu_enc_alloc, vpu_base_enc->output_phys_buffer);
+		gst_allocator_free(gst_fsl_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
 		vpu_base_enc->output_phys_buffer = NULL;
 	}
 
@@ -421,13 +426,15 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 			gst_fsl_vpu_framebuffers_enc_init_info_to_params(&(vpu_base_enc->init_info), &fbparams);
 			fbparams.pic_width = vpu_base_enc->open_param.nPicWidth;
 			fbparams.pic_height = vpu_base_enc->open_param.nPicHeight;
-			vpu_base_enc->framebuffers = gst_fsl_vpu_framebuffers_new(&fbparams, &gst_fsl_vpu_enc_alloc);
+			vpu_base_enc->framebuffers = gst_fsl_vpu_framebuffers_new(&fbparams, gst_fsl_vpu_enc_allocator_obtain());
 			gst_fsl_vpu_framebuffers_register_with_encoder(vpu_base_enc->framebuffers, vpu_base_enc->handle, plane_strides[0]);
 		}
 
 		if (vpu_base_enc->output_phys_buffer == NULL)
 		{
-			if (!gst_fsl_alloc_phys_mem_block(&gst_fsl_vpu_enc_alloc, &(vpu_base_enc->output_phys_buffer), vpu_base_enc->framebuffers->total_size))
+			vpu_base_enc->output_phys_buffer = (GstFslPhysMemory *)gst_allocator_alloc(gst_fsl_vpu_enc_allocator_obtain(), vpu_base_enc->framebuffers->total_size, NULL);
+
+			if (vpu_base_enc->output_phys_buffer == NULL)
 			{
 				GST_ERROR_OBJECT(vpu_base_enc, "could not allocate physical buffer for output data");
 				return GST_FLOW_ERROR;
@@ -440,9 +447,9 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		return GST_FLOW_ERROR;
 	}
 
-	enc_enc_param.nInVirtOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->virt_addr);
+	enc_enc_param.nInVirtOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->mapped_virt_addr); /* TODO */
 	enc_enc_param.nInPhyOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->phys_addr);
-	enc_enc_param.nInOutputBufLen = vpu_base_enc->output_phys_buffer->size;
+	enc_enc_param.nInOutputBufLen = vpu_base_enc->output_phys_buffer->mem.size;
 	enc_enc_param.nPicWidth = vpu_base_enc->framebuffers->pic_width;
 	enc_enc_param.nPicHeight = vpu_base_enc->framebuffers->pic_height;
 	enc_enc_param.nFrameRate = vpu_base_enc->open_param.nFrameRate;
@@ -467,7 +474,7 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	if ((enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_DIS) || (enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER))
 	{
 		gst_video_encoder_allocate_output_frame(encoder, frame, enc_enc_param.nOutOutputSize);
-		gst_buffer_fill(frame->output_buffer, 0, vpu_base_enc->output_phys_buffer->virt_addr, enc_enc_param.nOutOutputSize);
+		gst_buffer_fill(frame->output_buffer, 0, vpu_base_enc->output_phys_buffer->mapped_virt_addr, enc_enc_param.nOutOutputSize);
 		gst_video_encoder_finish_frame(encoder, frame);
 	}
 

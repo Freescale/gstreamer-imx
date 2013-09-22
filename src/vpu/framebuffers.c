@@ -21,8 +21,10 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 
+#include "../common/phys_mem_allocator.h"
 #include "framebuffers.h"
 #include "utils.h"
+#include "mem_blocks.h"
 
 
 GST_DEBUG_CATEGORY_STATIC(vpu_framebuffers_debug);
@@ -36,7 +38,7 @@ GST_DEBUG_CATEGORY_STATIC(vpu_framebuffers_debug);
 G_DEFINE_TYPE(GstFslVpuFramebuffers, gst_fsl_vpu_framebuffers, GST_TYPE_OBJECT)
 
 
-static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc);
+static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, GstFslVpuFramebufferParams *params, GstAllocator *allocator);
 static void gst_fsl_vpu_framebuffers_finalize(GObject *object);
 
 
@@ -71,11 +73,11 @@ void gst_fsl_vpu_framebuffers_init(GstFslVpuFramebuffers *framebuffers)
 }
 
 
-GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc)
+GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(GstFslVpuFramebufferParams *params, GstAllocator *allocator)
 {
 	GstFslVpuFramebuffers *framebuffers;
 	framebuffers = g_object_new(gst_fsl_vpu_framebuffers_get_type(), NULL);
-	if (gst_fsl_vpu_framebuffers_configure(framebuffers, params, phys_mem_alloc))
+	if (gst_fsl_vpu_framebuffers_configure(framebuffers, params, allocator))
 		return framebuffers;
 	else
 		return NULL;
@@ -156,18 +158,20 @@ void gst_fsl_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info,
 }
 
 
-static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, GstFslVpuFramebufferParams *params, gst_fsl_phys_mem_allocator *phys_mem_alloc)
+static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, GstFslVpuFramebufferParams *params, GstAllocator *allocator)
 {
 	int alignment;
 	unsigned char *phys_ptr, *virt_ptr;
 	guint i;
+
+	g_assert(GST_IS_FSL_PHYS_MEM_ALLOCATOR(allocator));
 
 	framebuffers->num_reserve_framebuffers = params->min_framebuffer_count;
 	framebuffers->num_framebuffers = MAX((guint)(params->min_framebuffer_count), (guint)10) + framebuffers->num_reserve_framebuffers;
 	framebuffers->num_available_framebuffers = framebuffers->num_framebuffers - framebuffers->num_reserve_framebuffers;
 	framebuffers->framebuffers = (VpuFrameBuffer *)g_slice_alloc(sizeof(VpuFrameBuffer) * framebuffers->num_framebuffers);
 
-	framebuffers->phys_mem_alloc = phys_mem_alloc;
+	framebuffers->allocator = allocator;
 
 	framebuffers->y_stride = ALIGN_VAL_TO(params->pic_width, FRAME_ALIGN);
 	if (params->interlace)
@@ -211,17 +215,18 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 
 	for (i = 0; i < framebuffers->num_framebuffers; ++i)
 	{
-		gst_fsl_phys_mem_block *mem_block;
+		GstFslPhysMemory *memory;
 		VpuFrameBuffer *framebuffer;
 
 		framebuffer = &(framebuffers->framebuffers[i]);
 
-		if (!gst_fsl_alloc_phys_mem_block(phys_mem_alloc, &mem_block, framebuffers->total_size))
+		memory = (GstFslPhysMemory *)gst_allocator_alloc(allocator, framebuffers->total_size, NULL);
+		if (memory == NULL)
 			return FALSE;
-		gst_fsl_append_phys_mem_block(mem_block, &(framebuffers->fb_mem_blocks));
+		gst_fsl_vpu_append_phys_mem_block(memory, &(framebuffers->fb_mem_blocks));
 
-		phys_ptr = (unsigned char*)(mem_block->phys_addr);
-		virt_ptr = (unsigned char*)(mem_block->virt_addr);
+		phys_ptr = (unsigned char*)(memory->phys_addr);
+		virt_ptr = (unsigned char*)(memory->mapped_virt_addr); /* TODO */
 
 		if (alignment > 1)
 		{
@@ -266,7 +271,7 @@ static void gst_fsl_vpu_framebuffers_finalize(GObject *object)
 		framebuffers->framebuffers = NULL;
 	}
 
-	gst_fsl_free_phys_mem_blocks(framebuffers->phys_mem_alloc, &(framebuffers->fb_mem_blocks));
+	gst_fsl_vpu_free_phys_mem_blocks((GstFslPhysMemAllocator *)(framebuffers->allocator), &(framebuffers->fb_mem_blocks));
 
 	G_OBJECT_CLASS(gst_fsl_vpu_framebuffers_parent_class)->finalize(object);
 }

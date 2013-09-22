@@ -1,4 +1,4 @@
-/* VPU encoder specific allocation functions
+/* VPU memory block lists
  * Copyright (C) 2013  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
@@ -17,17 +17,22 @@
  */
 
 
-#ifndef GST_FSL_VPU_ENCODER_ALLOC_H
-#define GST_FSL_VPU_ENCODER_ALLOC_H
+#ifndef GST_FSL_PHYS_MEM_BLOCKS_H
+#define GST_FSL_PHYS_MEM_BLOCKS_H
 
-#include <glib.h>
-#include "../../common/alloc.h"
+#include <gst/gst.h>
+#include "../common/phys_mem_allocator.h"
 
 
 G_BEGIN_DECLS
 
 
-extern gst_fsl_phys_mem_allocator gst_fsl_vpu_enc_alloc;
+gboolean gst_fsl_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size);
+void gst_fsl_vpu_append_virt_mem_block(unsigned char *mem_block, GSList **virt_mem_blocks);
+gboolean gst_fsl_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks);
+
+void gst_fsl_vpu_append_phys_mem_block(GstFslPhysMemory *memory, GSList **phys_mem_blocks);
+gboolean gst_fsl_vpu_free_phys_mem_blocks(GstFslPhysMemAllocator *phys_mem_allocator, GSList **phys_mem_blocks);
 
 
 G_END_DECLS
