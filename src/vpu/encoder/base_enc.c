@@ -22,6 +22,7 @@
 #include "allocator.h"
 #include "../mem_blocks.h"
 #include "../utils.h"
+#include "../../common/phys_mem_buffer_pool.h"
 #include "../../common/phys_mem_meta.h"
 
 
@@ -79,6 +80,9 @@ void gst_fsl_vpu_base_enc_init(GstFslVpuBaseEnc *vpu_base_enc)
 
 	vpu_base_enc->output_phys_buffer = NULL;
 	vpu_base_enc->framebuffers = NULL;
+
+	vpu_base_enc->internal_bufferpool = NULL;
+	vpu_base_enc->internal_input_buffer = NULL;
 
 	vpu_base_enc->virt_enc_mem_blocks = NULL;
 	vpu_base_enc->phys_enc_mem_blocks = NULL;
@@ -150,6 +154,11 @@ static gboolean gst_fsl_vpu_base_enc_free_enc_mem_blocks(GstFslVpuBaseEnc *vpu_b
 static void gst_fsl_vpu_base_enc_close_encoder(GstFslVpuBaseEnc *vpu_base_enc)
 {
 	VpuEncRetCode enc_ret;
+
+	if (vpu_base_enc->internal_input_buffer != NULL)
+		gst_buffer_unref(vpu_base_enc->internal_input_buffer);
+	if (vpu_base_enc->internal_bufferpool != NULL)
+		gst_object_unref(vpu_base_enc->internal_bufferpool);
 
 	if (vpu_base_enc->output_phys_buffer != NULL)
 	{
@@ -381,6 +390,7 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	GstFslVpuBaseEncClass *klass;
 	GstFslVpuBaseEnc *vpu_base_enc;
 	VpuFrameBuffer input_framebuf;
+	GstBuffer *input_buffer;
 
 	vpu_base_enc = GST_FSL_VPU_BASE_ENC(encoder);
 	klass = GST_FSL_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
@@ -390,14 +400,84 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	memset(&enc_enc_param, 0, sizeof(enc_enc_param));
 	memset(&input_framebuf, 0, sizeof(input_framebuf));
 
-	if ((phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(frame->input_buffer)) != NULL)
+	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(frame->input_buffer);
+
+	if (phys_mem_meta == NULL)
+	{
+		GstVideoFrame temp_input_video_frame, temp_incoming_video_frame;
+
+		if (vpu_base_enc->internal_input_buffer == NULL)
+		{
+			/* The internal input buffer is the temp input frame's DMA memory.
+			 * If it does not exist yet, it needs to be created here. The temp input
+			 * frame is then mapped. */
+
+			GstFlowReturn flow_ret;
+
+			if (vpu_base_enc->internal_bufferpool == NULL)
+			{
+				/* Internal bufferpool does not exist yet - create it now,
+				 * so that it can in turn create the internal input buffer */
+
+				GstStructure *config;
+				GstCaps *caps;
+				GstAllocator *allocator;
+
+				caps = gst_video_info_to_caps(&(vpu_base_enc->video_info));
+				vpu_base_enc->internal_bufferpool = gst_fsl_phys_mem_buffer_pool_new(FALSE);
+				allocator = gst_fsl_vpu_enc_allocator_obtain();
+
+				config = gst_buffer_pool_get_config(vpu_base_enc->internal_bufferpool);
+				gst_buffer_pool_config_set_params(config, caps, vpu_base_enc->video_info.size, 2, 0);
+				gst_buffer_pool_config_set_allocator(config, allocator, NULL);
+				gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM);
+				gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+				gst_buffer_pool_set_config(vpu_base_enc->internal_bufferpool, config);
+
+				gst_caps_unref(caps);
+
+				if (vpu_base_enc->internal_bufferpool == NULL)
+				{
+					GST_ERROR_OBJECT(vpu_base_enc, "failed to create internal bufferpool");
+					return FALSE;
+				}
+			}
+
+			/* Future versions of this code may propose the internal bufferpool upstream;
+			 * hence the is_active check */
+			if (!gst_buffer_pool_is_active(vpu_base_enc->internal_bufferpool))
+				gst_buffer_pool_set_active(vpu_base_enc->internal_bufferpool, TRUE);
+
+			/* Create the internal input buffer */
+			flow_ret = gst_buffer_pool_acquire_buffer(vpu_base_enc->internal_bufferpool, &(vpu_base_enc->internal_input_buffer), NULL);
+			if (flow_ret != GST_FLOW_OK)
+			{
+				GST_ERROR_OBJECT(vpu_base_enc, "error acquiring input frame buffer: %s", gst_pad_mode_get_name(flow_ret));
+				return FALSE;
+			}
+		}
+
+		gst_video_frame_map(&temp_incoming_video_frame, &(vpu_base_enc->video_info), frame->input_buffer, GST_MAP_READ);
+		gst_video_frame_map(&temp_input_video_frame, &(vpu_base_enc->video_info), vpu_base_enc->internal_input_buffer, GST_MAP_WRITE);
+
+		gst_video_frame_copy(&temp_input_video_frame, &temp_incoming_video_frame);
+
+		gst_video_frame_unmap(&temp_incoming_video_frame);
+		gst_video_frame_unmap(&temp_input_video_frame);
+
+		input_buffer = vpu_base_enc->internal_input_buffer;
+		phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(vpu_base_enc->internal_input_buffer);
+	}
+	else
+		input_buffer = frame->input_buffer;
+
 	{
 		gsize *plane_offsets;
 		gint *plane_strides;
 		GstVideoMeta *video_meta;
 		unsigned char *phys_ptr;
 
-		video_meta = gst_buffer_get_video_meta(frame->input_buffer);
+		video_meta = gst_buffer_get_video_meta(input_buffer);
 		if (video_meta != NULL)
 		{
 			plane_offsets = video_meta->offset;
@@ -440,11 +520,6 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 				return GST_FLOW_ERROR;
 			}
 		}
-	}
-	else
-	{
-		GST_ERROR_OBJECT(vpu_base_enc, "buffer is not physically contiguous");
-		return GST_FLOW_ERROR;
 	}
 
 	enc_enc_param.nInVirtOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->mapped_virt_addr); /* TODO */

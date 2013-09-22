@@ -64,6 +64,9 @@ struct _GstFslVpuBaseEnc
 	GstFslVpuFramebuffers *framebuffers;
 	GstFslPhysMemory *output_phys_buffer;
 
+	GstBufferPool *internal_bufferpool;
+	GstBuffer *internal_input_buffer;
+
 	GSList *virt_enc_mem_blocks, *phys_enc_mem_blocks;
 };
 
