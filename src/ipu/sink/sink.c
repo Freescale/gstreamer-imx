@@ -66,8 +66,8 @@ G_DEFINE_TYPE(GstFslIpuSink, gst_fsl_ipu_sink, GST_TYPE_VIDEO_SINK)
 
 
 static void gst_fsl_ipu_sink_finalize(GObject *object);
-void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
-void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
 static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query);
 static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
@@ -204,7 +204,7 @@ static void gst_fsl_ipu_sink_finalize(GObject *object)
 }
 
 
-void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+static void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
 	GstFslIpuSink *ipu_sink = GST_FSL_IPU_SINK(object);
 
@@ -226,7 +226,7 @@ void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const 
 }
 
 
-void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
 	GstFslIpuSink *ipu_sink = GST_FSL_IPU_SINK(object);
 

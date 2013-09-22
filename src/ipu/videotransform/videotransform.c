@@ -73,8 +73,8 @@ G_DEFINE_TYPE(GstFslIpuVideoTransform, gst_fsl_ipu_video_transform, GST_TYPE_VID
 
 
 static void gst_fsl_ipu_video_transform_finalize(GObject *object);
-void gst_fsl_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
-void gst_fsl_ipu_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static void gst_fsl_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_fsl_ipu_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static gboolean gst_ipu_video_transform_src_event(GstBaseTransform *transform, GstEvent *event);
 static GstCaps* gst_ipu_video_transform_transform_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *filter);
 static GstCaps* gst_ipu_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
@@ -188,7 +188,7 @@ static void gst_fsl_ipu_video_transform_finalize(GObject *object)
 }
 
 
-void gst_fsl_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+static void gst_fsl_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
 	GstFslIpuVideoTransform *ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(object);
 
@@ -210,7 +210,7 @@ void gst_fsl_ipu_video_transform_set_property(GObject *object, guint prop_id, GV
 }
 
 
-void gst_fsl_ipu_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void gst_fsl_ipu_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
 	GstFslIpuVideoTransform *ipu_video_transform = GST_FSL_IPU_VIDEO_TRANSFORM(object);
 
