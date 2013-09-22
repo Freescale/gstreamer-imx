@@ -259,6 +259,17 @@ static gboolean gst_fsl_vpu_base_enc_stop(GstVideoEncoder *encoder)
 	vpu_base_enc = GST_FSL_VPU_BASE_ENC(encoder);
 	klass = GST_FSL_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
 
+	if (vpu_base_enc->framebuffers != NULL)
+	{
+		gst_object_unref(vpu_base_enc->framebuffers);
+		vpu_base_enc->framebuffers = NULL;
+	}
+	if (vpu_base_enc->output_phys_buffer != NULL)
+	{
+		gst_allocator_free(gst_fsl_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
+		vpu_base_enc->output_phys_buffer = NULL;
+	}
+
 	gst_fsl_vpu_base_enc_close_encoder(vpu_base_enc);
 	gst_fsl_vpu_base_enc_free_enc_mem_blocks(vpu_base_enc);
 
