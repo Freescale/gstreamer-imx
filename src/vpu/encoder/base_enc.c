@@ -667,6 +667,7 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	enc_enc_param.nPicHeight = vpu_base_enc->framebuffers->pic_height;
 	enc_enc_param.nFrameRate = vpu_base_enc->open_param.nFrameRate;
 	enc_enc_param.pInFrame = &input_framebuf;
+	enc_enc_param.nForceIPicture = GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame) ? 1 : 0;
 
 	if (!klass->set_frame_enc_params(vpu_base_enc, &enc_enc_param, &(vpu_base_enc->open_param)))
 	{
