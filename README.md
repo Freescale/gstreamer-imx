@@ -1,11 +1,6 @@
 gst-fsl
 =======
 
-IMPORTANT NOTE
---------------
-
-**THIS SOFTWARE IS IN AN ALPHA STAGE. DO NOT USE FOR PRODUCTION YET.**
-
 About
 -----
 
@@ -13,6 +8,9 @@ This is a set of [GStreamer 1.0](http://gstreamer.freedesktop.org/) plugins for 
 i.MX platform, with emphasis on video en/decoding using the i.MX VPU engine.
 
 Currently, this software has been tested on the i.MX 6 Sabre SD Dual Lite platform only.
+
+The software as a whole is in alpha stage. The decoder is approaching a stable status, the IPU elements
+and eglvivsink element are in a beta stage, the encoder code is in an early alpha stage.
 
 
 License
@@ -24,9 +22,11 @@ These plugins are licensed under the LGPL v2.
 Available plugins
 -----------------
 
-* `fslvpudec` : video decoder plugin
-* `fslipusink` : video sink using the IPU to output to Framebuffer (may not work well if X11 or Wayland are running)
-* `fslipuvideotransform` : video transform element using the IPU, capable of scaling, deinterlacing, rotating (in 90 degree steps), flipping frames, and converting between color spaces
+* `imxvpudec` : video decoder plugin
+* `imxvpuenc_h264` : h.264 baseline profile Annex.B encoder (currently unfinished)
+* `imxipusink` : video sink using the IPU to output to Framebuffer (may not work well if X11 or Wayland are running)
+* `imxipuvideotransform` : video transform element using the IPU, capable of scaling, deinterlacing, rotating (in 90 degree steps), flipping frames, and converting between color spaces
+* `eglvivsink` : modified EGLGLES video sink from the 1.0.x gst-plugins-bad package; uses the Vivante direct textures with DMA buffers for smooth HD playback
 
 
 Dependencies
