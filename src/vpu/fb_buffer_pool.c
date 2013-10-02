@@ -25,41 +25,41 @@
 #include "vpu_buffer_meta.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(vpufbbufferpool_debug);
-#define GST_CAT_DEFAULT vpufbbufferpool_debug
+GST_DEBUG_CATEGORY_STATIC(imx_vpu_fb_buffer_pool_debug);
+#define GST_CAT_DEFAULT imx_vpu_fb_buffer_pool_debug
 
 
-static void gst_fsl_vpu_fb_buffer_pool_finalize(GObject *object);
-static const gchar ** gst_fsl_vpu_fb_buffer_pool_get_options(GstBufferPool *pool);
-static gboolean gst_fsl_vpu_fb_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config);
-static GstFlowReturn gst_fsl_vpu_fb_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, GstBufferPoolAcquireParams *params);
-static void gst_fsl_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer);
+static void gst_imx_vpu_fb_buffer_pool_finalize(GObject *object);
+static const gchar ** gst_imx_vpu_fb_buffer_pool_get_options(GstBufferPool *pool);
+static gboolean gst_imx_vpu_fb_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config);
+static GstFlowReturn gst_imx_vpu_fb_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, GstBufferPoolAcquireParams *params);
+static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer);
 
 
-G_DEFINE_TYPE(GstFslVpuFbBufferPool, gst_fsl_vpu_fb_buffer_pool, GST_TYPE_BUFFER_POOL)
+G_DEFINE_TYPE(GstImxVpuFbBufferPool, gst_imx_vpu_fb_buffer_pool, GST_TYPE_BUFFER_POOL)
 
 
 
 
-static void gst_fsl_vpu_fb_buffer_pool_finalize(GObject *object)
+static void gst_imx_vpu_fb_buffer_pool_finalize(GObject *object)
 {
-	GstFslVpuFbBufferPool *vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(object);
+	GstImxVpuFbBufferPool *vpu_pool = GST_IMX_VPU_FB_BUFFER_POOL(object);
 
 	if (vpu_pool->framebuffers != NULL)
 		gst_object_unref(vpu_pool->framebuffers);
 
 	GST_TRACE_OBJECT(vpu_pool, "shutting down buffer pool");
 
-	G_OBJECT_CLASS(gst_fsl_vpu_fb_buffer_pool_parent_class)->finalize(object);
+	G_OBJECT_CLASS(gst_imx_vpu_fb_buffer_pool_parent_class)->finalize(object);
 }
 
 
-static const gchar ** gst_fsl_vpu_fb_buffer_pool_get_options(G_GNUC_UNUSED GstBufferPool *pool)
+static const gchar ** gst_imx_vpu_fb_buffer_pool_get_options(G_GNUC_UNUSED GstBufferPool *pool)
 {
 	static const gchar *options[] =
 	{
 		GST_BUFFER_POOL_OPTION_VIDEO_META,
-		GST_BUFFER_POOL_OPTION_FSL_VPU_FRAMEBUFFER,
+		GST_BUFFER_POOL_OPTION_IMX_VPU_FRAMEBUFFER,
 		NULL
 	};
 
@@ -67,15 +67,15 @@ static const gchar ** gst_fsl_vpu_fb_buffer_pool_get_options(G_GNUC_UNUSED GstBu
 }
 
 
-static gboolean gst_fsl_vpu_fb_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config)
+static gboolean gst_imx_vpu_fb_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config)
 {
-	GstFslVpuFbBufferPool *vpu_pool;
+	GstImxVpuFbBufferPool *vpu_pool;
 	GstVideoInfo info;
 	GstCaps *caps;
 	gsize size;
 	guint min, max;
 
-	vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(pool);
+	vpu_pool = GST_IMX_VPU_FB_BUFFER_POOL(pool);
 
 	if (!gst_buffer_pool_config_get_params(config, &caps, &size, &min, &max))
 	{
@@ -107,17 +107,17 @@ static gboolean gst_fsl_vpu_fb_buffer_pool_set_config(GstBufferPool *pool, GstSt
 
 	vpu_pool->add_videometa = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
-	return GST_BUFFER_POOL_CLASS(gst_fsl_vpu_fb_buffer_pool_parent_class)->set_config(pool, config);
+	return GST_BUFFER_POOL_CLASS(gst_imx_vpu_fb_buffer_pool_parent_class)->set_config(pool, config);
 }
 
 
-static GstFlowReturn gst_fsl_vpu_fb_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, G_GNUC_UNUSED GstBufferPoolAcquireParams *params)
+static GstFlowReturn gst_imx_vpu_fb_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, G_GNUC_UNUSED GstBufferPoolAcquireParams *params)
 {
 	GstBuffer *buf;
-	GstFslVpuFbBufferPool *vpu_pool;
+	GstImxVpuFbBufferPool *vpu_pool;
 	GstVideoInfo *info;
 
-	vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(pool);
+	vpu_pool = GST_IMX_VPU_FB_BUFFER_POOL(pool);
 
 	info = &(vpu_pool->video_info);
 
@@ -128,8 +128,8 @@ static GstFlowReturn gst_fsl_vpu_fb_buffer_pool_alloc_buffer(GstBufferPool *pool
 		return GST_FLOW_ERROR;
 	}
 
-	GST_FSL_VPU_BUFFER_META_ADD(buf);
-	GST_FSL_PHYS_MEM_META_ADD(buf);
+	GST_IMX_VPU_BUFFER_META_ADD(buf);
+	GST_IMX_PHYS_MEM_META_ADD(buf);
 
 	if (vpu_pool->add_videometa)
 	{
@@ -150,19 +150,19 @@ static GstFlowReturn gst_fsl_vpu_fb_buffer_pool_alloc_buffer(GstBufferPool *pool
 }
 
 
-static void gst_fsl_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer)
+static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBuffer *buffer)
 {
-	GstFslVpuFbBufferPool *vpu_pool;
+	GstImxVpuFbBufferPool *vpu_pool;
 
-	vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(pool);
+	vpu_pool = GST_IMX_VPU_FB_BUFFER_POOL(pool);
 	g_assert(vpu_pool->framebuffers != NULL);
 
-	if (vpu_pool->framebuffers->registration_state == GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
+	if (vpu_pool->framebuffers->registration_state == GST_IMX_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
 	{
 		VpuDecRetCode dec_ret;
-		GstFslVpuBufferMeta *vpu_meta;
+		GstImxVpuBufferMeta *vpu_meta;
 
-		vpu_meta = GST_FSL_VPU_BUFFER_META_GET(buffer);
+		vpu_meta = GST_IMX_VPU_BUFFER_META_GET(buffer);
 
 		if (vpu_meta->framebuffer == NULL)
 		{
@@ -176,7 +176,7 @@ static void gst_fsl_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 		{	
 			dec_ret = VPU_DecOutFrameDisplayed(vpu_pool->framebuffers->decenc_states.dec.handle, vpu_meta->framebuffer);
 			if (dec_ret != VPU_DEC_RET_SUCCESS)
-				GST_ERROR_OBJECT(pool, "clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
+				GST_ERROR_OBJECT(pool, "clearing display framebuffer failed: %s", gst_imx_vpu_strerror(dec_ret));
 			else
 			{
 				vpu_meta->not_displayed_yet = FALSE;
@@ -192,11 +192,11 @@ static void gst_fsl_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 		g_mutex_unlock(&(vpu_pool->framebuffers->available_fb_mutex));
 	}
 
-	GST_BUFFER_POOL_CLASS(gst_fsl_vpu_fb_buffer_pool_parent_class)->release_buffer(pool, buffer);
+	GST_BUFFER_POOL_CLASS(gst_imx_vpu_fb_buffer_pool_parent_class)->release_buffer(pool, buffer);
 }
 
 
-static void gst_fsl_vpu_fb_buffer_pool_class_init(GstFslVpuFbBufferPoolClass *klass)
+static void gst_imx_vpu_fb_buffer_pool_class_init(GstImxVpuFbBufferPoolClass *klass)
 {
 	GObjectClass *object_class;
 	GstBufferPoolClass *parent_class;
@@ -204,17 +204,17 @@ static void gst_fsl_vpu_fb_buffer_pool_class_init(GstFslVpuFbBufferPoolClass *kl
 	object_class = G_OBJECT_CLASS(klass);
 	parent_class = GST_BUFFER_POOL_CLASS(klass);
 
-	GST_DEBUG_CATEGORY_INIT(vpufbbufferpool_debug, "vpufbbufferpool", 0, "Freescale VPU framebuffers buffer pool");
+	GST_DEBUG_CATEGORY_INIT(imx_vpu_fb_buffer_pool_debug, "imxvpufbbufferpool", 0, "Freescale i.MX VPU framebuffers buffer pool");
 
-	object_class->finalize       = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_finalize);
-	parent_class->get_options    = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_get_options);
-	parent_class->set_config     = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_set_config);
-	parent_class->alloc_buffer   = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_alloc_buffer);
-	parent_class->release_buffer = GST_DEBUG_FUNCPTR(gst_fsl_vpu_fb_buffer_pool_release_buffer);
+	object_class->finalize       = GST_DEBUG_FUNCPTR(gst_imx_vpu_fb_buffer_pool_finalize);
+	parent_class->get_options    = GST_DEBUG_FUNCPTR(gst_imx_vpu_fb_buffer_pool_get_options);
+	parent_class->set_config     = GST_DEBUG_FUNCPTR(gst_imx_vpu_fb_buffer_pool_set_config);
+	parent_class->alloc_buffer   = GST_DEBUG_FUNCPTR(gst_imx_vpu_fb_buffer_pool_alloc_buffer);
+	parent_class->release_buffer = GST_DEBUG_FUNCPTR(gst_imx_vpu_fb_buffer_pool_release_buffer);
 }
 
 
-static void gst_fsl_vpu_fb_buffer_pool_init(GstFslVpuFbBufferPool *pool)
+static void gst_imx_vpu_fb_buffer_pool_init(GstImxVpuFbBufferPool *pool)
 {
 	pool->framebuffers = NULL;
 	pool->add_videometa = FALSE;
@@ -223,22 +223,22 @@ static void gst_fsl_vpu_fb_buffer_pool_init(GstFslVpuFbBufferPool *pool)
 }
 
 
-GstBufferPool *gst_fsl_vpu_fb_buffer_pool_new(GstFslVpuFramebuffers *framebuffers)
+GstBufferPool *gst_imx_vpu_fb_buffer_pool_new(GstImxVpuFramebuffers *framebuffers)
 {
-	GstFslVpuFbBufferPool *vpu_pool;
+	GstImxVpuFbBufferPool *vpu_pool;
 
 	g_assert(framebuffers != NULL);
 
-	vpu_pool = g_object_new(gst_fsl_vpu_fb_buffer_pool_get_type(), NULL);
+	vpu_pool = g_object_new(gst_imx_vpu_fb_buffer_pool_get_type(), NULL);
 	vpu_pool->framebuffers = gst_object_ref(framebuffers);
 
 	return GST_BUFFER_POOL_CAST(vpu_pool);
 }
 
 
-void gst_fsl_vpu_fb_buffer_pool_set_framebuffers(GstBufferPool *pool, GstFslVpuFramebuffers *framebuffers)
+void gst_imx_vpu_fb_buffer_pool_set_framebuffers(GstBufferPool *pool, GstImxVpuFramebuffers *framebuffers)
 {
-	GstFslVpuFbBufferPool *vpu_pool = GST_FSL_VPU_FB_BUFFER_POOL(pool);
+	GstImxVpuFbBufferPool *vpu_pool = GST_IMX_VPU_FB_BUFFER_POOL(pool);
 
 	g_assert(framebuffers != NULL);
 
@@ -256,12 +256,12 @@ void gst_fsl_vpu_fb_buffer_pool_set_framebuffers(GstBufferPool *pool, GstFslVpuF
 }
 
 
-gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer, gboolean heap_mode)
+gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer, gboolean heap_mode)
 {
 	VpuDecRetCode dec_ret;
 	GstVideoMeta *video_meta;
-	GstFslVpuBufferMeta *vpu_meta;
-	GstFslPhysMemMeta *phys_mem_meta;
+	GstImxVpuBufferMeta *vpu_meta;
+	GstImxPhysMemMeta *phys_mem_meta;
 	GstMemory *memory;
 
 	video_meta = gst_buffer_get_video_meta(buffer);
@@ -271,14 +271,14 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 		return FALSE;
 	}
 
-	vpu_meta = GST_FSL_VPU_BUFFER_META_GET(buffer);
+	vpu_meta = GST_IMX_VPU_BUFFER_META_GET(buffer);
 	if (vpu_meta == NULL)
 	{
 		GST_ERROR("buffer with pointer %p has no VPU metadata", buffer);
 		return FALSE;
 	}
 
-	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(buffer);
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(buffer);
 	if (phys_mem_meta == NULL)
 	{
 		GST_ERROR("buffer with pointer %p has no phys mem metadata", buffer);
@@ -301,11 +301,11 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 		phys_mem_meta->phys_addr = 0;
 		phys_mem_meta->padding = 0;
 
-		if (framebuffers->registration_state == GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
+		if (framebuffers->registration_state == GST_IMX_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
 		{
 			dec_ret = VPU_DecOutFrameDisplayed(framebuffers->decenc_states.dec.handle, framebuffer);
 			if (dec_ret != VPU_DEC_RET_SUCCESS)
-				GST_ERROR("clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
+				GST_ERROR("clearing display framebuffer failed: %s", gst_imx_vpu_strerror(dec_ret));
 		}
 	}
 	else
@@ -339,9 +339,9 @@ gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffer
 }
 
 
-void gst_fsl_vpu_mark_buf_as_not_displayed(GstBuffer *buffer)
+void gst_imx_vpu_mark_buf_as_not_displayed(GstBuffer *buffer)
 {
-	GstFslVpuBufferMeta *vpu_meta = GST_FSL_VPU_BUFFER_META_GET(buffer);
+	GstImxVpuBufferMeta *vpu_meta = GST_IMX_VPU_BUFFER_META_GET(buffer);
 	g_assert(vpu_meta != NULL);
 	vpu_meta->not_displayed_yet = TRUE;
 }

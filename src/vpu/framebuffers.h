@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_VPU_FRAMEBUFFERS_H
-#define GST_FSL_VPU_FRAMEBUFFERS_H
+#ifndef GST_IMX_VPU_FRAMEBUFFERS_H
+#define GST_IMX_VPU_FRAMEBUFFERS_H
 
 #include <glib.h>
 #include <gst/gst.h>
@@ -28,24 +28,24 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslVpuFramebuffers GstFslVpuFramebuffers;
-typedef struct _GstFslVpuFramebuffersClass GstFslVpuFramebuffersClass;
+typedef struct _GstImxVpuFramebuffers GstImxVpuFramebuffers;
+typedef struct _GstImxVpuFramebuffersClass GstImxVpuFramebuffersClass;
 
 
-#define GST_TYPE_FSL_VPU_FRAMEBUFFERS             (gst_fsl_vpu_framebuffers_get_type())
-#define GST_FSL_VPU_FRAMEBUFFERS(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_VPU_FRAMEBUFFERS, GstFslVpuFramebuffers))
-#define GST_FSL_VPU_FRAMEBUFFERS_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_VPU_FRAMEBUFFERS, GstFslVpuFramebuffersClass))
-#define GST_FSL_VPU_FRAMEBUFFERS_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS((obj), GST_TYPE_FSL_VPU_FRAMEBUFFERS, GstFslVpuFramebuffersClass))
-#define GST_IS_FSL_VPU_FRAMEBUFFERS(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_VPU_FRAMEBUFFERS))
-#define GST_IS_FSL_VPU_FRAMEBUFFERS_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_VPU_FRAMEBUFFERS))
+#define GST_TYPE_IMX_VPU_FRAMEBUFFERS             (gst_imx_vpu_framebuffers_get_type())
+#define GST_IMX_VPU_FRAMEBUFFERS(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_VPU_FRAMEBUFFERS, GstImxVpuFramebuffers))
+#define GST_IMX_VPU_FRAMEBUFFERS_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_VPU_FRAMEBUFFERS, GstImxVpuFramebuffersClass))
+#define GST_IMX_VPU_FRAMEBUFFERS_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS((obj), GST_TYPE_IMX_VPU_FRAMEBUFFERS, GstImxVpuFramebuffersClass))
+#define GST_IS_IMX_VPU_FRAMEBUFFERS(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_VPU_FRAMEBUFFERS))
+#define GST_IS_IMX_VPU_FRAMEBUFFERS_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_VPU_FRAMEBUFFERS))
 
 
 typedef enum
 {
-	GST_FSL_VPU_FRAMEBUFFERS_UNREGISTERED,
-	GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED,
-	GST_FSL_VPU_FRAMEBUFFERS_ENCODER_REGISTERED
-} GstFslVpuFramebuffersRegistrationState;
+	GST_IMX_VPU_FRAMEBUFFERS_UNREGISTERED,
+	GST_IMX_VPU_FRAMEBUFFERS_DECODER_REGISTERED,
+	GST_IMX_VPU_FRAMEBUFFERS_ENCODER_REGISTERED
+} GstImxVpuFramebuffersRegistrationState;
 
 
 typedef union
@@ -61,16 +61,16 @@ typedef union
 		gboolean encoder_open;
 	} enc;
 }
-GstFslVpuFramebuffersDecEncStates;
+GstImxVpuFramebuffersDecEncStates;
 
 
-struct _GstFslVpuFramebuffers
+struct _GstImxVpuFramebuffers
 {
 	GstObject parent;
 
-	GstFslVpuFramebuffersDecEncStates decenc_states;
+	GstImxVpuFramebuffersDecEncStates decenc_states;
 
-	GstFslVpuFramebuffersRegistrationState registration_state;
+	GstImxVpuFramebuffersRegistrationState registration_state;
 
 	GstAllocator *allocator;
 
@@ -89,7 +89,7 @@ struct _GstFslVpuFramebuffers
 };
 
 
-struct _GstFslVpuFramebuffersClass
+struct _GstImxVpuFramebuffersClass
 {
 	GstObjectClass parent_class;
 };
@@ -105,15 +105,15 @@ typedef struct
 		interlace,
 		address_alignment;
 }
-GstFslVpuFramebufferParams;
+GstImxVpuFramebufferParams;
 
 
-GType gst_fsl_vpu_framebuffers_get_type(void);
-GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(GstFslVpuFramebufferParams *params, GstAllocator *allocator);
-gboolean gst_fsl_vpu_framebuffers_register_with_decoder(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle);
-gboolean gst_fsl_vpu_framebuffers_register_with_encoder(GstFslVpuFramebuffers *framebuffers, VpuEncHandle handle, guint src_stride);
-void gst_fsl_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params);
-void gst_fsl_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFramebufferParams *params);
+GType gst_imx_vpu_framebuffers_get_type(void);
+GstImxVpuFramebuffers * gst_imx_vpu_framebuffers_new(GstImxVpuFramebufferParams *params, GstAllocator *allocator);
+gboolean gst_imx_vpu_framebuffers_register_with_decoder(GstImxVpuFramebuffers *framebuffers, VpuDecHandle handle);
+gboolean gst_imx_vpu_framebuffers_register_with_encoder(GstImxVpuFramebuffers *framebuffers, VpuEncHandle handle, guint src_stride);
+void gst_imx_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstImxVpuFramebufferParams *params);
+void gst_imx_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info, GstImxVpuFramebufferParams *params);
 
 
 G_END_DECLS

@@ -48,11 +48,11 @@
  * videotransform element have been created. Both essentially do the same thing (blitting with
  * transformation operations). The only difference is the destination: in the sink, it is
  * the Linux framebuffer; in the videotransform element, it is an output DMA buffer wrapped in a
- * GstBuffer. To reuse code, the GstFslIpuBlitter object was introduced. It takes care of setting
+ * GstBuffer. To reuse code, the GstImxIpuBlitter object was introduced. It takes care of setting
  * up the IPU and performing the blitting. All the sink and videotransform element have to do is
  * to set up the input and output frames.
  *
- * The GstFslIpuBlitter object also takes care of a special case: when the input isn't a DMA buffer.
+ * The GstImxIpuBlitter object also takes care of a special case: when the input isn't a DMA buffer.
  * Then, a memory copy has to be done. For this reason, the object identifies three types of frames:
  * incoming, input, and output frames. Input and output frames are tied directly to the IPU and
  * must be backed by a DMA buffer. Incoming frames will be tested; if they are backed by a DMA
@@ -64,10 +64,10 @@
  * it cannot dictate upstream how these shall allocate the memory inside the buffers. Upstream can
  * respect proposals sent by downstream, but is free to ignore them.
  *
- * Incoming, input, and output data is expected in form of GstVideoFrame instances. The GstFslIpuBlitter
- * object does not take ownership over these frames. Therefore, if a gst_fsl_ipu_blitter_blit() call is to
+ * Incoming, input, and output data is expected in form of GstVideoFrame instances. The GstImxIpuBlitter
+ * object does not take ownership over these frames. Therefore, if a gst_imx_ipu_blitter_blit() call is to
  * be made, the frames must continue exist at least until then. (The one exception is the internal temporary
- * input frame, which is managed by GstFslIpuBlitter.)
+ * input frame, which is managed by GstImxIpuBlitter.)
  *
  * TODO: Currently, this code includes the linux/ipu.h header, which resides in the kernel.
  * Responses from Freescale indicate there is currently no other way how to do it. Fix this once there is#
@@ -76,22 +76,22 @@
 
 
 
-GST_DEBUG_CATEGORY_STATIC(ipu_blitter_debug);
-#define GST_CAT_DEFAULT ipu_blitter_debug
+GST_DEBUG_CATEGORY_STATIC(imx_ipu_blitter_debug);
+#define GST_CAT_DEFAULT imx_ipu_blitter_debug
 
 
-G_DEFINE_TYPE(GstFslIpuBlitter, gst_fsl_ipu_blitter, GST_TYPE_OBJECT)
+G_DEFINE_TYPE(GstImxIpuBlitter, gst_imx_ipu_blitter, GST_TYPE_OBJECT)
 
 
 /* Private structure storing IPU specific data */
-struct _GstFslIpuBlitterPrivate
+struct _GstImxIpuBlitterPrivate
 {
 	int ipu_fd;
 	struct ipu_task task;
 };
 
 
-/* Linux Framebuffer data; this struct is used with the gst_fsl_ipu_blitter_unmap_wrapped_framebuffer()
+/* Linux Framebuffer data; this struct is used with the gst_imx_ipu_blitter_unmap_wrapped_framebuffer()
  * call */
 typedef struct
 {
@@ -101,85 +101,85 @@ typedef struct
 FBMapData;
 
 
-static void gst_fsl_ipu_blitter_finalize(GObject *object);
-static guint32 gst_fsl_ipu_blitter_get_v4l_format(GstVideoFormat format);
-static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *ipu_blitter, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
-static int gst_fsl_ipu_video_bpp(GstVideoFormat fmt);
-static void gst_fsl_ipu_blitter_unmap_wrapped_framebuffer(gpointer data);
+static void gst_imx_ipu_blitter_finalize(GObject *object);
+static guint32 gst_imx_ipu_blitter_get_v4l_format(GstVideoFormat format);
+static GstVideoFormat gst_imx_ipu_blitter_get_format_from_fb(GstImxIpuBlitter *ipu_blitter, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
+static int gst_imx_ipu_video_bpp(GstVideoFormat fmt);
+static void gst_imx_ipu_blitter_unmap_wrapped_framebuffer(gpointer data);
 
 
 
 
 
-GType gst_fsl_ipu_blitter_rotation_mode_get_type(void)
+GType gst_imx_ipu_blitter_rotation_mode_get_type(void)
 {
-	static GType gst_fsl_ipu_blitter_rotation_mode_type = 0;
+	static GType gst_imx_ipu_blitter_rotation_mode_type = 0;
 
-	if (!gst_fsl_ipu_blitter_rotation_mode_type)
+	if (!gst_imx_ipu_blitter_rotation_mode_type)
 	{
 		static GEnumValue rotation_mode_values[] =
 		{
-			{ GST_FSL_IPU_BLITTER_ROTATION_NONE, "No rotation", "none" },
-			{ GST_FSL_IPU_BLITTER_ROTATION_HFLIP, "Flip horizontally", "horizontal-flip" },
-			{ GST_FSL_IPU_BLITTER_ROTATION_VFLIP, "Flip vertically", "vertical-flip" },
-			{ GST_FSL_IPU_BLITTER_ROTATION_180, "Rotate 180 degrees", "rotate-180" },
-			{ GST_FSL_IPU_BLITTER_ROTATION_90CW, "Rotate clockwise 90 degrees", "rotate-90cw" },
-			{ GST_FSL_IPU_BLITTER_ROTATION_90CW_HFLIP, "Rotate 180 degrees and flip horizontally", "rotate-90cw-hflip" },
-			{ GST_FSL_IPU_BLITTER_ROTATION_90CW_VFLIP, "Rotate 180 degrees and flip vertically", "rotate-90cw-vflip" },
-			{ GST_FSL_IPU_BLITTER_ROTATION_90CCW, "Rotate counter-clockwise 90 degrees", "rotate-90ccw" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_NONE, "No rotation", "none" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_HFLIP, "Flip horizontally", "horizontal-flip" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_VFLIP, "Flip vertically", "vertical-flip" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_180, "Rotate 180 degrees", "rotate-180" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_90CW, "Rotate clockwise 90 degrees", "rotate-90cw" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_90CW_HFLIP, "Rotate 180 degrees and flip horizontally", "rotate-90cw-hflip" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_90CW_VFLIP, "Rotate 180 degrees and flip vertically", "rotate-90cw-vflip" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_90CCW, "Rotate counter-clockwise 90 degrees", "rotate-90ccw" },
 			{ 0, NULL, NULL },
 		};
 
-		gst_fsl_ipu_blitter_rotation_mode_type = g_enum_register_static(
-			"FslIpuBlitterRotationMode",
+		gst_imx_ipu_blitter_rotation_mode_type = g_enum_register_static(
+			"ImxIpuBlitterRotationMode",
 			rotation_mode_values
 		);
 	}
 
-	return gst_fsl_ipu_blitter_rotation_mode_type;
+	return gst_imx_ipu_blitter_rotation_mode_type;
 }
 
 
-GType gst_fsl_ipu_blitter_deinterlace_mode_get_type(void)
+GType gst_imx_ipu_blitter_deinterlace_mode_get_type(void)
 {
-	static GType gst_fsl_ipu_blitter_deinterlace_mode_type = 0;
+	static GType gst_imx_ipu_blitter_deinterlace_mode_type = 0;
 
-	if (!gst_fsl_ipu_blitter_deinterlace_mode_type)
+	if (!gst_imx_ipu_blitter_deinterlace_mode_type)
 	{
 		static GEnumValue deinterlace_mode_values[] =
 		{
-			{ GST_FSL_IPU_BLITTER_DEINTERLACE_NONE, "No deinterlacing", "none" },
-			{ GST_FSL_IPU_BLITTER_DEINTERLACE_FAST_MOTION, "Fast-motion deinterlacing (uses one input frames for one output frame)", "fast-motion" },
+			{ GST_IMX_IPU_BLITTER_DEINTERLACE_NONE, "No deinterlacing", "none" },
+			{ GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION, "Fast-motion deinterlacing (uses one input frames for one output frame)", "fast-motion" },
 			{ 0, NULL, NULL },
 		};
 
-		gst_fsl_ipu_blitter_deinterlace_mode_type = g_enum_register_static(
-			"FslIpuBlitterDeinterlaceMode",
+		gst_imx_ipu_blitter_deinterlace_mode_type = g_enum_register_static(
+			"ImxIpuBlitterDeinterlaceMode",
 			deinterlace_mode_values
 		);
 	}
 
-	return gst_fsl_ipu_blitter_deinterlace_mode_type;
+	return gst_imx_ipu_blitter_deinterlace_mode_type;
 }
 
 
 
 
 
-void gst_fsl_ipu_blitter_class_init(GstFslIpuBlitterClass *klass)
+void gst_imx_ipu_blitter_class_init(GstImxIpuBlitterClass *klass)
 {
 	GObjectClass *object_class;
 
 	object_class = G_OBJECT_CLASS(klass);
-	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_ipu_blitter_finalize);
+	object_class->finalize = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_finalize);
 
-	GST_DEBUG_CATEGORY_INIT(ipu_blitter_debug, "ipublitter", 0, "Freescale IPU blitter operations");
+	GST_DEBUG_CATEGORY_INIT(imx_ipu_blitter_debug, "imxipublitter", 0, "Freescale i.MX IPU blitter operations");
 }
 
 
-void gst_fsl_ipu_blitter_init(GstFslIpuBlitter *ipu_blitter)
+void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 {
-	ipu_blitter->priv = g_slice_alloc(sizeof(GstFslIpuBlitterPrivate));
+	ipu_blitter->priv = g_slice_alloc(sizeof(GstImxIpuBlitterPrivate));
 
 	/* This FD is necessary for using the IPU ioctls */
 	ipu_blitter->priv->ipu_fd = open("/dev/mxc_ipu", O_RDWR, 0);
@@ -191,16 +191,16 @@ void gst_fsl_ipu_blitter_init(GstFslIpuBlitter *ipu_blitter)
 
 	ipu_blitter->internal_bufferpool = NULL;
 	ipu_blitter->internal_input_buffer = NULL;
-	ipu_blitter->apply_crop_metadata = GST_FSL_IPU_BLITTER_CROP_DEFAULT;
-	ipu_blitter->deinterlace_mode = GST_FSL_IPU_BLITTER_DEINTERLACE_DEFAULT;
+	ipu_blitter->apply_crop_metadata = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
+	ipu_blitter->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 
 	memset(&(ipu_blitter->priv->task), 0, sizeof(struct ipu_task));
 }
 
 
-static void gst_fsl_ipu_blitter_finalize(GObject *object)
+static void gst_imx_ipu_blitter_finalize(GObject *object)
 {
-	GstFslIpuBlitter *ipu_blitter = GST_FSL_IPU_BLITTER(object);
+	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(object);
 
 	if (ipu_blitter->internal_input_buffer != NULL)
 	{
@@ -214,66 +214,66 @@ static void gst_fsl_ipu_blitter_finalize(GObject *object)
 	{
 		if (ipu_blitter->priv->ipu_fd >= 0)
 			close(ipu_blitter->priv->ipu_fd);
-		g_slice_free1(sizeof(GstFslIpuBlitterPrivate), ipu_blitter->priv);
+		g_slice_free1(sizeof(GstImxIpuBlitterPrivate), ipu_blitter->priv);
 	}
 
-	G_OBJECT_CLASS(gst_fsl_ipu_blitter_parent_class)->finalize(object);
+	G_OBJECT_CLASS(gst_imx_ipu_blitter_parent_class)->finalize(object);
 }
 
 
-void gst_fsl_ipu_blitter_enable_crop(GstFslIpuBlitter *ipu_blitter, gboolean crop)
+void gst_imx_ipu_blitter_enable_crop(GstImxIpuBlitter *ipu_blitter, gboolean crop)
 {
 	ipu_blitter->apply_crop_metadata = crop;
 }
 
 
-gboolean gst_fsl_ipu_blitter_is_crop_enabled(GstFslIpuBlitter *ipu_blitter)
+gboolean gst_imx_ipu_blitter_is_crop_enabled(GstImxIpuBlitter *ipu_blitter)
 {
 	return ipu_blitter->apply_crop_metadata;
 }
 
 
-void gst_fsl_ipu_blitter_set_output_rotation_mode(GstFslIpuBlitter *ipu_blitter, GstFslIpuBlitterRotationMode rotation_mode)
+void gst_imx_ipu_blitter_set_output_rotation_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterRotationMode rotation_mode)
 {
 	switch (rotation_mode)
 	{
-		case GST_FSL_IPU_BLITTER_ROTATION_NONE:       ipu_blitter->priv->task.output.rotate = IPU_ROTATE_NONE; break;
-		case GST_FSL_IPU_BLITTER_ROTATION_HFLIP:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_HORIZ_FLIP; break;
-		case GST_FSL_IPU_BLITTER_ROTATION_VFLIP:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_VERT_FLIP; break;
-		case GST_FSL_IPU_BLITTER_ROTATION_180:        ipu_blitter->priv->task.output.rotate = IPU_ROTATE_180; break;
-		case GST_FSL_IPU_BLITTER_ROTATION_90CW:       ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT; break;
-		case GST_FSL_IPU_BLITTER_ROTATION_90CW_HFLIP: ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT_HFLIP; break;
-		case GST_FSL_IPU_BLITTER_ROTATION_90CW_VFLIP: ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT_VFLIP; break;
-		case GST_FSL_IPU_BLITTER_ROTATION_90CCW:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_LEFT; break;
+		case GST_IMX_IPU_BLITTER_ROTATION_NONE:       ipu_blitter->priv->task.output.rotate = IPU_ROTATE_NONE; break;
+		case GST_IMX_IPU_BLITTER_ROTATION_HFLIP:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_HORIZ_FLIP; break;
+		case GST_IMX_IPU_BLITTER_ROTATION_VFLIP:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_VERT_FLIP; break;
+		case GST_IMX_IPU_BLITTER_ROTATION_180:        ipu_blitter->priv->task.output.rotate = IPU_ROTATE_180; break;
+		case GST_IMX_IPU_BLITTER_ROTATION_90CW:       ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT; break;
+		case GST_IMX_IPU_BLITTER_ROTATION_90CW_HFLIP: ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT_HFLIP; break;
+		case GST_IMX_IPU_BLITTER_ROTATION_90CW_VFLIP: ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_RIGHT_VFLIP; break;
+		case GST_IMX_IPU_BLITTER_ROTATION_90CCW:      ipu_blitter->priv->task.output.rotate = IPU_ROTATE_90_LEFT; break;
 	}
 }
 
 
-GstFslIpuBlitterRotationMode gst_fsl_ipu_blitter_get_output_rotation_mode(GstFslIpuBlitter *ipu_blitter)
+GstImxIpuBlitterRotationMode gst_imx_ipu_blitter_get_output_rotation_mode(GstImxIpuBlitter *ipu_blitter)
 {
 	switch (ipu_blitter->priv->task.output.rotate)
 	{
-		case IPU_ROTATE_NONE:           return GST_FSL_IPU_BLITTER_ROTATION_NONE;
-		case IPU_ROTATE_HORIZ_FLIP:     return GST_FSL_IPU_BLITTER_ROTATION_HFLIP;
-		case IPU_ROTATE_VERT_FLIP:      return GST_FSL_IPU_BLITTER_ROTATION_VFLIP;
-		case IPU_ROTATE_180:            return GST_FSL_IPU_BLITTER_ROTATION_180;
-		case IPU_ROTATE_90_RIGHT:       return GST_FSL_IPU_BLITTER_ROTATION_90CW;
-		case IPU_ROTATE_90_RIGHT_HFLIP: return GST_FSL_IPU_BLITTER_ROTATION_90CW_HFLIP;
-		case IPU_ROTATE_90_RIGHT_VFLIP: return GST_FSL_IPU_BLITTER_ROTATION_90CW_VFLIP;
-		case IPU_ROTATE_90_LEFT:        return GST_FSL_IPU_BLITTER_ROTATION_90CCW;
-		default:                        return GST_FSL_IPU_BLITTER_ROTATION_NONE;
+		case IPU_ROTATE_NONE:           return GST_IMX_IPU_BLITTER_ROTATION_NONE;
+		case IPU_ROTATE_HORIZ_FLIP:     return GST_IMX_IPU_BLITTER_ROTATION_HFLIP;
+		case IPU_ROTATE_VERT_FLIP:      return GST_IMX_IPU_BLITTER_ROTATION_VFLIP;
+		case IPU_ROTATE_180:            return GST_IMX_IPU_BLITTER_ROTATION_180;
+		case IPU_ROTATE_90_RIGHT:       return GST_IMX_IPU_BLITTER_ROTATION_90CW;
+		case IPU_ROTATE_90_RIGHT_HFLIP: return GST_IMX_IPU_BLITTER_ROTATION_90CW_HFLIP;
+		case IPU_ROTATE_90_RIGHT_VFLIP: return GST_IMX_IPU_BLITTER_ROTATION_90CW_VFLIP;
+		case IPU_ROTATE_90_LEFT:        return GST_IMX_IPU_BLITTER_ROTATION_90CCW;
+		default:                        return GST_IMX_IPU_BLITTER_ROTATION_NONE;
 	}
 }
 
 
-void gst_fsl_ipu_blitter_set_deinterlace_mode(GstFslIpuBlitter *ipu_blitter, GstFslIpuBlitterDeinterlaceMode deinterlace_mode)
+void gst_imx_ipu_blitter_set_deinterlace_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterDeinterlaceMode deinterlace_mode)
 {
 	switch (deinterlace_mode)
 	{
-		case GST_FSL_IPU_BLITTER_DEINTERLACE_NONE:
+		case GST_IMX_IPU_BLITTER_DEINTERLACE_NONE:
 			ipu_blitter->priv->task.input.deinterlace.motion = MED_MOTION;
 			break;
-		case GST_FSL_IPU_BLITTER_DEINTERLACE_FAST_MOTION:
+		case GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION:
 			ipu_blitter->priv->task.input.deinterlace.motion = HIGH_MOTION;
 			break;
 	}
@@ -282,13 +282,13 @@ void gst_fsl_ipu_blitter_set_deinterlace_mode(GstFslIpuBlitter *ipu_blitter, Gst
 }
 
 
-GstFslIpuBlitterDeinterlaceMode gst_fsl_ipu_blitter_get_deinterlace_mode(GstFslIpuBlitter *ipu_blitter)
+GstImxIpuBlitterDeinterlaceMode gst_imx_ipu_blitter_get_deinterlace_mode(GstImxIpuBlitter *ipu_blitter)
 {
 	return ipu_blitter->deinterlace_mode;
 }
 
 
-static guint32 gst_fsl_ipu_blitter_get_v4l_format(GstVideoFormat format)
+static guint32 gst_imx_ipu_blitter_get_v4l_format(GstVideoFormat format)
 {
 	switch (format)
 	{
@@ -328,7 +328,7 @@ static guint32 gst_fsl_ipu_blitter_get_v4l_format(GstVideoFormat format)
 }
 
 
-static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *ipu_blitter, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix)
+static GstVideoFormat gst_imx_ipu_blitter_get_format_from_fb(GstImxIpuBlitter *ipu_blitter, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix)
 {
 	GstVideoFormat fmt = GST_VIDEO_FORMAT_UNKNOWN;
 	guint rlen = fb_var->red.length, glen = fb_var->green.length, blen = fb_var->blue.length, alen = fb_var->transp.length;
@@ -347,7 +347,7 @@ static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *i
 	}
 
 	/* TODO: Some cases are commented out, corresponding to the disabled pixel formats in
-	 * gst_fsl_ipu_blitter_get_v4l_format(). Re-enable them if and when there is a way to autodetect
+	 * gst_imx_ipu_blitter_get_v4l_format(). Re-enable them if and when there is a way to autodetect
 	 * supported formats. */
 	switch (fb_var->bits_per_pixel)
 	{
@@ -411,8 +411,8 @@ static GstVideoFormat gst_fsl_ipu_blitter_get_format_from_fb(GstFslIpuBlitter *i
 
 
 /* Determines the number of bytes per pixel used by the IPU for the given formats;
- * necessary for calculations in the GST_FSL_FILL_IPU_TASK macro */
-static int gst_fsl_ipu_video_bpp(GstVideoFormat fmt)
+ * necessary for calculations in the GST_IMX_FILL_IPU_TASK macro */
+static int gst_imx_ipu_video_bpp(GstVideoFormat fmt)
 {
 	switch (fmt)
 	{
@@ -457,22 +457,22 @@ static int gst_fsl_ipu_video_bpp(GstVideoFormat fmt)
  * contain DMA buffers (frames that do are very unlikely to use such nonstandard
  * layouts).
  * Since the stride is given in bytes, not pixels, it needs to be divided by
- * whatever gst_fsl_ipu_video_bpp() returns.
+ * whatever gst_imx_ipu_video_bpp() returns.
  */
-#define GST_FSL_FILL_IPU_TASK(ipu_blitter, frame, taskio) \
+#define GST_IMX_FILL_IPU_TASK(ipu_blitter, frame, taskio) \
 do { \
  \
 	guint num_extra_lines; \
 	GstVideoCropMeta *video_crop_meta; \
-	GstFslPhysMemMeta *phys_mem_meta; \
+	GstImxPhysMemMeta *phys_mem_meta; \
  \
 	video_crop_meta = gst_buffer_get_video_crop_meta((frame)->buffer); \
-	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET((frame)->buffer); \
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET((frame)->buffer); \
  \
 	g_assert(phys_mem_meta != NULL); \
  \
 	num_extra_lines = phys_mem_meta->padding / (frame)->info.stride[0]; \
-	(taskio).width = (frame)->info.stride[0] / gst_fsl_ipu_video_bpp((frame)->info.finfo->format); \
+	(taskio).width = (frame)->info.stride[0] / gst_imx_ipu_video_bpp((frame)->info.finfo->format); \
 	(taskio).height = (frame)->info.height + num_extra_lines; \
  \
 	if (ipu_blitter->apply_crop_metadata && (video_crop_meta != NULL)) \
@@ -494,43 +494,43 @@ do { \
 	} \
  \
 	(taskio).paddr = (dma_addr_t)(phys_mem_meta->phys_addr); \
-	(taskio).format = gst_fsl_ipu_blitter_get_v4l_format(GST_VIDEO_INFO_FORMAT(&((frame)->info))); \
+	(taskio).format = gst_imx_ipu_blitter_get_v4l_format(GST_VIDEO_INFO_FORMAT(&((frame)->info))); \
 } while (0)
 
 
-gboolean gst_fsl_ipu_blitter_set_input_frame(GstFslIpuBlitter *ipu_blitter, GstVideoFrame *input_frame)
+gboolean gst_imx_ipu_blitter_set_input_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *input_frame)
 {
 	g_assert(input_frame != NULL);
 
-	GST_FSL_FILL_IPU_TASK(ipu_blitter, input_frame, ipu_blitter->priv->task.input);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, input_frame, ipu_blitter->priv->task.input);
 
 	return TRUE;
 }
 
 
-gboolean gst_fsl_ipu_blitter_set_output_frame(GstFslIpuBlitter *ipu_blitter, GstVideoFrame *output_frame)
+gboolean gst_imx_ipu_blitter_set_output_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *output_frame)
 {
 	g_assert(output_frame != NULL);
 
-	GST_FSL_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output);
 
 	return TRUE;
 }
 
 
-gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, GstVideoFrame *incoming_frame)
+gboolean gst_imx_ipu_blitter_set_incoming_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *incoming_frame)
 {
-	GstFslPhysMemMeta *phys_mem_meta;
+	GstImxPhysMemMeta *phys_mem_meta;
 
 	g_assert(incoming_frame != NULL);
 
-	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(incoming_frame->buffer);
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(incoming_frame->buffer);
 
 	/* Test if the incoming frame uses DMA memory */
 	if (phys_mem_meta != NULL)
 	{
 		/* DMA memory present - the incoming can be used as an input frame directly */
-		gst_fsl_ipu_blitter_set_input_frame(ipu_blitter, incoming_frame);
+		gst_imx_ipu_blitter_set_input_frame(ipu_blitter, incoming_frame);
 	}
 	else
 	{
@@ -552,7 +552,7 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 
 				GstCaps *caps = gst_video_info_to_caps(&(ipu_blitter->input_video_info));
 
-				ipu_blitter->internal_bufferpool = gst_fsl_ipu_blitter_create_bufferpool(
+				ipu_blitter->internal_bufferpool = gst_imx_ipu_blitter_create_bufferpool(
 					ipu_blitter,
 					caps,
 					ipu_blitter->input_video_info.size,
@@ -594,12 +594,12 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 		gst_video_frame_copy(&(ipu_blitter->temp_input_video_frame), incoming_frame);
 
 		/* Finally, set the temp input frame as the input frame */
-		gst_fsl_ipu_blitter_set_input_frame(ipu_blitter, &(ipu_blitter->temp_input_video_frame));
+		gst_imx_ipu_blitter_set_input_frame(ipu_blitter, &(ipu_blitter->temp_input_video_frame));
 	}
 
 	ipu_blitter->priv->task.input.deinterlace.enable = 0;
 
-	if (ipu_blitter->deinterlace_mode != GST_FSL_IPU_BLITTER_DEINTERLACE_NONE)
+	if (ipu_blitter->deinterlace_mode != GST_IMX_IPU_BLITTER_DEINTERLACE_NONE)
 	{
 		switch (incoming_frame->info.interlace_mode)
 		{
@@ -646,14 +646,14 @@ gboolean gst_fsl_ipu_blitter_set_incoming_frame(GstFslIpuBlitter *ipu_blitter, G
 }
 
 
-void gst_fsl_ipu_blitter_set_input_info(GstFslIpuBlitter *ipu_blitter, GstVideoInfo *info)
+void gst_imx_ipu_blitter_set_input_info(GstImxIpuBlitter *ipu_blitter, GstVideoInfo *info)
 {
 	ipu_blitter->input_video_info = *info;
 
 	/* New videoinfo means new frame sizes, new strides etc.
 	 * making existing internal bufferpools and temp video frames unusable
 	 * -> shut them down; they will be recreated on-demand in the
-	 * gst_fsl_ipu_blitter_set_incoming_frame() call */
+	 * gst_imx_ipu_blitter_set_incoming_frame() call */
 	if (ipu_blitter->internal_input_buffer != NULL)
 	{
 		gst_video_frame_unmap(&(ipu_blitter->temp_input_video_frame));
@@ -668,7 +668,7 @@ void gst_fsl_ipu_blitter_set_input_info(GstFslIpuBlitter *ipu_blitter, GstVideoI
 }
 
 
-gboolean gst_fsl_ipu_blitter_blit(GstFslIpuBlitter *ipu_blitter)
+gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 {
 	/* The actual blit operation
 	 * Input and output frame are assumed to be set up properly at this point
@@ -683,22 +683,22 @@ gboolean gst_fsl_ipu_blitter_blit(GstFslIpuBlitter *ipu_blitter)
 }
 
 
-GstBufferPool* gst_fsl_ipu_blitter_create_bufferpool(GstFslIpuBlitter *ipu_blitter, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params)
+GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(GstImxIpuBlitter *ipu_blitter, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params)
 {
 	GstBufferPool *pool;
 	GstStructure *config;
 	
-	pool = gst_fsl_phys_mem_buffer_pool_new(FALSE);
+	pool = gst_imx_phys_mem_buffer_pool_new(FALSE);
 
 	config = gst_buffer_pool_get_config(pool);
 	gst_buffer_pool_config_set_params(config, caps, size, min_buffers, max_buffers);
 	/* If the allocator value is NULL, create an allocator */
 	if (allocator == NULL)
 	{
-		allocator = gst_fsl_ipu_allocator_new(ipu_blitter->priv->ipu_fd);
+		allocator = gst_imx_ipu_allocator_new(ipu_blitter->priv->ipu_fd);
 		gst_buffer_pool_config_set_allocator(config, allocator, alloc_params);
 	}
-	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM);
+	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM);
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 	gst_buffer_pool_set_config(pool, config);
 
@@ -706,18 +706,18 @@ GstBufferPool* gst_fsl_ipu_blitter_create_bufferpool(GstFslIpuBlitter *ipu_blitt
 }
 
 
-GstBufferPool* gst_fsl_ipu_blitter_get_internal_bufferpool(GstFslIpuBlitter *ipu_blitter)
+GstBufferPool* gst_imx_ipu_blitter_get_internal_bufferpool(GstImxIpuBlitter *ipu_blitter)
 {
 	return ipu_blitter->internal_bufferpool;
 }
 
 
-GstBuffer* gst_fsl_ipu_blitter_wrap_framebuffer(GstFslIpuBlitter *ipu_blitter, int framebuffer_fd, guint x, guint y, guint width, guint height)
+GstBuffer* gst_imx_ipu_blitter_wrap_framebuffer(GstImxIpuBlitter *ipu_blitter, int framebuffer_fd, guint x, guint y, guint width, guint height)
 {
 	guint fb_size, fb_width, fb_height;
 	GstVideoFormat fb_format;
 	GstBuffer *buffer;
-	GstFslPhysMemMeta *phys_mem_meta;
+	GstImxPhysMemMeta *phys_mem_meta;
 	FBMapData *map_data;
 	struct fb_var_screeninfo fb_var;
 	struct fb_fix_screeninfo fb_fix;
@@ -736,7 +736,7 @@ GstBuffer* gst_fsl_ipu_blitter_wrap_framebuffer(GstFslIpuBlitter *ipu_blitter, i
 
 	fb_width = fb_var.xres;
 	fb_height = fb_var.yres;
-	fb_format = gst_fsl_ipu_blitter_get_format_from_fb(ipu_blitter, &fb_var, &fb_fix);
+	fb_format = gst_imx_ipu_blitter_get_format_from_fb(ipu_blitter, &fb_var, &fb_fix);
 	fb_size = fb_fix.smem_len;
 
 	GST_DEBUG_OBJECT(ipu_blitter, "framebuffer resolution is %u x %u", fb_width, fb_height);
@@ -755,7 +755,7 @@ GstBuffer* gst_fsl_ipu_blitter_wrap_framebuffer(GstFslIpuBlitter *ipu_blitter, i
 		return NULL;
 	}
 
-	buffer = gst_buffer_new_wrapped_full(GST_MEMORY_FLAG_NO_SHARE, map_data->mapped_fb_address, fb_size, 0, fb_size, map_data, gst_fsl_ipu_blitter_unmap_wrapped_framebuffer);
+	buffer = gst_buffer_new_wrapped_full(GST_MEMORY_FLAG_NO_SHARE, map_data->mapped_fb_address, fb_size, 0, fb_size, map_data, gst_imx_ipu_blitter_unmap_wrapped_framebuffer);
 	gst_buffer_add_video_meta(buffer, GST_VIDEO_FRAME_FLAG_NONE, fb_format, fb_width, fb_height);
 
 	if ((width != 0) && (height != 0))
@@ -769,14 +769,14 @@ GstBuffer* gst_fsl_ipu_blitter_wrap_framebuffer(GstFslIpuBlitter *ipu_blitter, i
 		video_crop_meta->height = height;
 	}
 
-	phys_mem_meta = GST_FSL_PHYS_MEM_META_ADD(buffer);
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_ADD(buffer);
 	phys_mem_meta->phys_addr = (guintptr)(fb_fix.smem_start);
 
 	return buffer;
 }
 
 
-static void gst_fsl_ipu_blitter_unmap_wrapped_framebuffer(gpointer data)
+static void gst_imx_ipu_blitter_unmap_wrapped_framebuffer(gpointer data)
 {
 	FBMapData *map_data = (FBMapData *)data;
 	if (munmap(map_data->mapped_fb_address, map_data->fb_size) == -1)

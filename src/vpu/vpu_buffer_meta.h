@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_VPU_BUFFER_META_H
-#define GST_FSL_VPU_BUFFER_META_H
+#ifndef GST_IMX_VPU_BUFFER_META_H
+#define GST_IMX_VPU_BUFFER_META_H
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
@@ -29,15 +29,15 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslVpuBufferMeta GstFslVpuBufferMeta;
+typedef struct _GstImxVpuBufferMeta GstImxVpuBufferMeta;
 
 
-#define GST_FSL_VPU_BUFFER_META_GET(buffer)      ((GstFslVpuBufferMeta *)gst_buffer_get_meta((buffer), gst_fsl_vpu_buffer_meta_api_get_type()))
-#define GST_FSL_VPU_BUFFER_META_ADD(buffer)      (gst_buffer_add_meta((buffer), gst_fsl_vpu_buffer_meta_get_info(), NULL))
-#define GST_FSL_VPU_BUFFER_META_DEL(buffer)      (gst_buffer_remove_meta((buffer), gst_buffer_get_meta((buffer), gst_fsl_vpu_buffer_meta_api_get_type())))
+#define GST_IMX_VPU_BUFFER_META_GET(buffer)      ((GstImxVpuBufferMeta *)gst_buffer_get_meta((buffer), gst_imx_vpu_buffer_meta_api_get_type()))
+#define GST_IMX_VPU_BUFFER_META_ADD(buffer)      (gst_buffer_add_meta((buffer), gst_imx_vpu_buffer_meta_get_info(), NULL))
+#define GST_IMX_VPU_BUFFER_META_DEL(buffer)      (gst_buffer_remove_meta((buffer), gst_buffer_get_meta((buffer), gst_imx_vpu_buffer_meta_api_get_type())))
 
 
-struct _GstFslVpuBufferMeta
+struct _GstImxVpuBufferMeta
 {
 	GstMeta meta;
 
@@ -46,8 +46,8 @@ struct _GstFslVpuBufferMeta
 };
 
 
-GType gst_fsl_vpu_buffer_meta_api_get_type(void);
-GstMetaInfo const * gst_fsl_vpu_buffer_meta_get_info(void);
+GType gst_imx_vpu_buffer_meta_api_get_type(void);
+GstMetaInfo const * gst_imx_vpu_buffer_meta_get_info(void);
 
 
 G_END_DECLS

@@ -27,38 +27,38 @@
 #include "mem_blocks.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(vpu_framebuffers_debug);
-#define GST_CAT_DEFAULT vpu_framebuffers_debug
+GST_DEBUG_CATEGORY_STATIC(imx_vpu_framebuffers_debug);
+#define GST_CAT_DEFAULT imx_vpu_framebuffers_debug
 
 
 #define ALIGN_VAL_TO(LENGTH, ALIGN_SIZE)  ( ((guintptr)((LENGTH) + (ALIGN_SIZE) - 1) / (ALIGN_SIZE)) * (ALIGN_SIZE) )
 #define FRAME_ALIGN 16
 
 
-G_DEFINE_TYPE(GstFslVpuFramebuffers, gst_fsl_vpu_framebuffers, GST_TYPE_OBJECT)
+G_DEFINE_TYPE(GstImxVpuFramebuffers, gst_imx_vpu_framebuffers, GST_TYPE_OBJECT)
 
 
-static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, GstFslVpuFramebufferParams *params, GstAllocator *allocator);
-static void gst_fsl_vpu_framebuffers_finalize(GObject *object);
+static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *framebuffers, GstImxVpuFramebufferParams *params, GstAllocator *allocator);
+static void gst_imx_vpu_framebuffers_finalize(GObject *object);
 
 
 
 
-void gst_fsl_vpu_framebuffers_class_init(GstFslVpuFramebuffersClass *klass)
+void gst_imx_vpu_framebuffers_class_init(GstImxVpuFramebuffersClass *klass)
 {
 	GObjectClass *object_class;
 
 	object_class = G_OBJECT_CLASS(klass);
-	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_vpu_framebuffers_finalize);
+	object_class->finalize = GST_DEBUG_FUNCPTR(gst_imx_vpu_framebuffers_finalize);
 
-	GST_DEBUG_CATEGORY_INIT(vpu_framebuffers_debug, "vpuframebuffers", 0, "Freescale VPU framebuffer memory blocks");
+	GST_DEBUG_CATEGORY_INIT(imx_vpu_framebuffers_debug, "imxvpuframebuffers", 0, "Freescale i.MX VPU framebuffer memory blocks");
 }
 
 
-void gst_fsl_vpu_framebuffers_init(GstFslVpuFramebuffers *framebuffers)
+void gst_imx_vpu_framebuffers_init(GstImxVpuFramebuffers *framebuffers)
 {
-	framebuffers->registration_state = GST_FSL_VPU_FRAMEBUFFERS_UNREGISTERED;
-	memset(&(framebuffers->decenc_states), 0, sizeof(GstFslVpuFramebuffersDecEncStates));
+	framebuffers->registration_state = GST_IMX_VPU_FRAMEBUFFERS_UNREGISTERED;
+	memset(&(framebuffers->decenc_states), 0, sizeof(GstImxVpuFramebuffersDecEncStates));
 
 	framebuffers->framebuffers = NULL;
 	framebuffers->num_framebuffers = 0;
@@ -73,22 +73,22 @@ void gst_fsl_vpu_framebuffers_init(GstFslVpuFramebuffers *framebuffers)
 }
 
 
-GstFslVpuFramebuffers * gst_fsl_vpu_framebuffers_new(GstFslVpuFramebufferParams *params, GstAllocator *allocator)
+GstImxVpuFramebuffers * gst_imx_vpu_framebuffers_new(GstImxVpuFramebufferParams *params, GstAllocator *allocator)
 {
-	GstFslVpuFramebuffers *framebuffers;
-	framebuffers = g_object_new(gst_fsl_vpu_framebuffers_get_type(), NULL);
-	if (gst_fsl_vpu_framebuffers_configure(framebuffers, params, allocator))
+	GstImxVpuFramebuffers *framebuffers;
+	framebuffers = g_object_new(gst_imx_vpu_framebuffers_get_type(), NULL);
+	if (gst_imx_vpu_framebuffers_configure(framebuffers, params, allocator))
 		return framebuffers;
 	else
 		return NULL;
 }
 
 
-gboolean gst_fsl_vpu_framebuffers_register_with_decoder(GstFslVpuFramebuffers *framebuffers, VpuDecHandle handle)
+gboolean gst_imx_vpu_framebuffers_register_with_decoder(GstImxVpuFramebuffers *framebuffers, VpuDecHandle handle)
 {
 	VpuDecRetCode vpu_ret;
 
-	if (framebuffers->registration_state != GST_FSL_VPU_FRAMEBUFFERS_UNREGISTERED)
+	if (framebuffers->registration_state != GST_IMX_VPU_FRAMEBUFFERS_UNREGISTERED)
 	{
 		GST_ERROR_OBJECT(framebuffers, "framebuffers already registered");
 		return FALSE;
@@ -99,22 +99,22 @@ gboolean gst_fsl_vpu_framebuffers_register_with_decoder(GstFslVpuFramebuffers *f
 	vpu_ret = VPU_DecRegisterFrameBuffer(handle, framebuffers->framebuffers, framebuffers->num_framebuffers);
 	if (vpu_ret != VPU_DEC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_fsl_vpu_strerror(vpu_ret));
+		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_imx_vpu_strerror(vpu_ret));
 		return FALSE;
 	}
 
-	framebuffers->registration_state = GST_FSL_VPU_FRAMEBUFFERS_DECODER_REGISTERED;
+	framebuffers->registration_state = GST_IMX_VPU_FRAMEBUFFERS_DECODER_REGISTERED;
 	framebuffers->decenc_states.dec.decoder_open = TRUE;
 
 	return TRUE;
 }
 
 
-gboolean gst_fsl_vpu_framebuffers_register_with_encoder(GstFslVpuFramebuffers *framebuffers, VpuEncHandle handle, guint src_stride)
+gboolean gst_imx_vpu_framebuffers_register_with_encoder(GstImxVpuFramebuffers *framebuffers, VpuEncHandle handle, guint src_stride)
 {
 	VpuEncRetCode vpu_ret;
 
-	if (framebuffers->registration_state != GST_FSL_VPU_FRAMEBUFFERS_UNREGISTERED)
+	if (framebuffers->registration_state != GST_IMX_VPU_FRAMEBUFFERS_UNREGISTERED)
 	{
 		GST_ERROR_OBJECT(framebuffers, "framebuffers already registered");
 		return FALSE;
@@ -125,18 +125,18 @@ gboolean gst_fsl_vpu_framebuffers_register_with_encoder(GstFslVpuFramebuffers *f
 	vpu_ret = VPU_EncRegisterFrameBuffer(handle, framebuffers->framebuffers, framebuffers->num_framebuffers, src_stride);
 	if (vpu_ret != VPU_ENC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_fsl_vpu_strerror(vpu_ret));
+		GST_ERROR_OBJECT(framebuffers, "registering framebuffers failed: %s", gst_imx_vpu_strerror(vpu_ret));
 		return FALSE;
 	}
 
-	framebuffers->registration_state = GST_FSL_VPU_FRAMEBUFFERS_ENCODER_REGISTERED;
+	framebuffers->registration_state = GST_IMX_VPU_FRAMEBUFFERS_ENCODER_REGISTERED;
 	framebuffers->decenc_states.enc.encoder_open = TRUE;
 
 	return TRUE;
 }
 
 
-void gst_fsl_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstFslVpuFramebufferParams *params)
+void gst_imx_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstImxVpuFramebufferParams *params)
 {
 	params->pic_width = init_info->nPicWidth;
 	params->pic_height = init_info->nPicHeight;
@@ -147,7 +147,7 @@ void gst_fsl_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info,
 }
 
 
-void gst_fsl_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info, GstFslVpuFramebufferParams *params)
+void gst_imx_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info, GstImxVpuFramebufferParams *params)
 {
 	params->pic_width = 0;
 	params->pic_height = 0;
@@ -158,13 +158,13 @@ void gst_fsl_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info,
 }
 
 
-static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *framebuffers, GstFslVpuFramebufferParams *params, GstAllocator *allocator)
+static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *framebuffers, GstImxVpuFramebufferParams *params, GstAllocator *allocator)
 {
 	int alignment;
 	unsigned char *phys_ptr, *virt_ptr;
 	guint i;
 
-	g_assert(GST_IS_FSL_PHYS_MEM_ALLOCATOR(allocator));
+	g_assert(GST_IS_IMX_PHYS_MEM_ALLOCATOR(allocator));
 
 	framebuffers->num_reserve_framebuffers = params->min_framebuffer_count;
 	framebuffers->num_framebuffers = MAX((guint)(params->min_framebuffer_count), (guint)10) + framebuffers->num_reserve_framebuffers;
@@ -215,15 +215,15 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 
 	for (i = 0; i < framebuffers->num_framebuffers; ++i)
 	{
-		GstFslPhysMemory *memory;
+		GstImxPhysMemory *memory;
 		VpuFrameBuffer *framebuffer;
 
 		framebuffer = &(framebuffers->framebuffers[i]);
 
-		memory = (GstFslPhysMemory *)gst_allocator_alloc(allocator, framebuffers->total_size, NULL);
+		memory = (GstImxPhysMemory *)gst_allocator_alloc(allocator, framebuffers->total_size, NULL);
 		if (memory == NULL)
 			return FALSE;
-		gst_fsl_vpu_append_phys_mem_block(memory, &(framebuffers->fb_mem_blocks));
+		gst_imx_vpu_append_phys_mem_block(memory, &(framebuffers->fb_mem_blocks));
 
 		phys_ptr = (unsigned char*)(memory->phys_addr);
 		virt_ptr = (unsigned char*)(memory->mapped_virt_addr); /* TODO */
@@ -259,9 +259,9 @@ static gboolean gst_fsl_vpu_framebuffers_configure(GstFslVpuFramebuffers *frameb
 }
 
 
-static void gst_fsl_vpu_framebuffers_finalize(GObject *object)
+static void gst_imx_vpu_framebuffers_finalize(GObject *object)
 {
-	GstFslVpuFramebuffers *framebuffers = GST_FSL_VPU_FRAMEBUFFERS(object);
+	GstImxVpuFramebuffers *framebuffers = GST_IMX_VPU_FRAMEBUFFERS(object);
 
 	GST_DEBUG_OBJECT(framebuffers, "freeing framebuffer memory");
 
@@ -271,8 +271,8 @@ static void gst_fsl_vpu_framebuffers_finalize(GObject *object)
 		framebuffers->framebuffers = NULL;
 	}
 
-	gst_fsl_vpu_free_phys_mem_blocks((GstFslPhysMemAllocator *)(framebuffers->allocator), &(framebuffers->fb_mem_blocks));
+	gst_imx_vpu_free_phys_mem_blocks((GstImxPhysMemAllocator *)(framebuffers->allocator), &(framebuffers->fb_mem_blocks));
 
-	G_OBJECT_CLASS(gst_fsl_vpu_framebuffers_parent_class)->finalize(object);
+	G_OBJECT_CLASS(gst_imx_vpu_framebuffers_parent_class)->finalize(object);
 }
 

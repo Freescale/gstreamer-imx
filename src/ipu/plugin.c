@@ -27,8 +27,8 @@
 static gboolean plugin_init(GstPlugin *plugin)
 {
 	gboolean ret = TRUE;
-	ret = ret && gst_element_register(plugin, "fslipuvideotransform", GST_RANK_NONE, gst_fsl_ipu_video_transform_get_type());
-	ret = ret && gst_element_register(plugin, "fslipusink", GST_RANK_PRIMARY + 1, gst_fsl_ipu_sink_get_type());
+	ret = ret && gst_element_register(plugin, "imxipuvideotransform", GST_RANK_NONE, gst_imx_ipu_video_transform_get_type());
+	ret = ret && gst_element_register(plugin, "imxipusink", GST_RANK_PRIMARY + 1, gst_imx_ipu_sink_get_type());
 	return ret;
 }
 
@@ -37,7 +37,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 GST_PLUGIN_DEFINE(
 	GST_VERSION_MAJOR,
 	GST_VERSION_MINOR,
-	fslipu,
+	imxipu,
 	"video sink and image processing elements using the Freescale i.MX IPU",
 	plugin_init,
 	VERSION,

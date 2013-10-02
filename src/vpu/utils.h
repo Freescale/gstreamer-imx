@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_VPU_UTILS_H
-#define GST_FSL_VPU_UTILS_H
+#ifndef GST_IMX_VPU_UTILS_H
+#define GST_IMX_VPU_UTILS_H
 
 #include <glib.h>
 #include <vpu_wrapper.h>
@@ -27,7 +27,7 @@
 G_BEGIN_DECLS
 
 
-gchar const *gst_fsl_vpu_strerror(VpuDecRetCode code);
+gchar const *gst_imx_vpu_strerror(VpuDecRetCode code);
 
 
 G_END_DECLS

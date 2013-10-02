@@ -94,8 +94,8 @@
 
 
 
-GST_DEBUG_CATEGORY_STATIC(vpudec_debug);
-#define GST_CAT_DEFAULT vpudec_debug
+GST_DEBUG_CATEGORY_STATIC(imx_vpu_dec_debug);
+#define GST_CAT_DEFAULT imx_vpu_dec_debug
 
 
 #define ALIGN_VAL_TO(LENGTH, ALIGN_SIZE)  ( ((guintptr)((LENGTH) + (ALIGN_SIZE) - 1) / (ALIGN_SIZE)) * (ALIGN_SIZE) )
@@ -174,22 +174,22 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 );
 
 
-G_DEFINE_TYPE(GstFslVpuDec, gst_fsl_vpu_dec, GST_TYPE_VIDEO_DECODER)
+G_DEFINE_TYPE(GstImxVpuDec, gst_imx_vpu_dec, GST_TYPE_VIDEO_DECODER)
 
 
 /* miscellaneous functions */
-static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec);
-static gboolean gst_fsl_vpu_dec_free_dec_mem_blocks(GstFslVpuDec *vpu_dec);
-static gboolean gst_fsl_vpu_dec_fill_param_set(GstFslVpuDec *vpu_dec, GstVideoCodecState *state, VpuDecOpenParam *open_param, GstBuffer **codec_data);
-static void gst_fsl_vpu_dec_close_decoder(GstFslVpuDec *vpu_dec);
+static gboolean gst_imx_vpu_dec_alloc_dec_mem_blocks(GstImxVpuDec *vpu_dec);
+static gboolean gst_imx_vpu_dec_free_dec_mem_blocks(GstImxVpuDec *vpu_dec);
+static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCodecState *state, VpuDecOpenParam *open_param, GstBuffer **codec_data);
+static void gst_imx_vpu_dec_close_decoder(GstImxVpuDec *vpu_dec);
 
 /* functions for the base class */
-static gboolean gst_fsl_vpu_dec_start(GstVideoDecoder *decoder);
-static gboolean gst_fsl_vpu_dec_stop(GstVideoDecoder *decoder);
-static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state);
-static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *frame);
-/*static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard);*/
-static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
+static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder);
+static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder);
+static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state);
+static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *frame);
+/*static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard);*/
+static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
 
 /* TODO: reset() is disabled because the VPU_DecFlushAll() inside it
  * causes the imx6 to freeze.
@@ -202,12 +202,12 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 
 /* required function declared by G_DEFINE_TYPE */
 
-void gst_fsl_vpu_dec_class_init(GstFslVpuDecClass *klass)
+void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 {
 	GstVideoDecoderClass *base_class;
 	GstElementClass *element_class;
 
-	GST_DEBUG_CATEGORY_INIT(vpudec_debug, "vpudec", 0, "Freescale VPU video decoder");
+	GST_DEBUG_CATEGORY_INIT(imx_vpu_dec_debug, "imxvpudec", 0, "Freescale i.MX VPU video decoder");
 
 	base_class = GST_VIDEO_DECODER_CLASS(klass);
 	element_class = GST_ELEMENT_CLASS(klass);
@@ -223,18 +223,18 @@ void gst_fsl_vpu_dec_class_init(GstFslVpuDecClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
-	base_class->start             = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_start);
-	base_class->stop              = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_stop);
-	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_set_format);
-	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_handle_frame);
-	/*base_class->reset             = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_reset);*/
-	base_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_fsl_vpu_dec_decide_allocation);
+	base_class->start             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_start);
+	base_class->stop              = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_stop);
+	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_set_format);
+	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_handle_frame);
+	/*base_class->reset             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_reset);*/
+	base_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_decide_allocation);
 
 	klass->inst_counter = 0;
 }
 
 
-void gst_fsl_vpu_dec_init(GstFslVpuDec *vpu_dec)
+void gst_imx_vpu_dec_init(GstImxVpuDec *vpu_dec)
 {
 	vpu_dec->vpu_inst_opened = FALSE;
 
@@ -252,7 +252,7 @@ void gst_fsl_vpu_dec_init(GstFslVpuDec *vpu_dec)
 /***************************/
 /* miscellaneous functions */
 
-static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec)
+static gboolean gst_imx_vpu_dec_alloc_dec_mem_blocks(GstImxVpuDec *vpu_dec)
 {
 	int i;
 	int size;
@@ -265,16 +265,16 @@ static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec)
  
 		if (vpu_dec->mem_info.MemSubBlock[i].MemType == VPU_MEM_VIRT)
 		{
-			if (!gst_fsl_vpu_alloc_virt_mem_block(&ptr, size))
+			if (!gst_imx_vpu_alloc_virt_mem_block(&ptr, size))
 				return FALSE;
 
 			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO(ptr, vpu_dec->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_vpu_append_virt_mem_block(ptr, &(vpu_dec->virt_dec_mem_blocks));
+			gst_imx_vpu_append_virt_mem_block(ptr, &(vpu_dec->virt_dec_mem_blocks));
 		}
 		else if (vpu_dec->mem_info.MemSubBlock[i].MemType == VPU_MEM_PHY)
 		{
-			GstFslPhysMemory *memory = (GstFslPhysMemory *)gst_allocator_alloc(gst_fsl_vpu_dec_allocator_obtain(), size, NULL);
+			GstImxPhysMemory *memory = (GstImxPhysMemory *)gst_allocator_alloc(gst_imx_vpu_dec_allocator_obtain(), size, NULL);
 			if (memory == NULL)
 				return FALSE;
 
@@ -285,7 +285,7 @@ static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec)
 			vpu_dec->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(memory->mapped_virt_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
 			vpu_dec->mem_info.MemSubBlock[i].pPhyAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(memory->phys_addr), vpu_dec->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_vpu_append_phys_mem_block(memory, &(vpu_dec->phys_dec_mem_blocks));
+			gst_imx_vpu_append_phys_mem_block(memory, &(vpu_dec->phys_dec_mem_blocks));
 		}
 		else
 		{
@@ -297,19 +297,19 @@ static gboolean gst_fsl_vpu_dec_alloc_dec_mem_blocks(GstFslVpuDec *vpu_dec)
 }
 
 
-static gboolean gst_fsl_vpu_dec_free_dec_mem_blocks(GstFslVpuDec *vpu_dec)
+static gboolean gst_imx_vpu_dec_free_dec_mem_blocks(GstImxVpuDec *vpu_dec)
 {
 	gboolean ret1, ret2;
 	/* NOT using the two calls with && directly, since otherwise an early exit could happen; in other words,
 	 * if the first call failed, the second one wouldn't even be invoked
 	 * doing the logical AND afterwards fixes this */
-	ret1 = gst_fsl_vpu_free_virt_mem_blocks(&(vpu_dec->virt_dec_mem_blocks));
-	ret2 = gst_fsl_vpu_free_phys_mem_blocks((GstFslPhysMemAllocator *)gst_fsl_vpu_dec_allocator_obtain(), &(vpu_dec->phys_dec_mem_blocks));
+	ret1 = gst_imx_vpu_free_virt_mem_blocks(&(vpu_dec->virt_dec_mem_blocks));
+	ret2 = gst_imx_vpu_free_phys_mem_blocks((GstImxPhysMemAllocator *)gst_imx_vpu_dec_allocator_obtain(), &(vpu_dec->phys_dec_mem_blocks));
 	return ret1 && ret2;
 }
 
 
-static gboolean gst_fsl_vpu_dec_fill_param_set(GstFslVpuDec *vpu_dec, GstVideoCodecState *state, VpuDecOpenParam *open_param, GstBuffer **codec_data)
+static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCodecState *state, VpuDecOpenParam *open_param, GstBuffer **codec_data)
 {
 	guint structure_nr;
 	gboolean format_set;
@@ -485,7 +485,7 @@ static gboolean gst_fsl_vpu_dec_fill_param_set(GstFslVpuDec *vpu_dec, GstVideoCo
 }
 
 
-static void gst_fsl_vpu_dec_close_decoder(GstFslVpuDec *vpu_dec)
+static void gst_imx_vpu_dec_close_decoder(GstImxVpuDec *vpu_dec)
 {
 	VpuDecRetCode dec_ret;
 
@@ -493,11 +493,11 @@ static void gst_fsl_vpu_dec_close_decoder(GstFslVpuDec *vpu_dec)
 	{
 		dec_ret = VPU_DecFlushAll(vpu_dec->handle);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
-			GST_ERROR_OBJECT(vpu_dec, "flushing decoder failed: %s", gst_fsl_vpu_strerror(dec_ret));
+			GST_ERROR_OBJECT(vpu_dec, "flushing decoder failed: %s", gst_imx_vpu_strerror(dec_ret));
 
 		dec_ret = VPU_DecClose(vpu_dec->handle);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
-			GST_ERROR_OBJECT(vpu_dec, "closing decoder failed: %s", gst_fsl_vpu_strerror(dec_ret));
+			GST_ERROR_OBJECT(vpu_dec, "closing decoder failed: %s", gst_imx_vpu_strerror(dec_ret));
 
 		vpu_dec->vpu_inst_opened = FALSE;
 	}
@@ -509,20 +509,20 @@ static void gst_fsl_vpu_dec_close_decoder(GstFslVpuDec *vpu_dec)
 /********************************/
 /* functions for the base class */
 
-static gboolean gst_fsl_vpu_dec_start(GstVideoDecoder *decoder)
+static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder)
 {
 	VpuDecRetCode ret;
-	GstFslVpuDec *vpu_dec;
-	GstFslVpuDecClass *klass;
+	GstImxVpuDec *vpu_dec;
+	GstImxVpuDecClass *klass;
 
-	vpu_dec = GST_FSL_VPU_DEC(decoder);
-	klass = GST_FSL_VPU_DEC_CLASS(G_OBJECT_GET_CLASS(vpu_dec));
+	vpu_dec = GST_IMX_VPU_DEC(decoder);
+	klass = GST_IMX_VPU_DEC_CLASS(G_OBJECT_GET_CLASS(vpu_dec));
 
 #define VPUINIT_ERR(RET, DESC, UNLOAD) \
 	if ((RET) != VPU_DEC_RET_SUCCESS) \
 	{ \
 		g_mutex_unlock(&inst_counter_mutex); \
-		GST_ELEMENT_ERROR(vpu_dec, LIBRARY, INIT, ("%s: %s", (DESC), gst_fsl_vpu_strerror(RET)), (NULL)); \
+		GST_ELEMENT_ERROR(vpu_dec, LIBRARY, INIT, ("%s: %s", (DESC), gst_imx_vpu_strerror(RET)), (NULL)); \
 		if (UNLOAD) \
 			VPU_DecUnLoad(); \
 		return FALSE; \
@@ -559,7 +559,7 @@ static gboolean gst_fsl_vpu_dec_start(GstVideoDecoder *decoder)
 	ret = VPU_DecQueryMem(&(vpu_dec->mem_info));
 	if (ret != VPU_DEC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_dec, "could not get VPU memory information: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_dec, "could not get VPU memory information: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -567,7 +567,7 @@ static gboolean gst_fsl_vpu_dec_start(GstVideoDecoder *decoder)
 	 * Note that these are independent of decoder instances, so they
 	 * are allocated before the VPU_DecOpen() call, and are not
 	 * recreated in set_format */
-	if (!gst_fsl_vpu_dec_alloc_dec_mem_blocks(vpu_dec))
+	if (!gst_imx_vpu_dec_alloc_dec_mem_blocks(vpu_dec))
 		return FALSE;
 
 #undef VPUINIT_ERR
@@ -579,17 +579,17 @@ static gboolean gst_fsl_vpu_dec_start(GstVideoDecoder *decoder)
 }
 
 
-static gboolean gst_fsl_vpu_dec_stop(GstVideoDecoder *decoder)
+static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 {
 	gboolean ret;
 	VpuDecRetCode dec_ret;
-	GstFslVpuDec *vpu_dec;
-	GstFslVpuDecClass *klass;
+	GstImxVpuDec *vpu_dec;
+	GstImxVpuDecClass *klass;
 
 	ret = TRUE;
 
-	vpu_dec = GST_FSL_VPU_DEC(decoder);
-	klass = GST_FSL_VPU_DEC_CLASS(G_OBJECT_GET_CLASS(vpu_dec));
+	vpu_dec = GST_IMX_VPU_DEC(decoder);
+	klass = GST_IMX_VPU_DEC_CLASS(G_OBJECT_GET_CLASS(vpu_dec));
 
 	if (vpu_dec->current_framebuffers != NULL)
 	{
@@ -603,8 +603,8 @@ static gboolean gst_fsl_vpu_dec_stop(GstVideoDecoder *decoder)
 		vpu_dec->current_framebuffers = NULL;
 	}
 
-	gst_fsl_vpu_dec_close_decoder(vpu_dec);
-	gst_fsl_vpu_dec_free_dec_mem_blocks(vpu_dec);
+	gst_imx_vpu_dec_close_decoder(vpu_dec);
+	gst_imx_vpu_dec_free_dec_mem_blocks(vpu_dec);
 
 	if (vpu_dec->codec_data != NULL)
 	{
@@ -627,7 +627,7 @@ static gboolean gst_fsl_vpu_dec_stop(GstVideoDecoder *decoder)
 			dec_ret = VPU_DecUnLoad();
 			if (dec_ret != VPU_DEC_RET_SUCCESS)
 			{
-				GST_ERROR_OBJECT(vpu_dec, "unloading VPU failed: %s", gst_fsl_vpu_strerror(dec_ret));
+				GST_ERROR_OBJECT(vpu_dec, "unloading VPU failed: %s", gst_imx_vpu_strerror(dec_ret));
 			}
 			else
 				GST_INFO_OBJECT(vpu_dec, "VPU unloaded");
@@ -639,13 +639,13 @@ static gboolean gst_fsl_vpu_dec_stop(GstVideoDecoder *decoder)
 }
 
 
-static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state)
+static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state)
 {
 	VpuDecRetCode ret;
 	VpuDecOpenParam open_param;
 	int config_param;
 	GstBuffer *codec_data = NULL;
-	GstFslVpuDec *vpu_dec = GST_FSL_VPU_DEC(decoder);
+	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(decoder);
 
 	/* Clean up existing framebuffers structure;
 	 * if some previous and still existing buffer pools depend on this framebuffers
@@ -678,12 +678,12 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	}
 
 	/* Close old decoder instance */
-	gst_fsl_vpu_dec_close_decoder(vpu_dec);
+	gst_imx_vpu_dec_close_decoder(vpu_dec);
 
 	memset(&open_param, 0, sizeof(open_param));
 
 	/* codec_data does not need to be unref'd after use; it is owned by the caps structure */
-	if (!gst_fsl_vpu_dec_fill_param_set(vpu_dec, state, &open_param, &codec_data))
+	if (!gst_imx_vpu_dec_fill_param_set(vpu_dec, state, &open_param, &codec_data))
 	{
 		GST_ERROR_OBJECT(vpu_dec, "could not fill open params: state info incompatible");
 		return FALSE;
@@ -695,7 +695,7 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	ret = VPU_DecOpen(&(vpu_dec->handle), &open_param, &(vpu_dec->mem_info));
 	if (ret != VPU_DEC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_dec, "opening new VPU handle failed: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_dec, "opening new VPU handle failed: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -708,7 +708,7 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	ret = VPU_DecConfig(vpu_dec->handle, VPU_DEC_CONF_SKIPMODE, &config_param);
 	if (ret != VPU_DEC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_dec, "could not configure skip mode: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_dec, "could not configure skip mode: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -716,7 +716,7 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	ret = VPU_DecConfig(vpu_dec->handle, VPU_DEC_CONF_BUFDELAY, &config_param);
 	if (ret != VPU_DEC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_dec, "could not configure buffer delay: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_dec, "could not configure buffer delay: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -724,7 +724,7 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	ret = VPU_DecConfig(vpu_dec->handle, VPU_DEC_CONF_INPUTTYPE, &config_param);
 	if (ret != VPU_DEC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_dec, "could not configure input type: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_dec, "could not configure input type: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -740,7 +740,7 @@ static gboolean gst_fsl_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 }
 
 
-static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *frame)
+static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *frame)
 {
 	int buffer_ret_code;
 	VpuDecRetCode dec_ret;
@@ -749,10 +749,10 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	gboolean do_memcpy;
 	guint8 *combined_input;
 	gsize combined_input_size;
-	GstFslVpuDec *vpu_dec;
+	GstImxVpuDec *vpu_dec;
 
 	combined_input = NULL;
-	vpu_dec = GST_FSL_VPU_DEC(decoder);
+	vpu_dec = GST_IMX_VPU_DEC(decoder);
 
 	memset(&in_data, 0, sizeof(in_data));
 
@@ -803,7 +803,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 	if (dec_ret != VPU_DEC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_dec, "failed to decode frame: %s", gst_fsl_vpu_strerror(dec_ret));
+		GST_ERROR_OBJECT(vpu_dec, "failed to decode frame: %s", gst_imx_vpu_strerror(dec_ret));
 		return GST_FLOW_ERROR;
 	}
 
@@ -821,7 +821,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		dec_ret = VPU_DecGetInitialInfo(vpu_dec->handle, &(vpu_dec->init_info));
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 		{
-			GST_ERROR_OBJECT(vpu_dec, "could not get init info: %s", gst_fsl_vpu_strerror(dec_ret));
+			GST_ERROR_OBJECT(vpu_dec, "could not get init info: %s", gst_imx_vpu_strerror(dec_ret));
 			return GST_FLOW_ERROR;
 		}
 
@@ -846,13 +846,13 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		 * This point is always reached after set_format() was called,
 		 * and always before a frame is output */
 		{
-			GstFslVpuFramebufferParams fbparams;
-			gst_fsl_vpu_framebuffers_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
-			vpu_dec->current_framebuffers = gst_fsl_vpu_framebuffers_new(&fbparams, gst_fsl_vpu_dec_allocator_obtain());
+			GstImxVpuFramebufferParams fbparams;
+			gst_imx_vpu_framebuffers_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
+			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
 			if (vpu_dec->current_framebuffers == NULL)
 				return GST_FLOW_ERROR;
 
-			if (!gst_fsl_vpu_framebuffers_register_with_decoder(vpu_dec->current_framebuffers, vpu_dec->handle))
+			if (!gst_imx_vpu_framebuffers_register_with_decoder(vpu_dec->current_framebuffers, vpu_dec->handle))
 				return GST_FLOW_ERROR;
 		}
 
@@ -874,7 +874,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		dec_ret = VPU_DecFlushAll(vpu_dec->handle);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 		{
-			GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_fsl_vpu_strerror(dec_ret));
+			GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_imx_vpu_strerror(dec_ret));
 			return GST_FLOW_ERROR;
 		}
 
@@ -907,7 +907,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 		dec_ret = VPU_DecGetConsumedFrameInfo(vpu_dec->handle, &dec_framelen_info);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
-			GST_ERROR_OBJECT(vpu_dec, "could not get information about consumed frame: %s", gst_fsl_vpu_strerror(dec_ret));
+			GST_ERROR_OBJECT(vpu_dec, "could not get information about consumed frame: %s", gst_imx_vpu_strerror(dec_ret));
 
 		GST_DEBUG_OBJECT(vpu_dec, "one frame got consumed: framebuffer: %p  stuff length: %d  frame length: %d", dec_framelen_info.pFrame, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
 
@@ -937,7 +937,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		dec_ret = VPU_DecGetOutputFrame(vpu_dec->handle, &out_frame_info);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 		{
-			GST_ERROR_OBJECT(vpu_dec, "could not get decoded output frame: %s", gst_fsl_vpu_strerror(dec_ret));
+			GST_ERROR_OBJECT(vpu_dec, "could not get decoded output frame: %s", gst_imx_vpu_strerror(dec_ret));
 			return GST_FLOW_ERROR;
 		}
 
@@ -946,7 +946,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		/* ... and set its contents; either pass on the framebuffer directly,
 		 * or have set_contents() copy its pixels to a memory block on the heap,
 		 * depending on do_memcpy */
-		if (!gst_fsl_vpu_set_buffer_contents(buffer, vpu_dec->current_framebuffers, out_frame_info.pDisplayFrameBuf, do_memcpy))
+		if (!gst_imx_vpu_set_buffer_contents(buffer, vpu_dec->current_framebuffers, out_frame_info.pDisplayFrameBuf, do_memcpy))
 		{
 			gst_buffer_unref(buffer);
 			return GST_FLOW_ERROR;
@@ -961,7 +961,7 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * to allow the VPU wrapper to reuse it for new decoded
 			 * frames. Since this is a fresh frame, and it wasn't
 			 * used yet, mark it now as undisplayed. */
-			gst_fsl_vpu_mark_buf_as_not_displayed(buffer);
+			gst_imx_vpu_mark_buf_as_not_displayed(buffer);
 		}
 
 		frame->output_buffer = buffer;
@@ -976,14 +976,14 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		dec_ret = VPU_DecGetOutputFrame(vpu_dec->handle, &out_frame_info);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 		{
-			GST_ERROR_OBJECT(vpu_dec, "could not get decoded output frame: %s", gst_fsl_vpu_strerror(dec_ret));
+			GST_ERROR_OBJECT(vpu_dec, "could not get decoded output frame: %s", gst_imx_vpu_strerror(dec_ret));
 			return GST_FLOW_ERROR;
 		}
 
 		dec_ret = VPU_DecOutFrameDisplayed(vpu_dec->handle, out_frame_info.pDisplayFrameBuf);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 		{
-			GST_ERROR_OBJECT(vpu_dec, "clearing display framebuffer failed: %s", gst_fsl_vpu_strerror(dec_ret));
+			GST_ERROR_OBJECT(vpu_dec, "clearing display framebuffer failed: %s", gst_imx_vpu_strerror(dec_ret));
 			return GST_FLOW_ERROR;
 		}
 
@@ -1005,10 +1005,10 @@ static GstFlowReturn gst_fsl_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 
 #if 0
-static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard)
+static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard)
 {
 	VpuDecRetCode ret;
-	GstFslVpuDec *vpu_dec = GST_FSL_VPU_DEC(decoder);
+	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(decoder);
 
 	if (!vpu_dec->vpu_inst_opened)
 		return TRUE;
@@ -1016,7 +1016,7 @@ static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard)
 	ret = VPU_DecFlushAll(vpu_dec->handle);
 	if (ret != VPU_DEC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -1025,9 +1025,9 @@ static gboolean gst_fsl_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard)
 #endif
 
 
-static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query)
+static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query)
 {
-	GstFslVpuDec *vpu_dec = GST_FSL_VPU_DEC(decoder);
+	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(decoder);
 	GstCaps *outcaps;
 	GstBufferPool *pool = NULL;
 	guint size, min = 0, max = 0;
@@ -1049,7 +1049,7 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 		for (guint i = 0; i < gst_query_get_n_allocation_pools(query); ++i)
 		{
 			gst_query_parse_nth_allocation_pool(query, i, &pool, &size, &min, &max);
-			if (gst_buffer_pool_has_option(pool, GST_BUFFER_POOL_OPTION_FSL_VPU_FRAMEBUFFER))
+			if (gst_buffer_pool_has_option(pool, GST_BUFFER_POOL_OPTION_IMX_VPU_FRAMEBUFFER))
 				break;
 		}
 
@@ -1067,13 +1067,13 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 
 	/* Either no pool or no pool with the ability to allocate VPU DMA buffers
 	 * has been found -> create a new pool */
-	if ((pool == NULL) || !gst_buffer_pool_has_option(pool, GST_BUFFER_POOL_OPTION_FSL_VPU_FRAMEBUFFER))
+	if ((pool == NULL) || !gst_buffer_pool_has_option(pool, GST_BUFFER_POOL_OPTION_IMX_VPU_FRAMEBUFFER))
 	{
 		if (pool == NULL)
 			GST_DEBUG_OBJECT(decoder, "no pool present; creating new pool");
 		else
 			GST_DEBUG_OBJECT(decoder, "no pool supports VPU buffers; creating new pool");
-		pool = gst_fsl_vpu_fb_buffer_pool_new(vpu_dec->current_framebuffers);
+		pool = gst_imx_vpu_fb_buffer_pool_new(vpu_dec->current_framebuffers);
 	}
 
 	GST_DEBUG_OBJECT(
@@ -1086,14 +1086,14 @@ static gboolean gst_fsl_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	);
 
 	/* Inform the pool about the framebuffers */
-	gst_fsl_vpu_fb_buffer_pool_set_framebuffers(pool, vpu_dec->current_framebuffers);
+	gst_imx_vpu_fb_buffer_pool_set_framebuffers(pool, vpu_dec->current_framebuffers);
 
 	/* Now configure the pool. */
 	config = gst_buffer_pool_get_config(pool);
 	gst_buffer_pool_config_set_params(config, outcaps, size, min, max);
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_FSL_VPU_FRAMEBUFFER);
-	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM);
+	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_IMX_VPU_FRAMEBUFFER);
+	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM);
 	gst_buffer_pool_set_config(pool, config);
 
 	if (update_pool)

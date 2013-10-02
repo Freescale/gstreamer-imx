@@ -20,30 +20,30 @@
 #include "vpu_buffer_meta.h"
 
 
-static gboolean gst_fsl_vpu_buffer_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
+static gboolean gst_imx_vpu_buffer_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
 {
-	GstFslVpuBufferMeta *fsl_vpu_meta = (GstFslVpuBufferMeta *)meta;
-	fsl_vpu_meta->framebuffer = NULL;
-	fsl_vpu_meta->not_displayed_yet = FALSE;
+	GstImxVpuBufferMeta *imx_vpu_meta = (GstImxVpuBufferMeta *)meta;
+	imx_vpu_meta->framebuffer = NULL;
+	imx_vpu_meta->not_displayed_yet = FALSE;
 	return TRUE;
 }
 
 
-static void gst_fsl_vpu_buffer_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
+static void gst_imx_vpu_buffer_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
 {
-	GstFslVpuBufferMeta *fsl_vpu_meta = (GstFslVpuBufferMeta *)meta;
-	fsl_vpu_meta->framebuffer = NULL;
+	GstImxVpuBufferMeta *imx_vpu_meta = (GstImxVpuBufferMeta *)meta;
+	imx_vpu_meta->framebuffer = NULL;
 }
 
 
-GType gst_fsl_vpu_buffer_meta_api_get_type(void)
+GType gst_imx_vpu_buffer_meta_api_get_type(void)
 {
 	static volatile GType type;
-	static gchar const *tags[] = { "fsl_vpu", NULL };
+	static gchar const *tags[] = { "imx_vpu", NULL };
 
 	if (g_once_init_enter(&type))
 	{
-		GType _type = gst_meta_api_type_register("GstFslVpuBufferMetaAPI", tags);
+		GType _type = gst_meta_api_type_register("GstImxVpuBufferMetaAPI", tags);
 		g_once_init_leave(&type, _type);
 	}
 
@@ -51,23 +51,23 @@ GType gst_fsl_vpu_buffer_meta_api_get_type(void)
 }
 
 
-GstMetaInfo const * gst_fsl_vpu_buffer_meta_get_info(void)
+GstMetaInfo const * gst_imx_vpu_buffer_meta_get_info(void)
 {
-	static GstMetaInfo const *meta_buffer_fsl_vpu_info = NULL;
+	static GstMetaInfo const *meta_buffer_imx_vpu_info = NULL;
 
-	if (g_once_init_enter(&meta_buffer_fsl_vpu_info))
+	if (g_once_init_enter(&meta_buffer_imx_vpu_info))
 	{
 		GstMetaInfo const *meta = gst_meta_register(
-			gst_fsl_vpu_buffer_meta_api_get_type(),
-			"GstFslVpuBufferMeta",
-			sizeof(GstFslVpuBufferMeta),
-			GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_meta_init),
-			GST_DEBUG_FUNCPTR(gst_fsl_vpu_buffer_meta_free),
+			gst_imx_vpu_buffer_meta_api_get_type(),
+			"GstImxVpuBufferMeta",
+			sizeof(GstImxVpuBufferMeta),
+			GST_DEBUG_FUNCPTR(gst_imx_vpu_buffer_meta_init),
+			GST_DEBUG_FUNCPTR(gst_imx_vpu_buffer_meta_free),
 			(GstMetaTransformFunction)NULL
 		);
-		g_once_init_leave(&meta_buffer_fsl_vpu_info, meta);
+		g_once_init_leave(&meta_buffer_imx_vpu_info, meta);
 	}
 
-	return meta_buffer_fsl_vpu_info;
+	return meta_buffer_imx_vpu_info;
 }
 

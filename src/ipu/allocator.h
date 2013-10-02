@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_IPU_ALLOCATOR_H
-#define GST_FSL_IPU_ALLOCATOR_H
+#ifndef GST_IMX_IPU_ALLOCATOR_H
+#define GST_IMX_IPU_ALLOCATOR_H
 
 #include <gst/gst.h>
 #include "../common/phys_mem_allocator.h"
@@ -27,35 +27,35 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslIpuAllocator GstFslIpuAllocator;
-typedef struct _GstFslIpuAllocatorClass GstFslIpuAllocatorClass;
-typedef struct _GstFslIpuMemory GstFslIpuMemory;
+typedef struct _GstImxIpuAllocator GstImxIpuAllocator;
+typedef struct _GstImxIpuAllocatorClass GstImxIpuAllocatorClass;
+typedef struct _GstImxIpuMemory GstImxIpuMemory;
 
 
-#define GST_TYPE_FSL_IPU_ALLOCATOR             (gst_fsl_ipu_allocator_get_type())
-#define GST_FSL_IPU_ALLOCATOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_IPU_ALLOCATOR, GstFslIpuAllocator))
-#define GST_FSL_IPU_ALLOCATOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_IPU_ALLOCATOR, GstFslIpuAllocatorClass))
-#define GST_IS_FSL_IPU_ALLOCATOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_IPU_ALLOCATOR))
-#define GST_IS_FSL_IPU_ALLOCATOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_IPU_ALLOCATOR))
+#define GST_TYPE_IMX_IPU_ALLOCATOR             (gst_imx_ipu_allocator_get_type())
+#define GST_IMX_IPU_ALLOCATOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_IPU_ALLOCATOR, GstImxIpuAllocator))
+#define GST_IMX_IPU_ALLOCATOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_IPU_ALLOCATOR, GstImxIpuAllocatorClass))
+#define GST_IS_IMX_IPU_ALLOCATOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_IPU_ALLOCATOR))
+#define GST_IS_IMX_IPU_ALLOCATOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_IPU_ALLOCATOR))
 
-#define GST_FSL_IPU_ALLOCATOR_MEM_TYPE "FslIpuMemory"
+#define GST_IMX_IPU_ALLOCATOR_MEM_TYPE "ImxIpuMemory"
 
 
-struct _GstFslIpuAllocator
+struct _GstImxIpuAllocator
 {
-	GstFslPhysMemAllocator parent;
+	GstImxPhysMemAllocator parent;
 	int fd;
 };
 
 
-struct _GstFslIpuAllocatorClass
+struct _GstImxIpuAllocatorClass
 {
-	GstFslPhysMemAllocatorClass parent_class;
+	GstImxPhysMemAllocatorClass parent_class;
 };
 
 
-GType gst_fsl_ipu_allocator_get_type(void);
-GstAllocator* gst_fsl_ipu_allocator_new(int ipu_fd);
+GType gst_imx_ipu_allocator_get_type(void);
+GstAllocator* gst_imx_ipu_allocator_new(int ipu_fd);
 
 
 G_END_DECLS

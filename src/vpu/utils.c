@@ -21,7 +21,7 @@
 #include "utils.h"
 
 // TODO: create one strerror function for the decoder, one for the encoder
-gchar const *gst_fsl_vpu_strerror(VpuDecRetCode code)
+gchar const *gst_imx_vpu_strerror(VpuDecRetCode code)
 {
 	switch (code)
 	{

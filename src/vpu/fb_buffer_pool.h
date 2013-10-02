@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_VPU_FB_BUFFER_POOL_H
-#define GST_FSL_VPU_FB_BUFFER_POOL_H
+#ifndef GST_IMX_VPU_FB_BUFFER_POOL_H
+#define GST_IMX_VPU_FB_BUFFER_POOL_H
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
@@ -30,29 +30,29 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslVpuFbBufferPool GstFslVpuFbBufferPool;
-typedef struct _GstFslVpuFbBufferPoolClass GstFslVpuFbBufferPoolClass;
+typedef struct _GstImxVpuFbBufferPool GstImxVpuFbBufferPool;
+typedef struct _GstImxVpuFbBufferPoolClass GstImxVpuFbBufferPoolClass;
 
 
-#define GST_TYPE_FSL_VPU_FB_BUFFER_POOL             (gst_fsl_vpu_fb_buffer_pool_get_type())
-#define GST_FSL_VPU_FB_BUFFER_POOL(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_VPU_FB_BUFFER_POOL, GstFslVpuFbBufferPool))
-#define GST_FSL_VPU_FB_BUFFER_POOL_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_VPU_FB_BUFFER_POOL, GstFslVpuFbBufferPoolClass))
+#define GST_TYPE_IMX_VPU_FB_BUFFER_POOL             (gst_imx_vpu_fb_buffer_pool_get_type())
+#define GST_IMX_VPU_FB_BUFFER_POOL(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_VPU_FB_BUFFER_POOL, GstImxVpuFbBufferPool))
+#define GST_IMX_VPU_FB_BUFFER_POOL_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_VPU_FB_BUFFER_POOL, GstImxVpuFbBufferPoolClass))
 
 
-#define GST_BUFFER_POOL_OPTION_FSL_VPU_FRAMEBUFFER "GstBufferPoolOptionFslVpuFramebuffer"
+#define GST_BUFFER_POOL_OPTION_IMX_VPU_FRAMEBUFFER "GstBufferPoolOptionImxVpuFramebuffer"
 
 
-struct _GstFslVpuFbBufferPool
+struct _GstImxVpuFbBufferPool
 {
 	GstBufferPool bufferpool;
 
-	GstFslVpuFramebuffers *framebuffers;
+	GstImxVpuFramebuffers *framebuffers;
 	GstVideoInfo video_info;
 	gboolean add_videometa;
 };
 
 
-struct _GstFslVpuFbBufferPoolClass
+struct _GstImxVpuFbBufferPoolClass
 {
 	GstBufferPoolClass parent_class;
 };
@@ -61,13 +61,13 @@ struct _GstFslVpuFbBufferPoolClass
 G_END_DECLS
 
 
-GType gst_fsl_vpu_fb_buffer_pool_get_type(void);
+GType gst_imx_vpu_fb_buffer_pool_get_type(void);
 
-GstBufferPool *gst_fsl_vpu_fb_buffer_pool_new(GstFslVpuFramebuffers *framebuffers);
-void gst_fsl_vpu_fb_buffer_pool_set_framebuffers(GstBufferPool *pool, GstFslVpuFramebuffers *framebuffers);
+GstBufferPool *gst_imx_vpu_fb_buffer_pool_new(GstImxVpuFramebuffers *framebuffers);
+void gst_imx_vpu_fb_buffer_pool_set_framebuffers(GstBufferPool *pool, GstImxVpuFramebuffers *framebuffers);
 
-gboolean gst_fsl_vpu_set_buffer_contents(GstBuffer *buffer, GstFslVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer, gboolean heap_mode);
-void gst_fsl_vpu_mark_buf_as_not_displayed(GstBuffer *buffer);
+gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer, gboolean heap_mode);
+void gst_imx_vpu_mark_buf_as_not_displayed(GstBuffer *buffer);
 
 
 #endif

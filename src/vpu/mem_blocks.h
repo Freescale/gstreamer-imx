@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_PHYS_MEM_BLOCKS_H
-#define GST_FSL_PHYS_MEM_BLOCKS_H
+#ifndef GST_IMX_PHYS_MEM_BLOCKS_H
+#define GST_IMX_PHYS_MEM_BLOCKS_H
 
 #include <gst/gst.h>
 #include "../common/phys_mem_allocator.h"
@@ -27,12 +27,12 @@
 G_BEGIN_DECLS
 
 
-gboolean gst_fsl_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size);
-void gst_fsl_vpu_append_virt_mem_block(unsigned char *mem_block, GSList **virt_mem_blocks);
-gboolean gst_fsl_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks);
+gboolean gst_imx_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size);
+void gst_imx_vpu_append_virt_mem_block(unsigned char *mem_block, GSList **virt_mem_blocks);
+gboolean gst_imx_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks);
 
-void gst_fsl_vpu_append_phys_mem_block(GstFslPhysMemory *memory, GSList **phys_mem_blocks);
-gboolean gst_fsl_vpu_free_phys_mem_blocks(GstFslPhysMemAllocator *phys_mem_allocator, GSList **phys_mem_blocks);
+void gst_imx_vpu_append_phys_mem_block(GstImxPhysMemory *memory, GSList **phys_mem_blocks);
+gboolean gst_imx_vpu_free_phys_mem_blocks(GstImxPhysMemAllocator *phys_mem_allocator, GSList **phys_mem_blocks);
 
 
 G_END_DECLS

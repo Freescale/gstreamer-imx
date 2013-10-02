@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_VPU_ENCODER_BASE_ENC_H
-#define GST_FSL_VPU_ENCODER_BASE_ENC_H
+#ifndef GST_IMX_VPU_ENCODER_BASE_ENC_H
+#define GST_IMX_VPU_ENCODER_BASE_ENC_H
 
 #include <glib.h>
 #include <gst/gst.h>
@@ -34,19 +34,19 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslVpuBaseEnc GstFslVpuBaseEnc;
-typedef struct _GstFslVpuBaseEncClass GstFslVpuBaseEncClass;
+typedef struct _GstImxVpuBaseEnc GstImxVpuBaseEnc;
+typedef struct _GstImxVpuBaseEncClass GstImxVpuBaseEncClass;
 
 
-#define GST_TYPE_FSL_VPU_BASE_ENC             (gst_fsl_vpu_base_enc_get_type())
-#define GST_FSL_VPU_BASE_ENC(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_VPU_BASE_ENC, GstFslVpuBaseEnc))
-#define GST_FSL_VPU_BASE_ENC_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_VPU_BASE_ENC, GstFslVpuBaseEncClass))
-#define GST_FSL_VPU_BASE_ENC_CAST(obj)        ((GstFslVpuBaseEnc)(obj))
-#define GST_IS_FSL_VPU_BASE_ENC(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_VPU_BASE_ENC))
-#define GST_IS_FSL_VPU_BASE_ENC_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_VPU_BASE_ENC))
+#define GST_TYPE_IMX_VPU_BASE_ENC             (gst_imx_vpu_base_enc_get_type())
+#define GST_IMX_VPU_BASE_ENC(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_VPU_BASE_ENC, GstImxVpuBaseEnc))
+#define GST_IMX_VPU_BASE_ENC_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_VPU_BASE_ENC, GstImxVpuBaseEncClass))
+#define GST_IMX_VPU_BASE_ENC_CAST(obj)        ((GstImxVpuBaseEnc)(obj))
+#define GST_IS_IMX_VPU_BASE_ENC(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_VPU_BASE_ENC))
+#define GST_IS_IMX_VPU_BASE_ENC_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_VPU_BASE_ENC))
 
 
-struct _GstFslVpuBaseEnc
+struct _GstImxVpuBaseEnc
 {
 	GstVideoEncoder parent;
 
@@ -61,8 +61,8 @@ struct _GstFslVpuBaseEnc
 
 	gboolean vpu_inst_opened;
 
-	GstFslVpuFramebuffers *framebuffers;
-	GstFslPhysMemory *output_phys_buffer;
+	GstImxVpuFramebuffers *framebuffers;
+	GstImxPhysMemory *output_phys_buffer;
 
 	GstBufferPool *internal_bufferpool;
 	GstBuffer *internal_input_buffer;
@@ -76,19 +76,19 @@ struct _GstFslVpuBaseEnc
 };
 
 
-struct _GstFslVpuBaseEncClass
+struct _GstImxVpuBaseEncClass
 {
 	GstVideoEncoderClass parent_class;
 	gint inst_counter;
 
-	gboolean (*set_open_params)(GstFslVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
-	GstCaps* (*get_output_caps)(GstFslVpuBaseEnc *vpu_base_enc);
-	gboolean (*set_frame_enc_params)(GstFslVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
+	gboolean (*set_open_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
+	GstCaps* (*get_output_caps)(GstImxVpuBaseEnc *vpu_base_enc);
+	gboolean (*set_frame_enc_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
 	
 };
 
 
-GType gst_fsl_vpu_base_enc_get_type(void);
+GType gst_imx_vpu_base_enc_get_type(void);
 
 
 G_END_DECLS

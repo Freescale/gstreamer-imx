@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_VPU_ENCODER_H264_H
-#define GST_FSL_VPU_ENCODER_H264_H
+#ifndef GST_IMX_VPU_ENCODER_H264_H
+#define GST_IMX_VPU_ENCODER_H264_H
 
 #include "base_enc.h"
 
@@ -26,31 +26,31 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslVpuH264Enc GstFslVpuH264Enc;
-typedef struct _GstFslVpuH264EncClass GstFslVpuH264EncClass;
+typedef struct _GstImxVpuH264Enc GstImxVpuH264Enc;
+typedef struct _GstImxVpuH264EncClass GstImxVpuH264EncClass;
 
 
-#define GST_TYPE_FSL_VPU_H264_ENC             (gst_fsl_vpu_h264_enc_get_type())
-#define GST_FSL_VPU_H264_ENC(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_VPU_H264_ENC, GstFslVpuH264Enc))
-#define GST_FSL_VPU_H264_ENC_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_VPU_H264_ENC, GstFslVpuH264EncClass))
-#define GST_FSL_VPU_H264_ENC_CAST(obj)        ((GstFslVpuH264Enc)(obj))
-#define GST_IS_FSL_VPU_H264_ENC(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_VPU_H264_ENC))
-#define GST_IS_FSL_VPU_H264_ENC_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_VPU_H264_ENC))
+#define GST_TYPE_IMX_VPU_H264_ENC             (gst_imx_vpu_h264_enc_get_type())
+#define GST_IMX_VPU_H264_ENC(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_VPU_H264_ENC, GstImxVpuH264Enc))
+#define GST_IMX_VPU_H264_ENC_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_VPU_H264_ENC, GstImxVpuH264EncClass))
+#define GST_IMX_VPU_H264_ENC_CAST(obj)        ((GstImxVpuH264Enc)(obj))
+#define GST_IS_IMX_VPU_H264_ENC(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_VPU_H264_ENC))
+#define GST_IS_IMX_VPU_H264_ENC_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_VPU_H264_ENC))
 
 
-struct _GstFslVpuH264Enc
+struct _GstImxVpuH264Enc
 {
-	GstFslVpuBaseEnc parent;
+	GstImxVpuBaseEnc parent;
 };
 
 
-struct _GstFslVpuH264EncClass
+struct _GstImxVpuH264EncClass
 {
-	GstFslVpuBaseEncClass parent_class;
+	GstImxVpuBaseEncClass parent_class;
 };
 
 
-GType gst_fsl_vpu_h264_enc_get_type(void);
+GType gst_imx_vpu_h264_enc_get_type(void);
 
 
 G_END_DECLS

@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_COMMON_PHYS_MEM_META_H
-#define GST_FSL_COMMON_PHYS_MEM_META_H
+#ifndef GST_IMX_COMMON_PHYS_MEM_META_H
+#define GST_IMX_COMMON_PHYS_MEM_META_H
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
@@ -28,18 +28,18 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslPhysMemMeta GstFslPhysMemMeta;
+typedef struct _GstImxPhysMemMeta GstImxPhysMemMeta;
 
 
-#define GST_FSL_PHYS_MEM_META_GET(buffer)      ((GstFslPhysMemMeta *)gst_buffer_get_meta((buffer), gst_fsl_phys_mem_meta_api_get_type()))
-#define GST_FSL_PHYS_MEM_META_ADD(buffer)      ((GstFslPhysMemMeta *)gst_buffer_add_meta((buffer), gst_fsl_phys_mem_meta_get_info(), NULL))
-#define GST_FSL_PHYS_MEM_META_DEL(buffer)      (gst_buffer_remove_meta((buffer), gst_buffer_get_meta((buffer), gst_fsl_phys_mem_meta_api_get_type())))
+#define GST_IMX_PHYS_MEM_META_GET(buffer)      ((GstImxPhysMemMeta *)gst_buffer_get_meta((buffer), gst_imx_phys_mem_meta_api_get_type()))
+#define GST_IMX_PHYS_MEM_META_ADD(buffer)      ((GstImxPhysMemMeta *)gst_buffer_add_meta((buffer), gst_imx_phys_mem_meta_get_info(), NULL))
+#define GST_IMX_PHYS_MEM_META_DEL(buffer)      (gst_buffer_remove_meta((buffer), gst_buffer_get_meta((buffer), gst_imx_phys_mem_meta_api_get_type())))
 
 
-#define GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM "GstBufferPoolOptionFslPhysMem"
+#define GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM "GstBufferPoolOptionImxPhysMem"
 
 
-struct _GstFslPhysMemMeta
+struct _GstImxPhysMemMeta
 {
 	GstMeta meta;
 
@@ -48,8 +48,8 @@ struct _GstFslPhysMemMeta
 };
 
 
-GType gst_fsl_phys_mem_meta_api_get_type(void);
-GstMetaInfo const * gst_fsl_phys_mem_meta_get_info(void);
+GType gst_imx_phys_mem_meta_api_get_type(void);
+GstMetaInfo const * gst_imx_phys_mem_meta_get_info(void);
 
 
 G_END_DECLS

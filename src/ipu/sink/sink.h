@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_IPU_SINK_H
-#define GST_FSL_IPU_SINK_H
+#ifndef GST_IMX_IPU_SINK_H
+#define GST_IMX_IPU_SINK_H
 
 #include <glib.h>
 #include <gst/gst.h>
@@ -29,33 +29,33 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslIpuSink GstFslIpuSink;
-typedef struct _GstFslIpuSinkClass GstFslIpuSinkClass;
-typedef struct _GstFslIpuSinkPrivate GstFslIpuSinkPrivate;
+typedef struct _GstImxIpuSink GstImxIpuSink;
+typedef struct _GstImxIpuSinkClass GstImxIpuSinkClass;
+typedef struct _GstImxIpuSinkPrivate GstImxIpuSinkPrivate;
 
 
-#define GST_TYPE_FSL_IPU_SINK             (gst_fsl_ipu_sink_get_type())
-#define GST_FSL_IPU_SINK(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_IPU_SINK, GstFslIpuSink))
-#define GST_FSL_IPU_SINK_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_IPU_SINK, GstFslIpuSinkClass))
-#define GST_IS_FSL_IPU_SINK(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_IPU_SINK))
-#define GST_IS_FSL_IPU_SINK_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_IPU_SINK))
+#define GST_TYPE_IMX_IPU_SINK             (gst_imx_ipu_sink_get_type())
+#define GST_IMX_IPU_SINK(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_IPU_SINK, GstImxIpuSink))
+#define GST_IMX_IPU_SINK_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_IPU_SINK, GstImxIpuSinkClass))
+#define GST_IS_IMX_IPU_SINK(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_IPU_SINK))
+#define GST_IS_IMX_IPU_SINK_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_IPU_SINK))
 
 
-struct _GstFslIpuSink
+struct _GstImxIpuSink
 {
 	GstVideoSink parent;
-	GstFslIpuSinkPrivate *priv;
+	GstImxIpuSinkPrivate *priv;
 	GstBufferPool *pool;
 };
 
 
-struct _GstFslIpuSinkClass
+struct _GstImxIpuSinkClass
 {
 	GstVideoSinkClass parent_class;
 };
 
 
-GType gst_fsl_ipu_sink_get_type(void);
+GType gst_imx_ipu_sink_get_type(void);
 
 
 G_END_DECLS

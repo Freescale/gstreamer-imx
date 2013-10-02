@@ -20,8 +20,8 @@
 #include "mem_blocks.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(fslvpumemblocks_debug);
-#define GST_CAT_DEFAULT fslvpumemblocks_debug
+GST_DEBUG_CATEGORY_STATIC(imx_vpu_mem_blocks_debug);
+#define GST_CAT_DEFAULT imx_vpu_mem_blocks_debug
 
 
 static void setup_debug_category(void)
@@ -30,13 +30,13 @@ static void setup_debug_category(void)
 
 	if (g_once_init_enter(&initialized))
 	{
-		GST_DEBUG_CATEGORY_INIT(fslvpumemblocks_debug, "vpumemblocks", 0, "Freescale VPU memory block functions");
+		GST_DEBUG_CATEGORY_INIT(imx_vpu_mem_blocks_debug, "imxvpumemblocks", 0, "Freescale i.MX VPU memory block functions");
 		g_once_init_leave(&initialized, 1);
 	}
 }
 
 
-gboolean gst_fsl_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size)
+gboolean gst_imx_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size)
 {
 	setup_debug_category();
 
@@ -53,7 +53,7 @@ gboolean gst_fsl_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size)
 }
 
 
-void gst_fsl_vpu_append_virt_mem_block(unsigned char *mem_block, GSList **virt_mem_blocks)
+void gst_imx_vpu_append_virt_mem_block(unsigned char *mem_block, GSList **virt_mem_blocks)
 {
 	setup_debug_category();
 
@@ -61,7 +61,7 @@ void gst_fsl_vpu_append_virt_mem_block(unsigned char *mem_block, GSList **virt_m
 }
 
 
-gboolean gst_fsl_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks)
+gboolean gst_imx_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks)
 {
 	GSList *mem_block_node;
 
@@ -86,7 +86,7 @@ gboolean gst_fsl_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks)
 }
 
 
-void gst_fsl_vpu_append_phys_mem_block(GstFslPhysMemory *memory, GSList **phys_mem_blocks)
+void gst_imx_vpu_append_phys_mem_block(GstImxPhysMemory *memory, GSList **phys_mem_blocks)
 {
 	setup_debug_category();
 
@@ -94,7 +94,7 @@ void gst_fsl_vpu_append_phys_mem_block(GstFslPhysMemory *memory, GSList **phys_m
 }
 
 
-gboolean gst_fsl_vpu_free_phys_mem_blocks(GstFslPhysMemAllocator *phys_mem_allocator, GSList **phys_mem_blocks)
+gboolean gst_imx_vpu_free_phys_mem_blocks(GstImxPhysMemAllocator *phys_mem_allocator, GSList **phys_mem_blocks)
 {
 	GSList *mem_block_node;
 
@@ -110,7 +110,7 @@ gboolean gst_fsl_vpu_free_phys_mem_blocks(GstFslPhysMemAllocator *phys_mem_alloc
 	{
 		GstMemory *memory = (GstMemory *)(mem_block_node->data);
 		gst_allocator_free((GstAllocator *)phys_mem_allocator, memory);
-		GST_DEBUG("freed phys memory block with %u bytes at phys addr 0x%x", memory->size, ((GstFslPhysMemory *)memory)->phys_addr);
+		GST_DEBUG("freed phys memory block with %u bytes at phys addr 0x%x", memory->size, ((GstImxPhysMemory *)memory)->phys_addr);
 	}
 
 	g_slist_free(*phys_mem_blocks);

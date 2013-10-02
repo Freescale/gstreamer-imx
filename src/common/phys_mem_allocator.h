@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_COMMON_PHYS_MEM_ALLOCATOR_H
-#define GST_FSL_COMMON_PHYS_MEM_ALLOCATOR_H
+#ifndef GST_IMX_COMMON_PHYS_MEM_ALLOCATOR_H
+#define GST_IMX_COMMON_PHYS_MEM_ALLOCATOR_H
 
 #include <gst/gst.h>
 #include <gst/gstallocator.h>
@@ -27,36 +27,36 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslPhysMemAllocator GstFslPhysMemAllocator;
-typedef struct _GstFslPhysMemAllocatorClass GstFslPhysMemAllocatorClass;
-typedef struct _GstFslPhysMemory GstFslPhysMemory;
+typedef struct _GstImxPhysMemAllocator GstImxPhysMemAllocator;
+typedef struct _GstImxPhysMemAllocatorClass GstImxPhysMemAllocatorClass;
+typedef struct _GstImxPhysMemory GstImxPhysMemory;
 
 
-#define GST_TYPE_FSL_PHYS_MEM_ALLOCATOR             (gst_fsl_phys_mem_allocator_get_type())
-#define GST_FSL_PHYS_MEM_ALLOCATOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_PHYS_MEM_ALLOCATOR, GstFslPhysMemAllocator))
-#define GST_FSL_PHYS_MEM_ALLOCATOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_PHYS_MEM_ALLOCATOR, GstFslPhysMemAllocatorClass))
-#define GST_IS_FSL_PHYS_MEM_ALLOCATOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_PHYS_MEM_ALLOCATOR))
-#define GST_IS_FSL_PHYS_MEM_ALLOCATOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_PHYS_MEM_ALLOCATOR))
+#define GST_TYPE_IMX_PHYS_MEM_ALLOCATOR             (gst_imx_phys_mem_allocator_get_type())
+#define GST_IMX_PHYS_MEM_ALLOCATOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_PHYS_MEM_ALLOCATOR, GstImxPhysMemAllocator))
+#define GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_PHYS_MEM_ALLOCATOR, GstImxPhysMemAllocatorClass))
+#define GST_IS_IMX_PHYS_MEM_ALLOCATOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_PHYS_MEM_ALLOCATOR))
+#define GST_IS_IMX_PHYS_MEM_ALLOCATOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_PHYS_MEM_ALLOCATOR))
 
 
-struct _GstFslPhysMemAllocator
+struct _GstImxPhysMemAllocator
 {
 	GstAllocator parent;
 };
 
 
-struct _GstFslPhysMemAllocatorClass
+struct _GstImxPhysMemAllocatorClass
 {
 	GstAllocatorClass parent_class;
 
-	gboolean (*alloc_phys_mem)(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory, gssize size);
-	gboolean (*free_phys_mem)(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory);
-	gpointer (*map_phys_mem)(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory, gssize size, GstMapFlags flags);
-	void (*unmap_phys_mem)(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory);
+	gboolean (*alloc_phys_mem)(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size);
+	gboolean (*free_phys_mem)(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory);
+	gpointer (*map_phys_mem)(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size, GstMapFlags flags);
+	void (*unmap_phys_mem)(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory);
 };
 
 
-struct _GstFslPhysMemory
+struct _GstImxPhysMemory
 {
 	GstMemory mem;
 
@@ -66,11 +66,11 @@ struct _GstFslPhysMemory
 };
 
 
-GType gst_fsl_phys_mem_allocator_get_type(void);
+GType gst_imx_phys_mem_allocator_get_type(void);
 
-guintptr gst_fsl_phys_memory_get_phys_addr(GstMemory *mem);
-guintptr gst_fsl_phys_memory_get_cpu_addr(GstMemory *mem);
-gboolean gst_fsl_is_phys_memory(GstMemory *mem);
+guintptr gst_imx_phys_memory_get_phys_addr(GstMemory *mem);
+guintptr gst_imx_phys_memory_get_cpu_addr(GstMemory *mem);
+gboolean gst_imx_is_phys_memory(GstMemory *mem);
 
 
 G_END_DECLS

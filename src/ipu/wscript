@@ -19,7 +19,7 @@ def configure(conf):
 
 		int main() { return 0; }
 		''',
-		uselib_store = 'FSLIPU',
+		uselib_store = 'IMXIPU',
 		includes = incpaths,
 		mandatory = False,
 		execute = False,
@@ -36,9 +36,9 @@ def build(bld):
 		bld(
 			features = ['c', 'cshlib'],
 			includes = ['.', '../..'],
-			uselib = bld.env['COMMON_USELIB'] + ['FSLIPU'],
-			use = 'gstfslcommon',
-			target = 'gstfslipu',
+			uselib = bld.env['COMMON_USELIB'] + ['IMXIPU'],
+			use = 'gstimxcommon',
+			target = 'gstimxipu',
 			source = bld.path.ant_glob('*.c') + bld.path.ant_glob('videotransform/*.c') + bld.path.ant_glob('sink/*.c'),
 			install_path = bld.env['PLUGIN_INSTALL_PATH']
 		)

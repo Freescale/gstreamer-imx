@@ -21,8 +21,8 @@
 
 
 
-GST_DEBUG_CATEGORY_STATIC(vpu_h264_enc_debug);
-#define GST_CAT_DEFAULT vpu_h264_enc_debug
+GST_DEBUG_CATEGORY_STATIC(imx_vpu_h264_enc_debug);
+#define GST_CAT_DEFAULT imx_vpu_h264_enc_debug
 
 
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
@@ -50,28 +50,28 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 );
 
 
-G_DEFINE_TYPE(GstFslVpuH264Enc, gst_fsl_vpu_h264_enc, GST_TYPE_FSL_VPU_BASE_ENC)
+G_DEFINE_TYPE(GstImxVpuH264Enc, gst_imx_vpu_h264_enc, GST_TYPE_IMX_VPU_BASE_ENC)
 
 
 /* functions for the base class */
-gboolean gst_fsl_vpu_h264_enc_set_open_params(GstFslVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
-GstCaps* gst_fsl_vpu_h264_enc_get_output_caps(GstFslVpuBaseEnc *vpu_base_enc);
-gboolean gst_fsl_vpu_h264_enc_set_frame_enc_params(GstFslVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
+gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
+GstCaps* gst_imx_vpu_h264_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base_enc);
+gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
 
 
 
 
 /* required function declared by G_DEFINE_TYPE */
 
-void gst_fsl_vpu_h264_enc_class_init(GstFslVpuH264EncClass *klass)
+void gst_imx_vpu_h264_enc_class_init(GstImxVpuH264EncClass *klass)
 {
 	GstElementClass *element_class;
-	GstFslVpuBaseEncClass *base_class;
+	GstImxVpuBaseEncClass *base_class;
 
-	GST_DEBUG_CATEGORY_INIT(vpu_h264_enc_debug, "vpuenc_h264", 0, "Freescale VPU video h.264 encoder");
+	GST_DEBUG_CATEGORY_INIT(imx_vpu_h264_enc_debug, "imxvpuh264enc", 0, "Freescale i.MX VPU h.264 video encoder");
 
 	element_class = GST_ELEMENT_CLASS(klass);
-	base_class = GST_FSL_VPU_BASE_ENC_CLASS(klass);
+	base_class = GST_IMX_VPU_BASE_ENC_CLASS(klass);
 
 	gst_element_class_set_static_metadata(
 		element_class,
@@ -84,13 +84,13 @@ void gst_fsl_vpu_h264_enc_class_init(GstFslVpuH264EncClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
-	base_class->set_open_params      = GST_DEBUG_FUNCPTR(gst_fsl_vpu_h264_enc_set_open_params);
-	base_class->get_output_caps      = GST_DEBUG_FUNCPTR(gst_fsl_vpu_h264_enc_get_output_caps);
-	base_class->set_frame_enc_params = GST_DEBUG_FUNCPTR(gst_fsl_vpu_h264_enc_set_frame_enc_params);
+	base_class->set_open_params      = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_set_open_params);
+	base_class->get_output_caps      = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_get_output_caps);
+	base_class->set_frame_enc_params = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_set_frame_enc_params);
 }
 
 
-void gst_fsl_vpu_h264_enc_init(G_GNUC_UNUSED GstFslVpuH264Enc *vpu_base_enc)
+void gst_imx_vpu_h264_enc_init(G_GNUC_UNUSED GstImxVpuH264Enc *vpu_base_enc)
 {
 }
 
@@ -100,7 +100,7 @@ void gst_fsl_vpu_h264_enc_init(G_GNUC_UNUSED GstFslVpuH264Enc *vpu_base_enc)
 /********************************/
 /* functions for the base class */
 
-gboolean gst_fsl_vpu_h264_enc_set_open_params(G_GNUC_UNUSED GstFslVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param)
+gboolean gst_imx_vpu_h264_enc_set_open_params(G_GNUC_UNUSED GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param)
 {
 	open_param->eFormat = VPU_V_AVC;
 	open_param->eColorFormat = VPU_COLOR_420;
@@ -109,13 +109,13 @@ gboolean gst_fsl_vpu_h264_enc_set_open_params(G_GNUC_UNUSED GstFslVpuBaseEnc *vp
 }
 
 
-GstCaps* gst_fsl_vpu_h264_enc_get_output_caps(G_GNUC_UNUSED GstFslVpuBaseEnc *vpu_base_enc)
+GstCaps* gst_imx_vpu_h264_enc_get_output_caps(G_GNUC_UNUSED GstImxVpuBaseEnc *vpu_base_enc)
 {
 	return gst_caps_from_string("video/x-h264, stream-format = (string) byte-stream, alignment = (string) au");
 }
 
 
-gboolean gst_fsl_vpu_h264_enc_set_frame_enc_params(G_GNUC_UNUSED GstFslVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, G_GNUC_UNUSED VpuEncOpenParam *open_param)
+gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(G_GNUC_UNUSED GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, G_GNUC_UNUSED VpuEncOpenParam *open_param)
 {
 	enc_enc_param->eFormat = VPU_V_AVC;
 	enc_enc_param->nQuantParam = 0;

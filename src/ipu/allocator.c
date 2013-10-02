@@ -25,40 +25,40 @@
 #include "../common/phys_mem_meta.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(fslipuallocator_debug);
-#define GST_CAT_DEFAULT fslipuallocator_debug
+GST_DEBUG_CATEGORY_STATIC(imx_ipu_allocator_debug);
+#define GST_CAT_DEFAULT imx_ipu_allocator_debug
 
 
 
-static void gst_fsl_ipu_allocator_finalize(GObject *object);
+static void gst_imx_ipu_allocator_finalize(GObject *object);
 
-static gboolean gst_fsl_ipu_alloc_phys_mem(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory, gssize size);
-static gboolean gst_fsl_ipu_free_phys_mem(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory);
-static gpointer gst_fsl_ipu_map_phys_mem(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory, gssize size, GstMapFlags flags);
-static void gst_fsl_ipu_unmap_phys_mem(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory);
-
-
-G_DEFINE_TYPE(GstFslIpuAllocator, gst_fsl_ipu_allocator, GST_TYPE_FSL_PHYS_MEM_ALLOCATOR)
+static gboolean gst_imx_ipu_alloc_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size);
+static gboolean gst_imx_ipu_free_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory);
+static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size, GstMapFlags flags);
+static void gst_imx_ipu_unmap_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory);
 
 
+G_DEFINE_TYPE(GstImxIpuAllocator, gst_imx_ipu_allocator, GST_TYPE_IMX_PHYS_MEM_ALLOCATOR)
 
 
-GstAllocator* gst_fsl_ipu_allocator_new(int ipu_fd)
+
+
+GstAllocator* gst_imx_ipu_allocator_new(int ipu_fd)
 {
 	GstAllocator *allocator;
-	allocator = g_object_new(gst_fsl_ipu_allocator_get_type(), NULL);
+	allocator = g_object_new(gst_imx_ipu_allocator_get_type(), NULL);
 
-	GST_FSL_IPU_ALLOCATOR(allocator)->fd = ipu_fd;
+	GST_IMX_IPU_ALLOCATOR(allocator)->fd = ipu_fd;
 
 	return allocator;
 }
 
 
-static gboolean gst_fsl_ipu_alloc_phys_mem(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory, gssize size)
+static gboolean gst_imx_ipu_alloc_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size)
 {
 	dma_addr_t m;
 	int ret;
-	GstFslIpuAllocator *ipu_allocator = GST_FSL_IPU_ALLOCATOR(allocator);
+	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
 	m = (dma_addr_t)size;
 	ret = ioctl(ipu_allocator->fd, IPU_ALLOC, &m);
@@ -78,11 +78,11 @@ static gboolean gst_fsl_ipu_alloc_phys_mem(GstFslPhysMemAllocator *allocator, Gs
 }
 
 
-static gboolean gst_fsl_ipu_free_phys_mem(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory)
+static gboolean gst_imx_ipu_free_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory)
 {
 	dma_addr_t m;
 	int ret;
-	GstFslIpuAllocator *ipu_allocator = GST_FSL_IPU_ALLOCATOR(allocator);
+	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
 	m = (dma_addr_t)(memory->phys_addr);
 	ret = ioctl(ipu_allocator->fd, IPU_FREE, &m);
@@ -99,11 +99,11 @@ static gboolean gst_fsl_ipu_free_phys_mem(GstFslPhysMemAllocator *allocator, Gst
 }
 
 
-static gpointer gst_fsl_ipu_map_phys_mem(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory, gssize size, GstMapFlags flags)
+static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size, GstMapFlags flags)
 {
 	int prot = 0;
-	GstFslPhysMemory *phys_mem = (GstFslPhysMemory *)memory;
-	GstFslIpuAllocator *ipu_allocator = GST_FSL_IPU_ALLOCATOR(allocator);
+	GstImxPhysMemory *phys_mem = (GstImxPhysMemory *)memory;
+	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
 	if (phys_mem->mapped_virt_addr != NULL)
 		return phys_mem->mapped_virt_addr;
@@ -125,7 +125,7 @@ static gpointer gst_fsl_ipu_map_phys_mem(GstFslPhysMemAllocator *allocator, GstF
 }
 
 
-static void gst_fsl_ipu_unmap_phys_mem(GstFslPhysMemAllocator *allocator, GstFslPhysMemory *memory)
+static void gst_imx_ipu_unmap_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory)
 {
 	if (memory->mapped_virt_addr != NULL)
 	{
@@ -138,31 +138,31 @@ static void gst_fsl_ipu_unmap_phys_mem(GstFslPhysMemAllocator *allocator, GstFsl
 
 
 
-static void gst_fsl_ipu_allocator_class_init(GstFslIpuAllocatorClass *klass)
+static void gst_imx_ipu_allocator_class_init(GstImxIpuAllocatorClass *klass)
 {
 	GObjectClass *object_class = G_OBJECT_CLASS(klass);
-	GstFslPhysMemAllocatorClass *parent_class = GST_FSL_PHYS_MEM_ALLOCATOR_CLASS(klass);
+	GstImxPhysMemAllocatorClass *parent_class = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(klass);
 
-	object_class->finalize       = GST_DEBUG_FUNCPTR(gst_fsl_ipu_allocator_finalize);
-	parent_class->alloc_phys_mem = GST_DEBUG_FUNCPTR(gst_fsl_ipu_alloc_phys_mem);
-	parent_class->free_phys_mem  = GST_DEBUG_FUNCPTR(gst_fsl_ipu_free_phys_mem);
-	parent_class->map_phys_mem   = GST_DEBUG_FUNCPTR(gst_fsl_ipu_map_phys_mem);
-	parent_class->unmap_phys_mem = GST_DEBUG_FUNCPTR(gst_fsl_ipu_unmap_phys_mem);
+	object_class->finalize       = GST_DEBUG_FUNCPTR(gst_imx_ipu_allocator_finalize);
+	parent_class->alloc_phys_mem = GST_DEBUG_FUNCPTR(gst_imx_ipu_alloc_phys_mem);
+	parent_class->free_phys_mem  = GST_DEBUG_FUNCPTR(gst_imx_ipu_free_phys_mem);
+	parent_class->map_phys_mem   = GST_DEBUG_FUNCPTR(gst_imx_ipu_map_phys_mem);
+	parent_class->unmap_phys_mem = GST_DEBUG_FUNCPTR(gst_imx_ipu_unmap_phys_mem);
 
-	GST_DEBUG_CATEGORY_INIT(fslipuallocator_debug, "fslipuallocator", 0, "Freescale IPU physical memory/allocator");
+	GST_DEBUG_CATEGORY_INIT(imx_ipu_allocator_debug, "imxipuallocator", 0, "Freescale i.MX IPU physical memory/allocator");
 }
 
 
-static void gst_fsl_ipu_allocator_init(GstFslIpuAllocator *allocator)
+static void gst_imx_ipu_allocator_init(GstImxIpuAllocator *allocator)
 {
 	GstAllocator *base = GST_ALLOCATOR(allocator);
-	base->mem_type = GST_FSL_IPU_ALLOCATOR_MEM_TYPE;
+	base->mem_type = GST_IMX_IPU_ALLOCATOR_MEM_TYPE;
 }
 
 
-static void gst_fsl_ipu_allocator_finalize(GObject *object)
+static void gst_imx_ipu_allocator_finalize(GObject *object)
 {
-	GST_DEBUG_OBJECT(object, "shutting down FSL IPU allocator");
-	G_OBJECT_CLASS(gst_fsl_ipu_allocator_parent_class)->finalize(object);
+	GST_DEBUG_OBJECT(object, "shutting down IMX IPU allocator");
+	G_OBJECT_CLASS(gst_imx_ipu_allocator_parent_class)->finalize(object);
 }
 

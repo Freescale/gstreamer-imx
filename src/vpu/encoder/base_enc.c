@@ -27,8 +27,8 @@
 
 
 
-GST_DEBUG_CATEGORY_STATIC(vpu_base_enc_debug);
-#define GST_CAT_DEFAULT vpu_base_enc_debug
+GST_DEBUG_CATEGORY_STATIC(imx_vpu_base_enc_debug);
+#define GST_CAT_DEFAULT imx_vpu_base_enc_debug
 
 
 enum
@@ -53,43 +53,43 @@ enum
 static GMutex inst_counter_mutex;
 
 
-G_DEFINE_ABSTRACT_TYPE(GstFslVpuBaseEnc, gst_fsl_vpu_base_enc, GST_TYPE_VIDEO_ENCODER)
+G_DEFINE_ABSTRACT_TYPE(GstImxVpuBaseEnc, gst_imx_vpu_base_enc, GST_TYPE_VIDEO_ENCODER)
 
 
 /* miscellaneous functions */
-static gboolean gst_fsl_vpu_base_enc_alloc_enc_mem_blocks(GstFslVpuBaseEnc *vpu_base_enc);
-static gboolean gst_fsl_vpu_base_enc_free_enc_mem_blocks(GstFslVpuBaseEnc *vpu_base_enc);
-static void gst_fsl_vpu_base_enc_close_encoder(GstFslVpuBaseEnc *vpu_base_enc);
-static void gst_fsl_vpu_base_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
-static void gst_fsl_vpu_base_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static gboolean gst_imx_vpu_base_enc_alloc_enc_mem_blocks(GstImxVpuBaseEnc *vpu_base_enc);
+static gboolean gst_imx_vpu_base_enc_free_enc_mem_blocks(GstImxVpuBaseEnc *vpu_base_enc);
+static void gst_imx_vpu_base_enc_close_encoder(GstImxVpuBaseEnc *vpu_base_enc);
+static void gst_imx_vpu_base_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_vpu_base_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
 /* functions for the base class */
-static gboolean gst_fsl_vpu_base_enc_start(GstVideoEncoder *encoder);
-static gboolean gst_fsl_vpu_base_enc_stop(GstVideoEncoder *encoder);
-static gboolean gst_fsl_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVideoCodecState *state);
-static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *frame);
+static gboolean gst_imx_vpu_base_enc_start(GstVideoEncoder *encoder);
+static gboolean gst_imx_vpu_base_enc_stop(GstVideoEncoder *encoder);
+static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVideoCodecState *state);
+static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *frame);
 
 
 
 
 /* required function declared by G_DEFINE_TYPE */
 
-void gst_fsl_vpu_base_enc_class_init(GstFslVpuBaseEncClass *klass)
+void gst_imx_vpu_base_enc_class_init(GstImxVpuBaseEncClass *klass)
 {
 	GObjectClass *object_class;
 	GstVideoEncoderClass *base_class;
 
-	GST_DEBUG_CATEGORY_INIT(vpu_base_enc_debug, "vpubaseenc", 0, "Freescale VPU video encoder base class");
+	GST_DEBUG_CATEGORY_INIT(imx_vpu_base_enc_debug, "imxvpubaseenc", 0, "Freescale i.MX VPU video encoder base class");
 
 	object_class = G_OBJECT_CLASS(klass);
 	base_class = GST_VIDEO_ENCODER_CLASS(klass);
 
-	object_class->set_property    = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_set_property);
-	object_class->get_property    = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_get_property);
-	base_class->start             = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_start);
-	base_class->stop              = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_stop);
-	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_set_format);
-	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_fsl_vpu_base_enc_handle_frame);
+	object_class->set_property    = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_set_property);
+	object_class->get_property    = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_get_property);
+	base_class->start             = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_start);
+	base_class->stop              = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_stop);
+	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_set_format);
+	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_handle_frame);
 	
 	klass->inst_counter = 0;
 
@@ -143,7 +143,7 @@ void gst_fsl_vpu_base_enc_class_init(GstFslVpuBaseEncClass *klass)
 }
 
 
-void gst_fsl_vpu_base_enc_init(GstFslVpuBaseEnc *vpu_base_enc)
+void gst_imx_vpu_base_enc_init(GstImxVpuBaseEnc *vpu_base_enc)
 {
 	vpu_base_enc->vpu_inst_opened = FALSE;
 
@@ -168,7 +168,7 @@ void gst_fsl_vpu_base_enc_init(GstFslVpuBaseEnc *vpu_base_enc)
 /***************************/
 /* miscellaneous functions */
 
-static gboolean gst_fsl_vpu_base_enc_alloc_enc_mem_blocks(GstFslVpuBaseEnc *vpu_base_enc)
+static gboolean gst_imx_vpu_base_enc_alloc_enc_mem_blocks(GstImxVpuBaseEnc *vpu_base_enc)
 {
 	int i;
 	int size;
@@ -181,16 +181,16 @@ static gboolean gst_fsl_vpu_base_enc_alloc_enc_mem_blocks(GstFslVpuBaseEnc *vpu_
  
 		if (vpu_base_enc->mem_info.MemSubBlock[i].MemType == VPU_MEM_VIRT)
 		{
-			if (!gst_fsl_vpu_alloc_virt_mem_block(&ptr, size))
+			if (!gst_imx_vpu_alloc_virt_mem_block(&ptr, size))
 				return FALSE;
 
 			vpu_base_enc->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO(ptr, vpu_base_enc->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_vpu_append_virt_mem_block(ptr, &(vpu_base_enc->virt_enc_mem_blocks));
+			gst_imx_vpu_append_virt_mem_block(ptr, &(vpu_base_enc->virt_enc_mem_blocks));
 		}
 		else if (vpu_base_enc->mem_info.MemSubBlock[i].MemType == VPU_MEM_PHY)
 		{
-			GstFslPhysMemory *memory = (GstFslPhysMemory *)gst_allocator_alloc(gst_fsl_vpu_enc_allocator_obtain(), size, NULL);
+			GstImxPhysMemory *memory = (GstImxPhysMemory *)gst_allocator_alloc(gst_imx_vpu_enc_allocator_obtain(), size, NULL);
 			if (memory == NULL)
 				return FALSE;
 
@@ -201,7 +201,7 @@ static gboolean gst_fsl_vpu_base_enc_alloc_enc_mem_blocks(GstFslVpuBaseEnc *vpu_
 			vpu_base_enc->mem_info.MemSubBlock[i].pVirtAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(memory->mapped_virt_addr), vpu_base_enc->mem_info.MemSubBlock[i].nAlignment);
 			vpu_base_enc->mem_info.MemSubBlock[i].pPhyAddr = (unsigned char *)ALIGN_VAL_TO((unsigned char*)(memory->phys_addr), vpu_base_enc->mem_info.MemSubBlock[i].nAlignment);
 
-			gst_fsl_vpu_append_phys_mem_block(memory, &(vpu_base_enc->phys_enc_mem_blocks));
+			gst_imx_vpu_append_phys_mem_block(memory, &(vpu_base_enc->phys_enc_mem_blocks));
 		}
 		else
 		{
@@ -213,19 +213,19 @@ static gboolean gst_fsl_vpu_base_enc_alloc_enc_mem_blocks(GstFslVpuBaseEnc *vpu_
 }
 
 
-static gboolean gst_fsl_vpu_base_enc_free_enc_mem_blocks(GstFslVpuBaseEnc *vpu_base_enc)
+static gboolean gst_imx_vpu_base_enc_free_enc_mem_blocks(GstImxVpuBaseEnc *vpu_base_enc)
 {
 	gboolean ret1, ret2;
 	/* NOT using the two calls with && directly, since otherwise an early exit could happen; in other words,
 	 * if the first call failed, the second one wouldn't even be invoked
 	 * doing the logical AND afterwards fixes this */
-	ret1 = gst_fsl_vpu_free_virt_mem_blocks(&(vpu_base_enc->virt_enc_mem_blocks));
-	ret2 = gst_fsl_vpu_free_phys_mem_blocks((GstFslPhysMemAllocator *)gst_fsl_vpu_enc_allocator_obtain(), &(vpu_base_enc->phys_enc_mem_blocks));
+	ret1 = gst_imx_vpu_free_virt_mem_blocks(&(vpu_base_enc->virt_enc_mem_blocks));
+	ret2 = gst_imx_vpu_free_phys_mem_blocks((GstImxPhysMemAllocator *)gst_imx_vpu_enc_allocator_obtain(), &(vpu_base_enc->phys_enc_mem_blocks));
 	return ret1 && ret2;
 }
 
 
-static void gst_fsl_vpu_base_enc_close_encoder(GstFslVpuBaseEnc *vpu_base_enc)
+static void gst_imx_vpu_base_enc_close_encoder(GstImxVpuBaseEnc *vpu_base_enc)
 {
 	VpuEncRetCode enc_ret;
 
@@ -236,7 +236,7 @@ static void gst_fsl_vpu_base_enc_close_encoder(GstFslVpuBaseEnc *vpu_base_enc)
 
 	if (vpu_base_enc->output_phys_buffer != NULL)
 	{
-		gst_allocator_free(gst_fsl_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
+		gst_allocator_free(gst_imx_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
 		vpu_base_enc->output_phys_buffer = NULL;
 	}
 
@@ -244,16 +244,16 @@ static void gst_fsl_vpu_base_enc_close_encoder(GstFslVpuBaseEnc *vpu_base_enc)
 	{
 		enc_ret = VPU_EncClose(vpu_base_enc->handle);
 		if (enc_ret != VPU_ENC_RET_SUCCESS)
-			GST_ERROR_OBJECT(vpu_base_enc, "closing encoder failed: %s", gst_fsl_vpu_strerror(enc_ret));
+			GST_ERROR_OBJECT(vpu_base_enc, "closing encoder failed: %s", gst_imx_vpu_strerror(enc_ret));
 
 		vpu_base_enc->vpu_inst_opened = FALSE;
 	}
 }
 
 
-static void gst_fsl_vpu_base_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+static void gst_imx_vpu_base_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
-	GstFslVpuBaseEnc *vpu_base_enc = GST_FSL_VPU_BASE_ENC(object);
+	GstImxVpuBaseEnc *vpu_base_enc = GST_IMX_VPU_BASE_ENC(object);
 
 	switch (prop_id)
 	{
@@ -276,9 +276,9 @@ static void gst_fsl_vpu_base_enc_set_property(GObject *object, guint prop_id, GV
 }
 
 
-static void gst_fsl_vpu_base_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void gst_imx_vpu_base_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
-	GstFslVpuBaseEnc *vpu_base_enc = GST_FSL_VPU_BASE_ENC(object);
+	GstImxVpuBaseEnc *vpu_base_enc = GST_IMX_VPU_BASE_ENC(object);
 
 	switch (prop_id)
 	{
@@ -301,20 +301,20 @@ static void gst_fsl_vpu_base_enc_get_property(GObject *object, guint prop_id, GV
 }
 
 
-static gboolean gst_fsl_vpu_base_enc_start(GstVideoEncoder *encoder)
+static gboolean gst_imx_vpu_base_enc_start(GstVideoEncoder *encoder)
 {
 	VpuEncRetCode ret;
-	GstFslVpuBaseEnc *vpu_base_enc;
-	GstFslVpuBaseEncClass *klass;
+	GstImxVpuBaseEnc *vpu_base_enc;
+	GstImxVpuBaseEncClass *klass;
 
-	vpu_base_enc = GST_FSL_VPU_BASE_ENC(encoder);
-	klass = GST_FSL_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
+	vpu_base_enc = GST_IMX_VPU_BASE_ENC(encoder);
+	klass = GST_IMX_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
 
 #define VPUINIT_ERR(RET, DESC, UNLOAD) \
 	if ((RET) != VPU_ENC_RET_SUCCESS) \
 	{ \
 		g_mutex_unlock(&inst_counter_mutex); \
-		GST_ELEMENT_ERROR(vpu_base_enc, LIBRARY, INIT, ("%s: %s", (DESC), gst_fsl_vpu_strerror(RET)), (NULL)); \
+		GST_ELEMENT_ERROR(vpu_base_enc, LIBRARY, INIT, ("%s: %s", (DESC), gst_imx_vpu_strerror(RET)), (NULL)); \
 		if (UNLOAD) \
 			VPU_EncUnLoad(); \
 		return FALSE; \
@@ -351,7 +351,7 @@ static gboolean gst_fsl_vpu_base_enc_start(GstVideoEncoder *encoder)
 	ret = VPU_EncQueryMem(&(vpu_base_enc->mem_info));
 	if (ret != VPU_ENC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_base_enc, "could not get VPU memory information: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_base_enc, "could not get VPU memory information: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -359,7 +359,7 @@ static gboolean gst_fsl_vpu_base_enc_start(GstVideoEncoder *encoder)
 	 * Note that these are independent of encoder instances, so they
 	 * are allocated before the VPU_EncOpen() call, and are not
 	 * recreated in set_format */
-	if (!gst_fsl_vpu_base_enc_alloc_enc_mem_blocks(vpu_base_enc))
+	if (!gst_imx_vpu_base_enc_alloc_enc_mem_blocks(vpu_base_enc))
 		return FALSE;
 
 #undef VPUINIT_ERR
@@ -371,17 +371,17 @@ static gboolean gst_fsl_vpu_base_enc_start(GstVideoEncoder *encoder)
 }
 
 
-static gboolean gst_fsl_vpu_base_enc_stop(GstVideoEncoder *encoder)
+static gboolean gst_imx_vpu_base_enc_stop(GstVideoEncoder *encoder)
 {
 	gboolean ret;
 	VpuEncRetCode enc_ret;
-	GstFslVpuBaseEnc *vpu_base_enc;
-	GstFslVpuBaseEncClass *klass;
+	GstImxVpuBaseEnc *vpu_base_enc;
+	GstImxVpuBaseEncClass *klass;
 
 	ret = TRUE;
 
-	vpu_base_enc = GST_FSL_VPU_BASE_ENC(encoder);
-	klass = GST_FSL_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
+	vpu_base_enc = GST_IMX_VPU_BASE_ENC(encoder);
+	klass = GST_IMX_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
 
 	if (vpu_base_enc->framebuffers != NULL)
 	{
@@ -390,12 +390,12 @@ static gboolean gst_fsl_vpu_base_enc_stop(GstVideoEncoder *encoder)
 	}
 	if (vpu_base_enc->output_phys_buffer != NULL)
 	{
-		gst_allocator_free(gst_fsl_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
+		gst_allocator_free(gst_imx_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
 		vpu_base_enc->output_phys_buffer = NULL;
 	}
 
-	gst_fsl_vpu_base_enc_close_encoder(vpu_base_enc);
-	gst_fsl_vpu_base_enc_free_enc_mem_blocks(vpu_base_enc);
+	gst_imx_vpu_base_enc_close_encoder(vpu_base_enc);
+	gst_imx_vpu_base_enc_free_enc_mem_blocks(vpu_base_enc);
 
 	g_mutex_lock(&inst_counter_mutex);
 	if (klass->inst_counter > 0)
@@ -406,7 +406,7 @@ static gboolean gst_fsl_vpu_base_enc_stop(GstVideoEncoder *encoder)
 			enc_ret = VPU_EncUnLoad();
 			if (enc_ret != VPU_ENC_RET_SUCCESS)
 			{
-				GST_ERROR_OBJECT(vpu_base_enc, "unloading VPU encoder failed: %s", gst_fsl_vpu_strerror(enc_ret));
+				GST_ERROR_OBJECT(vpu_base_enc, "unloading VPU encoder failed: %s", gst_imx_vpu_strerror(enc_ret));
 			}
 			else
 				GST_INFO_OBJECT(vpu_base_enc, "VPU encoder unloaded");
@@ -418,21 +418,21 @@ static gboolean gst_fsl_vpu_base_enc_stop(GstVideoEncoder *encoder)
 }
 
 
-static gboolean gst_fsl_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVideoCodecState *state)
+static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVideoCodecState *state)
 {
 	VpuEncRetCode ret;
 	GstVideoCodecState *output_state;
-	GstFslVpuBaseEncClass *klass;
-	GstFslVpuBaseEnc *vpu_base_enc;
+	GstImxVpuBaseEncClass *klass;
+	GstImxVpuBaseEnc *vpu_base_enc;
 	
-	vpu_base_enc = GST_FSL_VPU_BASE_ENC(encoder);
-	klass = GST_FSL_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
+	vpu_base_enc = GST_IMX_VPU_BASE_ENC(encoder);
+	klass = GST_IMX_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
 
 	g_assert(klass->set_open_params != NULL);
 	g_assert(klass->get_output_caps != NULL);
 
 	/* Close old encoder instance */
-	gst_fsl_vpu_base_enc_close_encoder(vpu_base_enc);
+	gst_imx_vpu_base_enc_close_encoder(vpu_base_enc);
 
 	/* Clean up existing framebuffers structure;
 	 * if some previous and still existing buffer pools depend on this framebuffers
@@ -446,7 +446,7 @@ static gboolean gst_fsl_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 
 	if (vpu_base_enc->output_phys_buffer != NULL)
 	{
-		gst_allocator_free(gst_fsl_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
+		gst_allocator_free(gst_imx_vpu_enc_allocator_obtain(), (GstMemory *)(vpu_base_enc->output_phys_buffer));
 		vpu_base_enc->output_phys_buffer = NULL;
 	}
 
@@ -481,7 +481,7 @@ static gboolean gst_fsl_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	ret = VPU_EncOpen(&(vpu_base_enc->handle), &(vpu_base_enc->mem_info), &(vpu_base_enc->open_param));
 	if (ret != VPU_ENC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_base_enc, "opening new VPU handle failed: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_base_enc, "opening new VPU handle failed: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -493,14 +493,14 @@ static gboolean gst_fsl_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	ret = VPU_EncConfig(vpu_base_enc->handle, VPU_ENC_CONF_NONE, NULL);
 	if (ret != VPU_ENC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_base_enc, "could not apply default configuration: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_base_enc, "could not apply default configuration: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
 	ret = VPU_EncGetInitialInfo(vpu_base_enc->handle, &(vpu_base_enc->init_info));
 	if (ret != VPU_ENC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_base_enc, "retrieving init info failed: %s", gst_fsl_vpu_strerror(ret));
+		GST_ERROR_OBJECT(vpu_base_enc, "retrieving init info failed: %s", gst_imx_vpu_strerror(ret));
 		return FALSE;
 	}
 
@@ -520,25 +520,25 @@ static gboolean gst_fsl_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 }
 
 
-static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *frame)
+static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *frame)
 {
 	VpuEncRetCode enc_ret;
 	VpuEncEncParam enc_enc_param;
-	GstFslPhysMemMeta *phys_mem_meta;
-	GstFslVpuBaseEncClass *klass;
-	GstFslVpuBaseEnc *vpu_base_enc;
+	GstImxPhysMemMeta *phys_mem_meta;
+	GstImxVpuBaseEncClass *klass;
+	GstImxVpuBaseEnc *vpu_base_enc;
 	VpuFrameBuffer input_framebuf;
 	GstBuffer *input_buffer;
 
-	vpu_base_enc = GST_FSL_VPU_BASE_ENC(encoder);
-	klass = GST_FSL_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
+	vpu_base_enc = GST_IMX_VPU_BASE_ENC(encoder);
+	klass = GST_IMX_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
 
 	g_assert(klass->set_frame_enc_params != NULL);
 
 	memset(&enc_enc_param, 0, sizeof(enc_enc_param));
 	memset(&input_framebuf, 0, sizeof(input_framebuf));
 
-	phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(frame->input_buffer);
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(frame->input_buffer);
 
 	if (phys_mem_meta == NULL)
 	{
@@ -562,13 +562,13 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 				GstAllocator *allocator;
 
 				caps = gst_video_info_to_caps(&(vpu_base_enc->video_info));
-				vpu_base_enc->internal_bufferpool = gst_fsl_phys_mem_buffer_pool_new(FALSE);
-				allocator = gst_fsl_vpu_enc_allocator_obtain();
+				vpu_base_enc->internal_bufferpool = gst_imx_phys_mem_buffer_pool_new(FALSE);
+				allocator = gst_imx_vpu_enc_allocator_obtain();
 
 				config = gst_buffer_pool_get_config(vpu_base_enc->internal_bufferpool);
 				gst_buffer_pool_config_set_params(config, caps, vpu_base_enc->video_info.size, 2, 0);
 				gst_buffer_pool_config_set_allocator(config, allocator, NULL);
-				gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_FSL_PHYS_MEM);
+				gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM);
 				gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 				gst_buffer_pool_set_config(vpu_base_enc->internal_bufferpool, config);
 
@@ -604,7 +604,7 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		gst_video_frame_unmap(&temp_input_video_frame);
 
 		input_buffer = vpu_base_enc->internal_input_buffer;
-		phys_mem_meta = GST_FSL_PHYS_MEM_META_GET(vpu_base_enc->internal_input_buffer);
+		phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(vpu_base_enc->internal_input_buffer);
 	}
 	else
 		input_buffer = frame->input_buffer;
@@ -640,17 +640,17 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 
 		if (vpu_base_enc->framebuffers == NULL)
 		{
-			GstFslVpuFramebufferParams fbparams;
-			gst_fsl_vpu_framebuffers_enc_init_info_to_params(&(vpu_base_enc->init_info), &fbparams);
+			GstImxVpuFramebufferParams fbparams;
+			gst_imx_vpu_framebuffers_enc_init_info_to_params(&(vpu_base_enc->init_info), &fbparams);
 			fbparams.pic_width = vpu_base_enc->open_param.nPicWidth;
 			fbparams.pic_height = vpu_base_enc->open_param.nPicHeight;
-			vpu_base_enc->framebuffers = gst_fsl_vpu_framebuffers_new(&fbparams, gst_fsl_vpu_enc_allocator_obtain());
-			gst_fsl_vpu_framebuffers_register_with_encoder(vpu_base_enc->framebuffers, vpu_base_enc->handle, plane_strides[0]);
+			vpu_base_enc->framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_enc_allocator_obtain());
+			gst_imx_vpu_framebuffers_register_with_encoder(vpu_base_enc->framebuffers, vpu_base_enc->handle, plane_strides[0]);
 		}
 
 		if (vpu_base_enc->output_phys_buffer == NULL)
 		{
-			vpu_base_enc->output_phys_buffer = (GstFslPhysMemory *)gst_allocator_alloc(gst_fsl_vpu_enc_allocator_obtain(), vpu_base_enc->framebuffers->total_size, NULL);
+			vpu_base_enc->output_phys_buffer = (GstImxPhysMemory *)gst_allocator_alloc(gst_imx_vpu_enc_allocator_obtain(), vpu_base_enc->framebuffers->total_size, NULL);
 
 			if (vpu_base_enc->output_phys_buffer == NULL)
 			{
@@ -678,7 +678,7 @@ static GstFlowReturn gst_fsl_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	enc_ret = VPU_EncEncodeFrame(vpu_base_enc->handle, &enc_enc_param);
 	if (enc_ret != VPU_ENC_RET_SUCCESS)
 	{
-		GST_ERROR_OBJECT(vpu_base_enc, "failed to encode frame: %s", gst_fsl_vpu_strerror(enc_ret));
+		GST_ERROR_OBJECT(vpu_base_enc, "failed to encode frame: %s", gst_imx_vpu_strerror(enc_ret));
 		VPU_EncReset(vpu_base_enc->handle);
 		return GST_FLOW_ERROR;
 	}

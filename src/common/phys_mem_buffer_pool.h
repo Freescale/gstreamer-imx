@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_PHYS_MEM_BUFFER_POOL_H
-#define GST_FSL_PHYS_MEM_BUFFER_POOL_H
+#ifndef GST_IMX_PHYS_MEM_BUFFER_POOL_H
+#define GST_IMX_PHYS_MEM_BUFFER_POOL_H
 
 
 #include <gst/gst.h>
@@ -30,16 +30,16 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslPhysMemBufferPool GstFslPhysMemBufferPool;
-typedef struct _GstFslPhysMemBufferPoolClass GstFslPhysMemBufferPoolClass;
+typedef struct _GstImxPhysMemBufferPool GstImxPhysMemBufferPool;
+typedef struct _GstImxPhysMemBufferPoolClass GstImxPhysMemBufferPoolClass;
 
 
-#define GST_TYPE_FSL_PHYS_MEM_BUFFER_POOL             (gst_fsl_phys_mem_buffer_pool_get_type())
-#define GST_FSL_PHYS_MEM_BUFFER_POOL(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_PHYS_MEM_BUFFER_POOL, GstFslPhysMemBufferPool))
-#define GST_FSL_PHYS_MEM_BUFFER_POOL_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_PHYS_MEM_BUFFER_POOL, GstFslPhysMemBufferPoolClass))
+#define GST_TYPE_IMX_PHYS_MEM_BUFFER_POOL             (gst_imx_phys_mem_buffer_pool_get_type())
+#define GST_IMX_PHYS_MEM_BUFFER_POOL(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_PHYS_MEM_BUFFER_POOL, GstImxPhysMemBufferPool))
+#define GST_IMX_PHYS_MEM_BUFFER_POOL_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_PHYS_MEM_BUFFER_POOL, GstImxPhysMemBufferPoolClass))
 
 
-struct _GstFslPhysMemBufferPool
+struct _GstImxPhysMemBufferPool
 {
 	GstBufferPool bufferpool;
 
@@ -50,14 +50,14 @@ struct _GstFslPhysMemBufferPool
 };
 
 
-struct _GstFslPhysMemBufferPoolClass
+struct _GstImxPhysMemBufferPoolClass
 {
 	GstBufferPoolClass parent_class;
 };
 
 
-GType gst_fsl_phys_mem_buffer_pool_get_type(void);
-GstBufferPool *gst_fsl_phys_mem_buffer_pool_new(gboolean read_only);
+GType gst_imx_phys_mem_buffer_pool_get_type(void);
+GstBufferPool *gst_imx_phys_mem_buffer_pool_new(gboolean read_only);
 
 
 G_END_DECLS

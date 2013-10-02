@@ -75,7 +75,7 @@ def build(bld):
 		bld(
 			features = ['c', 'cshlib'],
 			includes = ['../..'],
-			use = 'gstfslcommon',
+			use = 'gstimxcommon',
 			uselib = ['X11', 'GLES1', 'GLES2', 'EGL', 'VIVANTE', 'GSTREAMER_VIDEO'] + bld.env['COMMON_USELIB'],
 			target = 'gsteglvivsink',
 			defines = ['HAVE_CONFIG_H', 'USE_EGL_X11', 'GST_LICENSE="LGPL"'],

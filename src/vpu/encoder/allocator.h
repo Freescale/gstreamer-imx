@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_VPU_ENCODER_ALLOCATOR_H
-#define GST_FSL_VPU_ENCODER_ALLOCATOR_H
+#ifndef GST_IMX_VPU_ENCODER_ALLOCATOR_H
+#define GST_IMX_VPU_ENCODER_ALLOCATOR_H
 
 #include <glib.h>
 #include "../../common/phys_mem_allocator.h"
@@ -27,34 +27,34 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslVpuEncAllocator GstFslVpuEncAllocator;
-typedef struct _GstFslVpuEncAllocatorClass GstFslVpuEncAllocatorClass;
-typedef struct _GstFslVpuEncMemory GstFslVpuEncMemory;
+typedef struct _GstImxVpuEncAllocator GstImxVpuEncAllocator;
+typedef struct _GstImxVpuEncAllocatorClass GstImxVpuEncAllocatorClass;
+typedef struct _GstImxVpuEncMemory GstImxVpuEncMemory;
 
 
-#define GST_TYPE_FSL_VPU_ENC_ALLOCATOR             (gst_fsl_vpu_enc_allocator_get_type())
-#define GST_FSL_VPU_ENC_ALLOCATOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_VPU_ENC_ALLOCATOR, GstFslVpuEncAllocator))
-#define GST_FSL_VPU_ENC_ALLOCATOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_VPU_ENC_ALLOCATOR, GstFslVpuEncAllocatorClass))
-#define GST_IS_FSL_VPU_ENC_ALLOCATOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_VPU_ENC_ALLOCATOR))
-#define GST_IS_FSL_VPU_ENC_ALLOCATOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_VPU_ENC_ALLOCATOR))
+#define GST_TYPE_IMX_VPU_ENC_ALLOCATOR             (gst_imx_vpu_enc_allocator_get_type())
+#define GST_IMX_VPU_ENC_ALLOCATOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_VPU_ENC_ALLOCATOR, GstImxVpuEncAllocator))
+#define GST_IMX_VPU_ENC_ALLOCATOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_VPU_ENC_ALLOCATOR, GstImxVpuEncAllocatorClass))
+#define GST_IS_IMX_VPU_ENC_ALLOCATOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_VPU_ENC_ALLOCATOR))
+#define GST_IS_IMX_VPU_ENC_ALLOCATOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_VPU_ENC_ALLOCATOR))
 
-#define GST_FSL_VPU_ENC_ALLOCATOR_MEM_TYPE "FslVpuEncMemory"
+#define GST_IMX_VPU_ENC_ALLOCATOR_MEM_TYPE "ImxVpuEncMemory"
 
 
-struct _GstFslVpuEncAllocator
+struct _GstImxVpuEncAllocator
 {
-	GstFslPhysMemAllocator parent;
+	GstImxPhysMemAllocator parent;
 };
 
 
-struct _GstFslVpuEncAllocatorClass
+struct _GstImxVpuEncAllocatorClass
 {
-	GstFslPhysMemAllocatorClass parent_class;
+	GstImxPhysMemAllocatorClass parent_class;
 };
 
 
-GType gst_fsl_vpu_enc_allocator_get_type(void);
-GstAllocator* gst_fsl_vpu_enc_allocator_obtain(void);
+GType gst_imx_vpu_enc_allocator_get_type(void);
+GstAllocator* gst_imx_vpu_enc_allocator_obtain(void);
 
 
 G_END_DECLS

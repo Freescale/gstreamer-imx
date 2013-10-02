@@ -17,8 +17,8 @@
  */
 
 
-#ifndef GST_FSL_VPU_DECODER_H
-#define GST_FSL_VPU_DECODER_H
+#ifndef GST_IMX_VPU_DECODER_H
+#define GST_IMX_VPU_DECODER_H
 
 #include <glib.h>
 #include <gst/gst.h>
@@ -33,18 +33,18 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstFslVpuDec GstFslVpuDec;
-typedef struct _GstFslVpuDecClass GstFslVpuDecClass;
+typedef struct _GstImxVpuDec GstImxVpuDec;
+typedef struct _GstImxVpuDecClass GstImxVpuDecClass;
 
 
-#define GST_TYPE_FSL_VPU_DEC             (gst_fsl_vpu_dec_get_type())
-#define GST_FSL_VPU_DEC(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_FSL_VPU_DEC, GstFslVpuDec))
-#define GST_FSL_VPU_DEC_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_FSL_VPU_DEC, GstFslVpuDecClass))
-#define GST_IS_FSL_VPU_DEC(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_FSL_VPU_DEC))
-#define GST_IS_FSL_VPU_DEC_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_FSL_VPU_DEC))
+#define GST_TYPE_IMX_VPU_DEC             (gst_imx_vpu_dec_get_type())
+#define GST_IMX_VPU_DEC(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_VPU_DEC, GstImxVpuDec))
+#define GST_IMX_VPU_DEC_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_VPU_DEC, GstImxVpuDecClass))
+#define GST_IS_IMX_VPU_DEC(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_VPU_DEC))
+#define GST_IS_IMX_VPU_DEC_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_VPU_DEC))
 
 
-struct _GstFslVpuDec
+struct _GstImxVpuDec
 {
 	GstVideoDecoder parent;
 
@@ -57,7 +57,7 @@ struct _GstFslVpuDec
 
 	GstBuffer *codec_data;
 
-	GstFslVpuFramebuffers *current_framebuffers;
+	GstImxVpuFramebuffers *current_framebuffers;
 
 	GstVideoCodecState *current_output_state;
 
@@ -65,14 +65,14 @@ struct _GstFslVpuDec
 };
 
 
-struct _GstFslVpuDecClass
+struct _GstImxVpuDecClass
 {
 	GstVideoDecoderClass parent_class;
 	gint inst_counter;
 };
 
 
-GType gst_fsl_vpu_dec_get_type(void);
+GType gst_imx_vpu_dec_get_type(void);
 
 
 G_END_DECLS

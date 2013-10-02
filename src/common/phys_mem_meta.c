@@ -20,23 +20,23 @@
 #include "phys_mem_meta.h"
 
 
-static gboolean gst_fsl_phys_mem_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
+static gboolean gst_imx_phys_mem_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
 {
-	GstFslPhysMemMeta *fsl_phys_mem_meta = (GstFslPhysMemMeta *)meta;
-	fsl_phys_mem_meta->phys_addr = 0;
-	fsl_phys_mem_meta->padding = 0;
+	GstImxPhysMemMeta *imx_phys_mem_meta = (GstImxPhysMemMeta *)meta;
+	imx_phys_mem_meta->phys_addr = 0;
+	imx_phys_mem_meta->padding = 0;
 	return TRUE;
 }
 
 
-GType gst_fsl_phys_mem_meta_api_get_type(void)
+GType gst_imx_phys_mem_meta_api_get_type(void)
 {
 	static volatile GType type;
 	static gchar const *tags[] = { "memory", "phys_mem", NULL };
 
 	if (g_once_init_enter(&type))
 	{
-		GType _type = gst_meta_api_type_register("GstFslPhysMemMetaAPI", tags);
+		GType _type = gst_meta_api_type_register("GstImxPhysMemMetaAPI", tags);
 		g_once_init_leave(&type, _type);
 	}
 
@@ -44,23 +44,23 @@ GType gst_fsl_phys_mem_meta_api_get_type(void)
 }
 
 
-GstMetaInfo const * gst_fsl_phys_mem_meta_get_info(void)
+GstMetaInfo const * gst_imx_phys_mem_meta_get_info(void)
 {
-	static GstMetaInfo const *gst_fsl_phys_mem_meta_info = NULL;
+	static GstMetaInfo const *gst_imx_phys_mem_meta_info = NULL;
 
-	if (g_once_init_enter(&gst_fsl_phys_mem_meta_info))
+	if (g_once_init_enter(&gst_imx_phys_mem_meta_info))
 	{
 		GstMetaInfo const *meta = gst_meta_register(
-			gst_fsl_phys_mem_meta_api_get_type(),
-			"GstFslPhysMemMeta",
-			sizeof(GstFslPhysMemMeta),
-			GST_DEBUG_FUNCPTR(gst_fsl_phys_mem_meta_init),
+			gst_imx_phys_mem_meta_api_get_type(),
+			"GstImxPhysMemMeta",
+			sizeof(GstImxPhysMemMeta),
+			GST_DEBUG_FUNCPTR(gst_imx_phys_mem_meta_init),
 			(GstMetaFreeFunction)NULL,
 			(GstMetaTransformFunction)NULL
 		);
-		g_once_init_leave(&gst_fsl_phys_mem_meta_info, meta);
+		g_once_init_leave(&gst_imx_phys_mem_meta_info, meta);
 	}
 
-	return gst_fsl_phys_mem_meta_info;
+	return gst_imx_phys_mem_meta_info;
 }
 

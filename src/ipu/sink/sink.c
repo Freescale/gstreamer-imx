@@ -32,8 +32,8 @@
 
 
 
-GST_DEBUG_CATEGORY_STATIC(ipusink_debug);
-#define GST_CAT_DEFAULT ipusink_debug
+GST_DEBUG_CATEGORY_STATIC(imx_ipu_sink_debug);
+#define GST_CAT_DEFAULT imx_ipu_sink_debug
 
 
 enum
@@ -49,42 +49,42 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	"sink",
 	GST_PAD_SINK,
 	GST_PAD_ALWAYS,
-	GST_FSL_IPU_BLITTER_CAPS
+	GST_IMX_IPU_BLITTER_CAPS
 );
 
 
-struct _GstFslIpuSinkPrivate
+struct _GstImxIpuSinkPrivate
 {
 	int framebuffer_fd;
 	GstBuffer *fb_buffer;
-	GstFslIpuBlitter *blitter;
+	GstImxIpuBlitter *blitter;
 	GstVideoFrame fb_output_frame;
 };
 
 
-G_DEFINE_TYPE(GstFslIpuSink, gst_fsl_ipu_sink, GST_TYPE_VIDEO_SINK)
+G_DEFINE_TYPE(GstImxIpuSink, gst_imx_ipu_sink, GST_TYPE_VIDEO_SINK)
 
 
-static void gst_fsl_ipu_sink_finalize(GObject *object);
-static void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
-static void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
-static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
-static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query);
-static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
+static void gst_imx_ipu_sink_finalize(GObject *object);
+static void gst_imx_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static gboolean gst_imx_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
+static gboolean gst_imx_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query);
+static GstFlowReturn gst_imx_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 
 
 
 
 /* required function declared by G_DEFINE_TYPE */
 
-void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
+void gst_imx_ipu_sink_class_init(GstImxIpuSinkClass *klass)
 {
 	GObjectClass *object_class;
 	GstBaseSinkClass *base_class;
 	GstVideoSinkClass *parent_class;
 	GstElementClass *element_class;
 
-	GST_DEBUG_CATEGORY_INIT(ipusink_debug, "ipusink", 0, "Freescale IPU video sink");
+	GST_DEBUG_CATEGORY_INIT(imx_ipu_sink_debug, "imxipusink", 0, "Freescale i.MX IPU video sink");
 
 	object_class = G_OBJECT_CLASS(klass);
 	base_class = GST_BASE_SINK_CLASS(klass);
@@ -101,12 +101,12 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 
 
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
-	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_caps);
-	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_fsl_ipu_propose_allocation);
-	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_show_frame);
-	object_class->finalize = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_finalize);
-	object_class->set_property = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_set_property);
-	object_class->get_property = GST_DEBUG_FUNCPTR(gst_fsl_ipu_sink_get_property);
+	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_set_caps);
+	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_ipu_propose_allocation);
+	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_show_frame);
+	object_class->finalize = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_finalize);
+	object_class->set_property = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_set_property);
+	object_class->get_property = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_get_property);
 
 	g_object_class_install_property(
 		object_class,
@@ -115,8 +115,8 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 			"output-rotation",
 			"Output rotation",
 			"Rotation that shall be applied to output frames",
-			gst_fsl_ipu_blitter_rotation_mode_get_type(),
-			GST_FSL_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT,
+			gst_imx_ipu_blitter_rotation_mode_get_type(),
+			GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -127,7 +127,7 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 			"enable-crop",
 			"Enable input frame cropping",
 			"Whether or not to crop input frames based on their video crop metadata",
-			GST_FSL_IPU_BLITTER_CROP_DEFAULT,
+			GST_IMX_IPU_BLITTER_CROP_DEFAULT,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -138,20 +138,20 @@ void gst_fsl_ipu_sink_class_init(GstFslIpuSinkClass *klass)
 			"deinterlace-mode",
 			"Deinterlace mode",
 			"Deinterlacing mode to be used for incoming frames (ignored if frames are not interlaced)",
-			gst_fsl_ipu_blitter_deinterlace_mode_get_type(),
-			GST_FSL_IPU_BLITTER_DEINTERLACE_DEFAULT,
+			gst_imx_ipu_blitter_deinterlace_mode_get_type(),
+			GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
 }
 
 
-void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
+void gst_imx_ipu_sink_init(GstImxIpuSink *ipu_sink)
 {
 	GstVideoInfo fb_video_info;
 	GstVideoMeta *fb_video_meta;
 
-	ipu_sink->priv = g_slice_alloc(sizeof(GstFslIpuSinkPrivate));
+	ipu_sink->priv = g_slice_alloc(sizeof(GstImxIpuSinkPrivate));
 	ipu_sink->priv->framebuffer_fd = -1;
 	ipu_sink->priv->blitter = NULL;
 
@@ -162,9 +162,9 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 		return;
 	}
 
-	ipu_sink->priv->blitter = g_object_new(gst_fsl_ipu_blitter_get_type(), NULL);
+	ipu_sink->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
 
-	ipu_sink->priv->fb_buffer = gst_fsl_ipu_blitter_wrap_framebuffer(ipu_sink->priv->blitter, ipu_sink->priv->framebuffer_fd, 0, 0, 0, 0);
+	ipu_sink->priv->fb_buffer = gst_imx_ipu_blitter_wrap_framebuffer(ipu_sink->priv->blitter, ipu_sink->priv->framebuffer_fd, 0, 0, 0, 0);
 	if (ipu_sink->priv->fb_buffer == NULL)
 	{
 		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("wrapping framebuffer in GstBuffer failed"), (NULL));
@@ -181,13 +181,13 @@ void gst_fsl_ipu_sink_init(GstFslIpuSink *ipu_sink)
 		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("could not map framebuffer output frame"), (NULL));
 	}
 
-	gst_fsl_ipu_blitter_set_output_frame(ipu_sink->priv->blitter, &(ipu_sink->priv->fb_output_frame));
+	gst_imx_ipu_blitter_set_output_frame(ipu_sink->priv->blitter, &(ipu_sink->priv->fb_output_frame));
 }
 
 
-static void gst_fsl_ipu_sink_finalize(GObject *object)
+static void gst_imx_ipu_sink_finalize(GObject *object)
 {
-	GstFslIpuSink *ipu_sink = GST_FSL_IPU_SINK(object);
+	GstImxIpuSink *ipu_sink = GST_IMX_IPU_SINK(object);
 
 	gst_video_frame_unmap(&(ipu_sink->priv->fb_output_frame));
 
@@ -197,27 +197,27 @@ static void gst_fsl_ipu_sink_finalize(GObject *object)
 			gst_object_unref(ipu_sink->priv->blitter);
 		if (ipu_sink->priv->framebuffer_fd >= 0)
 			close(ipu_sink->priv->framebuffer_fd);
-		g_slice_free1(sizeof(GstFslIpuSinkPrivate), ipu_sink->priv);
+		g_slice_free1(sizeof(GstImxIpuSinkPrivate), ipu_sink->priv);
 	}
 
-	G_OBJECT_CLASS(gst_fsl_ipu_sink_parent_class)->finalize(object);
+	G_OBJECT_CLASS(gst_imx_ipu_sink_parent_class)->finalize(object);
 }
 
 
-static void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+static void gst_imx_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
-	GstFslIpuSink *ipu_sink = GST_FSL_IPU_SINK(object);
+	GstImxIpuSink *ipu_sink = GST_IMX_IPU_SINK(object);
 
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
-			gst_fsl_ipu_blitter_set_output_rotation_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
+			gst_imx_ipu_blitter_set_output_rotation_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
 			break;
 		case PROP_INPUT_CROP:
-			gst_fsl_ipu_blitter_enable_crop(ipu_sink->priv->blitter, g_value_get_boolean(value));
+			gst_imx_ipu_blitter_enable_crop(ipu_sink->priv->blitter, g_value_get_boolean(value));
 			break;
 		case PROP_DEINTERLACE_MODE:
-			gst_fsl_ipu_blitter_set_deinterlace_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
+			gst_imx_ipu_blitter_set_deinterlace_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -226,20 +226,20 @@ static void gst_fsl_ipu_sink_set_property(GObject *object, guint prop_id, GValue
 }
 
 
-static void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void gst_imx_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
-	GstFslIpuSink *ipu_sink = GST_FSL_IPU_SINK(object);
+	GstImxIpuSink *ipu_sink = GST_IMX_IPU_SINK(object);
 
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
-			g_value_set_enum(value, gst_fsl_ipu_blitter_get_output_rotation_mode(ipu_sink->priv->blitter));
+			g_value_set_enum(value, gst_imx_ipu_blitter_get_output_rotation_mode(ipu_sink->priv->blitter));
 			break;
 		case PROP_INPUT_CROP:
-			g_value_set_boolean(value, gst_fsl_ipu_blitter_is_crop_enabled(ipu_sink->priv->blitter));
+			g_value_set_boolean(value, gst_imx_ipu_blitter_is_crop_enabled(ipu_sink->priv->blitter));
 			break;
 		case PROP_DEINTERLACE_MODE:
-			g_value_set_enum(value, gst_fsl_ipu_blitter_get_deinterlace_mode(ipu_sink->priv->blitter));
+			g_value_set_enum(value, gst_imx_ipu_blitter_get_deinterlace_mode(ipu_sink->priv->blitter));
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -248,22 +248,22 @@ static void gst_fsl_ipu_sink_get_property(GObject *object, guint prop_id, GValue
 }
 
 
-static gboolean gst_fsl_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
+static gboolean gst_imx_ipu_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 {
 	GstVideoInfo video_info;
-	GstFslIpuSink *ipu_sink = GST_FSL_IPU_SINK(sink);
+	GstImxIpuSink *ipu_sink = GST_IMX_IPU_SINK(sink);
 
 	gst_video_info_init(&video_info);
 	if (!gst_video_info_from_caps(&video_info, caps))
 		return FALSE;
 
-	gst_fsl_ipu_blitter_set_input_info(ipu_sink->priv->blitter, &video_info);
+	gst_imx_ipu_blitter_set_input_info(ipu_sink->priv->blitter, &video_info);
 
 	return TRUE;
 }
 
 
-static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query)
+static gboolean gst_imx_ipu_propose_allocation(GstBaseSink *sink, GstQuery *query)
 {
 	GstCaps *caps;
 	GstVideoInfo info;
@@ -325,12 +325,12 @@ static gboolean gst_fsl_ipu_propose_allocation(GstBaseSink *sink, GstQuery *quer
 }
 
 
-static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
+static GstFlowReturn gst_imx_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
-	GstFslIpuSink *ipu_sink;
+	GstImxIpuSink *ipu_sink;
 	GstVideoFrame input_video_frame;
 
-	ipu_sink = GST_FSL_IPU_SINK(video_sink);
+	ipu_sink = GST_IMX_IPU_SINK(video_sink);
 
 	if (ipu_sink->priv->fb_buffer == NULL)
 	{
@@ -344,10 +344,10 @@ static GstFlowReturn gst_fsl_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		return GST_FLOW_ERROR;
 	}
 
-	if (!gst_fsl_ipu_blitter_set_incoming_frame(ipu_sink->priv->blitter, &input_video_frame))
+	if (!gst_imx_ipu_blitter_set_incoming_frame(ipu_sink->priv->blitter, &input_video_frame))
 		return GST_FLOW_ERROR;
 
-	if (!gst_fsl_ipu_blitter_blit(ipu_sink->priv->blitter))
+	if (!gst_imx_ipu_blitter_blit(ipu_sink->priv->blitter))
 		return GST_FLOW_ERROR;
 
 	gst_video_frame_unmap(&input_video_frame);

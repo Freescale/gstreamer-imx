@@ -10,7 +10,7 @@ def build(bld):
 		features = ['c', 'cshlib'],
 		includes = ['.', '../..'],
 		uselib = bld.env['COMMON_USELIB'],
-		target = 'gstfslcommon',
+		target = 'gstimxcommon',
 		source = bld.path.ant_glob('*.c')
 	)
 

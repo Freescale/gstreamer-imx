@@ -27,8 +27,8 @@
 static gboolean plugin_init(GstPlugin *plugin)
 {
 	gboolean ret = TRUE;
-	ret = ret && gst_element_register(plugin, "fslvpudec", GST_RANK_PRIMARY + 1, gst_fsl_vpu_dec_get_type());
-	ret = ret && gst_element_register(plugin, "fslvpuenc_h264", GST_RANK_PRIMARY + 1, gst_fsl_vpu_h264_enc_get_type());
+	ret = ret && gst_element_register(plugin, "imxvpudec", GST_RANK_PRIMARY + 1, gst_imx_vpu_dec_get_type());
+	ret = ret && gst_element_register(plugin, "imxvpuenc_h264", GST_RANK_PRIMARY + 1, gst_imx_vpu_h264_enc_get_type());
 	return ret;
 }
 
@@ -37,7 +37,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 GST_PLUGIN_DEFINE(
 	GST_VERSION_MAJOR,
 	GST_VERSION_MINOR,
-	fslvpu,
+	imxvpu,
 	"video en- and decoder elements using the Freescale i.MX VPU",
 	plugin_init,
 	VERSION,
