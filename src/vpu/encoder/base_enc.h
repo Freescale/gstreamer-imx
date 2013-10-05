@@ -82,6 +82,7 @@ struct _GstImxVpuBaseEncClass
 	gboolean (*set_open_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParamSimp *open_param);
 	GstCaps* (*get_output_caps)(GstImxVpuBaseEnc *vpu_base_enc);
 	gboolean (*set_frame_enc_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParamSimp *open_param);
+	gsize (*fill_output_buffer)(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecFrame *frame, void *encoded_data_addr, gsize encoded_data_size, gboolean contains_header);
 	
 };
 

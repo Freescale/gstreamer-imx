@@ -92,6 +92,8 @@ void gst_imx_vpu_base_enc_class_init(GstImxVpuBaseEncClass *klass)
 	klass->set_open_params = NULL;
 	klass->get_output_caps = NULL;
 	klass->set_frame_enc_params = NULL;
+	klass->fill_output_buffer = NULL;
+
 	g_object_class_install_property(
 		object_class,
 		PROP_GOP_SIZE,
@@ -624,6 +626,9 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	enc_enc_param.pInFrame = &input_framebuf;
 	enc_enc_param.nForceIPicture = GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame) ? 1 : 0;
 
+	if (enc_enc_param.nForceIPicture)
+		GST_DEBUG_OBJECT(vpu_base_enc, "Keyframe forced");
+
 	if (!klass->set_frame_enc_params(vpu_base_enc, &enc_enc_param, &(vpu_base_enc->open_param)))
 	{
 		GST_ERROR_OBJECT(vpu_base_enc, "derived class could not frame enc params");
@@ -642,8 +647,18 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 
 	if ((enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_DIS) || (enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER))
 	{
-		gst_video_encoder_allocate_output_frame(encoder, frame, enc_enc_param.nOutOutputSize);
-		gst_buffer_fill(frame->output_buffer, 0, vpu_base_enc->output_phys_buffer->mapped_virt_addr, enc_enc_param.nOutOutputSize);
+		if (klass->fill_output_buffer != NULL)
+		{
+			gsize actual_output_size;
+			gst_video_encoder_allocate_output_frame(encoder, frame, vpu_base_enc->output_phys_buffer->mem.size);
+			actual_output_size = klass->fill_output_buffer(vpu_base_enc, frame, vpu_base_enc->output_phys_buffer->mapped_virt_addr, enc_enc_param.nOutOutputSize, enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER);
+			gst_buffer_set_size(frame->output_buffer, actual_output_size);
+		}
+		else
+		{
+			gst_video_encoder_allocate_output_frame(encoder, frame, enc_enc_param.nOutOutputSize);
+			gst_buffer_fill(frame->output_buffer, 0, vpu_base_enc->output_phys_buffer->mapped_virt_addr, enc_enc_param.nOutOutputSize);
+		}
 		gst_video_encoder_finish_frame(encoder, frame);
 	}
 
