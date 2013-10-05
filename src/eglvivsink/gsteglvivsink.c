@@ -2224,6 +2224,8 @@ gst_eglvivsink_upload (GstEglVivSink * eglvivsink, GstBuffer * buf)
 
       num_extra_lines = phys_mem_meta->padding / stride;
 
+      GST_DEBUG_OBJECT (eglvivsink, "Mapping physical address of video frame into VIV texture");
+
       /* Map the buffer to get a virtual address
        * glTexDirectVIVMap() only needs this to find a corresponding physical
        * address (even when one is specified) */
@@ -2234,6 +2236,7 @@ gst_eglvivsink_upload (GstEglVivSink * eglvivsink, GstBuffer * buf)
       if (!ret)
         goto HANDLE_ERROR;
     } else {
+      GST_DEBUG_OBJECT (eglvivsink, "Video frame buffer has no physical address -> using slower fill_texture fallback");
       if (!gst_eglvivsink_fill_texture (eglvivsink, buf))
         goto HANDLE_ERROR;
     }
