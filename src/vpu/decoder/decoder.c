@@ -909,7 +909,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 			GST_ERROR_OBJECT(vpu_dec, "could not get information about consumed frame: %s", gst_imx_vpu_strerror(dec_ret));
 
-		GST_DEBUG_OBJECT(vpu_dec, "one frame got consumed: framebuffer: %p  stuff length: %d  frame length: %d", dec_framelen_info.pFrame, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
+		GST_DEBUG_OBJECT(vpu_dec, "one frame got consumed: framebuffer: %p  stuff length: %d  frame length: %d", (gpointer)(dec_framelen_info.pFrame), dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
 
 		if (vpu_dec->current_framebuffers->num_available_framebuffers > 0)
 			vpu_dec->current_framebuffers->num_available_framebuffers--;
@@ -952,7 +952,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			return GST_FLOW_ERROR;
 		}
 
-		GST_DEBUG_OBJECT(vpu_dec, "output frame:  framebuffer addr: %p  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", out_frame_info.pDisplayFrameBuf, buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
+		GST_DEBUG_OBJECT(vpu_dec, "output frame:  framebuffer addr: %p  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)(out_frame_info.pDisplayFrameBuf), (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
 
 		if (!do_memcpy)
 		{
@@ -1079,7 +1079,7 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	GST_DEBUG_OBJECT(
 		pool,
 		"pool config:  outcaps: %" GST_PTR_FORMAT "  size: %u  min buffers: %u  max buffers: %u",
-		outcaps,
+		(gpointer)outcaps,
 		size,
 		min,
 		max
