@@ -35,15 +35,11 @@ enum
 {
 	PROP_0,
 	PROP_GOP_SIZE,
-	PROP_QP_SMOOTHING,
-	PROP_INTRA_16X16_ONLY,
 	PROP_BITRATE
 };
 
 
 #define DEFAULT_GOP_SIZE          16
-#define DEFAULT_QP_SMOOTHING      0.75
-#define DEFAULT_INTRA_16X16_ONLY  FALSE
 #define DEFAULT_BITRATE           0
 
 
@@ -93,6 +89,9 @@ void gst_imx_vpu_base_enc_class_init(GstImxVpuBaseEncClass *klass)
 	
 	klass->inst_counter = 0;
 
+	klass->set_open_params = NULL;
+	klass->get_output_caps = NULL;
+	klass->set_frame_enc_params = NULL;
 	g_object_class_install_property(
 		object_class,
 		PROP_GOP_SIZE,
@@ -102,29 +101,6 @@ void gst_imx_vpu_base_enc_class_init(GstImxVpuBaseEncClass *klass)
 			"How many frames a group-of-picture shall contain",
 			0, 32767,
 			DEFAULT_GOP_SIZE,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
-	g_object_class_install_property(
-		object_class,
-		PROP_QP_SMOOTHING,
-		g_param_spec_double(
-			"qp-smoothing",
-			"Quantization parameter smoothing",
-			"How fast the quantization parameter shall change; higher value means faster change (unused if qp is fixed)",
-			0.0, 1.0,
-			DEFAULT_QP_SMOOTHING,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
-	g_object_class_install_property(
-		object_class,
-		PROP_INTRA_16X16_ONLY,
-		g_param_spec_boolean(
-			"intra-16x16-only",
-			"Intra 16x16 only mode",
-			"Whether or not to use the 16x16 intra only mode",
-			DEFAULT_INTRA_16X16_ONLY,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -157,8 +133,6 @@ void gst_imx_vpu_base_enc_init(GstImxVpuBaseEnc *vpu_base_enc)
 	vpu_base_enc->phys_enc_mem_blocks = NULL;
 
 	vpu_base_enc->gop_size         = DEFAULT_GOP_SIZE;
-	vpu_base_enc->qp_smoothing     = DEFAULT_QP_SMOOTHING;
-	vpu_base_enc->intra_16x16_only = DEFAULT_INTRA_16X16_ONLY;
 	vpu_base_enc->bitrate          = DEFAULT_BITRATE;
 }
 
@@ -260,12 +234,6 @@ static void gst_imx_vpu_base_enc_set_property(GObject *object, guint prop_id, GV
 		case PROP_GOP_SIZE:
 			vpu_base_enc->gop_size = g_value_get_uint(value);
 			break;
-		case PROP_QP_SMOOTHING:
-			vpu_base_enc->qp_smoothing = g_value_get_double(value);
-			break;
-		case PROP_INTRA_16X16_ONLY:
-			vpu_base_enc->intra_16x16_only = g_value_get_boolean(value);
-			break;
 		case PROP_BITRATE:
 			vpu_base_enc->bitrate = g_value_get_uint(value);
 			break;
@@ -284,12 +252,6 @@ static void gst_imx_vpu_base_enc_get_property(GObject *object, guint prop_id, GV
 	{
 		case PROP_GOP_SIZE:
 			g_value_set_uint(value, vpu_base_enc->gop_size);
-			break;
-		case PROP_QP_SMOOTHING:
-			g_value_set_double(value, vpu_base_enc->qp_smoothing);
-			break;
-		case PROP_INTRA_16X16_ONLY:
-			g_value_set_boolean(value, vpu_base_enc->intra_16x16_only);
 			break;
 		case PROP_BITRATE:
 			g_value_set_uint(value, vpu_base_enc->bitrate);
@@ -450,7 +412,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 		vpu_base_enc->output_phys_buffer = NULL;
 	}
 
-	memset(&(vpu_base_enc->open_param), 0, sizeof(VpuEncOpenParam));
+	memset(&(vpu_base_enc->open_param), 0, sizeof(VpuEncOpenParamSimp));
 
 	/* These params are usually not set by derived classes */
 	vpu_base_enc->open_param.nPicWidth = GST_VIDEO_INFO_WIDTH(&(state->info));
@@ -459,13 +421,6 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	vpu_base_enc->open_param.sMirror = VPU_ENC_MIRDIR_NONE; /* don't use VPU rotation (IPU has better performance) */
 	vpu_base_enc->open_param.nBitRate = vpu_base_enc->bitrate;
 	vpu_base_enc->open_param.nGOPSize = vpu_base_enc->gop_size;
-	vpu_base_enc->open_param.nUserGamma = (int)(32768 * vpu_base_enc->qp_smoothing);
-	vpu_base_enc->open_param.nAvcIntra16x16OnlyModeEnable = vpu_base_enc->intra_16x16_only ? 1 : 0;
-	vpu_base_enc->open_param.nRcIntervalMode = 1;
-	/* These params are defaults, and are often overwritten by derived classes */
-	vpu_base_enc->open_param.nUserQpMax = -1;
-	vpu_base_enc->open_param.nUserQpMin = -1;
-	vpu_base_enc->open_param.nRcIntraQp = -1;
 
 	GST_DEBUG_OBJECT(vpu_base_enc, "setting bitrate to %u kbps and GOP size to %u", vpu_base_enc->open_param.nBitRate, vpu_base_enc->open_param.nGOPSize);
 
@@ -478,7 +433,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 
 	/* The actual initialization; requires bitstream information (such as the codec type), which
 	 * is determined by the fill_param_set call before */
-	ret = VPU_EncOpen(&(vpu_base_enc->handle), &(vpu_base_enc->mem_info), &(vpu_base_enc->open_param));
+	ret = VPU_EncOpenSimp(&(vpu_base_enc->handle), &(vpu_base_enc->mem_info), &(vpu_base_enc->open_param));
 	if (ret != VPU_ENC_RET_SUCCESS)
 	{
 		GST_ERROR_OBJECT(vpu_base_enc, "opening new VPU handle failed: %s", gst_imx_vpu_strerror(ret));
