@@ -420,7 +420,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	vpu_base_enc->open_param.nPicWidth = GST_VIDEO_INFO_WIDTH(&(state->info));
 	vpu_base_enc->open_param.nPicHeight = GST_VIDEO_INFO_HEIGHT(&(state->info));
 	vpu_base_enc->open_param.nFrameRate = (GST_VIDEO_INFO_FPS_N(&(state->info)) & 0xffffUL) | (((GST_VIDEO_INFO_FPS_D(&(state->info)) - 1) & 0xffffUL) << 16);
-	vpu_base_enc->open_param.sMirror = VPU_ENC_MIRDIR_NONE; /* don't use VPU rotation (IPU has better performance) */
+	vpu_base_enc->open_param.sMirror = VPU_ENC_MIRDIR_NONE; /* don't use VPU mirroring (IPU has better performance) */
 	vpu_base_enc->open_param.nBitRate = vpu_base_enc->bitrate;
 	vpu_base_enc->open_param.nGOPSize = vpu_base_enc->gop_size;
 
@@ -486,6 +486,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	GstImxVpuBaseEnc *vpu_base_enc;
 	VpuFrameBuffer input_framebuf;
 	GstBuffer *input_buffer;
+	gint src_stride;
 
 	vpu_base_enc = GST_IMX_VPU_BASE_ENC(encoder);
 	klass = GST_IMX_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
@@ -497,8 +498,13 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(frame->input_buffer);
 
+	/* If the incoming frame's buffer is not using physically contiguous memory,
+	 * it needs to be copied to the internal input buffer, otherwise the VPU
+	 * encoder cannot read the frame */
 	if (phys_mem_meta == NULL)
 	{
+		/* No physical memory metadata found -> buffer is not physically contiguous */
+
 		GstVideoFrame temp_input_video_frame, temp_incoming_video_frame;
 
 		if (vpu_base_enc->internal_input_buffer == NULL)
@@ -552,6 +558,10 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 			}
 		}
 
+		/* The internal input buffer exists at this point. Since the incoming frame
+		 * is not stored in physical memory, copy its pixels to the internal
+		 * input buffer, so the encoder can read them. */
+
 		gst_video_frame_map(&temp_incoming_video_frame, &(vpu_base_enc->video_info), frame->input_buffer, GST_MAP_READ);
 		gst_video_frame_map(&temp_input_video_frame, &(vpu_base_enc->video_info), vpu_base_enc->internal_input_buffer, GST_MAP_WRITE);
 
@@ -560,18 +570,28 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		gst_video_frame_unmap(&temp_incoming_video_frame);
 		gst_video_frame_unmap(&temp_input_video_frame);
 
+		/* Set the internal input buffer as the encoder's input */
 		input_buffer = vpu_base_enc->internal_input_buffer;
+		/* And use the internal input buffer's physical memory metadata */
 		phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(vpu_base_enc->internal_input_buffer);
 	}
 	else
+	{
+		/* Physical memory metadata found -> buffer is physically contiguous
+		 * It can be used directly as input for the VPU encoder */
 		input_buffer = frame->input_buffer;
+	}
 
+	/* Set up physical addresses for the input framebuffer */
 	{
 		gsize *plane_offsets;
 		gint *plane_strides;
 		GstVideoMeta *video_meta;
 		unsigned char *phys_ptr;
 
+		/* Try to use plane offset and stride information from the video
+		 * metadata if present, since these can be more accurate than
+		 * the information from the video info */
 		video_meta = gst_buffer_get_video_meta(input_buffer);
 		if (video_meta != NULL)
 		{
@@ -589,34 +609,40 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		input_framebuf.pbufY = phys_ptr;
 		input_framebuf.pbufCb = phys_ptr + plane_offsets[1];
 		input_framebuf.pbufCr = phys_ptr + plane_offsets[2];
-		input_framebuf.pbufMvCol = NULL;
+		input_framebuf.pbufMvCol = NULL; /* not used by the VPU encoder */
 		input_framebuf.nStrideY = plane_strides[0];
 		input_framebuf.nStrideC = plane_strides[1];
 
-		GST_TRACE_OBJECT(vpu_base_enc, "width: %d   height: %d   stride 0: %d   stride 1: %d   offset 0: %d   offset 1: %d   offset 2: %d", GST_VIDEO_INFO_WIDTH(&(vpu_base_enc->video_info)), GST_VIDEO_INFO_HEIGHT(&(vpu_base_enc->video_info)), plane_strides[0], plane_strides[1], plane_offsets[0], plane_offsets[1], plane_offsets[2]);
+		/* this is needed for framebuffers registration below */
+		src_stride = plane_strides[0];
 
-		if (vpu_base_enc->framebuffers == NULL)
-		{
-			GstImxVpuFramebufferParams fbparams;
-			gst_imx_vpu_framebuffers_enc_init_info_to_params(&(vpu_base_enc->init_info), &fbparams);
-			fbparams.pic_width = vpu_base_enc->open_param.nPicWidth;
-			fbparams.pic_height = vpu_base_enc->open_param.nPicHeight;
-			vpu_base_enc->framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_enc_allocator_obtain());
-			gst_imx_vpu_framebuffers_register_with_encoder(vpu_base_enc->framebuffers, vpu_base_enc->handle, plane_strides[0]);
-		}
+		GST_TRACE_OBJECT(vpu_base_enc, "width: %d   height: %d   stride 0: %d   stride 1: %d   offset 0: %d   offset 1: %d   offset 2: %d", GST_VIDEO_INFO_WIDTH(&(vpu_base_enc->video_info)), GST_VIDEO_INFO_HEIGHT(&(vpu_base_enc->video_info)), plane_strides[0], plane_strides[1], plane_offsets[0], plane_offsets[1], plane_offsets[2]);
+	}
+
+	/* Create framebuffers structure (if not already present) */
+	if (vpu_base_enc->framebuffers == NULL)
+	{
+		GstImxVpuFramebufferParams fbparams;
+		gst_imx_vpu_framebuffers_enc_init_info_to_params(&(vpu_base_enc->init_info), &fbparams);
+		fbparams.pic_width = vpu_base_enc->open_param.nPicWidth;
+		fbparams.pic_height = vpu_base_enc->open_param.nPicHeight;
+		vpu_base_enc->framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_enc_allocator_obtain());
+		gst_imx_vpu_framebuffers_register_with_encoder(vpu_base_enc->framebuffers, vpu_base_enc->handle, src_stride);
+	}
+
+	/* Allocate physical buffer for output data (if not already present) */
+	if (vpu_base_enc->output_phys_buffer == NULL)
+	{
+		vpu_base_enc->output_phys_buffer = (GstImxPhysMemory *)gst_allocator_alloc(gst_imx_vpu_enc_allocator_obtain(), vpu_base_enc->framebuffers->total_size, NULL);
 
 		if (vpu_base_enc->output_phys_buffer == NULL)
 		{
-			vpu_base_enc->output_phys_buffer = (GstImxPhysMemory *)gst_allocator_alloc(gst_imx_vpu_enc_allocator_obtain(), vpu_base_enc->framebuffers->total_size, NULL);
-
-			if (vpu_base_enc->output_phys_buffer == NULL)
-			{
-				GST_ERROR_OBJECT(vpu_base_enc, "could not allocate physical buffer for output data");
-				return GST_FLOW_ERROR;
-			}
+			GST_ERROR_OBJECT(vpu_base_enc, "could not allocate physical buffer for output data");
+			return GST_FLOW_ERROR;
 		}
 	}
 
+	/* Set up encoding parameters */
 	enc_enc_param.nInVirtOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->mapped_virt_addr); /* TODO */
 	enc_enc_param.nInPhyOutput = (unsigned int)(vpu_base_enc->output_phys_buffer->phys_addr);
 	enc_enc_param.nInOutputBufLen = vpu_base_enc->output_phys_buffer->mem.size;
@@ -629,12 +655,14 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	if (enc_enc_param.nForceIPicture)
 		GST_DEBUG_OBJECT(vpu_base_enc, "Keyframe forced");
 
+	/* Give the derived class a chance to set up encoding parameters too */
 	if (!klass->set_frame_enc_params(vpu_base_enc, &enc_enc_param, &(vpu_base_enc->open_param)))
 	{
 		GST_ERROR_OBJECT(vpu_base_enc, "derived class could not frame enc params");
 		return GST_FLOW_ERROR;
 	}
 
+	/* Perform the frame encoding */
 	enc_ret = VPU_EncEncodeFrame(vpu_base_enc->handle, &enc_enc_param);
 	if (enc_ret != VPU_ENC_RET_SUCCESS)
 	{
@@ -645,20 +673,36 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 
 	GST_LOG_OBJECT(vpu_base_enc, "out ret code: 0x%x  out size: %u", enc_enc_param.eOutRetCode, enc_enc_param.nOutOutputSize);
 
+	/* Output contains a header, or an encoded frame, or both
+	 * -> copy encoded data to the frame's output buffer */
 	if ((enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_DIS) || (enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER))
 	{
 		if (klass->fill_output_buffer != NULL)
 		{
+			/* The derived data can handle the output buffer filling on its own;
+			 * allocate an output frame that is as large as the input frame.
+			 * The derived class may want to insert data (for example, SPS/PPS headers
+			 * in h.264 NAL streams). Since the output data is typically much smaller
+			 * than the input frame, this gives the derived class enough room for
+			 * additional data. */
 			gsize actual_output_size;
 			gst_video_encoder_allocate_output_frame(encoder, frame, vpu_base_enc->output_phys_buffer->mem.size);
+
 			actual_output_size = klass->fill_output_buffer(vpu_base_enc, frame, vpu_base_enc->output_phys_buffer->mapped_virt_addr, enc_enc_param.nOutOutputSize, enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER);
+
+			/* Set the output buffer's size to the actual number of bytes
+			 * filled by the derived class */
 			gst_buffer_set_size(frame->output_buffer, actual_output_size);
 		}
 		else
 		{
+			/* The derived class does not handle output buffer filling, so simply copy
+			 * the encoded data to the output buffer. */
 			gst_video_encoder_allocate_output_frame(encoder, frame, enc_enc_param.nOutOutputSize);
 			gst_buffer_fill(frame->output_buffer, 0, vpu_base_enc->output_phys_buffer->mapped_virt_addr, enc_enc_param.nOutOutputSize);
 		}
+
+		/* Either way, the frame is finished */
 		gst_video_encoder_finish_frame(encoder, frame);
 	}
 
