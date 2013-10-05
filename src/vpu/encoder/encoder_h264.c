@@ -26,6 +26,16 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_h264_enc_debug);
 #define GST_CAT_DEFAULT imx_vpu_h264_enc_debug
 
 
+enum
+{
+	PROP_0,
+	PROP_QUANT_PARAM
+};
+
+
+#define DEFAULT_QUANT_PARAM     0
+
+
 #define NALU_TYPE_IDR 0x05
 #define NALU_TYPE_SPS 0x07
 #define NALU_TYPE_PPS 0x08
@@ -38,8 +48,8 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	GST_STATIC_CAPS(
 		"video/x-raw,"
 		"format = (string) I420, "
-		"width = (int) [ 16, 1920, 8 ], "
-		"height = (int) [ 16, 1080, 8 ], "
+		"width = (int) [ 48, 1920, 8 ], "
+		"height = (int) [ 32, 1080, 8 ], "
 		"framerate = (fraction) [ 0, MAX ]"
 	)
 );
@@ -51,7 +61,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	GST_STATIC_CAPS(
 		"video/x-h264, "
 		"stream-format = (string) byte-stream, "
-		"alignment = (string) au; "
+		"alignment = (string) nal; "
 	)
 );
 
@@ -65,6 +75,8 @@ static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base_
 static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParamSimp *open_param);
 static void gst_imx_vpu_h264_enc_copy_nalu(guint8 *in_data, guint8 **out_data_cur, guint8 *out_data_end, gsize nalu_size);
 static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecFrame *frame, void *encoded_data_addr, gsize encoded_data_size, gboolean contains_header);
+static void gst_imx_vpu_h264_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_vpu_h264_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
 
 
@@ -92,11 +104,26 @@ void gst_imx_vpu_h264_enc_class_init(GstImxVpuH264EncClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
+	object_class->set_property       = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_set_property);
+	object_class->get_property       = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_get_property);
 	object_class->finalize           = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_finalize);
 	base_class->set_open_params      = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_set_open_params);
 	base_class->get_output_caps      = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_get_output_caps);
 	base_class->set_frame_enc_params = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_set_frame_enc_params);
 	base_class->fill_output_buffer   = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_fill_output_buffer);
+
+	g_object_class_install_property(
+		object_class,
+		PROP_QUANT_PARAM,
+		g_param_spec_uint(
+			"quant-param",
+			"Quantization parameter",
+			"Constant quantization quality parameter (ignored if bitrate is set to a nonzero value)",
+			0, 51,
+			DEFAULT_QUANT_PARAM,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -106,6 +133,7 @@ void gst_imx_vpu_h264_enc_init(GstImxVpuH264Enc *enc)
 	enc->pps_buffer = NULL;
 	enc->last_nalu_types[0] = 0;
 	enc->last_nalu_types[1] = 0;
+	enc->quant_param = DEFAULT_QUANT_PARAM;
 }
 
 
@@ -139,10 +167,12 @@ static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(G_GNUC_UNUSED GstImxVpuBase
 }
 
 
-static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(G_GNUC_UNUSED GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, G_GNUC_UNUSED VpuEncOpenParamSimp *open_param)
+static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, G_GNUC_UNUSED VpuEncOpenParamSimp *open_param)
 {
+	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(vpu_base_enc);
+
 	enc_enc_param->eFormat = VPU_V_AVC;
-	enc_enc_param->nQuantParam = 0;
+	enc_enc_param->nQuantParam = enc->quant_param;
 
 	return TRUE;
 }
@@ -353,5 +383,37 @@ static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_
 	gst_buffer_unmap(frame->output_buffer, &map_info);
 
 	return actual_output_size;
+}
+
+
+static void gst_imx_vpu_h264_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+{
+	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(object);
+
+	switch (prop_id)
+	{
+		case PROP_QUANT_PARAM:
+			enc->quant_param = g_value_get_uint(value);
+			break;
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
+}
+
+
+static void gst_imx_vpu_h264_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(object);
+
+	switch (prop_id)
+	{
+		case PROP_QUANT_PARAM:
+			g_value_set_uint(value, enc->quant_param);
+			break;
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
 }
 
