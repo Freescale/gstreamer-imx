@@ -125,6 +125,8 @@ void gst_imx_vpu_base_enc_init(GstImxVpuBaseEnc *vpu_base_enc)
 {
 	vpu_base_enc->vpu_inst_opened = FALSE;
 
+	vpu_base_enc->gen_second_iframe = FALSE;
+
 	vpu_base_enc->output_phys_buffer = NULL;
 	vpu_base_enc->framebuffers = NULL;
 
@@ -378,6 +380,8 @@ static gboolean gst_imx_vpu_base_enc_stop(GstVideoEncoder *encoder)
 	}
 	g_mutex_unlock(&inst_counter_mutex);
 
+	vpu_base_enc->gen_second_iframe = FALSE;
+
 	return ret;
 }
 
@@ -472,6 +476,8 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	gst_video_codec_state_unref(output_state);
 
 	vpu_base_enc->video_info = state->info;
+
+	vpu_base_enc->gen_second_iframe = FALSE;
 
 	return TRUE;
 }
@@ -650,10 +656,25 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	enc_enc_param.nPicHeight = vpu_base_enc->framebuffers->pic_height;
 	enc_enc_param.nFrameRate = vpu_base_enc->open_param.nFrameRate;
 	enc_enc_param.pInFrame = &input_framebuf;
-	enc_enc_param.nForceIPicture = GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame) ? 1 : 0;
+	enc_enc_param.nForceIPicture = 0;
 
-	if (enc_enc_param.nForceIPicture)
-		GST_DEBUG_OBJECT(vpu_base_enc, "Keyframe forced");
+	/* Force I-frame if either IS_FORCE_KEYFRAME is set for the current frame,
+	 * or if the previous frame was a forced I-frame.
+	 * Several encoder elements such as x264enc generate two I-frames when IS_FORCE_KEYFRAME
+	 * is set. If only one is generated, h264parse may miss the SPS/PPS headers.
+	 * TODO: find a more detailed explanation as to why this is necessary. */
+	if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame))
+	{
+		vpu_base_enc->gen_second_iframe = TRUE;
+		enc_enc_param.nForceIPicture = 1;
+		GST_DEBUG_OBJECT(vpu_base_enc, "Got request to make this a keyframe - forcing first I frame");
+	}
+	else if (vpu_base_enc->gen_second_iframe)
+	{
+		vpu_base_enc->gen_second_iframe = FALSE;
+		enc_enc_param.nForceIPicture = 1;
+		GST_DEBUG_OBJECT(vpu_base_enc, "Last frame was a keyframe upon request - forcing second I frame");
+	}
 
 	/* Give the derived class a chance to set up encoding parameters too */
 	if (!klass->set_frame_enc_params(vpu_base_enc, &enc_enc_param, &(vpu_base_enc->open_param)))

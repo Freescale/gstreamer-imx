@@ -59,7 +59,7 @@ struct _GstImxVpuBaseEnc
 
 	VpuEncOpenParamSimp open_param;
 
-	gboolean vpu_inst_opened;
+	gboolean vpu_inst_opened, gen_second_iframe;
 
 	GstImxVpuFramebuffers *framebuffers;
 	GstImxPhysMemory *output_phys_buffer;
