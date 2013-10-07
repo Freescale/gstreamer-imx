@@ -675,7 +675,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 
 	/* Output contains a header, or an encoded frame, or both
 	 * -> copy encoded data to the frame's output buffer */
-	if ((enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_DIS) || (enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER))
+	if (enc_enc_param.eOutRetCode & (VPU_ENC_OUTPUT_DIS | VPU_ENC_OUTPUT_SEQHEADER))
 	{
 		if (klass->fill_output_buffer != NULL)
 		{

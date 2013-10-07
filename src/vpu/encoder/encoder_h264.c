@@ -75,8 +75,8 @@ static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base_
 static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParamSimp *open_param);
 static void gst_imx_vpu_h264_enc_copy_nalu(guint8 *in_data, guint8 **out_data_cur, guint8 *out_data_end, gsize nalu_size);
 static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecFrame *frame, void *encoded_data_addr, gsize encoded_data_size, gboolean contains_header);
-static void gst_imx_vpu_h264_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
-static void gst_imx_vpu_h264_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static void gst_imx_vpu_h264_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_vpu_h264_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
 
 
@@ -104,8 +104,8 @@ void gst_imx_vpu_h264_enc_class_init(GstImxVpuH264EncClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
-	object_class->set_property       = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_set_property);
-	object_class->get_property       = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_get_property);
+	object_class->set_property       = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_set_property);
+	object_class->get_property       = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_get_property);
 	object_class->finalize           = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_finalize);
 	base_class->set_open_params      = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_set_open_params);
 	base_class->get_output_caps      = GST_DEBUG_FUNCPTR(gst_imx_vpu_h264_enc_get_output_caps);
@@ -283,7 +283,7 @@ static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_
 			guint8 nalu_type;
 
 			/* If header generation is forced, set initial copy_headers value to TRUE */
-			copy_headers = GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME_HEADERS(frame);
+			copy_headers = GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME_HEADERS(frame) || GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame);
 
 			/* Retrieve the NAL unit type from the 5 lower bits of the first byte in the NAL unit */
 			nalu_type = in_data[nalu_start_ofs] & 0x1F;
@@ -386,7 +386,7 @@ static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_
 }
 
 
-static void gst_imx_vpu_h264_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+static void gst_imx_vpu_h264_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
 	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(object);
 
@@ -402,7 +402,7 @@ static void gst_imx_vpu_h264_set_property(GObject *object, guint prop_id, GValue
 }
 
 
-static void gst_imx_vpu_h264_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void gst_imx_vpu_h264_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
 	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(object);
 
