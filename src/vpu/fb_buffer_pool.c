@@ -292,8 +292,8 @@ gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffer
 		memory = gst_allocator_alloc(NULL, framebuffers->total_size, NULL);
 		gst_memory_map(memory, &map_info, GST_MAP_WRITE);
 		memcpy(map_info.data, framebuffer->pbufVirtY, framebuffers->y_size);
-		memcpy(map_info.data, framebuffer->pbufVirtCb, framebuffers->u_size);
-		memcpy(map_info.data, framebuffer->pbufVirtCr, framebuffers->v_size);
+		memcpy(map_info.data + framebuffers->y_size, framebuffer->pbufVirtCb, framebuffers->u_size);
+		memcpy(map_info.data + framebuffers->y_size + framebuffers->u_size, framebuffer->pbufVirtCr, framebuffers->v_size);
 		gst_memory_unmap(memory, &map_info);
 
 		vpu_meta->framebuffer = NULL;
