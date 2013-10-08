@@ -163,7 +163,7 @@ static gboolean gst_imx_vpu_h264_enc_set_open_params(G_GNUC_UNUSED GstImxVpuBase
 
 static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(G_GNUC_UNUSED GstImxVpuBaseEnc *vpu_base_enc)
 {
-	return gst_caps_from_string("video/x-h264, stream-format = (string) byte-stream, alignment = (string) au");
+	return gst_caps_from_string("video/x-h264, stream-format = (string) byte-stream, alignment = (string) nal");
 }
 
 
