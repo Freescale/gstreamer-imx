@@ -1,5 +1,5 @@
-gst-fsl
-=======
+gstreamer-imx
+=============
 
 About
 -----

@@ -102,7 +102,7 @@ def configure(conf):
 
 	conf.define('GST_PACKAGE_NAME', conf.options.with_package_name)
 	conf.define('GST_PACKAGE_ORIGIN', conf.options.with_package_origin)
-	conf.define('PACKAGE', "gst-fsl")
+	conf.define('PACKAGE', "gstreamer-imx")
 	conf.define('VERSION', "1.0")
 
 	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_VIDEO', 'PTHREAD', 'M']
