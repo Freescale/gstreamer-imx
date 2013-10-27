@@ -244,6 +244,8 @@ void gst_imx_vpu_dec_init(GstImxVpuDec *vpu_dec)
 
 	vpu_dec->virt_dec_mem_blocks = NULL;
 	vpu_dec->phys_dec_mem_blocks = NULL;
+
+	vpu_dec->frame_table = NULL;
 }
 
 
@@ -563,6 +565,8 @@ static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder)
 		return FALSE;
 	}
 
+	vpu_dec->frame_table = g_hash_table_new(NULL, NULL);
+
 	/* Allocate the work buffers
 	 * Note that these are independent of decoder instances, so they
 	 * are allocated before the VPU_DecOpen() call, and are not
@@ -616,6 +620,12 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 	{
 		gst_video_codec_state_unref(vpu_dec->current_output_state);
 		vpu_dec->current_output_state = NULL;
+	}
+
+	if (vpu_dec->frame_table != NULL)
+	{
+		g_hash_table_destroy(vpu_dec->frame_table);
+		vpu_dec->frame_table = NULL;
 	}
 
 	g_mutex_lock(&inst_counter_mutex);
@@ -736,11 +746,10 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 		vpu_dec->codec_data = gst_buffer_copy(codec_data);
 
 	return TRUE;
-
 }
 
 
-static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *frame)
+static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *cur_frame)
 {
 	int buffer_ret_code;
 	VpuDecRetCode dec_ret;
@@ -756,7 +765,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 	memset(&in_data, 0, sizeof(in_data));
 
-	gst_buffer_map(frame->input_buffer, &in_map_info, GST_MAP_READ);
+	gst_buffer_map(cur_frame->input_buffer, &in_map_info, GST_MAP_READ);
 
 	/* If there is codec data, prepend it to the input frame data
 	 * To do that, allocate a temporary memory block big enough for both
@@ -812,7 +821,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	/* Cleanup temporary combined block and input frame mapping */
 	if (combined_input != NULL)
 		g_slice_free1(combined_input_size, combined_input);
-	gst_buffer_unmap(frame->input_buffer, &in_map_info);
+	gst_buffer_unmap(cur_frame->input_buffer, &in_map_info);
 
 	if (buffer_ret_code & VPU_DEC_INIT_OK)
 	{
@@ -909,7 +918,9 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 			GST_ERROR_OBJECT(vpu_dec, "could not get information about consumed frame: %s", gst_imx_vpu_strerror(dec_ret));
 
-		GST_DEBUG_OBJECT(vpu_dec, "one frame got consumed: framebuffer: %p  stuff length: %d  frame length: %d", (gpointer)(dec_framelen_info.pFrame), dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
+		GST_DEBUG_OBJECT(vpu_dec, "one frame got consumed: codecframe: %p  framebuffer: %p  system frame number: %u  stuff length: %d  frame length: %d", (gpointer)cur_frame, (gpointer)(dec_framelen_info.pFrame), cur_frame->system_frame_number, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
+
+		g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(cur_frame->system_frame_number + 1));
 
 		if (vpu_dec->current_framebuffers->num_available_framebuffers > 0)
 			vpu_dec->current_framebuffers->num_available_framebuffers--;
@@ -932,6 +943,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	{
 		GstBuffer *buffer;
 		VpuDecOutFrameInfo out_frame_info;
+		GstVideoCodecFrame *out_frame;
+		guint32 out_system_frame_number;
 
 		/* Retrieve the decoded frame */
 		dec_ret = VPU_DecGetOutputFrame(vpu_dec->handle, &out_frame_info);
@@ -940,6 +953,9 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			GST_ERROR_OBJECT(vpu_dec, "could not get decoded output frame: %s", gst_imx_vpu_strerror(dec_ret));
 			return GST_FLOW_ERROR;
 		}
+
+		out_system_frame_number = (guint32)(g_hash_table_lookup(vpu_dec->frame_table, (gpointer)(out_frame_info.pDisplayFrameBuf))) - 1;
+		out_frame = gst_video_decoder_get_frame(decoder, out_system_frame_number);
 
 		/* Create empty buffer */
 		buffer = gst_video_decoder_allocate_output_buffer(decoder);
@@ -952,7 +968,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			return GST_FLOW_ERROR;
 		}
 
-		GST_DEBUG_OBJECT(vpu_dec, "output frame:  framebuffer addr: %p  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)(out_frame_info.pDisplayFrameBuf), (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
+		GST_DEBUG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer addr: %p  system frame number: %u  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gpointer)(out_frame_info.pDisplayFrameBuf), out_system_frame_number, (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
 
 		if (!do_memcpy)
 		{
@@ -964,9 +980,9 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			gst_imx_vpu_mark_buf_as_not_displayed(buffer);
 		}
 
-		frame->output_buffer = buffer;
+		out_frame->output_buffer = buffer;
 
-		gst_video_decoder_finish_frame(decoder, frame);
+		gst_video_decoder_finish_frame(decoder, out_frame);
 	}
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_MOSAIC_DIS)
 	{
@@ -993,12 +1009,14 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	{
 		GST_DEBUG_OBJECT(vpu_dec, "dropping frame");
 		vpu_dec->current_framebuffers->num_available_framebuffers++;
-		gst_video_decoder_drop_frame(decoder, frame);
+//		gst_video_decoder_drop_frame(decoder, frame); // TODO
 	}
 	else if (buffer_ret_code & VPU_DEC_NO_ENOUGH_BUF)
 		GST_WARNING_OBJECT(vpu_dec, "no free output frame available (ret code: 0x%X)", buffer_ret_code);
 	else
 		GST_DEBUG_OBJECT(vpu_dec, "nothing to output (ret code: 0x%X)", buffer_ret_code);
+
+	gst_video_codec_frame_unref(cur_frame);
 
 	return GST_FLOW_OK;
 }
