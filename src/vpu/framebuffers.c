@@ -166,7 +166,7 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 
 	g_assert(GST_IS_IMX_PHYS_MEM_ALLOCATOR(allocator));
 
-	framebuffers->num_reserve_framebuffers = params->min_framebuffer_count;
+	framebuffers->num_reserve_framebuffers = MAX((guint)(params->min_framebuffer_count), (guint)3);
 	framebuffers->num_framebuffers = MAX((guint)(params->min_framebuffer_count), (guint)10) + framebuffers->num_reserve_framebuffers;
 	framebuffers->num_available_framebuffers = framebuffers->num_framebuffers - framebuffers->num_reserve_framebuffers;
 	framebuffers->framebuffers = (VpuFrameBuffer *)g_slice_alloc(sizeof(VpuFrameBuffer) * framebuffers->num_framebuffers);
