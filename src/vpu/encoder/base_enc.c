@@ -125,8 +125,6 @@ void gst_imx_vpu_base_enc_init(GstImxVpuBaseEnc *vpu_base_enc)
 {
 	vpu_base_enc->vpu_inst_opened = FALSE;
 
-	vpu_base_enc->gen_second_iframe = FALSE;
-
 	vpu_base_enc->output_phys_buffer = NULL;
 	vpu_base_enc->framebuffers = NULL;
 
@@ -380,8 +378,6 @@ static gboolean gst_imx_vpu_base_enc_stop(GstVideoEncoder *encoder)
 	}
 	g_mutex_unlock(&inst_counter_mutex);
 
-	vpu_base_enc->gen_second_iframe = FALSE;
-
 	return ret;
 }
 
@@ -476,8 +472,6 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	gst_video_codec_state_unref(output_state);
 
 	vpu_base_enc->video_info = state->info;
-
-	vpu_base_enc->gen_second_iframe = FALSE;
 
 	return TRUE;
 }
@@ -658,22 +652,11 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	enc_enc_param.pInFrame = &input_framebuf;
 	enc_enc_param.nForceIPicture = 0;
 
-	/* Force I-frame if either IS_FORCE_KEYFRAME is set for the current frame,
-	 * or if the previous frame was a forced I-frame.
-	 * Several encoder elements such as x264enc generate two I-frames when IS_FORCE_KEYFRAME
-	 * is set. If only one is generated, h264parse may miss the SPS/PPS headers.
-	 * TODO: find a more detailed explanation as to why this is necessary. */
-	if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame))
+	/* Force I-frame if either IS_FORCE_KEYFRAME or IS_FORCE_KEYFRAME_HEADERS is set for the current frame. */
+	if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame) || GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME_HEADERS(frame))
 	{
-		vpu_base_enc->gen_second_iframe = TRUE;
 		enc_enc_param.nForceIPicture = 1;
-		GST_DEBUG_OBJECT(vpu_base_enc, "Got request to make this a keyframe - forcing first I frame");
-	}
-	else if (vpu_base_enc->gen_second_iframe)
-	{
-		vpu_base_enc->gen_second_iframe = FALSE;
-		enc_enc_param.nForceIPicture = 1;
-		GST_DEBUG_OBJECT(vpu_base_enc, "Last frame was a keyframe upon request - forcing second I frame");
+		GST_DEBUG_OBJECT(vpu_base_enc, "got request to make this a keyframe - forcing first I frame");
 	}
 
 	/* Give the derived class a chance to set up encoding parameters too */
@@ -683,48 +666,108 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		return GST_FLOW_ERROR;
 	}
 
-	/* Perform the frame encoding */
-	enc_ret = VPU_EncEncodeFrame(vpu_base_enc->handle, &enc_enc_param);
-	if (enc_ret != VPU_ENC_RET_SUCCESS)
+	/* Main encoding block */
 	{
-		GST_ERROR_OBJECT(vpu_base_enc, "failed to encode frame: %s", gst_imx_vpu_strerror(enc_ret));
-		VPU_EncReset(vpu_base_enc->handle);
-		return GST_FLOW_ERROR;
-	}
+		GstBuffer *output_buffer = NULL;
+		gsize output_buffer_offset = 0;
+		gboolean frame_finished = FALSE;
 
-	GST_LOG_OBJECT(vpu_base_enc, "out ret code: 0x%x  out size: %u", enc_enc_param.eOutRetCode, enc_enc_param.nOutOutputSize);
+		frame->output_buffer = NULL;
 
-	/* Output contains a header, or an encoded frame, or both
-	 * -> copy encoded data to the frame's output buffer */
-	if (enc_enc_param.eOutRetCode & (VPU_ENC_OUTPUT_DIS | VPU_ENC_OUTPUT_SEQHEADER))
-	{
-		if (klass->fill_output_buffer != NULL)
+		/* Run in a loop until the VPU reports the input as used */
+		do
 		{
-			/* The derived data can handle the output buffer filling on its own;
-			 * allocate an output frame that is as large as the input frame.
-			 * The derived class may want to insert data (for example, SPS/PPS headers
-			 * in h.264 NAL streams). Since the output data is typically much smaller
-			 * than the input frame, this gives the derived class enough room for
-			 * additional data. */
-			gsize actual_output_size;
-			gst_video_encoder_allocate_output_frame(encoder, frame, vpu_base_enc->output_phys_buffer->mem.size);
+			/* Feed input data */
+			enc_ret = VPU_EncEncodeFrame(vpu_base_enc->handle, &enc_enc_param);
+			if (enc_ret != VPU_ENC_RET_SUCCESS)
+			{
+				GST_ERROR_OBJECT(vpu_base_enc, "failed to encode frame: %s", gst_imx_vpu_strerror(enc_ret));
+				VPU_EncReset(vpu_base_enc->handle);
+				return GST_FLOW_ERROR;
+			}
 
-			actual_output_size = klass->fill_output_buffer(vpu_base_enc, frame, vpu_base_enc->output_phys_buffer->mapped_virt_addr, enc_enc_param.nOutOutputSize, enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER);
+			if (frame_finished)
+			{
+				GST_WARNING_OBJECT(vpu_base_enc, "frame was already finished for the current input, but input not yet marked as used");
+				continue;
+			}
 
-			/* Set the output buffer's size to the actual number of bytes
-			 * filled by the derived class */
-			gst_buffer_set_size(frame->output_buffer, actual_output_size);
+			if (enc_enc_param.eOutRetCode & (VPU_ENC_OUTPUT_DIS | VPU_ENC_OUTPUT_SEQHEADER))
+			{
+				/* Create an output buffer on demand */
+				if (output_buffer == NULL)
+				{
+					output_buffer = gst_video_encoder_allocate_output_buffer(
+						encoder,
+						vpu_base_enc->output_phys_buffer->mem.size
+					);
+					frame->output_buffer = output_buffer;
+				}
+
+				GST_DEBUG_OBJECT(vpu_base_enc, "processing output data: %u bytes, output buffer offset %u", enc_enc_param.nOutOutputSize, output_buffer_offset);
+
+				if (klass->fill_output_buffer != NULL)
+				{
+					/* Derived class fills data on its own */
+
+					gsize cur_offset = output_buffer_offset;
+					output_buffer_offset += klass->fill_output_buffer(
+						vpu_base_enc,
+						frame,
+						cur_offset,
+						vpu_base_enc->output_phys_buffer->mapped_virt_addr,
+						enc_enc_param.nOutOutputSize,
+						enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER
+					);
+				}
+				else
+				{
+					/* Use default data filling (= copy input to output) */
+
+					gst_buffer_fill(
+						output_buffer,
+						output_buffer_offset,
+						vpu_base_enc->output_phys_buffer->mapped_virt_addr,
+						enc_enc_param.nOutOutputSize
+					);
+					output_buffer_offset += enc_enc_param.nOutOutputSize;
+				}
+
+				if (enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_DIS)
+				{
+					g_assert(output_buffer != NULL);
+
+					/* Set the output buffer's size to the actual number of bytes
+					 * filled by the derived class */
+					gst_buffer_set_size(output_buffer, output_buffer_offset);
+
+					/* Set the frame DTS */
+					frame->dts = frame->pts;
+
+					/* And finish the frame, handing the output data over to the base class */
+					gst_video_encoder_finish_frame(encoder, frame);
+
+					output_buffer = NULL;
+					frame_finished = TRUE;
+
+					if (!(enc_enc_param.eOutRetCode & VPU_ENC_INPUT_USED))
+						GST_WARNING_OBJECT(vpu_base_enc, "frame finished, but VPU did not report the input as used");
+
+					break;
+				}
+			}
 		}
-		else
+		while (!(enc_enc_param.eOutRetCode & VPU_ENC_INPUT_USED)); /* VPU_ENC_INPUT_NOT_USED has value 0x0 - cannot use it for flag checks */
+
+		/* If output_buffer is NULL at this point, it means VPU_ENC_OUTPUT_DIS was never communicated
+		 * by the VPU, and the buffer is unfinished. -> Drop it. */
+		if (output_buffer != NULL)
 		{
-			/* The derived class does not handle output buffer filling, so simply copy
-			 * the encoded data to the output buffer. */
-			gst_video_encoder_allocate_output_frame(encoder, frame, enc_enc_param.nOutOutputSize);
-			gst_buffer_fill(frame->output_buffer, 0, vpu_base_enc->output_phys_buffer->mapped_virt_addr, enc_enc_param.nOutOutputSize);
+			GST_WARNING_OBJECT(vpu_base_enc, "frame unfinished ; dropping");
+			gst_buffer_unref(output_buffer);
+			frame->output_buffer = NULL; /* necessary to make finish_frame() drop the frame */
+			gst_video_encoder_finish_frame(encoder, frame);
 		}
-
-		/* Either way, the frame is finished */
-		gst_video_encoder_finish_frame(encoder, frame);
 	}
 
 	return GST_FLOW_OK;

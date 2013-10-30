@@ -42,8 +42,8 @@ struct _GstImxVpuH264Enc
 {
 	GstImxVpuBaseEnc parent;
 	GstBuffer *sps_buffer, *pps_buffer;
-	guint8 last_nalu_types[2];
 	guint quant_param;
+	gboolean produce_access_units;
 };
 
 
