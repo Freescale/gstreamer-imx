@@ -167,11 +167,9 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 	g_assert(GST_IS_IMX_PHYS_MEM_ALLOCATOR(allocator));
 
 	/* Only one reserved framebuffer is necessary, since such framebuffers are used only as temporary storage; their pixels
-	 * get immediately copied with memcpy().
-	 * For num_framebuffers, MAX(min_framebuffer_count+1 , 10) is used; the +1 takes care of corner cases where one more framebuffer is
-	 * used at the same time, and the MAX() expression makes sure at least 10 framebuffers are used (empirically estimated default) */
+	 * get immediately copied with memcpy() */
 	framebuffers->num_reserve_framebuffers = 1;
-	framebuffers->num_framebuffers = MAX((guint)(params->min_framebuffer_count + 1), (guint)10) + framebuffers->num_reserve_framebuffers;
+	framebuffers->num_framebuffers = params->min_framebuffer_count + framebuffers->num_reserve_framebuffers;
 	framebuffers->num_available_framebuffers = framebuffers->num_framebuffers - framebuffers->num_reserve_framebuffers;
 	framebuffers->framebuffers = (VpuFrameBuffer *)g_slice_alloc(sizeof(VpuFrameBuffer) * framebuffers->num_framebuffers);
 

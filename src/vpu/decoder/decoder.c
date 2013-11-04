@@ -857,6 +857,13 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		{
 			GstImxVpuFramebufferParams fbparams;
 			gst_imx_vpu_framebuffers_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
+
+			/* Make sure at least 10 framebuffers are used (helps with smooth playback;
+			 * the min_framebuffer_count+1 part takes care of corner cases where one more framebuffer is
+			 * used at the same time and min_framebuffer_count >= 10
+			 * the 10 framebuffers figure is an empirically estimated default */
+			fbparams.min_framebuffer_count = MAX((guint)(fbparams.min_framebuffer_count + 1), (guint)10);
+
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
 			if (vpu_dec->current_framebuffers == NULL)
 				return GST_FLOW_ERROR;
