@@ -531,17 +531,23 @@ gboolean gst_imx_ipu_blitter_set_incoming_frame(GstImxIpuBlitter *ipu_blitter, G
 	{
 		/* DMA memory present - the incoming can be used as an input frame directly */
 		gst_imx_ipu_blitter_set_input_frame(ipu_blitter, incoming_frame);
+
+		GST_TRACE_OBJECT(ipu_blitter, "incoming frame uses DMA memory - setting it as input frame directly");
 	}
 	else
 	{
 		/* No DMA memory present; the incoming frame needs to be copied to an internal
 		 * temporary input frame */
 
+		GST_TRACE_OBJECT(ipu_blitter, "incoming frame does not use DMA memory - need to copy it to an internal input DMA buffer");
+
 		if (ipu_blitter->internal_input_buffer == NULL)
 		{
 			/* The internal input buffer is the temp input frame's DMA memory.
 			 * If it does not exist yet, it needs to be created here. The temp input
 			 * frame is then mapped. */
+
+			GST_TRACE_OBJECT(ipu_blitter, "internal input DMA buffer does not exist yet -> creating one");
 
 			GstFlowReturn flow_ret;
 
