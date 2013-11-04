@@ -540,7 +540,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 				if (vpu_base_enc->internal_bufferpool == NULL)
 				{
 					GST_ERROR_OBJECT(vpu_base_enc, "failed to create internal bufferpool");
-					return FALSE;
+					return GST_FLOW_ERROR;
 				}
 			}
 
@@ -554,7 +554,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 			if (flow_ret != GST_FLOW_OK)
 			{
 				GST_ERROR_OBJECT(vpu_base_enc, "error acquiring input frame buffer: %s", gst_pad_mode_get_name(flow_ret));
-				return FALSE;
+				return flow_ret;
 			}
 		}
 
