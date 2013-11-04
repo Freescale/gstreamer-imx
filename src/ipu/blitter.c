@@ -469,7 +469,7 @@ do { \
 	video_crop_meta = gst_buffer_get_video_crop_meta((frame)->buffer); \
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET((frame)->buffer); \
  \
-	g_assert(phys_mem_meta != NULL); \
+	g_assert((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0)); \
  \
 	num_extra_lines = phys_mem_meta->padding / (frame)->info.stride[0]; \
 	(taskio).width = (frame)->info.stride[0] / gst_imx_ipu_video_bpp((frame)->info.finfo->format); \
@@ -527,7 +527,7 @@ gboolean gst_imx_ipu_blitter_set_incoming_frame(GstImxIpuBlitter *ipu_blitter, G
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(incoming_frame->buffer);
 
 	/* Test if the incoming frame uses DMA memory */
-	if (phys_mem_meta != NULL)
+	if ((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0))
 	{
 		/* DMA memory present - the incoming can be used as an input frame directly */
 		gst_imx_ipu_blitter_set_input_frame(ipu_blitter, incoming_frame);

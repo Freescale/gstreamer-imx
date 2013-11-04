@@ -2208,7 +2208,7 @@ gst_eglvivsink_upload (GstEglVivSink * eglvivsink, GstBuffer * buf)
   /* If the video frame is stored in a physically contiguous buffer and
    * uses a format that can be used with glTexDirectVIVMap, do so,
    * otherwise use gst_eglvivsink_fill_texture as a fallback */
-    if (gst_eglvivsink_is_format_supported (fmt) && ((phys_mem_meta = GST_IMX_PHYS_MEM_META_GET (buf)) != 0)) {
+    if (gst_eglvivsink_is_format_supported (fmt) && ((phys_mem_meta = GST_IMX_PHYS_MEM_META_GET (buf)) != 0) && (phys_mem_meta->phys_addr != 0)) {
       gboolean ret;
       GstMapInfo map_info;
       guint num_extra_lines;
