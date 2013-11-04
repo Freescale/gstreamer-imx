@@ -626,7 +626,14 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 		gst_imx_vpu_framebuffers_enc_init_info_to_params(&(vpu_base_enc->init_info), &fbparams);
 		fbparams.pic_width = vpu_base_enc->open_param.nPicWidth;
 		fbparams.pic_height = vpu_base_enc->open_param.nPicHeight;
+
 		vpu_base_enc->framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_enc_allocator_obtain());
+		if (vpu_base_enc->framebuffers == NULL)
+		{
+			GST_ELEMENT_ERROR(vpu_base_enc, RESOURCE, NO_SPACE_LEFT, ("could not create framebuffers structure"), (NULL));
+			return GST_FLOW_ERROR;
+		}
+
 		gst_imx_vpu_framebuffers_register_with_encoder(vpu_base_enc->framebuffers, vpu_base_enc->handle, src_stride);
 	}
 

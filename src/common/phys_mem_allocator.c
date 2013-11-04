@@ -134,7 +134,10 @@ static GstMemory* gst_imx_phys_mem_allocator_alloc(GstAllocator *allocator, gsiz
 	maxsize = size + params->prefix + params->padding;
 	phys_mem = gst_imx_phys_mem_allocator_alloc_internal(allocator, NULL, maxsize, params->flags, params->align, params->prefix, size);
 
-	GST_DEBUG_OBJECT(allocator, "allocated memory block %p at phys addr 0x%x with %u bytes", (gpointer)phys_mem, phys_mem->phys_addr, size);
+	if (phys_mem != NULL)
+		GST_DEBUG_OBJECT(allocator, "allocated memory block %p at phys addr 0x%x with %u bytes", (gpointer)phys_mem, phys_mem->phys_addr, size);
+	else
+		GST_WARNING_OBJECT(allocator, "could not allocate memory block with %u bytes", size);
 
 	return (GstMemory *)phys_mem;
 }
