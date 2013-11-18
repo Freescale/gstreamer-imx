@@ -45,6 +45,7 @@ struct _GstImxIpuVideoTransform
 {
 	GstVideoFilter parent;
 	GstImxIpuVideoTransformPrivate *priv;
+	gboolean inout_caps_equal;
 };
 
 
