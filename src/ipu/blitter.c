@@ -288,6 +288,15 @@ GstImxIpuBlitterDeinterlaceMode gst_imx_ipu_blitter_get_deinterlace_mode(GstImxI
 }
 
 
+gboolean gst_imx_ipu_blitter_are_transforms_enabled(GstImxIpuBlitter *ipu_blitter)
+{
+	return
+		(ipu_blitter->deinterlace_mode != GST_IMX_IPU_BLITTER_DEINTERLACE_NONE) ||
+		(ipu_blitter->priv->task.output.rotate != IPU_ROTATE_NONE) ||
+		ipu_blitter->apply_crop_metadata;
+}
+
+
 static guint32 gst_imx_ipu_blitter_get_v4l_format(GstVideoFormat format)
 {
 	switch (format)

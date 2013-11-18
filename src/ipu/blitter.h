@@ -92,7 +92,7 @@ GstImxIpuBlitterDeinterlaceMode;
 
 
 #define GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT  GST_IMX_IPU_BLITTER_ROTATION_NONE
-#define GST_IMX_IPU_BLITTER_CROP_DEFAULT  TRUE
+#define GST_IMX_IPU_BLITTER_CROP_DEFAULT  FALSE
 #define GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT  GST_IMX_IPU_BLITTER_DEINTERLACE_NONE
 
 
@@ -130,6 +130,8 @@ GstImxIpuBlitterRotationMode gst_imx_ipu_blitter_get_output_rotation_mode(GstImx
 
 void gst_imx_ipu_blitter_set_deinterlace_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterDeinterlaceMode deinterlace_mode);
 GstImxIpuBlitterDeinterlaceMode gst_imx_ipu_blitter_get_deinterlace_mode(GstImxIpuBlitter *ipu_blitter);
+
+gboolean gst_imx_ipu_blitter_are_transforms_enabled(GstImxIpuBlitter *ipu_blitter);
 
 gboolean gst_imx_ipu_blitter_set_input_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *input_frame);
 gboolean gst_imx_ipu_blitter_set_output_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *output_frame);
