@@ -98,6 +98,16 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_dec_debug);
 #define GST_CAT_DEFAULT imx_vpu_dec_debug
 
 
+enum
+{
+	PROP_0,
+	PROP_MIN_NUM_FRAMEBUFFERS
+};
+
+
+#define DEFAULT_MIN_NUM_FRAMEBUFFERS 10
+
+
 #define ALIGN_VAL_TO(LENGTH, ALIGN_SIZE)  ( ((guintptr)((LENGTH) + (ALIGN_SIZE) - 1) / (ALIGN_SIZE)) * (ALIGN_SIZE) )
 
 
@@ -191,6 +201,9 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 /*static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard);*/
 static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
 
+static void gst_imx_vpu_dec_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
+static void gst_imx_vpu_dec_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+
 /* TODO: reset() is disabled because the VPU_DecFlushAll() inside it
  * causes the imx6 to freeze.
  * Tests show that clean seeking is possible even without calling this.
@@ -204,24 +217,21 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 
 void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 {
+	GObjectClass *object_class;
 	GstVideoDecoderClass *base_class;
 	GstElementClass *element_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_vpu_dec_debug, "imxvpudec", 0, "Freescale i.MX VPU video decoder");
 
+	object_class = G_OBJECT_CLASS(klass);
 	base_class = GST_VIDEO_DECODER_CLASS(klass);
 	element_class = GST_ELEMENT_CLASS(klass);
 
-	gst_element_class_set_static_metadata(
-		element_class,
-		"Freescale VPU video decoder",
-		"Codec/Decoder/Video",
-		"hardware-accelerated video decoding using the Freescale VPU engine",
-		"Carlos Rafael Giani <dv@pseudoterminal.org>"
-	);
-
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
+
+	object_class->set_property    = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_set_property);
+	object_class->get_property    = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_get_property);
 
 	base_class->start             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_start);
 	base_class->stop              = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_stop);
@@ -231,6 +241,27 @@ void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 	base_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_decide_allocation);
 
 	klass->inst_counter = 0;
+
+	g_object_class_install_property(
+		object_class,
+		PROP_MIN_NUM_FRAMEBUFFERS,
+		g_param_spec_uint(
+			"min-num-framebuffers",
+			"Min number of framebuffers",
+			"Minimum number of framebuffers to allocate for holding decoded pictures",
+			1, 32767,
+			DEFAULT_MIN_NUM_FRAMEBUFFERS,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+
+	gst_element_class_set_static_metadata(
+		element_class,
+		"Freescale VPU video decoder",
+		"Codec/Decoder/Video",
+		"hardware-accelerated video decoding using the Freescale VPU engine",
+		"Carlos Rafael Giani <dv@pseudoterminal.org>"
+	);
 }
 
 
@@ -240,6 +271,7 @@ void gst_imx_vpu_dec_init(GstImxVpuDec *vpu_dec)
 
 	vpu_dec->codec_data = NULL;
 	vpu_dec->current_framebuffers = NULL;
+	vpu_dec->min_num_framebuffers = DEFAULT_MIN_NUM_FRAMEBUFFERS;
 	vpu_dec->current_output_state = NULL;
 
 	vpu_dec->virt_dec_mem_blocks = NULL;
@@ -862,7 +894,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * the min_framebuffer_count+1 part takes care of corner cases where one more framebuffer is
 			 * used at the same time and min_framebuffer_count >= 10
 			 * the 10 framebuffers figure is an empirically estimated default */
-			fbparams.min_framebuffer_count = MAX((guint)(fbparams.min_framebuffer_count + 1), (guint)10);
+			fbparams.min_framebuffer_count = MAX((guint)(fbparams.min_framebuffer_count + 1), vpu_dec->min_num_framebuffers);
 
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
 			if (vpu_dec->current_framebuffers == NULL)
@@ -1130,5 +1162,49 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 		gst_object_unref(pool);
 
 	return TRUE;
+}
+
+
+static void gst_imx_vpu_dec_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec)
+{
+	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(object);
+
+	switch (prop_id)
+	{
+		case PROP_MIN_NUM_FRAMEBUFFERS:
+		{
+			guint num;
+
+			if (vpu_dec->vpu_inst_opened)
+			{
+				GST_ERROR_OBJECT(vpu_dec, "cannot change minimum number of framebuffers while a VPU decoder instance is open");
+				return;
+			}
+
+			num = g_value_get_uint(value);
+			vpu_dec->min_num_framebuffers = num;
+
+			break;
+		}
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
+}
+
+
+static void gst_imx_vpu_dec_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(object);
+
+	switch (prop_id)
+	{
+		case PROP_MIN_NUM_FRAMEBUFFERS:
+			g_value_set_uint(value, vpu_dec->min_num_framebuffers);
+			break;
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
 }
 

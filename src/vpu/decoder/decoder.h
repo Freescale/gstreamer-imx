@@ -58,6 +58,7 @@ struct _GstImxVpuDec
 	GstBuffer *codec_data;
 
 	GstImxVpuFramebuffers *current_framebuffers;
+	guint min_num_framebuffers;
 
 	GstVideoCodecState *current_output_state;
 
