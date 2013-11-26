@@ -83,7 +83,7 @@ static void gst_ipu_video_transform_fixate_format_caps(GstBaseTransform *transfo
 static gboolean gst_imx_ipu_video_transform_propose_allocation(GstBaseTransform *transform, GstQuery *decide_query, GstQuery *query);
 static gboolean gst_imx_ipu_video_transform_decide_allocation(GstBaseTransform *transform, GstQuery *query);
 static gboolean gst_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info);
-static void gst_imx_ipu_video_transform_check_passthrough(GstImxIpuVideoTransform *ipu_video_transform);
+static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTransform * trans, GstBuffer *input, GstBuffer **outbuf);
 static GstFlowReturn gst_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out);
 
 
@@ -116,16 +116,17 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
-	object_class->finalize                   = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_finalize);
-	object_class->set_property               = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_property);
-	object_class->get_property               = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_get_property);
-	base_transform_class->src_event          = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_src_event);
-	base_transform_class->transform_caps     = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_caps);
-	base_transform_class->fixate_caps        = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_fixate_caps);
-	base_transform_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_propose_allocation);
-	base_transform_class->decide_allocation  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_decide_allocation);
-	video_filter_class->set_info             = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_set_info);
-	video_filter_class->transform_frame      = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_frame);
+	object_class->finalize                      = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_finalize);
+	object_class->set_property                  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_property);
+	object_class->get_property                  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_get_property);
+	base_transform_class->src_event             = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_src_event);
+	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_caps);
+	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_fixate_caps);
+	base_transform_class->propose_allocation    = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_propose_allocation);
+	base_transform_class->decide_allocation     = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_decide_allocation);
+	base_transform_class->prepare_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_prepare_output_buffer);
+	video_filter_class->set_info                = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_set_info);
+	video_filter_class->transform_frame         = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_frame);
 
 	base_transform_class->passthrough_on_same_caps = FALSE;
 
@@ -175,7 +176,9 @@ void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transfo
 	ipu_video_transform->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
 	ipu_video_transform->inout_caps_equal = FALSE;
 
-	gst_base_transform_set_passthrough(base_transform, TRUE);
+	/* Set passthrough initially to FALSE ; passthrough will later be
+	 * enabled/disabled on a per-frame basis */
+	gst_base_transform_set_passthrough(base_transform, FALSE);
 }
 
 
@@ -202,15 +205,12 @@ static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop
 	{
 		case PROP_OUTPUT_ROTATION:
 			gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_transform->priv->blitter, g_value_get_enum(value));
-			gst_imx_ipu_video_transform_check_passthrough(ipu_video_transform);
 			break;
 		case PROP_INPUT_CROP:
 			gst_imx_ipu_blitter_enable_crop(ipu_video_transform->priv->blitter, g_value_get_boolean(value));
-			gst_imx_ipu_video_transform_check_passthrough(ipu_video_transform);
 			break;
 		case PROP_DEINTERLACE_MODE:
 			gst_imx_ipu_blitter_set_deinterlace_mode(ipu_video_transform->priv->blitter, g_value_get_enum(value));
-			gst_imx_ipu_video_transform_check_passthrough(ipu_video_transform);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -987,20 +987,104 @@ static gboolean gst_imx_ipu_video_transform_decide_allocation(GstBaseTransform *
 }
 
 
-static gboolean gst_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, G_GNUC_UNUSED GstVideoInfo *out_info)
+static gboolean gst_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info)
 {
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(filter);
-	ipu_video_transform->inout_caps_equal = gst_caps_is_equal_fixed(in, out);
+
+	/* For IPU blitting operations, equality is limited to width, height, pixelformat */
+	ipu_video_transform->inout_caps_equal =
+		(in_info->width == out_info->width) &&
+		(in_info->height == out_info->height) &&
+		(in_info->finfo->format == out_info->finfo->format)
+		;
+
+	if (ipu_video_transform->inout_caps_equal)
+		GST_DEBUG_OBJECT(filter, "input and output caps are equal");
+	else
+		GST_DEBUG_OBJECT(filter, "input and output caps are not equal:  input: %" GST_PTR_FORMAT "  output: %" GST_PTR_FORMAT, (gpointer)in, (gpointer)out);
+
 	gst_imx_ipu_blitter_set_input_info(ipu_video_transform->priv->blitter, in_info);
-	gst_imx_ipu_video_transform_check_passthrough(ipu_video_transform);
+
 	return TRUE;
 }
 
 
-static void gst_imx_ipu_video_transform_check_passthrough(GstImxIpuVideoTransform *ipu_video_transform)
+static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTransform *trans, GstBuffer *input, GstBuffer **outbuf)
 {
-	GstBaseTransform *base_transform = GST_BASE_TRANSFORM(ipu_video_transform);
-	gst_base_transform_set_passthrough(base_transform, ipu_video_transform->inout_caps_equal && !gst_imx_ipu_blitter_are_transforms_enabled(ipu_video_transform->priv->blitter));
+	gboolean passthrough = FALSE;
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(trans);
+
+	/* Test if passthrough should be enabled */
+	if ((input != NULL) && ipu_video_transform->inout_caps_equal)
+	{
+		/* if there is an input buffer and the input/output caps are equal,
+		 * assume passthrough should be used, and test for exceptions where
+		 * passthrough must not be enabled */
+		passthrough = TRUE;
+
+		/* Aforementioned exceptions are transforms like rotation, deinterlacing ... */
+		if (gst_imx_ipu_blitter_are_transforms_enabled(ipu_video_transform->priv->blitter))
+		{
+			GstVideoMeta *video_meta = gst_buffer_get_video_meta(input);
+
+			/* Try to find video metadata; if found, check if the interlacing
+			 * flag is set. If deinterlacing is enabled, and this flag is set,
+			 * then deinterlacing must be performed, therefore passthrough must
+			 * not be enabled. */
+			if (video_meta != NULL)
+			{
+				if (gst_imx_ipu_blitter_get_deinterlace_mode(ipu_video_transform->priv->blitter) != GST_IMX_IPU_BLITTER_DEINTERLACE_NONE)
+				{
+					passthrough = ((video_meta->flags & GST_VIDEO_FRAME_FLAG_INTERLACED) == 0);
+					GST_LOG_OBJECT(trans, "interlacing flag found: %s", passthrough ? "yes" : "no");
+				}
+			}
+			else
+				GST_LOG_OBJECT(trans, "no video metadata found");
+
+			/* Check for rotation. If rotation shall be applied, passthrough
+			 * is not possible. */
+			if (gst_imx_ipu_blitter_get_output_rotation_mode(ipu_video_transform->priv->blitter) != GST_IMX_IPU_BLITTER_ROTATION_NONE)
+			{
+				GST_LOG_OBJECT(trans, "no rotation set");
+				passthrough = FALSE;
+			}
+
+			/* Check for effective cropping. Effective means the crop rectangle
+			 * is not exactly the same as the input. (Crop rectangle 0,0,picwidth,picheight
+			 * doesnt actually crop anything.) If there is an effective crop rectangle,
+			 * disable passthrough. */
+			if (gst_imx_ipu_blitter_is_crop_enabled(ipu_video_transform->priv->blitter))
+			{
+				GstVideoCropMeta *video_crop_meta = gst_buffer_get_video_crop_meta(input);
+				if (video_crop_meta != NULL)
+				{
+					if (video_meta != NULL)
+					{
+						if (
+							(video_crop_meta->x != 0) ||
+							(video_crop_meta->y != 0) ||
+							(video_crop_meta->width != video_meta->width) ||
+							(video_crop_meta->height != video_meta->height)
+						)
+							passthrough = FALSE;
+
+						GST_LOG_OBJECT(trans, "effective crop rectangle found: %s", passthrough ? "yes" : "no");
+					}
+				}
+			}
+				GST_LOG_OBJECT(trans, "no video crop metadata found");
+		}
+	}
+	else if (!ipu_video_transform->inout_caps_equal)
+		GST_LOG_OBJECT(trans, "input and output caps are not equal");
+	else if (input == NULL)
+		GST_LOG_OBJECT(trans, "input buffer is NULL");
+
+	GST_LOG_OBJECT(trans, "passthrough: %s", passthrough ? "yes" : "no");
+	gst_base_transform_set_passthrough(trans, passthrough);
+
+	return GST_BASE_TRANSFORM_CLASS(gst_imx_ipu_video_transform_parent_class)->prepare_output_buffer(trans, input, outbuf);
 }
 
 
