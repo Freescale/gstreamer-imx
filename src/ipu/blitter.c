@@ -268,16 +268,6 @@ GstImxIpuBlitterRotationMode gst_imx_ipu_blitter_get_output_rotation_mode(GstImx
 
 void gst_imx_ipu_blitter_set_deinterlace_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterDeinterlaceMode deinterlace_mode)
 {
-	switch (deinterlace_mode)
-	{
-		case GST_IMX_IPU_BLITTER_DEINTERLACE_NONE:
-			ipu_blitter->priv->task.input.deinterlace.motion = MED_MOTION;
-			break;
-		case GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION:
-			ipu_blitter->priv->task.input.deinterlace.motion = HIGH_MOTION;
-			break;
-	}
-
 	ipu_blitter->deinterlace_mode = deinterlace_mode;
 }
 
@@ -685,6 +675,43 @@ void gst_imx_ipu_blitter_set_input_info(GstImxIpuBlitter *ipu_blitter, GstVideoI
 
 gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 {
+	/* Motion must be set to MED_MOTION if no interlacing shall be used
+	 * mixed mode bitstreams contain interlaced and non-interlaced pictures,
+	 * so set the motion value here */
+	if (ipu_blitter->priv->task.input.deinterlace.enable)
+	{
+		switch (ipu_blitter->deinterlace_mode)
+		{
+			case GST_IMX_IPU_BLITTER_DEINTERLACE_NONE:
+				ipu_blitter->priv->task.input.deinterlace.motion = MED_MOTION;
+				break;
+			case GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION:
+				ipu_blitter->priv->task.input.deinterlace.motion = HIGH_MOTION;
+				break;
+		}
+	}
+	else
+		ipu_blitter->priv->task.input.deinterlace.motion = MED_MOTION;
+
+	GST_LOG_OBJECT(
+		ipu_blitter,
+		"task input:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  paddr 0x%x  deinterlace enable %u motion 0x%x",
+		ipu_blitter->priv->task.input.width, ipu_blitter->priv->task.input.height,
+		ipu_blitter->priv->task.input.format,
+		ipu_blitter->priv->task.input.crop.pos.x, ipu_blitter->priv->task.input.crop.pos.y, ipu_blitter->priv->task.input.crop.w, ipu_blitter->priv->task.input.crop.h,
+		ipu_blitter->priv->task.input.paddr,
+		ipu_blitter->priv->task.input.deinterlace.enable, ipu_blitter->priv->task.input.deinterlace.motion
+	);
+	GST_LOG_OBJECT(
+		ipu_blitter,
+		"task output:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  paddr 0x%x  rotate: %u",
+		ipu_blitter->priv->task.output.width, ipu_blitter->priv->task.output.height,
+		ipu_blitter->priv->task.output.format,
+		ipu_blitter->priv->task.output.crop.pos.x, ipu_blitter->priv->task.output.crop.pos.y, ipu_blitter->priv->task.output.crop.w, ipu_blitter->priv->task.output.crop.h,
+		ipu_blitter->priv->task.output.paddr,
+		ipu_blitter->priv->task.output.rotate
+	);
+
 	/* The actual blit operation
 	 * Input and output frame are assumed to be set up properly at this point
 	 */
