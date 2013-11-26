@@ -161,7 +161,7 @@ static gpointer gst_imx_phys_mem_allocator_map(GstMemory *mem, gsize maxsize, Gs
 	GstImxPhysMemAllocator *phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
-	GST_TRACE_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p", maxsize, (gpointer)mem);
+	GST_TRACE_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p (phys addr %p)", maxsize, (gpointer)mem, (gpointer)(phys_mem->phys_addr));
 
 	return klass->map_phys_mem(phys_mem_alloc, phys_mem, maxsize, flags);
 }
@@ -173,7 +173,7 @@ static void gst_imx_phys_mem_allocator_unmap(GstMemory *mem)
 	GstImxPhysMemAllocator *phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
-	GST_TRACE_OBJECT(phys_mem_alloc, "unmapping memory block %p", (gpointer)mem);
+	GST_TRACE_OBJECT(phys_mem_alloc, "unmapping memory block %p (phys addr %p)", (gpointer)mem, (gpointer)(phys_mem->phys_addr));
 
 	klass->unmap_phys_mem(phys_mem_alloc, phys_mem);
 }
