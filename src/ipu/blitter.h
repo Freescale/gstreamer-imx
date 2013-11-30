@@ -133,7 +133,6 @@ gboolean gst_imx_ipu_blitter_are_transforms_enabled(GstImxIpuBlitter *ipu_blitte
 
 gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *input_buffer);
 gboolean gst_imx_ipu_blitter_set_output_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *output_buffer);
-gboolean gst_imx_ipu_blitter_set_incoming_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *incoming_buffer);
 
 void gst_imx_ipu_blitter_set_input_info(GstImxIpuBlitter *ipu_blitter, GstVideoInfo *info);
 

@@ -1093,7 +1093,7 @@ static GstFlowReturn gst_ipu_video_transform_transform_frame(GstVideoFilter *fil
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(filter);
 
 	if (
-		gst_imx_ipu_blitter_set_incoming_buffer(ipu_video_transform->priv->blitter, in->buffer) &&
+		gst_imx_ipu_blitter_set_input_buffer(ipu_video_transform->priv->blitter, in->buffer) &&
 		gst_imx_ipu_blitter_set_output_buffer(ipu_video_transform->priv->blitter, out->buffer) &&
 		gst_imx_ipu_blitter_blit(ipu_video_transform->priv->blitter)
 	)

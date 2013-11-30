@@ -105,6 +105,7 @@ static void gst_imx_ipu_blitter_finalize(GObject *object);
 static guint32 gst_imx_ipu_blitter_get_v4l_format(GstVideoFormat format);
 static GstVideoFormat gst_imx_ipu_blitter_get_format_from_fb(GstImxIpuBlitter *ipu_blitter, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
 static int gst_imx_ipu_video_bpp(GstVideoFormat fmt);
+gboolean gst_imx_ipu_blitter_set_actual_input_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *actual_input_buffer);
 
 
 
@@ -492,11 +493,11 @@ do { \
 } while (0)
 
 
-gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *input_buffer)
+gboolean gst_imx_ipu_blitter_set_actual_input_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *actual_input_buffer)
 {
-	g_assert(input_buffer != NULL);
+	g_assert(actual_input_buffer != NULL);
 
-	GST_IMX_FILL_IPU_TASK(ipu_blitter, input_buffer, ipu_blitter->priv->task.input);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, actual_input_buffer, ipu_blitter->priv->task.input);
 
 	return TRUE;
 }
@@ -512,31 +513,31 @@ gboolean gst_imx_ipu_blitter_set_output_buffer(GstImxIpuBlitter *ipu_blitter, Gs
 }
 
 
-gboolean gst_imx_ipu_blitter_set_incoming_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *incoming_buffer)
+gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *input_buffer)
 {
 	GstImxPhysMemMeta *phys_mem_meta;
 
-	g_assert(incoming_buffer != NULL);
+	g_assert(input_buffer != NULL);
 
-	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(incoming_buffer);
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(input_buffer);
 
-	/* Test if the incoming buffer uses DMA memory */
+	/* Test if the input buffer uses DMA memory */
 	if ((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0))
 	{
-		/* DMA memory present - the incoming buffer can be used as an input buffer directly */
-		gst_imx_ipu_blitter_set_input_buffer(ipu_blitter, incoming_buffer);
+		/* DMA memory present - the input buffer can be used as an actual input buffer */
+		gst_imx_ipu_blitter_set_actual_input_buffer(ipu_blitter, input_buffer);
 
-		GST_TRACE_OBJECT(ipu_blitter, "incoming buffer uses DMA memory - setting it as input buffer directly");
+		GST_TRACE_OBJECT(ipu_blitter, "input buffer uses DMA memory - setting it as actual input buffer");
 	}
 	else
 	{
-		/* No DMA memory present; the incoming buffer needs to be copied to an internal
+		/* No DMA memory present; the input buffer needs to be copied to an internal
 		 * temporary input buffer */
 
 		GstBuffer *temp_input_buffer;
 		GstFlowReturn flow_ret;
 
-		GST_TRACE_OBJECT(ipu_blitter, "incoming buffer does not use DMA memory - need to copy it to an internal input DMA buffer");
+		GST_TRACE_OBJECT(ipu_blitter, "input buffer does not use DMA memory - need to copy it to an internal input DMA buffer");
 
 		{
 			/* The internal input buffer is the temp input frame's DMA memory.
@@ -583,22 +584,22 @@ gboolean gst_imx_ipu_blitter_set_incoming_buffer(GstImxIpuBlitter *ipu_blitter, 
 		}
 
 		{
-			GstVideoFrame incoming_frame, temp_input_frame;
+			GstVideoFrame input_frame, temp_input_frame;
 
-			gst_video_frame_map(&incoming_frame, &(ipu_blitter->input_video_info), incoming_buffer, GST_MAP_READ);
+			gst_video_frame_map(&input_frame, &(ipu_blitter->input_video_info), input_buffer, GST_MAP_READ);
 			gst_video_frame_map(&temp_input_frame, &(ipu_blitter->input_video_info), temp_input_buffer, GST_MAP_WRITE);
 
-			/* Copy the incoming frame's pixels to the temp input frame
+			/* Copy the input buffer's pixels to the temp input frame
 			 * The gst_video_frame_copy() makes sure stride and plane offset values from both
 			 * frames are respected */
-			gst_video_frame_copy(&temp_input_frame, &incoming_frame);
+			gst_video_frame_copy(&temp_input_frame, &input_frame);
 
 			gst_video_frame_unmap(&temp_input_frame);
-			gst_video_frame_unmap(&incoming_frame);
+			gst_video_frame_unmap(&input_frame);
 		}
 
-		/* Finally, set the temp input buffer as the input buffer */
-		gst_imx_ipu_blitter_set_input_buffer(ipu_blitter, temp_input_buffer);
+		/* Finally, set the temp input buffer as the actual input buffer */
+		gst_imx_ipu_blitter_set_actual_input_buffer(ipu_blitter, temp_input_buffer);
 	}
 
 	/* Configure interlacing */
@@ -617,7 +618,7 @@ gboolean gst_imx_ipu_blitter_set_incoming_buffer(GstImxIpuBlitter *ipu_blitter, 
 
 				GST_TRACE_OBJECT(ipu_blitter, "input stream uses mixed interlacing -> need to check video metadata deinterlacing flag");
 
-				video_meta = gst_buffer_get_video_meta(incoming_buffer);
+				video_meta = gst_buffer_get_video_meta(input_buffer);
 				if (video_meta != NULL)
 				{
 					if (video_meta->flags & GST_VIDEO_FRAME_FLAG_INTERLACED)

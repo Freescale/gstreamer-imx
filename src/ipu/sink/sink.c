@@ -323,7 +323,7 @@ static GstFlowReturn gst_imx_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		return GST_FLOW_ERROR;
 	}
 
-	if (!gst_imx_ipu_blitter_set_incoming_buffer(ipu_sink->priv->blitter, buf))
+	if (!gst_imx_ipu_blitter_set_input_buffer(ipu_sink->priv->blitter, buf))
 		return GST_FLOW_ERROR;
 
 	if (!gst_imx_ipu_blitter_blit(ipu_sink->priv->blitter))
