@@ -1046,7 +1046,7 @@ static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTr
 			 * is not possible. */
 			if (gst_imx_ipu_blitter_get_output_rotation_mode(ipu_video_transform->priv->blitter) != GST_IMX_IPU_BLITTER_ROTATION_NONE)
 			{
-				GST_LOG_OBJECT(trans, "no rotation set");
+				GST_LOG_OBJECT(trans, "rotation requested");
 				passthrough = FALSE;
 			}
 
@@ -1093,8 +1093,8 @@ static GstFlowReturn gst_ipu_video_transform_transform_frame(GstVideoFilter *fil
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(filter);
 
 	if (
-		gst_imx_ipu_blitter_set_incoming_frame(ipu_video_transform->priv->blitter, in) &&
-		gst_imx_ipu_blitter_set_output_frame(ipu_video_transform->priv->blitter, out) &&
+		gst_imx_ipu_blitter_set_incoming_buffer(ipu_video_transform->priv->blitter, in->buffer) &&
+		gst_imx_ipu_blitter_set_output_buffer(ipu_video_transform->priv->blitter, out->buffer) &&
 		gst_imx_ipu_blitter_blit(ipu_video_transform->priv->blitter)
 	)
 		return GST_FLOW_OK;

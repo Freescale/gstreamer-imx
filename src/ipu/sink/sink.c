@@ -58,7 +58,6 @@ struct _GstImxIpuSinkPrivate
 	int framebuffer_fd;
 	GstBuffer *fb_buffer;
 	GstImxIpuBlitter *blitter;
-	GstVideoFrame fb_output_frame;
 };
 
 
@@ -148,9 +147,6 @@ void gst_imx_ipu_sink_class_init(GstImxIpuSinkClass *klass)
 
 void gst_imx_ipu_sink_init(GstImxIpuSink *ipu_sink)
 {
-	GstVideoInfo fb_video_info;
-	GstVideoMeta *fb_video_meta;
-
 	ipu_sink->priv = g_slice_alloc(sizeof(GstImxIpuSinkPrivate));
 	ipu_sink->priv->framebuffer_fd = -1;
 	ipu_sink->priv->blitter = NULL;
@@ -171,17 +167,7 @@ void gst_imx_ipu_sink_init(GstImxIpuSink *ipu_sink)
 		return;
 	}
 
-	fb_video_meta = gst_buffer_get_video_meta(ipu_sink->priv->fb_buffer);
-	g_assert(fb_video_meta != NULL);
-	gst_video_info_init(&fb_video_info);
-	gst_video_info_set_format(&fb_video_info, fb_video_meta->format, fb_video_meta->width, fb_video_meta->height);
-
-	if (!gst_video_frame_map(&(ipu_sink->priv->fb_output_frame), &fb_video_info, ipu_sink->priv->fb_buffer, GST_MAP_WRITE))
-	{
-		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("could not map framebuffer output frame"), (NULL));
-	}
-
-	gst_imx_ipu_blitter_set_output_frame(ipu_sink->priv->blitter, &(ipu_sink->priv->fb_output_frame));
+	gst_imx_ipu_blitter_set_output_buffer(ipu_sink->priv->blitter, ipu_sink->priv->fb_buffer);
 }
 
 
@@ -189,10 +175,10 @@ static void gst_imx_ipu_sink_finalize(GObject *object)
 {
 	GstImxIpuSink *ipu_sink = GST_IMX_IPU_SINK(object);
 
-	gst_video_frame_unmap(&(ipu_sink->priv->fb_output_frame));
-
 	if (ipu_sink->priv != NULL)
 	{
+		if (ipu_sink->priv->fb_buffer != NULL)
+			gst_buffer_unref(ipu_sink->priv->fb_buffer);
 		if (ipu_sink->priv->blitter != NULL)
 			gst_object_unref(ipu_sink->priv->blitter);
 		if (ipu_sink->priv->framebuffer_fd >= 0)
@@ -328,7 +314,6 @@ static gboolean gst_imx_ipu_propose_allocation(GstBaseSink *sink, GstQuery *quer
 static GstFlowReturn gst_imx_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
 	GstImxIpuSink *ipu_sink;
-	GstVideoFrame input_video_frame;
 
 	ipu_sink = GST_IMX_IPU_SINK(video_sink);
 
@@ -338,19 +323,11 @@ static GstFlowReturn gst_imx_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		return GST_FLOW_ERROR;
 	}
 
-	if (!gst_video_frame_map(&input_video_frame, &(ipu_sink->priv->blitter->input_video_info), buf, GST_MAP_READ))
-	{
-		GST_ERROR_OBJECT(ipu_sink, "could not map incoming input frame");
-		return GST_FLOW_ERROR;
-	}
-
-	if (!gst_imx_ipu_blitter_set_incoming_frame(ipu_sink->priv->blitter, &input_video_frame))
+	if (!gst_imx_ipu_blitter_set_incoming_buffer(ipu_sink->priv->blitter, buf))
 		return GST_FLOW_ERROR;
 
 	if (!gst_imx_ipu_blitter_blit(ipu_sink->priv->blitter))
 		return GST_FLOW_ERROR;
-
-	gst_video_frame_unmap(&input_video_frame);
 
 	return GST_FLOW_OK;
 }

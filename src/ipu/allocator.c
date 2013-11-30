@@ -105,6 +105,7 @@ static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstI
 	GstImxPhysMemory *phys_mem = (GstImxPhysMemory *)memory;
 	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
+	// TODO: refcount for mapping
 	if (phys_mem->mapped_virt_addr != NULL)
 		return phys_mem->mapped_virt_addr;
 

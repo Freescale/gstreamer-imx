@@ -105,7 +105,6 @@ static void gst_imx_ipu_blitter_finalize(GObject *object);
 static guint32 gst_imx_ipu_blitter_get_v4l_format(GstVideoFormat format);
 static GstVideoFormat gst_imx_ipu_blitter_get_format_from_fb(GstImxIpuBlitter *ipu_blitter, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
 static int gst_imx_ipu_video_bpp(GstVideoFormat fmt);
-static void gst_imx_ipu_blitter_unmap_wrapped_framebuffer(gpointer data);
 
 
 
@@ -190,7 +189,6 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 	}
 
 	ipu_blitter->internal_bufferpool = NULL;
-	ipu_blitter->internal_input_buffer = NULL;
 	ipu_blitter->apply_crop_metadata = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
 	ipu_blitter->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 
@@ -202,11 +200,6 @@ static void gst_imx_ipu_blitter_finalize(GObject *object)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(object);
 
-	if (ipu_blitter->internal_input_buffer != NULL)
-	{
-		gst_video_frame_unmap(&(ipu_blitter->temp_input_video_frame));
-		gst_buffer_unref(ipu_blitter->internal_input_buffer);
-	}
 	if (ipu_blitter->internal_bufferpool != NULL)
 		gst_object_unref(ipu_blitter->internal_bufferpool);
 
@@ -458,25 +451,27 @@ static int gst_imx_ipu_video_bpp(GstVideoFormat fmt)
  * Since the stride is given in bytes, not pixels, it needs to be divided by
  * whatever gst_imx_ipu_video_bpp() returns.
  */
-#define GST_IMX_FILL_IPU_TASK(ipu_blitter, frame, taskio) \
+#define GST_IMX_FILL_IPU_TASK(ipu_blitter, buffer, taskio) \
 do { \
  \
 	guint num_extra_lines; \
+	GstVideoMeta *video_meta; \
 	GstVideoCropMeta *video_crop_meta; \
 	GstImxPhysMemMeta *phys_mem_meta; \
  \
-	video_crop_meta = gst_buffer_get_video_crop_meta((frame)->buffer); \
-	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET((frame)->buffer); \
+	video_meta = gst_buffer_get_video_meta(buffer); \
+	video_crop_meta = gst_buffer_get_video_crop_meta(buffer); \
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(buffer); \
  \
-	g_assert((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0)); \
+	g_assert((video_meta != NULL) && (phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0)); \
  \
-	num_extra_lines = phys_mem_meta->padding / (frame)->info.stride[0]; \
-	(taskio).width = (frame)->info.stride[0] / gst_imx_ipu_video_bpp((frame)->info.finfo->format); \
-	(taskio).height = (frame)->info.height + num_extra_lines; \
+	num_extra_lines = phys_mem_meta->padding / video_meta->stride[0]; \
+	(taskio).width = video_meta->stride[0] / gst_imx_ipu_video_bpp(video_meta->format); \
+	(taskio).height = video_meta->height + num_extra_lines; \
  \
 	if (ipu_blitter->apply_crop_metadata && (video_crop_meta != NULL)) \
 	{ \
-		if ((video_crop_meta->x >= (guint)((frame)->info.width)) || (video_crop_meta->y >= (guint)((frame)->info.height))) \
+		if ((video_crop_meta->x >= (guint)(video_meta->width)) || (video_crop_meta->y >= (guint)(video_meta->height))) \
 			return FALSE; \
  \
 		(taskio).crop.pos.x = video_crop_meta->x; \
@@ -493,62 +488,60 @@ do { \
 	} \
  \
 	(taskio).paddr = (dma_addr_t)(phys_mem_meta->phys_addr); \
-	(taskio).format = gst_imx_ipu_blitter_get_v4l_format(GST_VIDEO_INFO_FORMAT(&((frame)->info))); \
+	(taskio).format = gst_imx_ipu_blitter_get_v4l_format(video_meta->format); \
 } while (0)
 
 
-gboolean gst_imx_ipu_blitter_set_input_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *input_frame)
+gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *input_buffer)
 {
-	g_assert(input_frame != NULL);
+	g_assert(input_buffer != NULL);
 
-	GST_IMX_FILL_IPU_TASK(ipu_blitter, input_frame, ipu_blitter->priv->task.input);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, input_buffer, ipu_blitter->priv->task.input);
 
 	return TRUE;
 }
 
 
-gboolean gst_imx_ipu_blitter_set_output_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *output_frame)
+gboolean gst_imx_ipu_blitter_set_output_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *output_buffer)
 {
-	g_assert(output_frame != NULL);
+	g_assert(output_buffer != NULL);
 
-	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_buffer, ipu_blitter->priv->task.output);
 
 	return TRUE;
 }
 
 
-gboolean gst_imx_ipu_blitter_set_incoming_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *incoming_frame)
+gboolean gst_imx_ipu_blitter_set_incoming_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *incoming_buffer)
 {
 	GstImxPhysMemMeta *phys_mem_meta;
 
-	g_assert(incoming_frame != NULL);
+	g_assert(incoming_buffer != NULL);
 
-	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(incoming_frame->buffer);
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(incoming_buffer);
 
-	/* Test if the incoming frame uses DMA memory */
+	/* Test if the incoming buffer uses DMA memory */
 	if ((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0))
 	{
-		/* DMA memory present - the incoming can be used as an input frame directly */
-		gst_imx_ipu_blitter_set_input_frame(ipu_blitter, incoming_frame);
+		/* DMA memory present - the incoming buffer can be used as an input buffer directly */
+		gst_imx_ipu_blitter_set_input_buffer(ipu_blitter, incoming_buffer);
 
-		GST_TRACE_OBJECT(ipu_blitter, "incoming frame uses DMA memory - setting it as input frame directly");
+		GST_TRACE_OBJECT(ipu_blitter, "incoming buffer uses DMA memory - setting it as input buffer directly");
 	}
 	else
 	{
-		/* No DMA memory present; the incoming frame needs to be copied to an internal
-		 * temporary input frame */
+		/* No DMA memory present; the incoming buffer needs to be copied to an internal
+		 * temporary input buffer */
 
-		GST_TRACE_OBJECT(ipu_blitter, "incoming frame does not use DMA memory - need to copy it to an internal input DMA buffer");
+		GstBuffer *temp_input_buffer;
+		GstFlowReturn flow_ret;
 
-		if (ipu_blitter->internal_input_buffer == NULL)
+		GST_TRACE_OBJECT(ipu_blitter, "incoming buffer does not use DMA memory - need to copy it to an internal input DMA buffer");
+
 		{
 			/* The internal input buffer is the temp input frame's DMA memory.
 			 * If it does not exist yet, it needs to be created here. The temp input
 			 * frame is then mapped. */
-
-			GST_TRACE_OBJECT(ipu_blitter, "internal input DMA buffer does not exist yet -> creating one");
-
-			GstFlowReturn flow_ret;
 
 			if (ipu_blitter->internal_bufferpool == NULL)
 			{
@@ -579,34 +572,40 @@ gboolean gst_imx_ipu_blitter_set_incoming_frame(GstImxIpuBlitter *ipu_blitter, G
 			 * hence the is_active check */
 			if (!gst_buffer_pool_is_active(ipu_blitter->internal_bufferpool))
 				gst_buffer_pool_set_active(ipu_blitter->internal_bufferpool, TRUE);
-
-			/* Create the internal input buffer */
-			flow_ret = gst_buffer_pool_acquire_buffer(ipu_blitter->internal_bufferpool, &(ipu_blitter->internal_input_buffer), NULL);
-			if (flow_ret != GST_FLOW_OK)
-			{
-				GST_ERROR_OBJECT(ipu_blitter, "error acquiring input frame buffer: %s", gst_pad_mode_get_name(flow_ret));
-				return FALSE;
-			}
-
-			/* The temp input video frame is mapped and remains mapped until
-			 * either new input videoinfo is set or the blitter is discarded */
-			gst_video_frame_map(&(ipu_blitter->temp_input_video_frame), &(ipu_blitter->input_video_info), ipu_blitter->internal_input_buffer, GST_MAP_WRITE);
 		}
 
-		/* Copy the incoming frame's pixels to the temp input frame
-		 * The gst_video_frame_copy() makes sure stride and plane offset values from both
-		 * frames are respected */
-		gst_video_frame_copy(&(ipu_blitter->temp_input_video_frame), incoming_frame);
+		/* Create the internal input buffer */
+		flow_ret = gst_buffer_pool_acquire_buffer(ipu_blitter->internal_bufferpool, &temp_input_buffer, NULL);
+		if (flow_ret != GST_FLOW_OK)
+		{
+			GST_ERROR_OBJECT(ipu_blitter, "error acquiring input frame buffer: %s", gst_pad_mode_get_name(flow_ret));
+			return FALSE;
+		}
 
-		/* Finally, set the temp input frame as the input frame */
-		gst_imx_ipu_blitter_set_input_frame(ipu_blitter, &(ipu_blitter->temp_input_video_frame));
+		{
+			GstVideoFrame incoming_frame, temp_input_frame;
+
+			gst_video_frame_map(&incoming_frame, &(ipu_blitter->input_video_info), incoming_buffer, GST_MAP_READ);
+			gst_video_frame_map(&temp_input_frame, &(ipu_blitter->input_video_info), temp_input_buffer, GST_MAP_WRITE);
+
+			/* Copy the incoming frame's pixels to the temp input frame
+			 * The gst_video_frame_copy() makes sure stride and plane offset values from both
+			 * frames are respected */
+			gst_video_frame_copy(&temp_input_frame, &incoming_frame);
+
+			gst_video_frame_unmap(&temp_input_frame);
+			gst_video_frame_unmap(&incoming_frame);
+		}
+
+		/* Finally, set the temp input buffer as the input buffer */
+		gst_imx_ipu_blitter_set_input_buffer(ipu_blitter, temp_input_buffer);
 	}
 
+	/* Configure interlacing */
 	ipu_blitter->priv->task.input.deinterlace.enable = 0;
-
 	if (ipu_blitter->deinterlace_mode != GST_IMX_IPU_BLITTER_DEINTERLACE_NONE)
 	{
-		switch (incoming_frame->info.interlace_mode)
+		switch (ipu_blitter->input_video_info.interlace_mode)
 		{
 			case GST_VIDEO_INTERLACE_MODE_INTERLEAVED:
 				GST_TRACE_OBJECT(ipu_blitter, "input stream uses interlacing -> deinterlacing enabled");
@@ -618,7 +617,7 @@ gboolean gst_imx_ipu_blitter_set_incoming_frame(GstImxIpuBlitter *ipu_blitter, G
 
 				GST_TRACE_OBJECT(ipu_blitter, "input stream uses mixed interlacing -> need to check video metadata deinterlacing flag");
 
-				video_meta = gst_buffer_get_video_meta(incoming_frame->buffer);
+				video_meta = gst_buffer_get_video_meta(incoming_buffer);
 				if (video_meta != NULL)
 				{
 					if (video_meta->flags & GST_VIDEO_FRAME_FLAG_INTERLACED)
@@ -659,12 +658,6 @@ void gst_imx_ipu_blitter_set_input_info(GstImxIpuBlitter *ipu_blitter, GstVideoI
 	 * making existing internal bufferpools and temp video frames unusable
 	 * -> shut them down; they will be recreated on-demand in the
 	 * gst_imx_ipu_blitter_set_incoming_frame() call */
-	if (ipu_blitter->internal_input_buffer != NULL)
-	{
-		gst_video_frame_unmap(&(ipu_blitter->temp_input_video_frame));
-		gst_buffer_unref(ipu_blitter->internal_input_buffer);
-		ipu_blitter->internal_input_buffer = NULL;
-	}
 	if (ipu_blitter->internal_bufferpool != NULL)
 	{
 		gst_object_unref(ipu_blitter->internal_bufferpool);
@@ -754,13 +747,14 @@ GstBufferPool* gst_imx_ipu_blitter_get_internal_bufferpool(GstImxIpuBlitter *ipu
 }
 
 
+/* The produced buffer contains only metadata, no memory blocks - the IPU sink does not need anything more
+ * TODO: add some logic to wrap the framebuffer memory block, including map/unmap code etc. */
 GstBuffer* gst_imx_ipu_blitter_wrap_framebuffer(GstImxIpuBlitter *ipu_blitter, int framebuffer_fd, guint x, guint y, guint width, guint height)
 {
-	guint fb_size, fb_width, fb_height;
+	guint fb_width, fb_height;
 	GstVideoFormat fb_format;
 	GstBuffer *buffer;
 	GstImxPhysMemMeta *phys_mem_meta;
-	FBMapData *map_data;
 	struct fb_var_screeninfo fb_var;
 	struct fb_fix_screeninfo fb_fix;
 
@@ -779,25 +773,10 @@ GstBuffer* gst_imx_ipu_blitter_wrap_framebuffer(GstImxIpuBlitter *ipu_blitter, i
 	fb_width = fb_var.xres;
 	fb_height = fb_var.yres;
 	fb_format = gst_imx_ipu_blitter_get_format_from_fb(ipu_blitter, &fb_var, &fb_fix);
-	fb_size = fb_fix.smem_len;
 
 	GST_DEBUG_OBJECT(ipu_blitter, "framebuffer resolution is %u x %u", fb_width, fb_height);
 
-	/* mmap the framebuffer
-	 * Strictly speaking, this is unnecessary in most cases, since the CPU will rarely want to access
-	 * the framebuffer; the IPU shall do that. So, a GstBuffer with no memory blocks and phys_mem_meta
-	 * metadata would be enough. However, GStreamer video frame map logic requires buffers that can be mapped,
-	 * and a GstBuffer with no memory blocks cannot be mapped. */
-	map_data = g_slice_alloc(sizeof(FBMapData));
-	map_data->fb_size = fb_size;
-	map_data->mapped_fb_address = mmap(NULL, fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, framebuffer_fd, 0);
-	if (map_data->mapped_fb_address == MAP_FAILED)
-	{
-		GST_ERROR_OBJECT(ipu_blitter, "memory-mapping the Linux framebuffer failed: %s", strerror(errno));
-		return NULL;
-	}
-
-	buffer = gst_buffer_new_wrapped_full(GST_MEMORY_FLAG_NO_SHARE, map_data->mapped_fb_address, fb_size, 0, fb_size, map_data, gst_imx_ipu_blitter_unmap_wrapped_framebuffer);
+	buffer = gst_buffer_new();
 	gst_buffer_add_video_meta(buffer, GST_VIDEO_FRAME_FLAG_NONE, fb_format, fb_width, fb_height);
 
 	if ((width != 0) && (height != 0))
@@ -815,14 +794,5 @@ GstBuffer* gst_imx_ipu_blitter_wrap_framebuffer(GstImxIpuBlitter *ipu_blitter, i
 	phys_mem_meta->phys_addr = (guintptr)(fb_fix.smem_start);
 
 	return buffer;
-}
-
-
-static void gst_imx_ipu_blitter_unmap_wrapped_framebuffer(gpointer data)
-{
-	FBMapData *map_data = (FBMapData *)data;
-	if (munmap(map_data->mapped_fb_address, map_data->fb_size) == -1)
-		GST_ERROR("unmapping memory-mapped Linux framebuffer failed: %s", strerror(errno));
-	g_slice_free1(sizeof(FBMapData), data);
 }
 

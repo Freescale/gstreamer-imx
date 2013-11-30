@@ -102,8 +102,6 @@ struct _GstImxIpuBlitter
 	GstImxIpuBlitterPrivate *priv;
 
 	GstBufferPool *internal_bufferpool;
-	GstBuffer *internal_input_buffer;
-	GstVideoFrame temp_input_video_frame;
 	GstVideoInfo input_video_info;
 	gboolean apply_crop_metadata;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
@@ -133,9 +131,9 @@ GstImxIpuBlitterDeinterlaceMode gst_imx_ipu_blitter_get_deinterlace_mode(GstImxI
 
 gboolean gst_imx_ipu_blitter_are_transforms_enabled(GstImxIpuBlitter *ipu_blitter);
 
-gboolean gst_imx_ipu_blitter_set_input_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *input_frame);
-gboolean gst_imx_ipu_blitter_set_output_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *output_frame);
-gboolean gst_imx_ipu_blitter_set_incoming_frame(GstImxIpuBlitter *ipu_blitter, GstVideoFrame *incoming_frame);
+gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *input_buffer);
+gboolean gst_imx_ipu_blitter_set_output_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *output_buffer);
+gboolean gst_imx_ipu_blitter_set_incoming_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *incoming_buffer);
 
 void gst_imx_ipu_blitter_set_input_info(GstImxIpuBlitter *ipu_blitter, GstVideoInfo *info);
 
