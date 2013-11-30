@@ -102,6 +102,7 @@ struct _GstImxIpuBlitter
 	GstImxIpuBlitterPrivate *priv;
 
 	GstBufferPool *internal_bufferpool;
+	GstBuffer *actual_input_buffer;
 	GstVideoInfo input_video_info;
 	gboolean apply_crop_metadata;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;

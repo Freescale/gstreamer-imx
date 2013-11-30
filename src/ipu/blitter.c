@@ -190,6 +190,7 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 	}
 
 	ipu_blitter->internal_bufferpool = NULL;
+	ipu_blitter->actual_input_buffer = NULL;
 	ipu_blitter->apply_crop_metadata = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
 	ipu_blitter->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 
@@ -201,6 +202,8 @@ static void gst_imx_ipu_blitter_finalize(GObject *object)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(object);
 
+	if (ipu_blitter->actual_input_buffer != NULL)
+		gst_buffer_unref(ipu_blitter->actual_input_buffer);
 	if (ipu_blitter->internal_bufferpool != NULL)
 		gst_object_unref(ipu_blitter->internal_bufferpool);
 
@@ -498,6 +501,7 @@ gboolean gst_imx_ipu_blitter_set_actual_input_buffer(GstImxIpuBlitter *ipu_blitt
 	g_assert(actual_input_buffer != NULL);
 
 	GST_IMX_FILL_IPU_TASK(ipu_blitter, actual_input_buffer, ipu_blitter->priv->task.input);
+	ipu_blitter->actual_input_buffer = actual_input_buffer;
 
 	return TRUE;
 }
@@ -525,7 +529,7 @@ gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, Gst
 	if ((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0))
 	{
 		/* DMA memory present - the input buffer can be used as an actual input buffer */
-		gst_imx_ipu_blitter_set_actual_input_buffer(ipu_blitter, input_buffer);
+		gst_imx_ipu_blitter_set_actual_input_buffer(ipu_blitter, gst_buffer_ref(input_buffer));
 
 		GST_TRACE_OBJECT(ipu_blitter, "input buffer uses DMA memory - setting it as actual input buffer");
 	}
@@ -669,6 +673,10 @@ void gst_imx_ipu_blitter_set_input_info(GstImxIpuBlitter *ipu_blitter, GstVideoI
 
 gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 {
+	int ret;
+
+	g_assert(ipu_blitter->actual_input_buffer != NULL);
+
 	/* Motion must be set to MED_MOTION if no interlacing shall be used
 	 * mixed mode bitstreams contain interlaced and non-interlaced pictures,
 	 * so set the motion value here */
@@ -709,13 +717,18 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 	/* The actual blit operation
 	 * Input and output frame are assumed to be set up properly at this point
 	 */
-	if (ioctl(ipu_blitter->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_blitter->priv->task)) == -1)
+	ret = ioctl(ipu_blitter->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_blitter->priv->task));
+
+	gst_buffer_unref(ipu_blitter->actual_input_buffer);
+	ipu_blitter->actual_input_buffer = NULL;
+
+	if (ret == -1)
 	{
 		GST_ERROR_OBJECT(ipu_blitter, "queuing IPU task failed: %s", strerror(errno));
 		return FALSE;
 	}
-
-	return TRUE;
+	else
+		return TRUE;
 }
 
 
