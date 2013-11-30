@@ -1035,8 +1035,24 @@ static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTr
 			{
 				if (gst_imx_ipu_blitter_get_deinterlace_mode(ipu_video_transform->priv->blitter) != GST_IMX_IPU_BLITTER_DEINTERLACE_NONE)
 				{
-					passthrough = ((video_meta->flags & GST_VIDEO_FRAME_FLAG_INTERLACED) == 0);
-					GST_LOG_OBJECT(trans, "interlacing flag found: %s", passthrough ? "yes" : "no");
+					switch (ipu_video_transform->priv->blitter->input_video_info.interlace_mode)
+					{
+						gboolean flag_found;
+						case GST_VIDEO_INTERLACE_MODE_INTERLEAVED:
+							GST_LOG_OBJECT(trans, "interlacing in interleaved mode");
+							passthrough = FALSE;
+							break;
+						case GST_VIDEO_INTERLACE_MODE_MIXED:
+							flag_found = ((video_meta->flags & GST_VIDEO_FRAME_FLAG_INTERLACED) == 0);
+							passthrough = passthrough && !flag_found;
+							GST_LOG_OBJECT(trans, "interlacing in mixed mode - flag %s", flag_found ? "found" : "not found");
+							break;
+						case GST_VIDEO_INTERLACE_MODE_PROGRESSIVE:
+						case GST_VIDEO_INTERLACE_MODE_FIELDS:
+							break;
+						default:
+							break;
+					}
 				}
 			}
 			else

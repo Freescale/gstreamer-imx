@@ -86,6 +86,7 @@ GstImxIpuBlitterRotationMode;
 typedef enum
 {
 	GST_IMX_IPU_BLITTER_DEINTERLACE_NONE,
+	GST_IMX_IPU_BLITTER_DEINTERLACE_SLOW_MOTION,
 	GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION
 }
 GstImxIpuBlitterDeinterlaceMode;
@@ -102,7 +103,7 @@ struct _GstImxIpuBlitter
 	GstImxIpuBlitterPrivate *priv;
 
 	GstBufferPool *internal_bufferpool;
-	GstBuffer *actual_input_buffer;
+	GstBuffer *actual_input_buffer, *previous_input_buffer;
 	GstVideoInfo input_video_info;
 	gboolean apply_crop_metadata;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;

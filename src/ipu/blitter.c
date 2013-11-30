@@ -149,6 +149,7 @@ GType gst_imx_ipu_blitter_deinterlace_mode_get_type(void)
 		static GEnumValue deinterlace_mode_values[] =
 		{
 			{ GST_IMX_IPU_BLITTER_DEINTERLACE_NONE, "No deinterlacing", "none" },
+			{ GST_IMX_IPU_BLITTER_DEINTERLACE_SLOW_MOTION, "Slow-motion deinterlacing (uses two input frames for one output frame)", "slow-motion" },
 			{ GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION, "Fast-motion deinterlacing (uses one input frames for one output frame)", "fast-motion" },
 			{ 0, NULL, NULL },
 		};
@@ -191,6 +192,7 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 
 	ipu_blitter->internal_bufferpool = NULL;
 	ipu_blitter->actual_input_buffer = NULL;
+	ipu_blitter->previous_input_buffer = NULL;
 	ipu_blitter->apply_crop_metadata = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
 	ipu_blitter->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 
@@ -202,6 +204,8 @@ static void gst_imx_ipu_blitter_finalize(GObject *object)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(object);
 
+	if (ipu_blitter->previous_input_buffer != NULL)
+		gst_buffer_unref(ipu_blitter->previous_input_buffer);
 	if (ipu_blitter->actual_input_buffer != NULL)
 		gst_buffer_unref(ipu_blitter->actual_input_buffer);
 	if (ipu_blitter->internal_bufferpool != NULL)
@@ -265,6 +269,13 @@ GstImxIpuBlitterRotationMode gst_imx_ipu_blitter_get_output_rotation_mode(GstImx
 
 void gst_imx_ipu_blitter_set_deinterlace_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterDeinterlaceMode deinterlace_mode)
 {
+	if (ipu_blitter->previous_input_buffer != NULL)
+	{
+		gst_buffer_unref(ipu_blitter->previous_input_buffer);
+		ipu_blitter->previous_input_buffer = NULL;
+	}
+	ipu_blitter->priv->task.input.paddr_n = 0;
+
 	ipu_blitter->deinterlace_mode = deinterlace_mode;
 }
 
@@ -687,6 +698,28 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 			case GST_IMX_IPU_BLITTER_DEINTERLACE_NONE:
 				ipu_blitter->priv->task.input.deinterlace.motion = MED_MOTION;
 				break;
+			case GST_IMX_IPU_BLITTER_DEINTERLACE_SLOW_MOTION:
+			{
+				GstImxPhysMemMeta *phys_mem_meta;
+
+				if (ipu_blitter->previous_input_buffer == NULL)
+					break;
+
+				phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(ipu_blitter->previous_input_buffer);
+
+				/* Test if the input buffer uses DMA memory */
+				if ((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0))
+				{
+					ipu_blitter->priv->task.input.deinterlace.motion = LOW_MOTION;
+					ipu_blitter->priv->task.input.paddr_n = (dma_addr_t)(phys_mem_meta->phys_addr);
+				}
+				else
+				{
+					ipu_blitter->priv->task.input.deinterlace.motion = HIGH_MOTION;
+					ipu_blitter->priv->task.input.paddr_n = 0;
+				}
+				break;
+			}
 			case GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION:
 				ipu_blitter->priv->task.input.deinterlace.motion = HIGH_MOTION;
 				break;
@@ -719,8 +752,18 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 	 */
 	ret = ioctl(ipu_blitter->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_blitter->priv->task));
 
-	gst_buffer_unref(ipu_blitter->actual_input_buffer);
-	ipu_blitter->actual_input_buffer = NULL;
+	if (ipu_blitter->priv->task.input.deinterlace.enable && (ipu_blitter->deinterlace_mode == GST_IMX_IPU_BLITTER_DEINTERLACE_SLOW_MOTION))
+	{
+		if (ipu_blitter->previous_input_buffer != NULL)
+			gst_buffer_unref(ipu_blitter->previous_input_buffer);
+		ipu_blitter->previous_input_buffer = ipu_blitter->actual_input_buffer;
+		ipu_blitter->actual_input_buffer = NULL;
+	}
+	else
+	{
+		gst_buffer_unref(ipu_blitter->actual_input_buffer);
+		ipu_blitter->actual_input_buffer = NULL;
+	}
 
 	if (ret == -1)
 	{
