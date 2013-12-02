@@ -161,33 +161,43 @@ static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 	{
 		VpuDecRetCode dec_ret;
 		GstImxVpuBufferMeta *vpu_meta;
+		GstImxPhysMemMeta *phys_mem_meta;
 
 		vpu_meta = GST_IMX_VPU_BUFFER_META_GET(buffer);
-
-		if (vpu_meta->framebuffer == NULL)
-		{
-			GST_DEBUG_OBJECT(pool, "buffer %p does not have VPU metadata - nothing to clear", (gpointer)buffer);
-			return;
-		}
+		phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(buffer);
 
 		g_mutex_lock(&(vpu_pool->framebuffers->available_fb_mutex));
 
-		if (vpu_meta->not_displayed_yet && vpu_pool->framebuffers->decenc_states.dec.decoder_open)
-		{	
-			dec_ret = VPU_DecOutFrameDisplayed(vpu_pool->framebuffers->decenc_states.dec.handle, vpu_meta->framebuffer);
-			if (dec_ret != VPU_DEC_RET_SUCCESS)
-				GST_ERROR_OBJECT(pool, "clearing display framebuffer failed: %s", gst_imx_vpu_strerror(dec_ret));
-			else
+		if ((vpu_meta->framebuffer != NULL) && (phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0))
+		{
+			if (vpu_meta->not_displayed_yet && vpu_pool->framebuffers->decenc_states.dec.decoder_open)
 			{
-				vpu_meta->not_displayed_yet = FALSE;
-				vpu_pool->framebuffers->num_available_framebuffers++;
-				GST_DEBUG_OBJECT(pool, "cleared buffer %p", (gpointer)buffer);
+				dec_ret = VPU_DecOutFrameDisplayed(vpu_pool->framebuffers->decenc_states.dec.handle, vpu_meta->framebuffer);
+				if (dec_ret != VPU_DEC_RET_SUCCESS)
+					GST_ERROR_OBJECT(pool, "clearing display framebuffer failed: %s", gst_imx_vpu_strerror(dec_ret));
+				else
+				{
+					vpu_meta->not_displayed_yet = FALSE;
+					vpu_pool->framebuffers->num_available_framebuffers++;
+					GST_DEBUG_OBJECT(pool, "cleared buffer %p", (gpointer)buffer);
+				}
 			}
+			else if (!vpu_pool->framebuffers->decenc_states.dec.decoder_open)
+				GST_DEBUG_OBJECT(pool, "not clearing buffer %p, since VPU decoder is closed", (gpointer)buffer);
+			else
+				GST_DEBUG_OBJECT(pool, "buffer %p already cleared", (gpointer)buffer);
 		}
-		else if (!vpu_pool->framebuffers->decenc_states.dec.decoder_open)
-			GST_DEBUG_OBJECT(pool, "not clearing buffer %p, since VPU decoder is closed", (gpointer)buffer);
 		else
-			GST_DEBUG_OBJECT(pool, "buffer %p already cleared", (gpointer)buffer);
+		{
+			GST_DEBUG_OBJECT(pool, "buffer %p does not contain physical memory and/or a VPU framebuffer pointer, and does not need to be cleared", (gpointer)buffer);
+		}
+
+		/* Clear out old memory blocks ; the decoder always fills empty buffers with new memory
+		 * blocks when it needs to push a newly decoded frame downstream anyway
+		 * (see gst_imx_vpu_set_buffer_contents() below)
+		 * removing the now-unused memory blocks immediately avoids buildup of unused but
+		 * still allocated memory */
+		gst_buffer_remove_all_memory(buffer);
 
 		g_mutex_unlock(&(vpu_pool->framebuffers->available_fb_mutex));
 	}
@@ -331,8 +341,9 @@ gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffer
 		);
 	}
 
-
+	/* remove any existing memory blocks */
 	gst_buffer_remove_all_memory(buffer);
+	/* and append the new memory block */
 	gst_buffer_append_memory(buffer, memory);
 
 	return TRUE;
