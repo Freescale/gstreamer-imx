@@ -887,6 +887,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		 * This point is always reached after set_format() was called,
 		 * and always before a frame is output */
 		{
+			guint min_fbcount_indicated_by_vpu;
 			GstImxVpuFramebufferParams fbparams;
 			gst_imx_vpu_framebuffers_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
 
@@ -894,7 +895,9 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * the min_framebuffer_count+1 part takes care of corner cases where one more framebuffer is
 			 * used at the same time and min_framebuffer_count >= 10
 			 * the 10 framebuffers figure is an empirically estimated default */
-			fbparams.min_framebuffer_count = MAX((guint)(fbparams.min_framebuffer_count + 1), vpu_dec->min_num_framebuffers);
+			min_fbcount_indicated_by_vpu = (guint)(fbparams.min_framebuffer_count);
+			fbparams.min_framebuffer_count = MAX((min_fbcount_indicated_by_vpu + 1), vpu_dec->min_num_framebuffers);
+			GST_DEBUG_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen minimum: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
 
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
 			if (vpu_dec->current_framebuffers == NULL)
@@ -961,18 +964,22 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 		g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(cur_frame->system_frame_number + 1));
 
+		/* Decrement only if framebuffers are available
+		 * if none are available, then fallback mode kicks in, and data is copied immediately
+		 * from the framebuffer memory, so decrementing the counter makes no sense then */
 		if (vpu_dec->current_framebuffers->num_available_framebuffers > 0)
+		{
 			vpu_dec->current_framebuffers->num_available_framebuffers--;
-		GST_DEBUG_OBJECT(vpu_dec, "number of available buffers is %d", vpu_dec->current_framebuffers->num_available_framebuffers);
-	}
-
-	/* There are no available framebuffers left; only the reserved ones
-	 * -> instead of sending them downstream, mark their contents to be
-	 * copied to memory allocated on the heap */
-	if (vpu_dec->current_framebuffers->num_available_framebuffers <= 0)
-	{
-		GST_WARNING_OBJECT(vpu_dec, "no framebuffers available - copying decoded contents to a heap buffer");
-		do_memcpy = TRUE;
+			GST_DEBUG_OBJECT(vpu_dec, "number of available buffers is %d", vpu_dec->current_framebuffers->num_available_framebuffers);
+		}
+		else
+		{
+			/* There are no available framebuffers left; only the reserved ones
+			 * -> instead of sending them downstream, mark their contents to be
+			 * copied to memory allocated on the heap */
+			GST_WARNING_OBJECT(vpu_dec, "no framebuffers available - copying decoded contents to a heap buffer");
+			do_memcpy = TRUE;
+		}
 	}
 
 	/* Unlock the mutex; the subsequent steps are safe */
@@ -1042,12 +1049,14 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			return GST_FLOW_ERROR;
 		}
 
-		vpu_dec->current_framebuffers->num_available_framebuffers++;
+		if (!do_memcpy) /* do not increase the counter if fallback mode is used */
+			vpu_dec->current_framebuffers->num_available_framebuffers++;
 	}
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_DROPPED)
 	{
 		GST_DEBUG_OBJECT(vpu_dec, "dropping frame");
-		vpu_dec->current_framebuffers->num_available_framebuffers++;
+		if (!do_memcpy) /* do not increase the counter if fallback mode is used */
+			vpu_dec->current_framebuffers->num_available_framebuffers++;
 //		gst_video_decoder_drop_frame(decoder, frame); // TODO
 	}
 	else if (buffer_ret_code & VPU_DEC_NO_ENOUGH_BUF)
