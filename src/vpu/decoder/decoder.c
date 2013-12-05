@@ -151,7 +151,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 
 		/* VPU_V_H263 */
 		"video/x-h263, "
-		"parsed = (boolean) true; "
+		"variant = (string) itu; "
 
 		/* VPU_V_MJPG */
 		"image/jpeg; "

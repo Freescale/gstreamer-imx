@@ -54,9 +54,8 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_SRC,
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
-		"video/mpeg, "
-		"mpegversion = (int) 4," 
-		"systemstream = (boolean) false, "
+		"video/x-h263, "
+		"variant = (string) itu, "
 		"width = (int) [ 48, 1920, 8 ], "
 		"height = (int) [ 32, 1080, 8 ], "
 		"framerate = (fraction) [ 0, MAX ]; "
