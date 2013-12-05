@@ -9,8 +9,7 @@ i.MX platform, with emphasis on video en/decoding using the i.MX VPU engine.
 
 Currently, this software has been tested on the i.MX 6 Sabre SD Dual Lite platform only.
 
-The software as a whole is in alpha stage. The decoder is approaching a stable status, the IPU elements
-and eglvivsink element are in a beta stage, the encoder code is in an early alpha stage.
+The software as a whole is currently in beta stage.
 
 
 License
