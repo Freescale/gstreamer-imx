@@ -831,7 +831,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		in_data.nSize = in_map_info.size;
 	}
 
-	GST_DEBUG_OBJECT(vpu_dec, "total input frame size: %u", in_data.nSize);
+	GST_DEBUG_OBJECT(vpu_dec, "codecframe: %p  total input frame size: %u", (gpointer)cur_frame, in_data.nSize);
 
 	/* Using a mutex here, since the VPU_DecDecodeBuf() call internally picks an
 	 * available framebuffer, and at the same time, the bufferpool release() function
@@ -896,7 +896,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * used at the same time and min_framebuffer_count >= 10
 			 * the 10 framebuffers figure is an empirically estimated default */
 			min_fbcount_indicated_by_vpu = (guint)(fbparams.min_framebuffer_count);
-			fbparams.min_framebuffer_count = MAX((min_fbcount_indicated_by_vpu + 1), vpu_dec->min_num_framebuffers);
+			fbparams.min_framebuffer_count = MAX((min_fbcount_indicated_by_vpu + 3), vpu_dec->min_num_framebuffers);
 			GST_DEBUG_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen minimum: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
 
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
@@ -950,40 +950,47 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 	/* The following code block may cause a race condition if not synchronized;
 	 * the buffer pool release() function must not run at the same time */
-	g_mutex_lock(&(vpu_dec->current_framebuffers->available_fb_mutex));
-
-	if (buffer_ret_code & VPU_DEC_ONE_FRM_CONSUMED)
 	{
-		VpuDecFrameLengthInfo dec_framelen_info;
+		g_mutex_lock(&(vpu_dec->current_framebuffers->available_fb_mutex));
 
-		dec_ret = VPU_DecGetConsumedFrameInfo(vpu_dec->handle, &dec_framelen_info);
-		if (dec_ret != VPU_DEC_RET_SUCCESS)
-			GST_ERROR_OBJECT(vpu_dec, "could not get information about consumed frame: %s", gst_imx_vpu_strerror(dec_ret));
-
-		GST_DEBUG_OBJECT(vpu_dec, "one frame got consumed: codecframe: %p  framebuffer: %p  system frame number: %u  stuff length: %d  frame length: %d", (gpointer)cur_frame, (gpointer)(dec_framelen_info.pFrame), cur_frame->system_frame_number, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
-
-		g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(cur_frame->system_frame_number + 1));
-
-		/* Decrement only if framebuffers are available
-		 * if none are available, then fallback mode kicks in, and data is copied immediately
-		 * from the framebuffer memory, so decrementing the counter makes no sense then */
-		if (vpu_dec->current_framebuffers->num_available_framebuffers > 0)
+		if (buffer_ret_code & VPU_DEC_ONE_FRM_CONSUMED)
 		{
-			vpu_dec->current_framebuffers->num_available_framebuffers--;
-			GST_DEBUG_OBJECT(vpu_dec, "number of available buffers is %d", vpu_dec->current_framebuffers->num_available_framebuffers);
+			VpuDecFrameLengthInfo dec_framelen_info;
+
+			dec_ret = VPU_DecGetConsumedFrameInfo(vpu_dec->handle, &dec_framelen_info);
+			if (dec_ret != VPU_DEC_RET_SUCCESS)
+				GST_ERROR_OBJECT(vpu_dec, "could not get information about consumed frame: %s", gst_imx_vpu_strerror(dec_ret));
+
+			GST_DEBUG_OBJECT(vpu_dec, "one frame got consumed: codecframe: %p  framebuffer: %p  system frame number: %u  stuff length: %d  frame length: %d", (gpointer)cur_frame, (gpointer)(dec_framelen_info.pFrame), cur_frame->system_frame_number, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
+
+			g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(cur_frame->system_frame_number + 1));
 		}
-		else
+
+		/* With some bitstreams, libfslvpuwrap does not report VPU_DEC_ONE_FRM_CONSUMED for consumed frames for some strange reason */
+		/* TODO: is this a bug in this library? */
+		if (buffer_ret_code & (VPU_DEC_ONE_FRM_CONSUMED | VPU_DEC_OUTPUT_DIS | VPU_DEC_OUTPUT_MOSAIC_DIS))
 		{
-			/* There are no available framebuffers left; only the reserved ones
-			 * -> instead of sending them downstream, mark their contents to be
-			 * copied to memory allocated on the heap */
-			GST_WARNING_OBJECT(vpu_dec, "no framebuffers available - copying decoded contents to a heap buffer");
-			do_memcpy = TRUE;
+			/* Decrement only if framebuffers are available
+			 * if none are available, then fallback mode kicks in, and data is copied immediately
+			 * from the framebuffer memory, so decrementing the counter makes no sense then */
+			if (vpu_dec->current_framebuffers->num_available_framebuffers > 0)
+			{
+				vpu_dec->current_framebuffers->num_available_framebuffers--;
+				GST_DEBUG_OBJECT(vpu_dec, "number of available buffers is %d", vpu_dec->current_framebuffers->num_available_framebuffers);
+			}
+			else
+			{
+				/* There are no available framebuffers left; only the reserved ones
+				 * -> instead of sending them downstream, mark their contents to be
+				 * copied to memory allocated on the heap */
+				GST_WARNING_OBJECT(vpu_dec, "no framebuffers available - copying decoded contents to a heap buffer");
+				do_memcpy = TRUE;
+			}
 		}
+
+		/* Unlock the mutex; the subsequent steps are safe */
+		g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
 	}
-
-	/* Unlock the mutex; the subsequent steps are safe */
-	g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
 
 	if (buffer_ret_code & VPU_DEC_OUTPUT_DIS)
 	{
@@ -991,6 +998,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		VpuDecOutFrameInfo out_frame_info;
 		GstVideoCodecFrame *out_frame;
 		guint32 out_system_frame_number;
+		gboolean sys_frame_nr_valid;
 
 		/* Retrieve the decoded frame */
 		dec_ret = VPU_DecGetOutputFrame(vpu_dec->handle, &out_frame_info);
@@ -1000,8 +1008,22 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			return GST_FLOW_ERROR;
 		}
 
-		out_system_frame_number = (guint32)(g_hash_table_lookup(vpu_dec->frame_table, (gpointer)(out_frame_info.pDisplayFrameBuf))) - 1;
-		out_frame = gst_video_decoder_get_frame(decoder, out_system_frame_number);
+		out_system_frame_number = (guint32)(g_hash_table_lookup(vpu_dec->frame_table, (gpointer)(out_frame_info.pDisplayFrameBuf)));
+		sys_frame_nr_valid = FALSE;
+		if (out_system_frame_number > 0)
+		{
+			out_system_frame_number--;
+			out_frame = gst_video_decoder_get_frame(decoder, out_system_frame_number);
+			if (out_frame != NULL)
+			{
+				GST_TRACE_OBJECT(vpu_dec, "system frame number valid and corresponding frame is still pending");
+				sys_frame_nr_valid = TRUE;
+			}
+			else
+				GST_WARNING_OBJECT(vpu_dec, "valid system frame number present, but corresponding frame has been handled already");
+		}
+		else
+			GST_TRACE_OBJECT(vpu_dec, "display framebuffer is unknown -> no valid system frame number can be retrieved; assuming no reordering is done");
 
 		/* Create empty buffer */
 		buffer = gst_video_decoder_allocate_output_buffer(decoder);
@@ -1014,7 +1036,17 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			return GST_FLOW_ERROR;
 		}
 
-		GST_DEBUG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer addr: %p  system frame number: %u  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gpointer)(out_frame_info.pDisplayFrameBuf), out_system_frame_number, (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
+		if (sys_frame_nr_valid)
+		{
+			GST_DEBUG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %p  system frame number: %u  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gpointer)(out_frame_info.pDisplayFrameBuf->pbufY), out_system_frame_number, (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
+		}
+		else
+		{
+			GST_TRACE_OBJECT(vpu_dec, "system frame number invalid or unusable - getting oldest pending frame instead");
+			out_frame = gst_video_decoder_get_oldest_frame(decoder);
+
+			GST_DEBUG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %p  system frame number: <none; oldest frame>  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gpointer)(out_frame_info.pDisplayFrameBuf->pbufY), (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
+		}
 
 		if (!do_memcpy)
 		{
