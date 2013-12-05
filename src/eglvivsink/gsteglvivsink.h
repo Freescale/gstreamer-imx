@@ -131,6 +131,8 @@ struct _GstEglGlesRenderContext
   EGLint egl_minor, egl_major;
   gint n_textures;
 
+  GLvoid* viv_planes[3];
+
   /* shader vars */
   GLuint position_loc[2]; /* frame, border */
   GLuint texpos_loc[1]; /* frame */
