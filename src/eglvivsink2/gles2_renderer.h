@@ -1,0 +1,33 @@
+#ifndef GST_IMX_EGL_VIV_SINK_GLES2_RENDERER_H
+#define GST_IMX_EGL_VIV_SINK_GLES2_RENDERER_H
+
+#include <gst/gst.h>
+#include <gst/video/video.h>
+
+
+G_BEGIN_DECLS
+
+
+typedef struct _GstImxEglVivSinkGLES2Renderer GstImxEglVivSinkGLES2Renderer;
+
+
+GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void);
+void gst_imx_egl_viv_sink_gles2_renderer_destroy(GstImxEglVivSinkGLES2Renderer *renderer);
+
+gboolean gst_imx_egl_viv_sink_gles2_renderer_start(GstImxEglVivSinkGLES2Renderer *renderer);
+gboolean gst_imx_egl_viv_sink_gles2_renderer_stop(GstImxEglVivSinkGLES2Renderer *renderer);
+gboolean gst_imx_egl_viv_sink_gles2_renderer_is_started(GstImxEglVivSinkGLES2Renderer *renderer);
+
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_handle(GstImxEglVivSinkGLES2Renderer *renderer, guintptr window_handle);
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_event_handling(GstImxEglVivSinkGLES2Renderer *renderer, gboolean event_handling);
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_video_info(GstImxEglVivSinkGLES2Renderer *renderer, GstVideoInfo *video_info);
+
+GstFlowReturn gst_imx_egl_viv_sink_gles2_renderer_show_frame(GstImxEglVivSinkGLES2Renderer *renderer, GstBuffer *buf);
+gboolean gst_imx_egl_viv_sink_gles2_renderer_expose(GstImxEglVivSinkGLES2Renderer *renderer);
+
+
+G_END_DECLS
+
+
+#endif
+
