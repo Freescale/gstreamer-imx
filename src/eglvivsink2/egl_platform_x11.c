@@ -13,9 +13,6 @@ GST_DEBUG_CATEGORY_STATIC(eglplatform_x11_debug);
 #define GST_CAT_DEFAULT eglplatform_x11_debug
 
 
-//#define USE_POLL
-
-
 struct _GstImxEglVivSinkEGLPlatform
 {
 	EGLNativeDisplayType native_display;
@@ -27,10 +24,6 @@ struct _GstImxEglVivSinkEGLPlatform
 	Atom wm_delete_atom;
 	GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb;
 	gpointer user_context;
-#ifdef USE_POLL
-	int x11_display_fd;
-	int x11_expose_pipe_fd[2];
-#endif
 };
 
 
@@ -86,15 +79,6 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(GstImxEglV
 	platform->window_resized_event_cb = window_resized_event_cb;
 	platform->user_context = user_context;
 
-#ifdef USE_POLL
-	if (pipe(platform->x11_expose_pipe_fd) == -1)
-	{
-		GST_ERROR("could not create expose pipe: %s", strerror(errno));
-		g_free(platform);
-		return NULL;
-	}
-#endif
-
 	x11_display = XOpenDisplay(0);
 	if (x11_display == NULL)
 	{
@@ -102,17 +86,6 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(GstImxEglV
 		g_free(platform);
 		return NULL;
 	}
-
-#ifdef USE_POLL
-	platform->x11_display_fd = ConnectionNumber(x11_display);
-	if (platform->x11_display_fd < 0)
-	{
-		GST_ERROR("got invalid file descriptor %d for X11 display", platform->x11_display_fd);
-		XCloseDisplay(x11_display);
-		g_free(platform);
-		return NULL;
-	}
-#endif
 
 	platform->native_display = (EGLNativeDisplayType)x11_display;
 
@@ -147,10 +120,6 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 			eglTerminate(platform->egl_display);
 		if (platform->native_display != NULL)
 			XCloseDisplay((Display*)(platform->native_display));
-#ifdef USE_POLL
-		close(platform->x11_expose_pipe_fd[0]);
-		close(platform->x11_expose_pipe_fd[1]);
-#endif
 		g_free(platform);
 	}
 }
@@ -369,12 +338,8 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatfor
 
 gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *platform)
 {
-#ifdef USE_POLL
-	char dummy = 1;
-#else
 	Display *x11_display = (Display *)(platform->native_display);
 	Window x11_window = (Window)(platform->native_window);
-#endif
 
 	if (platform->native_window == 0)
 	{
@@ -382,13 +347,6 @@ gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *p
 		return TRUE;
 	}
 
-#ifdef USE_POLL
-	if (write(platform->x11_expose_pipe_fd[1], &dummy, sizeof(dummy)) == -1)
-	{
-		GST_ERROR("could not write dummy value into expose pipe: %s", strerror(errno));
-		return FALSE;
-	}
-#else
 	XClientMessageEvent dummy_event;
 	memset(&dummy_event, 0, sizeof(dummy_event));
 	dummy_event.type = ClientMessage;
@@ -396,7 +354,6 @@ gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *p
 	dummy_event.format = 32;
 	XSendEvent(x11_display, x11_window, 0, 0, (XEvent *)(&dummy_event));
 	XFlush(x11_display);
-#endif
 
 	return TRUE;
 }
@@ -404,34 +361,12 @@ gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *p
 
 GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_events(GstImxEglVivSinkEGLPlatform *platform)
 {
-#ifdef USE_POLL
-	struct pollfd fds[2];
-	int pret;
-#endif
 	Display *x11_display = (Display *)(platform->native_display);
 	gboolean expose_required = FALSE;
 
-#ifdef USE_POLL
-	memset(fds, 0, sizeof(fds));
-	fds[0].fd = platform->x11_display_fd;
-	fds[1].fd = platform->x11_expose_pipe_fd[0];
-	fds[0].events = fds[1].events = POLLIN;
-
-	pret = poll(fds, 2, -1);
-	if ((pret < 0) && (pret != EAGAIN))
-	{
-		GST_ERROR("poll() failed: %s", strerror(errno));
-		return GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_ERROR;
-	}
-
-	if (fds[0].revents & POLLIN)
-#endif
 	{
 		/* handle X11 events */
 
-#ifdef USE_POLL
-		while (XPending(x11_display))
-#endif
 		{
 			XEvent xevent;
 
@@ -469,25 +404,6 @@ GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_even
 			}
 		}
 	}
-
-#ifdef USE_POLL
-	if ((pret != EAGAIN) && (fds[1].revents & POLLIN))
-	{
-		/* expose requested through pipe */
-
-		char dummy;
-
-		GST_DEBUG("received dummy data in expose pipe   %x", fds[1].revents);
-
-		if (read(platform->x11_expose_pipe_fd[0], &dummy, sizeof(dummy) == -1))
-		{
-			GST_ERROR("could not read dummy value from expose pipe: %s", strerror(errno));
-			return GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_ERROR;
-		}
-		else
-			expose_required = TRUE;
-	}
-#endif
 
 	return expose_required ? GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_EXPOSE_REQUIRED : GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_OK;
 }
