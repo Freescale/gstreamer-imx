@@ -323,7 +323,7 @@ static gboolean gst_imx_egl_viv_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 static gboolean gst_imx_egl_viv_propose_allocation(GstBaseSink *sink, GstQuery *query)
 {
-#if 0
+#if 1
 	GstCaps *caps;
 	GstVideoInfo info;
 	GstBufferPool *pool;
