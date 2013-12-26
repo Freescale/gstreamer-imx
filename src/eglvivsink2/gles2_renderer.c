@@ -25,7 +25,7 @@ struct _GstImxEglVivSinkGLES2Renderer
 	gboolean thread_started, loop_running;
 	GstFlowReturn loop_flow_retval;
 	GThread *thread;
-	GRecMutex mutex; // TODO: try to use GMutex instead (it's faster)
+	GMutex mutex;
 
 	GLuint vertex_shader, fragment_shader, program;
 	GLuint vertex_buffer, index_buffer;
@@ -37,8 +37,8 @@ struct _GstImxEglVivSinkGLES2Renderer
 };
 
 
-#define GLES2_RENDERER_LOCK(renderer) g_rec_mutex_lock(&((renderer)->mutex))
-#define GLES2_RENDERER_UNLOCK(renderer) g_rec_mutex_unlock(&((renderer)->mutex))
+#define GLES2_RENDERER_LOCK(renderer) g_mutex_lock(&((renderer)->mutex))
+#define GLES2_RENDERER_UNLOCK(renderer) g_mutex_unlock(&((renderer)->mutex))
 
 
 static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data);
@@ -828,7 +828,7 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void)
 	renderer->loop_running = FALSE;
 	renderer->loop_flow_retval = GST_FLOW_OK;
 	renderer->thread = NULL;
-	g_rec_mutex_init(&(renderer->mutex));
+	g_mutex_init(&(renderer->mutex));
 
 	renderer->vertex_shader = 0;
 	renderer->fragment_shader = 0;
@@ -857,7 +857,7 @@ void gst_imx_egl_viv_sink_gles2_renderer_destroy(GstImxEglVivSinkGLES2Renderer *
 		gst_imx_egl_viv_sink_egl_platform_destroy(renderer->egl_platform);
 	}
 
-	g_rec_mutex_clear(&(renderer->mutex));
+	g_mutex_clear(&(renderer->mutex));
 
 	g_slice_free1(sizeof(GstImxEglVivSinkGLES2Renderer), renderer);
 }
