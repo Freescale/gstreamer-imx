@@ -780,9 +780,10 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 	if (!gst_imx_egl_viv_sink_gles2_renderer_fill_texture(renderer, renderer->current_frame))
 		return FALSE;
 
+#if 0
 	glBufferData(GL_ARRAY_BUFFER, vertex_data_size, vertex_data, GL_STATIC_DRAW);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_data_size, index_data, GL_STATIC_DRAW);
-
+#endif
 
 	glDrawElements(GL_TRIANGLES, num_vertex_indices, vertex_index_gltype, (GLvoid const *)0);
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glDrawElements"))
