@@ -24,7 +24,15 @@ struct _GstImxEglVivSinkEGLPlatform
 	Atom wm_delete_atom;
 	GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb;
 	gpointer user_context;
+	GMutex mutex;
 };
+ 
+ 
+#define EGL_PLATFORM_LOCK(platform) g_mutex_lock(&((platform)->mutex))
+#define EGL_PLATFORM_UNLOCK(platform) g_mutex_unlock(&((platform)->mutex))
+
+
+static void gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(GstImxEglVivSinkEGLPlatform *platform, gboolean event_handling);
 
 
 static void init_debug_category(void)
@@ -79,6 +87,8 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(GstImxEglV
 	platform->window_resized_event_cb = window_resized_event_cb;
 	platform->user_context = user_context;
 
+	g_mutex_init(&(platform->mutex));
+
 	x11_display = XOpenDisplay(0);
 	if (x11_display == NULL)
 	{
@@ -116,6 +126,8 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 {
 	if (platform != NULL)
 	{
+		g_mutex_clear(&(platform->mutex));
+
 		if (platform->egl_display != EGL_NO_DISPLAY)
 			eglTerminate(platform->egl_display);
 		if (platform->native_display != NULL)
@@ -155,13 +167,15 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		return FALSE;
 	}
 
+	EGL_PLATFORM_LOCK(platform);
+
 	if (window_handle != 0)
 	{
 		platform->native_window = window_handle;
 		platform->internal_window = FALSE;
 		/* TODO: select EGL config with matching visual */
 
-		gst_imx_egl_viv_sink_egl_platform_set_event_handling(platform, event_handling);
+		gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(platform, event_handling);
 	}
 	else
 	{
@@ -175,6 +189,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		if (!eglGetConfigAttrib(platform->egl_display, config, EGL_NATIVE_VISUAL_ID, &native_visual_id))
 		{
 			GST_ERROR("eglGetConfigAttrib failed: %s", gst_imx_egl_viv_sink_egl_platform_get_error_string());
+			EGL_PLATFORM_UNLOCK(platform);
 			return FALSE;
 		}
 
@@ -187,6 +202,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		if (visual_info == NULL)
 		{
 			GST_ERROR("Could not get visual info for native visual ID %d", native_visual_id);
+			EGL_PLATFORM_UNLOCK(platform);
 			return FALSE;
 		}
 
@@ -216,7 +232,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		XSetWMProtocols(x11_display, x11_window, &(platform->wm_delete_atom), 1);
 
 		XStoreName(x11_display, x11_window, "eglvivsink window");
-		gst_imx_egl_viv_sink_egl_platform_set_event_handling(platform, event_handling);
+		gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(platform, event_handling);
 
 		XSizeHints sizehints;
 		sizehints.x = 0;
@@ -249,6 +265,8 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 			glViewport(0, 0, window_attr.width, window_attr.height);
 	}
 
+	EGL_PLATFORM_UNLOCK(platform);
+
 	return TRUE;
 }
 
@@ -276,6 +294,8 @@ gboolean gst_imx_egl_viv_sink_egl_platform_shutdown_window(GstImxEglVivSinkEGLPl
 	platform->egl_context = EGL_NO_CONTEXT;
 	platform->egl_surface = EGL_NO_SURFACE;
 
+	EGL_PLATFORM_LOCK(platform);
+
 	XSelectInput(x11_display, x11_window, 0);
 
 	while (XPending(x11_display))
@@ -289,14 +309,16 @@ gboolean gst_imx_egl_viv_sink_egl_platform_shutdown_window(GstImxEglVivSinkEGLPl
 
 	platform->native_window = 0;
 
+	EGL_PLATFORM_UNLOCK(platform);
+
 	return TRUE;
 }
 
 
-void gst_imx_egl_viv_sink_egl_platform_set_event_handling(GstImxEglVivSinkEGLPlatform *platform, gboolean event_handling)
+static void gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(GstImxEglVivSinkEGLPlatform *platform, gboolean event_handling)
 {
+	Window x11_window;
 	Display *x11_display = (Display *)(platform->native_display);
-	Window x11_window = (Window)(platform->native_window);
 
 	static long const basic_event_mask = ExposureMask | StructureNotifyMask | PointerMotionMask | KeyPressMask | KeyReleaseMask;
 
@@ -305,6 +327,7 @@ void gst_imx_egl_viv_sink_egl_platform_set_event_handling(GstImxEglVivSinkEGLPla
 		GST_LOG("window not open - cannot set event handling");
 		return;
 	}
+	x11_window = (Window)(platform->native_window);
 
 	if (event_handling)
 	{
@@ -324,28 +347,48 @@ void gst_imx_egl_viv_sink_egl_platform_set_event_handling(GstImxEglVivSinkEGLPla
 }
 
 
+void gst_imx_egl_viv_sink_egl_platform_set_event_handling(GstImxEglVivSinkEGLPlatform *platform, gboolean event_handling)
+{
+	EGL_PLATFORM_LOCK(platform);
+	gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(platform, event_handling);
+	EGL_PLATFORM_UNLOCK(platform);
+}
+
+
 void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatform *platform, GstVideoInfo *video_info)
 {
+	Window x11_window;
+
+	EGL_PLATFORM_LOCK(platform);
 	if (platform->native_window == 0)
 	{
 		GST_LOG("window not open - cannot set video info");
+		EGL_PLATFORM_UNLOCK(platform);
 		return;
 	}
 
-	XResizeWindow((Display *)(platform->native_display), (Window)(platform->native_window), GST_VIDEO_INFO_WIDTH(video_info), GST_VIDEO_INFO_HEIGHT(video_info));
+	x11_window = (Window)(platform->native_window);
+
+	XResizeWindow((Display *)(platform->native_display), x11_window, GST_VIDEO_INFO_WIDTH(video_info), GST_VIDEO_INFO_HEIGHT(video_info));
+
+	EGL_PLATFORM_UNLOCK(platform);
 }
 
 
 gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *platform)
 {
+	Window x11_window;
 	Display *x11_display = (Display *)(platform->native_display);
-	Window x11_window = (Window)(platform->native_window);
+
+	EGL_PLATFORM_LOCK(platform);
 
 	if (platform->native_window == 0)
 	{
 		GST_LOG("window not open - cannot expose");
+		EGL_PLATFORM_UNLOCK(platform);
 		return TRUE;
 	}
+	x11_window = (Window)(platform->native_window);
 
 	XClientMessageEvent dummy_event;
 	memset(&dummy_event, 0, sizeof(dummy_event));
@@ -354,6 +397,8 @@ gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *p
 	dummy_event.format = 32;
 	XSendEvent(x11_display, x11_window, 0, 0, (XEvent *)(&dummy_event));
 	XFlush(x11_display);
+
+	EGL_PLATFORM_UNLOCK(platform);
 
 	return TRUE;
 }
