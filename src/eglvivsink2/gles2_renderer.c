@@ -28,7 +28,7 @@ struct _GstImxEglVivSinkGLES2Renderer
 	GMutex mutex;
 
 	GLuint vertex_shader, fragment_shader, program;
-	GLuint vertex_buffer, index_buffer;
+	GLuint vertex_buffer;
 	GLuint texture;
 	GLint tex_uloc, uv_scale_uloc;
 	GLint position_aloc, texcoords_aloc;
@@ -48,8 +48,8 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_build_shader(GLuint *shader,
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_destroy_shader(GLuint *shader, GLenum shader_type);
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_link_program(GLuint *program, GLuint vertex_shader, GLuint fragment_shader);
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_destroy_program(GLuint *program, GLuint vertex_shader, GLuint fragment_shader);
-static gboolean gst_imx_egl_viv_sink_gles2_renderer_build_vertex_index_buffers(GLuint *vertex_buffer, GLuint *index_buffer);
-static gboolean gst_imx_egl_viv_sink_gles2_renderer_destroy_vertex_index_buffers(GLuint *vertex_buffer, GLuint *index_buffer);
+static gboolean gst_imx_egl_viv_sink_gles2_renderer_build_vertex_buffer(GLuint *vertex_buffer);
+static gboolean gst_imx_egl_viv_sink_gles2_renderer_destroy_vertex_buffer(GLuint *vertex_buffer);
 static GLenum gst_imx_egl_viv_sink_gles2_renderer_get_viv_format(GstVideoFormat format);
 static gint gst_imx_egl_viv_sink_gles2_renderer_bpp(GstVideoFormat fmt);
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_search_extension(GLubyte const *extensions);
@@ -88,24 +88,16 @@ static char const * simple_fragment_shader =
 
 static GLfloat const vertex_data[] = {
 	-1, -1,  0, 1,
+	-1,  1,  0, 0,
 	 1, -1,  1, 1,
 	 1,  1,  1, 0,
-	-1,  1,  0, 0
 };
-static unsigned int const vertex_data_size = sizeof(vertex_data);
+static unsigned int const vertex_data_size = sizeof(GLfloat)*16;
 static unsigned int const vertex_size = sizeof(GLfloat)*4;
 static unsigned int const vertex_position_num = 2;
 static unsigned int const vertex_position_offset = sizeof(GLfloat)*0;
 static unsigned int const vertex_texcoords_num = 2;
 static unsigned int const vertex_texcoords_offset = sizeof(GLfloat)*2;
-
-static GLushort const index_data[] = {
-	3, 0, 2,
-	2, 0, 1
-};
-static unsigned int const index_data_size = sizeof(index_data);
-static unsigned int const num_vertex_indices = 6;
-static GLenum const vertex_index_gltype = GL_UNSIGNED_SHORT;
 
 
 
@@ -174,7 +166,6 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 
 	glUseProgram(renderer->program);
 	glBindBuffer(GL_ARRAY_BUFFER, renderer->vertex_buffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderer->index_buffer);
 	glBindTexture(GL_TEXTURE_2D, renderer->texture);
 
 	GST_DEBUG("starting loop");
@@ -418,27 +409,24 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_destroy_program(GLuint *prog
 }
 
 
-static gboolean gst_imx_egl_viv_sink_gles2_renderer_build_vertex_index_buffers(GLuint *vertex_buffer, GLuint *index_buffer)
+static gboolean gst_imx_egl_viv_sink_gles2_renderer_build_vertex_buffer(GLuint *vertex_buffer)
 {
 	glGetError(); /* clear out any existing error */
 
 	glGenBuffers(1, vertex_buffer);
 	glBindBuffer(GL_ARRAY_BUFFER, *vertex_buffer);
+	/* TODO: This has to be called twice, otherwise the vertex data gets corrupted after the first few
+	 * rendered frames. Is this a Vivante driver bug? */
+	glBufferData(GL_ARRAY_BUFFER, vertex_data_size, vertex_data, GL_STATIC_DRAW);
 	glBufferData(GL_ARRAY_BUFFER, vertex_data_size, vertex_data, GL_STATIC_DRAW);
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("vertex buffer", "glBufferData"))
-		return FALSE;
-
-	glGenBuffers(1, index_buffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, *index_buffer);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_data_size, index_data, GL_STATIC_DRAW);
-	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("index buffer", "glBufferData"))
 		return FALSE;
 
 	return TRUE;
 }
 
 
-static gboolean gst_imx_egl_viv_sink_gles2_renderer_destroy_vertex_index_buffers(GLuint *vertex_buffer, GLuint *index_buffer)
+static gboolean gst_imx_egl_viv_sink_gles2_renderer_destroy_vertex_buffer(GLuint *vertex_buffer)
 {
 	glGetError(); /* clear out any existing error */
 
@@ -447,13 +435,6 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_destroy_vertex_index_buffers
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
 		glDeleteBuffers(1, vertex_buffer);
 		*vertex_buffer = 0;
-	}
-
-	if ((*index_buffer) != 0)
-	{
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-		glDeleteBuffers(1, index_buffer);
-		*index_buffer = 0;
 	}
 
 	return TRUE;
@@ -597,7 +578,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_setup_resources(GstImxEglViv
 	glUniform1i(renderer->tex_uloc, 0);
 
 	/* build vertex and index buffer objects */
-	if (!gst_imx_egl_viv_sink_gles2_renderer_build_vertex_index_buffers(&(renderer->vertex_buffer), &(renderer->index_buffer)))
+	if (!gst_imx_egl_viv_sink_gles2_renderer_build_vertex_buffer(&(renderer->vertex_buffer)))
 		return FALSE;
 
 	/* enable vertex attrib array and set up pointers */
@@ -631,7 +612,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_teardown_resources(GstImxEgl
 	glDisableVertexAttribArray(renderer->texcoords_aloc);
 	ret = gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("texcoords vertex attrib", "glDisableVertexAttribArray") && ret;
 	/* destroy vertex and index buffer objects */
-	ret = gst_imx_egl_viv_sink_gles2_renderer_destroy_vertex_index_buffers(&(renderer->vertex_buffer), &(renderer->index_buffer)) && ret;
+	ret = gst_imx_egl_viv_sink_gles2_renderer_destroy_vertex_buffer(&(renderer->vertex_buffer)) && ret;
 
 	/* destroy texture */
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -780,12 +761,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 	if (!gst_imx_egl_viv_sink_gles2_renderer_fill_texture(renderer, renderer->current_frame))
 		return FALSE;
 
-#if 0
-	glBufferData(GL_ARRAY_BUFFER, vertex_data_size, vertex_data, GL_STATIC_DRAW);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_data_size, index_data, GL_STATIC_DRAW);
-#endif
-
-	glDrawElements(GL_TRIANGLES, num_vertex_indices, vertex_index_gltype, (GLvoid const *)0);
+	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glDrawElements"))
 		return FALSE;
 
@@ -834,7 +810,6 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void)
 	renderer->fragment_shader = 0;
 	renderer->program = 0;
 	renderer->vertex_buffer = 0;
-	renderer->index_buffer = 0;
 	renderer->texture = 0;
 
 	renderer->viv_planes[0] = NULL;
