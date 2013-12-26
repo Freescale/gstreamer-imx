@@ -74,6 +74,7 @@ static char const * simple_vertex_shader =
 	;
 
 static char const * simple_fragment_shader =
+	"precision mediump float;\n"
 	"varying vec2 uv; \n"
 	"uniform sampler2D tex; \n"
 	"uniform vec2 uv_scale; \n"
@@ -103,6 +104,8 @@ static GLushort const index_data[] = {
 	2, 0, 1
 };
 static unsigned int const index_data_size = sizeof(index_data);
+static unsigned int const num_vertex_indices = 6;
+static GLenum const vertex_index_gltype = GL_UNSIGNED_SHORT;
 
 
 
@@ -367,7 +370,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_link_program(GLuint *program
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("program", "glLinkProgram"))
 		return FALSE;
 
-	glGetShaderiv(*program, GL_LINK_STATUS, &link_status);
+	glGetProgramiv(*program, GL_LINK_STATUS, &link_status);
 	if (link_status == GL_FALSE)
 	{
 		GST_ERROR("linking program failed");
@@ -605,10 +608,10 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_setup_resources(GstImxEglViv
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("texcoords vertex attrib", "glEnableVertexAttribArray"))
 		return FALSE;
 
-	glVertexAttribPointer(renderer->position_aloc,  vertex_position_num, GL_FLOAT, GL_FALSE, vertex_size, (GLvoid const*)(vertex_position_offset));
+	glVertexAttribPointer(renderer->position_aloc,  vertex_position_num, GL_FLOAT, GL_FALSE, vertex_size, (GLvoid const*)((uintptr_t)vertex_position_offset));
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("position vertex attrib", "glVertexAttribPointer"))
 		return FALSE;
-	glVertexAttribPointer(renderer->texcoords_aloc, vertex_texcoords_num, GL_FLOAT, GL_FALSE, vertex_size, (GLvoid const*)(vertex_texcoords_offset));
+	glVertexAttribPointer(renderer->texcoords_aloc, vertex_texcoords_num, GL_FLOAT, GL_FALSE, vertex_size, (GLvoid const*)((uintptr_t)vertex_texcoords_offset));
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("texcoords vertex attrib", "glVertexAttribPointer"))
 		return FALSE;
 
@@ -781,7 +784,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_data_size, index_data, GL_STATIC_DRAW);
 
 
-	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, (GLvoid const *)0);
+	glDrawElements(GL_TRIANGLES, num_vertex_indices, vertex_index_gltype, (GLvoid const *)0);
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glDrawElements"))
 		return FALSE;
 
