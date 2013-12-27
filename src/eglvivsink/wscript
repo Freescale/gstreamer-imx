@@ -14,22 +14,6 @@ def check_x11(conf, uselib = ''):
 	  conf.check_cc(mandatory = 0, lib = 'X11', uselib = uselib, uselib_store = 'X11') and \
 	  conf.check_cc(mandatory = 0, header_name = 'X11/Xlib.h', uselib = uselib, uselib_store = 'X11')
 
-def check_egl(conf, uselib = ''):
-	return \
-	  conf.check_cc(mandatory = 0, lib = 'EGL', uselib = uselib, uselib_store = 'EGL') and \
-	  conf.check_cc(mandatory = 0, header_name = 'EGL/egl.h', uselib = uselib, uselib_store = 'EGL')
-
-def check_openvg(conf, uselib = 'EGL'):
-	return \
-	  conf.check_cc(mandatory = 0, lib = 'OpenVG', uselib = uselib, uselib_store = 'OPENVG') and \
-	  conf.check_cc(mandatory = 0, header_name = 'VG/openvg.h', uselib = uselib, uselib_store = 'OPENVG')
-
-def check_gles1(conf, uselib = 'EGL', lib_list = ['GLESv1_CM', 'GLESV1_CL']):
-	retval = \
-	  check_lib_list(conf = conf, uselib = uselib, uselib_store = 'GLES1', lib_list = lib_list) and \
-	  conf.check_cc(mandatory = 0, header_name = 'GLES/gl.h', uselib = uselib, uselib_store = 'GLES1')
-	return retval
-
 def check_gles2(conf, uselib = 'EGL', lib_list = ['GLESv2']):
 	retval = \
 	  check_lib_list(conf = conf, uselib = uselib, uselib_store = 'GLES2', lib_list = lib_list) and \
@@ -37,6 +21,22 @@ def check_gles2(conf, uselib = 'EGL', lib_list = ['GLESv2']):
 	conf.check_cc(mandatory = 0, header_name = ['GLES2/gl2.h', 'GLES2/gl2ext.h'], uselib = uselib, define_name = 'WITH_GL2EXT_H', uselib_store = 'GLES2')
 	return retval
 
+def check_vivante_egl(conf, egl_extra_defines):
+	if not conf.check_cc(mandatory = 0, lib = ['EGL', 'GAL'], uselib_store = 'EGL'):
+		return False
+	old_cflags = list(conf.env['CFLAGS'])
+	extra_defines = ['LINUX']
+	if egl_extra_defines:
+		extra_defines += egl_extra_defines
+	extra_cflags = map(lambda x: conf.env['DEFINES_ST'] % x, extra_defines)
+	conf.env['CFLAGS'] += extra_cflags
+	retval = \
+		conf.check_cc(mandatory = 0, header_name = 'EGL/eglvivante.h', uselib_store = 'EGL') and \
+		conf.check_cc(mandatory = 0, header_name = 'EGL/egl.h', uselib_store = 'EGL')
+	conf.env['CFLAGS'] = old_cflags
+	if retval:
+		conf.env['DEFINES_EGL'] += extra_defines
+	return retval
 
 def check_viv_texformat(conf, texformat):
 	test_code = """
@@ -52,18 +52,45 @@ def check_viv_texformat(conf, texformat):
 			return (GL_%s) * 0;
 		}
 	"""
-	return conf.check(fragment = (test_code % texformat), mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for GLES texture format %s' % texformat, uselib = ['EGL', 'GLES'], okmsg = 'yes', errmsg = 'no')  
+	return conf.check(fragment = (test_code % texformat), mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for GLES texture format %s' % texformat, uselib = ['EGL', 'GLES2'] + conf.env['PLATFORM_USELIBS'], okmsg = 'yes', errmsg = 'no')
+
+
+valid_egl_platforms = ['fb', 'x11']
+
+
+def options(opt):
+	opt.add_option('--egl-platform', action='store', default='x11', help='EGL platform to build for (valid values: ' + ' '.join(valid_egl_platforms) + ')')
+
+
+def check_dependencies(conf):
+	platform = conf.options.egl_platform
+	if platform == "x11":
+		if not check_x11(conf) or not check_vivante_egl(conf, None):
+			return False
+		conf.env['PLATFORM_SOURCE'] = ['egl_platform_x11.c']
+		conf.env['PLATFORM_USELIBS'] += ["X11"]
+	elif platform == "fb":
+		if not check_vivante_egl(conf, ['EGL_API_FB']):
+			return False
+		conf.env['PLATFORM_SOURCE'] = ['egl_platform_fb_mx6.c']
+
+	if not check_gles2(conf):
+		return False
+
+	for texfmt in ['VIV_I420', 'VIV_YV12', 'VIV_NV12', 'VIV_NV21', 'VIV_YUY2', 'VIV_UYVY']:
+		if check_viv_texformat(conf, texfmt):
+			conf.define('HAVE_' + texfmt, 1)
+
+	return True
 
 
 def configure(conf):
 	from waflib.Build import Logs
-	conf.env['DEFINES_EGL'] = ['LINUX']
-	if check_x11(conf) and \
-	  check_egl(conf, 'EGL') and \
-	  check_gles2(conf, lib_list = ['GLESv2', 'GLESv2x', 'GLESv2SC']):
-		for texfmt in ['VIV_I420', 'VIV_YV12', 'VIV_NV12', 'VIV_NV21', 'VIV_YUY2', 'VIV_UYVY']:
-			if check_viv_texformat(conf, texfmt):
-				conf.define('HAVE_' + texfmt, 1)
+
+	if not conf.options.egl_platform in valid_egl_platforms:
+		conf.fatal('Invalid platform selected; run "./waf configure --help" for details about the --egl-platform option')
+
+	if check_dependencies(conf):
 		Logs.pprint('GREEN', 'Modified EGL GLES sink will be built')
 		conf.env['EGLVIVSINK_ENABLED'] = 1
 	else:
@@ -76,10 +103,9 @@ def build(bld):
 			features = ['c', 'cshlib'],
 			includes = ['../..'],
 			use = 'gstimxcommon',
-			uselib = ['X11', 'GLES1', 'GLES2', 'EGL', 'VIVANTE', 'GSTREAMER_VIDEO'] + bld.env['COMMON_USELIB'],
-			target = 'gsteglvivsink',
-			defines = ['HAVE_CONFIG_H', 'USE_EGL_X11', 'GST_LICENSE="LGPL"'],
-			source = bld.path.ant_glob('*.c'),
+			uselib = ['EGL', 'GLES2'] + bld.env['PLATFORM_USELIBS'] + ['GSTREAMER_VIDEO'] + bld.env['COMMON_USELIB'],
+			target = 'gstimxeglvivsink',
+			source = ['eglvivsink.c', 'gles2_renderer.c', 'plugin.c'] + bld.env['PLATFORM_SOURCE'],
 			install_path = bld.env['PLUGIN_INSTALL_PATH']
 		)
 

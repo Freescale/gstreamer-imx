@@ -52,7 +52,7 @@ def options(opt):
 	opt.add_option('--plugin-install-path', action = 'store', default = "${PREFIX}/lib/gstreamer-1.0", help = 'where to install the plugin for GStreamer 1.0 [default: %default]')
 	opt.load('compiler_c')
 	opt.recurse('src/ipu')
-	opt.recurse('src/eglvivsink2')
+	opt.recurse('src/eglvivsink')
 
 
 def configure(conf):
@@ -112,7 +112,7 @@ def configure(conf):
 	conf.recurse('src/common')
 	conf.recurse('src/ipu')
 	conf.recurse('src/vpu')
-	conf.recurse('src/eglvivsink2')
+	conf.recurse('src/eglvivsink')
 
 
 	conf.write_config_header('config.h')
@@ -123,5 +123,5 @@ def build(bld):
 	bld.recurse('src/common')
 	bld.recurse('src/ipu')
 	bld.recurse('src/vpu')
-	bld.recurse('src/eglvivsink2')
+	bld.recurse('src/eglvivsink')
 
