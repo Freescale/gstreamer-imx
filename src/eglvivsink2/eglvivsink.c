@@ -151,7 +151,7 @@ void gst_imx_egl_viv_sink_init(GstImxEglVivSink *egl_viv_sink)
 {
 	egl_viv_sink->gles2_renderer = NULL;
 	egl_viv_sink->window_handle = 0;
-	egl_viv_sink->handle_events = FALSE;
+	egl_viv_sink->handle_events = TRUE;
 	g_mutex_init(&(egl_viv_sink->renderer_access_mutex));
 }
 
