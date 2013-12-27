@@ -175,11 +175,14 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 
 	framebuffers->allocator = allocator;
 
-	framebuffers->y_stride = ALIGN_VAL_TO(params->pic_width, FRAME_ALIGN);
+	framebuffers->pic_width = ALIGN_VAL_TO(params->pic_width, FRAME_ALIGN);
 	if (params->interlace)
-		framebuffers->y_size = framebuffers->y_stride * ALIGN_VAL_TO(params->pic_height, (2 * FRAME_ALIGN));
+		framebuffers->pic_height = ALIGN_VAL_TO(params->pic_height, (2 * FRAME_ALIGN));
 	else
-		framebuffers->y_size = framebuffers->y_stride * ALIGN_VAL_TO(params->pic_height, FRAME_ALIGN);
+		framebuffers->pic_height = ALIGN_VAL_TO(params->pic_height, FRAME_ALIGN);
+
+	framebuffers->y_stride = params->pic_width;
+	framebuffers->y_size = framebuffers->y_stride * framebuffers->pic_height;
 
 	switch (params->mjpeg_source_format)
 	{
@@ -207,9 +210,6 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 		framebuffers->v_size = ALIGN_VAL_TO(framebuffers->v_size, alignment);
 		framebuffers->mv_size = ALIGN_VAL_TO(framebuffers->mv_size, alignment);
 	}
-
-	framebuffers->pic_width = params->pic_width;
-	framebuffers->pic_height = params->pic_height;
 
 	framebuffers->total_size = framebuffers->y_size + framebuffers->u_size + framebuffers->v_size + framebuffers->mv_size + alignment;
 	GST_DEBUG_OBJECT(framebuffers, "num framebuffers:  total: %u  reserved: %u  available: %d", framebuffers->num_framebuffers, framebuffers->num_reserve_framebuffers, framebuffers->num_available_framebuffers);
