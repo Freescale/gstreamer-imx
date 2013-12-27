@@ -14,7 +14,10 @@ GST_DEBUG_CATEGORY_STATIC(gles2renderer_debug);
 struct _GstImxEglVivSinkGLES2Renderer
 {
 	guintptr window_handle;
+	guint window_width, window_height;
+	guint new_window_width, new_window_height;
 	gboolean event_handling;
+	guint display_ratio_n, display_ratio_d;
 	GstVideoInfo video_info;
 	gboolean video_info_updated;
 
@@ -30,7 +33,7 @@ struct _GstImxEglVivSinkGLES2Renderer
 	GLuint vertex_shader, fragment_shader, program;
 	GLuint vertex_buffer;
 	GLuint texture;
-	GLint tex_uloc, uv_scale_uloc;
+	GLint tex_uloc, frame_rect_uloc, uv_scale_uloc;
 	GLint position_aloc, texcoords_aloc;
 
 	GLvoid* viv_planes[3];
@@ -59,6 +62,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_teardown_resources(GstImxEgl
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSinkGLES2Renderer *renderer, GstBuffer *buffer);
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxEglVivSinkGLES2Renderer *renderer);
 static void gst_imx_egl_viv_sink_gles2_renderer_resize_callback(GstImxEglVivSinkEGLPlatform *platform, guint window_width, guint window_height, gpointer user_context);
+static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxEglVivSinkGLES2Renderer *renderer, GstVideoInfo *video_info);
 
 
 
@@ -66,10 +70,11 @@ static char const * simple_vertex_shader =
 	"attribute vec2 position; \n"
 	"attribute vec2 texcoords; \n"
 	"varying vec2 uv; \n"
+	"uniform vec2 frame_rect; \n"
 	"void main(void) \n"
 	"{ \n"
 	"	uv = texcoords; \n"
-	"	gl_Position = vec4(position, 1.0, 1.0); \n"
+	"	gl_Position = vec4(position * frame_rect.xy, 1.0, 1.0); \n"
 	"} \n"
 	;
 
@@ -80,8 +85,8 @@ static char const * simple_fragment_shader =
 	"uniform vec2 uv_scale; \n"
 	"void main(void) \n"
 	"{ \n"
-	"	vec4 texel = texture2D(tex, uv / uv_scale);"
-	"	gl_FragColor = vec4(texel.rgb, 1.0);"
+	"	vec4 texel = texture2D(tex, uv * uv_scale); \n"
+	"	gl_FragColor = vec4(texel.rgb, 1.0); \n"
 	"} \n"
 	;
 
@@ -153,9 +158,10 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE);
 
+	GLES2_RENDERER_LOCK(renderer);
+
 	if (!gst_imx_egl_viv_sink_gles2_renderer_setup_resources(renderer))
 	{
-		GLES2_RENDERER_LOCK(renderer);
 		renderer->loop_flow_retval = GST_FLOW_ERROR;
 		GLES2_RENDERER_UNLOCK(renderer);
 
@@ -167,6 +173,8 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 	glUseProgram(renderer->program);
 	glBindBuffer(GL_ARRAY_BUFFER, renderer->vertex_buffer);
 	glBindTexture(GL_TEXTURE_2D, renderer->texture);
+
+	GLES2_RENDERER_UNLOCK(renderer);
 
 	GST_DEBUG("starting loop");
 
@@ -200,6 +208,25 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 				break;
 		}
 
+		if ((renderer->new_window_width != 0) && (renderer->new_window_height != 0))
+		{
+			glGetError(); /* clear out any existing error */
+
+			renderer->window_width = renderer->new_window_width;
+			renderer->window_height = renderer->new_window_height;
+
+			glViewport(0, 0, renderer->window_width, renderer->window_height);
+
+			GST_DEBUG("resizing viewport to %ux%u pixel", renderer->window_width, renderer->window_height);
+
+			gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info));
+
+			gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("viewport", "glViewport");
+
+			renderer->new_window_width = 0;
+			renderer->new_window_height = 0;
+		}
+
 		if (!renderer->loop_running)
 		{
 			GST_DEBUG("loop running flag has been set to FALSE");
@@ -226,10 +253,12 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 			break;
 	}
 
+	GLES2_RENDERER_LOCK(renderer);
 	if (!gst_imx_egl_viv_sink_gles2_renderer_teardown_resources(renderer))
 	{
 		GST_ERROR("tearing down resources failed");
 	}
+	GLES2_RENDERER_UNLOCK(renderer);
 
 	{
 		if (!gst_imx_egl_viv_sink_egl_platform_shutdown_window(renderer->egl_platform))
@@ -553,6 +582,8 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_search_extension(GLubyte con
 
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_setup_resources(GstImxEglVivSinkGLES2Renderer *renderer)
 {
+	/* must be called with lock */
+
 	/* build shaders and program */
 	if (!gst_imx_egl_viv_sink_gles2_renderer_build_shader(&(renderer->vertex_shader), GL_VERTEX_SHADER, simple_vertex_shader))
 		return FALSE;
@@ -562,6 +593,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_setup_resources(GstImxEglViv
 		return FALSE;
 	/* get uniform and attribute locations */
 	renderer->tex_uloc = glGetUniformLocation(renderer->program, "tex");
+	renderer->frame_rect_uloc = glGetUniformLocation(renderer->program, "frame_rect");
 	renderer->uv_scale_uloc = glGetUniformLocation(renderer->program, "uv_scale");
 	renderer->position_aloc = glGetAttribLocation(renderer->program, "position");
 	renderer->texcoords_aloc = glGetAttribLocation(renderer->program, "texcoords");
@@ -576,6 +608,8 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_setup_resources(GstImxEglViv
 
 	/* set texture unit value for tex uniform */
 	glUniform1i(renderer->tex_uloc, 0);
+
+	glUniform2f(renderer->frame_rect_uloc, 1.0f, 1.0f);
 
 	/* build vertex and index buffer objects */
 	if (!gst_imx_egl_viv_sink_gles2_renderer_build_vertex_buffer(&(renderer->vertex_buffer)))
@@ -596,12 +630,17 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_setup_resources(GstImxEglViv
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("texcoords vertex attrib", "glVertexAttribPointer"))
 		return FALSE;
 
+	if (!gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info)))
+		return FALSE;
+
 	return TRUE;
 }
 
 
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_teardown_resources(GstImxEglVivSinkGLES2Renderer *renderer)
 {
+	/* must be called with lock */
+
 	gboolean ret = TRUE;
 
 	/* && ret instead of ret && to avoid early termination */
@@ -623,6 +662,12 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_teardown_resources(GstImxEgl
 	ret = gst_imx_egl_viv_sink_gles2_renderer_destroy_shader(&(renderer->vertex_shader), GL_VERTEX_SHADER) && ret;
 	ret = gst_imx_egl_viv_sink_gles2_renderer_destroy_shader(&(renderer->fragment_shader), GL_FRAGMENT_SHADER) && ret;
 
+	renderer->tex_uloc = -1;
+	renderer->frame_rect_uloc = -1;
+	renderer->uv_scale_uloc = -1;
+	renderer->position_aloc = -1;
+	renderer->texcoords_aloc = -1;
+
 	return ret;
 }
 
@@ -635,13 +680,13 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 	GstImxPhysMemMeta *phys_mem_meta;
 	GstVideoFormat fmt;
 	GLenum gl_format;
-	GLuint /*w, */h, total_w, total_h;
+	GLuint w, h, total_w, total_h;
 	
 	phys_mem_meta = NULL;
 	fmt = renderer->video_info.finfo->format;
 
 	gl_format = gst_imx_egl_viv_sink_gles2_renderer_get_viv_format(fmt);
-	//w = renderer->video_info.width;
+	w = renderer->video_info.width;
 	h = renderer->video_info.height;
 
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(buffer);
@@ -672,7 +717,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 	total_w = stride[0] / gst_imx_egl_viv_sink_gles2_renderer_bpp(fmt);
 	total_h = h + num_extra_lines;
 
-	glUniform2f(renderer->uv_scale_uloc, 1.0f, 1.0f);
+	glUniform2f(renderer->uv_scale_uloc, (float)w / (float)total_w, (float)h / (float)total_h);
 
 	if (is_phys_buf)
 	{
@@ -758,27 +803,25 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glClear"))
 		return FALSE;
 
-	if (!gst_imx_egl_viv_sink_gles2_renderer_fill_texture(renderer, renderer->current_frame))
-		return FALSE;
+	if (renderer->current_frame != NULL)
+	{
+		if (!gst_imx_egl_viv_sink_gles2_renderer_fill_texture(renderer, renderer->current_frame))
+			return FALSE;
 
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glDrawElements"))
-		return FALSE;
+		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glDrawElements"))
+			return FALSE;
+	}
 
 	return TRUE;
 }
 
 
-static void gst_imx_egl_viv_sink_gles2_renderer_resize_callback(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, guint window_width, guint window_height, G_GNUC_UNUSED gpointer user_context)
+static void gst_imx_egl_viv_sink_gles2_renderer_resize_callback(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, guint window_width, guint window_height, gpointer user_context)
 {
-	glGetError(); /* clear out any existing error */
-
-//	GstImxEglVivSinkGLES2Renderer *gles2_renderer = (GstImxEglVivSinkGLES2Renderer *)user_context;
-	glViewport(0, 0, window_width, window_height);
-
-	GST_DEBUG("resizing viewport to %ux%u pixel", window_width, window_height);
-
-	gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("viewport", "glViewport");
+	GstImxEglVivSinkGLES2Renderer *gles2_renderer = (GstImxEglVivSinkGLES2Renderer *)user_context;
+	gles2_renderer->new_window_width = window_width;
+	gles2_renderer->new_window_height = window_height;
 }
 
 
@@ -793,7 +836,13 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void)
 	renderer = g_slice_alloc(sizeof(GstImxEglVivSinkGLES2Renderer));
 
 	renderer->window_handle = 0;
+	renderer->window_width = 0;
+	renderer->window_height = 0;
+	renderer->new_window_width = 0;
+	renderer->new_window_height = 0;
 	renderer->event_handling = TRUE;
+	renderer->display_ratio_n = 1;
+	renderer->display_ratio_d = 1;
 	renderer->video_info_updated = TRUE;
 
 	renderer->current_frame = NULL;
@@ -811,6 +860,12 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void)
 	renderer->program = 0;
 	renderer->vertex_buffer = 0;
 	renderer->texture = 0;
+
+	renderer->tex_uloc = -1;
+	renderer->frame_rect_uloc = -1;
+	renderer->uv_scale_uloc = -1;
+	renderer->position_aloc = -1;
+	renderer->texcoords_aloc = -1;
 
 	renderer->viv_planes[0] = NULL;
 
@@ -934,11 +989,74 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_event_handling(GstImxEglVivSink
 }
 
 
+static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxEglVivSinkGLES2Renderer *renderer, GstVideoInfo *video_info)
+{
+	/* must be called with lock */
+
+	gint video_par_n, video_par_d, window_par_n, window_par_d;
+	float display_scale_w, display_scale_h, norm_ratio;
+
+	video_par_n = video_info->par_n;
+	video_par_d = video_info->par_d;
+	window_par_n = 1;
+	window_par_d = 1;
+
+	if (!gst_video_calculate_display_ratio(&(renderer->display_ratio_n), &(renderer->display_ratio_d), video_info->width, video_info->height, video_par_n, video_par_d, window_par_n, window_par_d))
+	{
+		GLES2_RENDERER_UNLOCK(renderer);
+		GST_ERROR("could not calculate display ratio");
+		return FALSE;
+	}
+
+	norm_ratio = (float)(renderer->display_ratio_n) / (float)(renderer->display_ratio_d) * (float)(renderer->window_height) / (float)(renderer->window_width);
+
+	GST_DEBUG(
+		"video width/height: %dx%d  video pixel aspect ratio: %d/%d  window pixel aspect ratio: %d/%d  calculated display ratio: %d/%d  window width/height: %dx%d  norm ratio: %f",
+		video_info->width, video_info->height,
+		video_par_n, video_par_d,
+		window_par_n, window_par_d,
+		renderer->display_ratio_n, renderer->display_ratio_d,
+		renderer->window_width, renderer->window_height,
+		norm_ratio
+	);
+
+	if (norm_ratio >= 1.0f)
+	{
+		display_scale_w = 1.0f;
+		display_scale_h = 1.0f / norm_ratio;
+	}
+	else
+	{
+		display_scale_w = norm_ratio;
+		display_scale_h = 1.0f;
+	}
+
+	if (renderer->frame_rect_uloc != -1)
+	{
+		GST_DEBUG(
+			"display scale: %f/%f",
+			display_scale_w, display_scale_h
+		);
+		glUniform2f(renderer->frame_rect_uloc, display_scale_w, display_scale_h);
+	}
+
+	return TRUE;
+}
+
+
 gboolean gst_imx_egl_viv_sink_gles2_renderer_set_video_info(GstImxEglVivSinkGLES2Renderer *renderer, GstVideoInfo *video_info)
 {
 	GLES2_RENDERER_LOCK(renderer);
+
+	if (!gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, video_info))
+	{
+		GLES2_RENDERER_UNLOCK(renderer);
+		return FALSE;
+	}
+
 	renderer->video_info = *video_info;
 	renderer->video_info_updated = TRUE;
+
 	GLES2_RENDERER_UNLOCK(renderer);
 
 	gst_imx_egl_viv_sink_egl_platform_set_video_info(renderer->egl_platform, video_info);
