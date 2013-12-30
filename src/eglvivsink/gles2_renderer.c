@@ -20,6 +20,7 @@ struct _GstImxEglVivSinkGLES2Renderer
 	guint display_ratio_n, display_ratio_d;
 	GstVideoInfo video_info;
 	gboolean video_info_updated;
+	gboolean fullscreen;
 
 	GstBuffer *current_frame;
 
@@ -129,7 +130,7 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 	{
 		GLubyte const *extensions;
 
-		if (!gst_imx_egl_viv_sink_egl_platform_init_window(renderer->egl_platform, renderer->window_handle, renderer->event_handling, &(renderer->video_info)))
+		if (!gst_imx_egl_viv_sink_egl_platform_init_window(renderer->egl_platform, renderer->window_handle, renderer->event_handling, &(renderer->video_info), renderer->fullscreen))
 		{
 			GST_ERROR("could not open window");
 			renderer->loop_flow_retval = GST_FLOW_ERROR;
@@ -844,6 +845,7 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void)
 	renderer->display_ratio_n = 1;
 	renderer->display_ratio_d = 1;
 	renderer->video_info_updated = TRUE;
+	renderer->fullscreen = FALSE;
 
 	renderer->current_frame = NULL;
 
@@ -1062,6 +1064,28 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_video_info(GstImxEglVivSinkGLES
 	gst_imx_egl_viv_sink_egl_platform_set_video_info(renderer->egl_platform, video_info);
 
 	return TRUE;
+}
+
+
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_fullscreen(GstImxEglVivSinkGLES2Renderer *renderer, gboolean fullscreen)
+{
+	gboolean ret = TRUE;
+
+	if (renderer->fullscreen == fullscreen)
+		return TRUE;
+
+	renderer->fullscreen = fullscreen;
+
+	if (renderer->thread_started)
+	{
+		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_stop(renderer);
+		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_start(renderer);
+	}
+
+	if (!ret)
+		GST_ERROR("%s fullscreen mode failed", fullscreen ? "enabling" : "disabling");
+
+	return ret;
 }
 
 

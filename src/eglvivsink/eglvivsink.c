@@ -34,6 +34,16 @@ GST_DEBUG_CATEGORY_STATIC(imx_egl_viv_sink_debug);
 #define GST_CAT_DEFAULT imx_egl_viv_sink_debug
 
 
+enum
+{
+	PROP_0,
+	PROP_FULLSCREEN
+};
+
+
+#define DEFAULT_FULLSCREEN FALSE
+
+
 #ifdef HAVE_VIV_I420
 	#define CAPS_VIV_I420 "I420, "
 #else
@@ -105,6 +115,8 @@ G_DEFINE_TYPE_WITH_CODE(
 
 
 static void gst_imx_egl_viv_sink_finalize(GObject *object);
+static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_egl_viv_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static GstStateChangeReturn gst_imx_egl_viv_sink_change_state(GstElement *element, GstStateChange state_change);
 static gboolean gst_imx_egl_viv_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
 static gboolean gst_imx_egl_viv_propose_allocation(GstBaseSink *sink, GstQuery *query);
@@ -129,6 +141,16 @@ void gst_imx_egl_viv_sink_class_init(GstImxEglVivSinkClass *klass)
 	parent_class = GST_VIDEO_SINK_CLASS(klass);
 	element_class = GST_ELEMENT_CLASS(klass);
 
+	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
+
+	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_set_caps);
+	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_propose_allocation);
+	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_show_frame);
+	element_class->change_state = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_change_state);
+	object_class->finalize = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_finalize);
+	object_class->set_property = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_set_property);
+	object_class->get_property = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_get_property);
+
 	gst_element_class_set_static_metadata(
 		element_class,
 		"Freescale EGL video sink",
@@ -137,14 +159,17 @@ void gst_imx_egl_viv_sink_class_init(GstImxEglVivSinkClass *klass)
 		"Carlos Rafael Giani <dv@pseudoterminal.org>"
 	);
 
-	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
-
-	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_set_caps);
-	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_propose_allocation);
-	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_show_frame);
-	element_class->change_state = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_change_state);
-	object_class->finalize = GST_DEBUG_FUNCPTR(gst_imx_egl_viv_sink_finalize);
-}
+	g_object_class_install_property(
+		object_class,
+		PROP_FULLSCREEN,
+		g_param_spec_boolean(
+			"fullscreen",
+			"Fullscreen mode",
+			"Whether or not to set the created window to fullscreen mode (ignored if application provides a window handle)",
+			DEFAULT_FULLSCREEN,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);}
 
 
 void gst_imx_egl_viv_sink_init(GstImxEglVivSink *egl_viv_sink)
@@ -152,6 +177,7 @@ void gst_imx_egl_viv_sink_init(GstImxEglVivSink *egl_viv_sink)
 	egl_viv_sink->gles2_renderer = NULL;
 	egl_viv_sink->window_handle = 0;
 	egl_viv_sink->handle_events = TRUE;
+	egl_viv_sink->fullscreen = DEFAULT_FULLSCREEN;
 	g_mutex_init(&(egl_viv_sink->renderer_access_mutex));
 }
 
@@ -222,6 +248,49 @@ static void gst_imx_egl_viv_sink_set_event_handling(GstVideoOverlay *overlay, gb
 		gst_imx_egl_viv_sink_gles2_renderer_set_event_handling(egl_viv_sink->gles2_renderer, handle_events);
 
 	g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+}
+
+
+static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+{
+	GstImxEglVivSink *egl_viv_sink = GST_IMX_EGL_VIV_SINK(object);
+
+	switch (prop_id)
+	{
+		case PROP_FULLSCREEN:
+		{
+			gboolean new_fs = g_value_get_boolean(value);
+			if (new_fs == egl_viv_sink->fullscreen)
+				break;
+
+			egl_viv_sink->fullscreen = new_fs;
+			if (egl_viv_sink->gles2_renderer != NULL)
+				gst_imx_egl_viv_sink_gles2_renderer_set_fullscreen(egl_viv_sink->gles2_renderer, new_fs);
+
+			break;
+		}
+
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
+}
+
+
+static void gst_imx_egl_viv_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	GstImxEglVivSink *egl_viv_sink = GST_IMX_EGL_VIV_SINK(object);
+
+	switch (prop_id)
+	{
+		case PROP_FULLSCREEN:
+			g_value_set_boolean(value, egl_viv_sink->fullscreen);
+			break;
+
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
 }
 
 
@@ -308,6 +377,7 @@ static gboolean gst_imx_egl_viv_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_window_handle(egl_viv_sink->gles2_renderer, egl_viv_sink->window_handle);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_event_handling(egl_viv_sink->gles2_renderer, egl_viv_sink->handle_events);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_video_info(egl_viv_sink->gles2_renderer, &(egl_viv_sink->video_info));
+		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_fullscreen(egl_viv_sink->gles2_renderer, egl_viv_sink->fullscreen);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_start(egl_viv_sink->gles2_renderer);
 	}
 	else

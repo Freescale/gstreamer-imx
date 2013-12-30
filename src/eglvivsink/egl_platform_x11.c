@@ -1,6 +1,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/cursorfont.h>
+#include <X11/Xatom.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -137,7 +138,7 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 }
 
 
-gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, guintptr window_handle, gboolean event_handling, GstVideoInfo *video_info)
+gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, guintptr window_handle, gboolean event_handling, GstVideoInfo *video_info, gboolean fullscreen)
 {
 	EGLint num_configs;
 	EGLConfig config;
@@ -185,6 +186,8 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		int num_matching_visuals;
 		XSetWindowAttributes attr;
 		int screen_num;
+		Window root_window;
+		Atom net_wm_state_atom, net_wm_state_fullscreen_atom;
 
 		if (!eglGetConfigAttrib(platform->egl_display, config, EGL_NATIVE_VISUAL_ID, &native_visual_id))
 		{
@@ -194,6 +197,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		}
 
 		screen_num = DefaultScreen(x11_display);
+		root_window = RootWindow(x11_display, screen_num);
 
 		memset(&visual_info_template, 0, sizeof(visual_info_template));
 		visual_info_template.visualid = native_visual_id;
@@ -218,7 +222,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		// TODO: xlib error handler
 
 		x11_window = XCreateWindow(
-			x11_display, RootWindow(x11_display, screen_num),
+			x11_display, root_window,
 			0, 0, GST_VIDEO_INFO_WIDTH(video_info), GST_VIDEO_INFO_HEIGHT(video_info),
 			0, visual_info->depth, InputOutput, visual_info->visual,
 			CWBackPixel | CWColormap  | CWBorderPixel | CWBackingStore | CWOverrideRedirect,
@@ -227,6 +231,9 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 
 		platform->native_window = (EGLNativeWindowType)x11_window;
 		platform->internal_window = TRUE;
+
+		net_wm_state_atom = XInternAtom(x11_display, "_NET_WM_STATE", True);
+		net_wm_state_fullscreen_atom = XInternAtom(x11_display, "_NET_WM_STATE_FULLSCREEN", True);
 
 		platform->wm_delete_atom = XInternAtom(x11_display, "WM_DELETE_WINDOW", True);
 		XSetWMProtocols(x11_display, x11_window, &(platform->wm_delete_atom), 1);
@@ -242,8 +249,38 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		sizehints.flags = PPosition | PSize;
 		XSetNormalHints(x11_display, x11_window, &sizehints);
 
+		if (fullscreen)
+		{
+			XChangeProperty(
+				x11_display, x11_window,
+				net_wm_state_atom,
+				XA_ATOM, 32, PropModeReplace,
+				(unsigned char*)&net_wm_state_fullscreen_atom, 1
+			);
+		}
+
 		XClearWindow(x11_display, x11_window);
 		XMapRaised(x11_display, x11_window);
+
+		if (fullscreen)
+		{
+			XEvent event;
+			event.type = ClientMessage;
+			event.xclient.window = x11_window;
+			event.xclient.message_type = net_wm_state_atom;
+			event.xclient.format = 32;
+			event.xclient.data.l[0] = 1;
+			event.xclient.data.l[1] = net_wm_state_fullscreen_atom;
+			event.xclient.data.l[3] = 0l;
+
+			XSendEvent(
+				x11_display,
+				root_window,
+				0,
+				SubstructureNotifyMask,
+				&event
+			);
+		}
 
 		XSync(x11_display, False);
 	}
