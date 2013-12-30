@@ -718,6 +718,8 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 	total_w = stride[0] / gst_imx_egl_viv_sink_gles2_renderer_bpp(fmt);
 	total_h = h + num_extra_lines;
 
+	GST_LOG("w/h: %d/%d total_w/h: %d/%d", w, h, total_w, total_h);
+
 	glUniform2f(renderer->uv_scale_uloc, (float)w / (float)total_w, (float)h / (float)total_h);
 
 	if (is_phys_buf)
@@ -969,6 +971,9 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_handle(GstImxEglVivSinkG
 {
 	gboolean ret = TRUE;
 
+	if (renderer->window_handle == window_handle)
+		return TRUE;
+
 	renderer->window_handle = window_handle;
 
 	if (renderer->thread_started)
@@ -983,6 +988,9 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_handle(GstImxEglVivSinkG
 
 gboolean gst_imx_egl_viv_sink_gles2_renderer_set_event_handling(GstImxEglVivSinkGLES2Renderer *renderer, gboolean event_handling)
 {
+	if (renderer->event_handling == event_handling)
+		return TRUE;
+
 	renderer->event_handling = event_handling;
 	if (renderer->thread_started)
 		gst_imx_egl_viv_sink_egl_platform_set_event_handling(renderer->egl_platform, renderer->event_handling);
