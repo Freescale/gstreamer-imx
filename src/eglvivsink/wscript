@@ -72,7 +72,7 @@ def check_dependencies(conf):
 	elif platform == "fb":
 		if not check_vivante_egl(conf, ['EGL_API_FB']):
 			return False
-		conf.env['PLATFORM_SOURCE'] = ['egl_platform_fb_mx6.c']
+		conf.env['PLATFORM_SOURCE'] = ['egl_platform_fb.c']
 
 	if not check_gles2(conf):
 		return False
