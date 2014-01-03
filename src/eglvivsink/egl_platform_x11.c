@@ -76,7 +76,7 @@ static char const *gst_imx_egl_viv_sink_egl_platform_get_error_string(void)
 }
 
 
-GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb, gpointer user_context)
+GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar const *native_display_name, GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb, gpointer user_context)
 {
 	EGLint ver_major, ver_minor;
 	GstImxEglVivSinkEGLPlatform* platform;
@@ -90,7 +90,7 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(GstImxEglV
 
 	g_mutex_init(&(platform->mutex));
 
-	x11_display = XOpenDisplay(0);
+	x11_display = XOpenDisplay(native_display_name);
 	if (x11_display == NULL)
 	{
 		GST_ERROR("could not open X display");

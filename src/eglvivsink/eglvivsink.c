@@ -37,11 +37,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_egl_viv_sink_debug);
 enum
 {
 	PROP_0,
-	PROP_FULLSCREEN
+	PROP_FULLSCREEN,
+	PROP_NATIVE_DISPLAY
 };
 
 
 #define DEFAULT_FULLSCREEN FALSE
+#define DEFAULT_NATIVE_DISPLAY NULL
 
 
 #ifdef HAVE_VIV_I420
@@ -169,7 +171,20 @@ void gst_imx_egl_viv_sink_class_init(GstImxEglVivSinkClass *klass)
 			DEFAULT_FULLSCREEN,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
-	);}
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_NATIVE_DISPLAY,
+		g_param_spec_string(
+			"native-display",
+			"Native display identifier",
+			"String identifying the display to use (default value uses the default display)",
+			DEFAULT_NATIVE_DISPLAY,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+
+}
 
 
 void gst_imx_egl_viv_sink_init(GstImxEglVivSink *egl_viv_sink)
@@ -178,6 +193,7 @@ void gst_imx_egl_viv_sink_init(GstImxEglVivSink *egl_viv_sink)
 	egl_viv_sink->window_handle = 0;
 	egl_viv_sink->handle_events = TRUE;
 	egl_viv_sink->fullscreen = DEFAULT_FULLSCREEN;
+	egl_viv_sink->native_display_name = DEFAULT_NATIVE_DISPLAY;
 	g_mutex_init(&(egl_viv_sink->renderer_access_mutex));
 }
 
@@ -186,6 +202,7 @@ static void gst_imx_egl_viv_sink_finalize(GObject *object)
 {
 	GstImxEglVivSink *egl_viv_sink = GST_IMX_EGL_VIV_SINK(object);
 	g_mutex_clear(&(egl_viv_sink->renderer_access_mutex));
+	g_free(egl_viv_sink->native_display_name);
 	G_OBJECT_CLASS(gst_imx_egl_viv_sink_parent_class)->finalize(object);
 }
 
@@ -275,6 +292,18 @@ static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GV
 			break;
 		}
 
+		case PROP_NATIVE_DISPLAY:
+		{
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				gchar const *new_display_name = g_value_get_string(value);
+				g_free(egl_viv_sink->native_display_name);
+				egl_viv_sink->native_display_name = g_strdup(new_display_name);
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+		}
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -291,6 +320,12 @@ static void gst_imx_egl_viv_sink_get_property(GObject *object, guint prop_id, GV
 		case PROP_FULLSCREEN:
 			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
 			g_value_set_boolean(value, egl_viv_sink->fullscreen);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+
+		case PROP_NATIVE_DISPLAY:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			g_value_set_string(value, egl_viv_sink->native_display_name);
 			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
 			break;
 
@@ -312,7 +347,7 @@ static GstStateChangeReturn gst_imx_egl_viv_sink_change_state(GstElement *elemen
 		{
 			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
 
-			egl_viv_sink->gles2_renderer = gst_imx_egl_viv_sink_gles2_renderer_create();
+			egl_viv_sink->gles2_renderer = gst_imx_egl_viv_sink_gles2_renderer_create(egl_viv_sink->native_display_name);
 			if (egl_viv_sink->gles2_renderer == NULL)
 				return GST_STATE_CHANGE_FAILURE;
 

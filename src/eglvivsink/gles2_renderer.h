@@ -11,7 +11,7 @@ G_BEGIN_DECLS
 typedef struct _GstImxEglVivSinkGLES2Renderer GstImxEglVivSinkGLES2Renderer;
 
 
-GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void);
+GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char const *native_display_name);
 void gst_imx_egl_viv_sink_gles2_renderer_destroy(GstImxEglVivSinkGLES2Renderer *renderer);
 
 gboolean gst_imx_egl_viv_sink_gles2_renderer_start(GstImxEglVivSinkGLES2Renderer *renderer);

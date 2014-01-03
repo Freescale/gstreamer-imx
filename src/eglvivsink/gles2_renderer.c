@@ -830,7 +830,7 @@ static void gst_imx_egl_viv_sink_gles2_renderer_resize_callback(G_GNUC_UNUSED Gs
 
 
 
-GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void)
+GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char const *native_display_name)
 {
 	GstImxEglVivSinkGLES2Renderer *renderer;
 
@@ -851,7 +851,7 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(void)
 
 	renderer->current_frame = NULL;
 
-	renderer->egl_platform = gst_imx_egl_viv_sink_egl_platform_create(gst_imx_egl_viv_sink_gles2_renderer_resize_callback, renderer);
+	renderer->egl_platform = gst_imx_egl_viv_sink_egl_platform_create(native_display_name, gst_imx_egl_viv_sink_gles2_renderer_resize_callback, renderer);
 
 	renderer->thread_started = FALSE;
 	renderer->loop_running = FALSE;
