@@ -260,12 +260,17 @@ static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GV
 		case PROP_FULLSCREEN:
 		{
 			gboolean new_fs = g_value_get_boolean(value);
-			if (new_fs == egl_viv_sink->fullscreen)
-				break;
 
-			egl_viv_sink->fullscreen = new_fs;
-			if (egl_viv_sink->gles2_renderer != NULL)
-				gst_imx_egl_viv_sink_gles2_renderer_set_fullscreen(egl_viv_sink->gles2_renderer, new_fs);
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				if (new_fs != egl_viv_sink->fullscreen)
+				{
+					egl_viv_sink->fullscreen = new_fs;
+					if (egl_viv_sink->gles2_renderer != NULL)
+						gst_imx_egl_viv_sink_gles2_renderer_set_fullscreen(egl_viv_sink->gles2_renderer, new_fs);
+				}
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
 
 			break;
 		}
@@ -284,7 +289,9 @@ static void gst_imx_egl_viv_sink_get_property(GObject *object, guint prop_id, GV
 	switch (prop_id)
 	{
 		case PROP_FULLSCREEN:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
 			g_value_set_boolean(value, egl_viv_sink->fullscreen);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
 			break;
 
 		default:
