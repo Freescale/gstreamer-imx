@@ -50,7 +50,7 @@ struct _GstImxEglVivSink
 	GstImxEglVivSinkGLES2Renderer *gles2_renderer;
 	GstVideoInfo video_info;
 	guintptr window_handle;
-	gboolean handle_events, fullscreen;
+	gboolean handle_events, fullscreen, force_aspect_ratio;
 	gchar *native_display_name;
 	GMutex renderer_access_mutex;
 };

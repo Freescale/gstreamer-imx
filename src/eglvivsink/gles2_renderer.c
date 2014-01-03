@@ -26,7 +26,7 @@ struct _GstImxEglVivSinkGLES2Renderer
 
 	GstImxEglVivSinkEGLPlatform *egl_platform;
 
-	gboolean thread_started, loop_running;
+	gboolean thread_started, loop_running, force_aspect_ratio;
 	GstFlowReturn loop_flow_retval;
 	GThread *thread;
 	GMutex mutex;
@@ -852,9 +852,15 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char c
 	renderer->current_frame = NULL;
 
 	renderer->egl_platform = gst_imx_egl_viv_sink_egl_platform_create(native_display_name, gst_imx_egl_viv_sink_gles2_renderer_resize_callback, renderer);
+	if (renderer->egl_platform == NULL)
+	{
+		g_slice_free1(sizeof(GstImxEglVivSinkGLES2Renderer), renderer);
+		return NULL;
+	}
 
 	renderer->thread_started = FALSE;
 	renderer->loop_running = FALSE;
+	renderer->force_aspect_ratio = TRUE;
 	renderer->loop_flow_retval = GST_FLOW_OK;
 	renderer->thread = NULL;
 	g_mutex_init(&(renderer->mutex));
@@ -1003,41 +1009,53 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxE
 {
 	/* must be called with lock */
 
-	gint video_par_n, video_par_d, window_par_n, window_par_d;
-	float display_scale_w, display_scale_h, norm_ratio;
+	float display_scale_w, display_scale_h;
 
-	video_par_n = video_info->par_n;
-	video_par_d = video_info->par_d;
-	window_par_n = 1;
-	window_par_d = 1;
-
-	if (!gst_video_calculate_display_ratio(&(renderer->display_ratio_n), &(renderer->display_ratio_d), video_info->width, video_info->height, video_par_n, video_par_d, window_par_n, window_par_d))
+	if (renderer->force_aspect_ratio)
 	{
-		GLES2_RENDERER_UNLOCK(renderer);
-		GST_ERROR("could not calculate display ratio");
-		return FALSE;
-	}
+		gint video_par_n, video_par_d, window_par_n, window_par_d;
+		float norm_ratio;
 
-	norm_ratio = (float)(renderer->display_ratio_n) / (float)(renderer->display_ratio_d) * (float)(renderer->window_height) / (float)(renderer->window_width);
+		video_par_n = video_info->par_n;
+		video_par_d = video_info->par_d;
+		window_par_n = 1;
+		window_par_d = 1;
 
-	GST_DEBUG(
-		"video width/height: %dx%d  video pixel aspect ratio: %d/%d  window pixel aspect ratio: %d/%d  calculated display ratio: %d/%d  window width/height: %dx%d  norm ratio: %f",
-		video_info->width, video_info->height,
-		video_par_n, video_par_d,
-		window_par_n, window_par_d,
-		renderer->display_ratio_n, renderer->display_ratio_d,
-		renderer->window_width, renderer->window_height,
-		norm_ratio
-	);
+		if (!gst_video_calculate_display_ratio(&(renderer->display_ratio_n), &(renderer->display_ratio_d), video_info->width, video_info->height, video_par_n, video_par_d, window_par_n, window_par_d))
+		{
+			GLES2_RENDERER_UNLOCK(renderer);
+			GST_ERROR("could not calculate display ratio");
+			return FALSE;
+		}
 
-	if (norm_ratio >= 1.0f)
-	{
-		display_scale_w = 1.0f;
-		display_scale_h = 1.0f / norm_ratio;
+		norm_ratio = (float)(renderer->display_ratio_n) / (float)(renderer->display_ratio_d) * (float)(renderer->window_height) / (float)(renderer->window_width);
+
+		GST_DEBUG(
+			"video width/height: %dx%d  video pixel aspect ratio: %d/%d  window pixel aspect ratio: %d/%d  calculated display ratio: %d/%d  window width/height: %dx%d  norm ratio: %f",
+			video_info->width, video_info->height,
+			video_par_n, video_par_d,
+			window_par_n, window_par_d,
+			renderer->display_ratio_n, renderer->display_ratio_d,
+			renderer->window_width, renderer->window_height,
+			norm_ratio
+		);
+
+		if (norm_ratio >= 1.0f)
+		{
+			display_scale_w = 1.0f;
+			display_scale_h = 1.0f / norm_ratio;
+		}
+		else
+		{
+			display_scale_w = norm_ratio;
+			display_scale_h = 1.0f;
+		}
 	}
 	else
 	{
-		display_scale_w = norm_ratio;
+		renderer->display_ratio_n = 1;
+		renderer->display_ratio_d = 1;
+		display_scale_w = 1.0f;
 		display_scale_h = 1.0f;
 	}
 
@@ -1094,6 +1112,23 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_fullscreen(GstImxEglVivSinkGLES
 		GST_ERROR("%s fullscreen mode failed", fullscreen ? "enabling" : "disabling");
 
 	return ret;
+}
+
+
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_force_aspect_ratio(GstImxEglVivSinkGLES2Renderer *renderer, gboolean force_aspect_ratio)
+{
+	GLES2_RENDERER_LOCK(renderer);
+
+	renderer->force_aspect_ratio = force_aspect_ratio;
+	if (!gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info)))
+	{
+		GLES2_RENDERER_UNLOCK(renderer);
+		return FALSE;
+	}
+
+	GLES2_RENDERER_UNLOCK(renderer);
+
+	return TRUE;
 }
 
 

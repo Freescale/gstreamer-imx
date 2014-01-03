@@ -38,11 +38,13 @@ enum
 {
 	PROP_0,
 	PROP_FULLSCREEN,
+	PROP_FORCE_ASPECT_RATIO,
 	PROP_NATIVE_DISPLAY
 };
 
 
 #define DEFAULT_FULLSCREEN FALSE
+#define DEFAULT_FORCE_ASPECT_RATIO TRUE
 #define DEFAULT_NATIVE_DISPLAY NULL
 
 
@@ -183,6 +185,17 @@ void gst_imx_egl_viv_sink_class_init(GstImxEglVivSinkClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
+	g_object_class_install_property(
+		object_class,
+		PROP_FORCE_ASPECT_RATIO,
+		g_param_spec_boolean(
+			"force-aspect-ratio",
+			"Force aspect ratio",
+			"When enabled, scaling will respect original aspect ratio",
+			DEFAULT_FORCE_ASPECT_RATIO,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 
 }
 
@@ -193,6 +206,7 @@ void gst_imx_egl_viv_sink_init(GstImxEglVivSink *egl_viv_sink)
 	egl_viv_sink->window_handle = 0;
 	egl_viv_sink->handle_events = TRUE;
 	egl_viv_sink->fullscreen = DEFAULT_FULLSCREEN;
+	egl_viv_sink->force_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
 	egl_viv_sink->native_display_name = DEFAULT_NATIVE_DISPLAY;
 	g_mutex_init(&(egl_viv_sink->renderer_access_mutex));
 }
@@ -292,6 +306,24 @@ static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GV
 			break;
 		}
 
+		case PROP_FORCE_ASPECT_RATIO:
+		{
+			gboolean b = g_value_get_boolean(value);
+
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				if (b != egl_viv_sink->force_aspect_ratio)
+				{
+					egl_viv_sink->force_aspect_ratio = b;
+					if (egl_viv_sink->gles2_renderer != NULL)
+						gst_imx_egl_viv_sink_gles2_renderer_set_force_aspect_ratio(egl_viv_sink->gles2_renderer, b);
+				}
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+
+			break;
+		}
+
 		case PROP_NATIVE_DISPLAY:
 		{
 			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
@@ -320,6 +352,12 @@ static void gst_imx_egl_viv_sink_get_property(GObject *object, guint prop_id, GV
 		case PROP_FULLSCREEN:
 			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
 			g_value_set_boolean(value, egl_viv_sink->fullscreen);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+
+		case PROP_FORCE_ASPECT_RATIO:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			g_value_set_boolean(value, egl_viv_sink->force_aspect_ratio);
 			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
 			break;
 
@@ -420,6 +458,7 @@ static gboolean gst_imx_egl_viv_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_event_handling(egl_viv_sink->gles2_renderer, egl_viv_sink->handle_events);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_video_info(egl_viv_sink->gles2_renderer, &(egl_viv_sink->video_info));
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_fullscreen(egl_viv_sink->gles2_renderer, egl_viv_sink->fullscreen);
+		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_force_aspect_ratio(egl_viv_sink->gles2_renderer, egl_viv_sink->force_aspect_ratio);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_start(egl_viv_sink->gles2_renderer);
 	}
 	else
