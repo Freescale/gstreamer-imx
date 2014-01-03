@@ -105,7 +105,7 @@ def build(bld):
 			use = 'gstimxcommon',
 			uselib = ['EGL', 'GLES2'] + bld.env['PLATFORM_USELIBS'] + ['GSTREAMER_VIDEO'] + bld.env['COMMON_USELIB'],
 			target = 'gstimxeglvivsink',
-			source = ['eglvivsink.c', 'gles2_renderer.c', 'plugin.c'] + bld.env['PLATFORM_SOURCE'],
+			source = ['eglvivsink.c', 'gles2_renderer.c', 'egl_misc.c', 'plugin.c'] + bld.env['PLATFORM_SOURCE'],
 			install_path = bld.env['PLUGIN_INSTALL_PATH']
 		)
 

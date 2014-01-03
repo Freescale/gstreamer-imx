@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include "egl_platform.h"
+#include "egl_misc.h"
 #include "gl_headers.h"
 
 
@@ -49,33 +50,6 @@ static void init_debug_category(void)
 }
 
 
-static char const *gst_imx_egl_viv_sink_egl_platform_get_error_string(void)
-{
-	EGLint err = eglGetError();
-	if (err == EGL_SUCCESS)
-		return "success";
-
-	switch (err)
-	{
-		case EGL_NOT_INITIALIZED: return "not initialized";
-		case EGL_BAD_ACCESS: return "bad access";
-		case EGL_BAD_ALLOC: return "bad alloc";
-		case EGL_BAD_ATTRIBUTE: return "bad attribute";
-		case EGL_BAD_CONTEXT: return "bad context";
-		case EGL_BAD_CONFIG: return "bad config";
-		case EGL_BAD_CURRENT_SURFACE: return "bad current surface";
-		case EGL_BAD_DISPLAY: return "bad display";
-		case EGL_BAD_SURFACE: return "bad surface";
-		case EGL_BAD_MATCH: return "bad match";
-		case EGL_BAD_PARAMETER: return "bad parameter";
-		case EGL_BAD_NATIVE_PIXMAP: return "bad native pixmap";
-		case EGL_BAD_NATIVE_WINDOW: return "bad native window";
-		case EGL_CONTEXT_LOST: return "context lost";
-		default: return "<unknown error>";
-	}
-}
-
-
 GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar const *native_display_name, GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb, gpointer user_context)
 {
 	EGLint ver_major, ver_minor;
@@ -103,7 +77,7 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 	platform->egl_display = eglGetDisplay(platform->native_display);
 	if (platform->egl_display == EGL_NO_DISPLAY)
 	{
-		GST_ERROR("eglGetDisplay failed: %s", gst_imx_egl_viv_sink_egl_platform_get_error_string());
+		GST_ERROR("eglGetDisplay failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
 		XCloseDisplay(x11_display);
 		g_free(platform);
 		return NULL;
@@ -111,7 +85,7 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 
 	if (!eglInitialize(platform->egl_display, &ver_major, &ver_minor))
 	{
-		GST_ERROR("eglInitialize failed: %s", gst_imx_egl_viv_sink_egl_platform_get_error_string());
+		GST_ERROR("eglInitialize failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
 		XCloseDisplay(x11_display);
 		g_free(platform);
 		return NULL;
@@ -164,7 +138,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 
 	if (!eglChooseConfig(platform->egl_display, eglconfig_attribs, &config, 1, &num_configs))
 	{
-		GST_ERROR("eglChooseConfig failed: %s", gst_imx_egl_viv_sink_egl_platform_get_error_string());
+		GST_ERROR("eglChooseConfig failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
 		return FALSE;
 	}
 
@@ -191,7 +165,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 
 		if (!eglGetConfigAttrib(platform->egl_display, config, EGL_NATIVE_VISUAL_ID, &native_visual_id))
 		{
-			GST_ERROR("eglGetConfigAttrib failed: %s", gst_imx_egl_viv_sink_egl_platform_get_error_string());
+			GST_ERROR("eglGetConfigAttrib failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
 			EGL_PLATFORM_UNLOCK(platform);
 			return FALSE;
 		}
