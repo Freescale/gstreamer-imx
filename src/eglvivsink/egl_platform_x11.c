@@ -44,9 +44,9 @@ static void init_debug_category(void)
 	{
 		GST_DEBUG_CATEGORY_INIT(eglplatform_x11_debug, "eglplatform_x11", 0, "eglvivsink X11 platform");
 		initialized = TRUE;
-	}
 
-	XInitThreads();
+		XInitThreads();
+	}
 }
 
 
