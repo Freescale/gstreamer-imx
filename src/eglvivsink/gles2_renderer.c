@@ -823,6 +823,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 static void gst_imx_egl_viv_sink_gles2_renderer_resize_callback(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, guint window_width, guint window_height, gpointer user_context)
 {
 	GstImxEglVivSinkGLES2Renderer *gles2_renderer = (GstImxEglVivSinkGLES2Renderer *)user_context;
+	GST_DEBUG("resize_callback w/h: %d/%d", window_width, window_height);
 	gles2_renderer->new_window_width = window_width;
 	gles2_renderer->new_window_height = window_height;
 }
@@ -1011,7 +1012,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxE
 
 	float display_scale_w, display_scale_h;
 
-	if (renderer->force_aspect_ratio)
+	if (renderer->force_aspect_ratio && (renderer->window_width != 0) && (renderer->window_height != 0))
 	{
 		gint video_par_n, video_par_d, window_par_n, window_par_d;
 		float norm_ratio;
