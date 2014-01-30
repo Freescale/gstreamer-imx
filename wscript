@@ -113,6 +113,7 @@ def configure(conf):
 	conf.recurse('src/ipu')
 	conf.recurse('src/vpu')
 	conf.recurse('src/eglvivsink')
+	conf.recurse('src/v4l2src')
 
 
 	conf.write_config_header('config.h')
@@ -124,4 +125,5 @@ def build(bld):
 	bld.recurse('src/ipu')
 	bld.recurse('src/vpu')
 	bld.recurse('src/eglvivsink')
+	bld.recurse('src/v4l2src')
 
