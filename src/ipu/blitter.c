@@ -124,8 +124,8 @@ GType gst_imx_ipu_blitter_rotation_mode_get_type(void)
 			{ GST_IMX_IPU_BLITTER_ROTATION_VFLIP, "Flip vertically", "vertical-flip" },
 			{ GST_IMX_IPU_BLITTER_ROTATION_180, "Rotate 180 degrees", "rotate-180" },
 			{ GST_IMX_IPU_BLITTER_ROTATION_90CW, "Rotate clockwise 90 degrees", "rotate-90cw" },
-			{ GST_IMX_IPU_BLITTER_ROTATION_90CW_HFLIP, "Rotate 180 degrees and flip horizontally", "rotate-90cw-hflip" },
-			{ GST_IMX_IPU_BLITTER_ROTATION_90CW_VFLIP, "Rotate 180 degrees and flip vertically", "rotate-90cw-vflip" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_90CW_HFLIP, "Rotate clockwise 90 degrees and flip horizontally", "rotate-90cw-hflip" },
+			{ GST_IMX_IPU_BLITTER_ROTATION_90CW_VFLIP, "Rotate clockwise 90 degrees and flip vertically", "rotate-90cw-vflip" },
 			{ GST_IMX_IPU_BLITTER_ROTATION_90CCW, "Rotate counter-clockwise 90 degrees", "rotate-90ccw" },
 			{ 0, NULL, NULL },
 		};
