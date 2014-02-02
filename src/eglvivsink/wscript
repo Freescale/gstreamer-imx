@@ -91,10 +91,11 @@ def configure(conf):
 		conf.fatal('Invalid platform selected; run "./waf configure --help" for details about the --egl-platform option')
 
 	if check_dependencies(conf):
-		Logs.pprint('GREEN', 'Modified EGL GLES sink will be built')
+		Logs.pprint('GREEN', 'EGL sink with Vivante direct textures will be built')
+		Logs.pprint('GREEN', 'Selected EGL platform: ' + conf.options.egl_platform)
 		conf.env['EGLVIVSINK_ENABLED'] = 1
 	else:
-		Logs.pprint('RED', 'Modified EGL GLES sink will not be built - dependencies not found')
+		Logs.pprint('RED', 'EGL sink with Vivante direct textures will not be built - dependencies not found')
 
 
 def build(bld):
