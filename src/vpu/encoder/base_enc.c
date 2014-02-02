@@ -64,6 +64,7 @@ static gboolean gst_imx_vpu_base_enc_start(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_base_enc_stop(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVideoCodecState *state);
 static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *frame);
+static gboolean gst_imx_vpu_base_enc_propose_allocation(GstVideoEncoder *encoder, GstQuery *query);
 
 
 
@@ -86,6 +87,17 @@ void gst_imx_vpu_base_enc_class_init(GstImxVpuBaseEncClass *klass)
 	base_class->stop              = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_stop);
 	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_set_format);
 	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_handle_frame);
+
+	/* TODO: Memory-mapped writes into physically contiguous memory blocks are quite slow. This is
+	 * probably caused by the mapping type: if for example it is not mapped with write combining
+	 * enabled, random access to the memory will cause lots of wasteful cycles, explaining the
+	 * slowdown. Until this can be verified, the buffer pool is disabled; upstream does not get a
+	 * proposal for its allocation, and buffer contents end up copied over to a local physical
+	 * memory block by using memcpy(). Currently, doing that is ~3 times faster than letting
+	 * upstream write directly into physical memory blocks allocated by the proposed buffer pool.
+	 * (This also affects the IPU elements.)
+	 */
+	/*base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_propose_allocation);*/
 	
 	klass->inst_counter = 0;
 
@@ -791,3 +803,42 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	return GST_FLOW_OK;
 }
 
+
+static gboolean gst_imx_vpu_base_enc_propose_allocation(GstVideoEncoder *encoder, GstQuery *query)
+{
+	GstStructure *config;
+	GstCaps *caps;
+	gboolean need_pool;
+	GstVideoInfo info;
+	GstBufferPool *pool;
+	GstAllocator *allocator;
+
+	gst_query_parse_allocation (query, &caps, &need_pool);
+
+	if (need_pool) {
+		if (caps == NULL) {
+			GST_WARNING_OBJECT(encoder, "no caps");
+			return FALSE;
+		}
+
+		if (!gst_video_info_from_caps (&info, caps)) {
+			GST_WARNING_OBJECT(encoder, "invalid caps");
+			return FALSE;
+		}
+
+		pool = gst_imx_phys_mem_buffer_pool_new(FALSE);
+		allocator = gst_imx_vpu_enc_allocator_obtain();
+
+		config = gst_buffer_pool_get_config(pool);
+		gst_buffer_pool_config_set_params(config, caps, info.size, 2, 0);
+		gst_buffer_pool_config_set_allocator(config, allocator, NULL);
+		gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM);
+		gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+		gst_buffer_pool_set_config(pool, config);
+
+		gst_query_add_allocation_pool (query, pool, info.size, 2, 0);
+		gst_object_unref (pool);
+	}
+
+	return TRUE;
+}
