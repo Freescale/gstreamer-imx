@@ -41,7 +41,6 @@ typedef struct _GstImxVpuH264EncClass GstImxVpuH264EncClass;
 struct _GstImxVpuH264Enc
 {
 	GstImxVpuBaseEnc parent;
-	GstBuffer *sps_buffer, *pps_buffer;
 	guint quant_param;
 	gboolean produce_access_units;
 };

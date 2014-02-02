@@ -73,7 +73,6 @@ static void gst_imx_vpu_h264_enc_finalize(GObject *object);
 static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
 static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base_enc);
 static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
-static void gst_imx_vpu_h264_enc_copy_nalu(guint8 *in_data, guint8 **out_data_cur, guint8 *out_data_end, gsize nalu_size);
 static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecFrame *frame, gsize output_offset, void *encoded_data_addr, gsize encoded_data_size, gboolean contains_header);
 static void gst_imx_vpu_h264_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_vpu_h264_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
@@ -129,8 +128,6 @@ void gst_imx_vpu_h264_enc_class_init(GstImxVpuH264EncClass *klass)
 
 void gst_imx_vpu_h264_enc_init(GstImxVpuH264Enc *enc)
 {
-	enc->sps_buffer = NULL;
-	enc->pps_buffer = NULL;
 	enc->quant_param = DEFAULT_QUANT_PARAM;
 	enc->produce_access_units = FALSE;
 }
@@ -140,13 +137,6 @@ void gst_imx_vpu_h264_enc_init(GstImxVpuH264Enc *enc)
 
 static void gst_imx_vpu_h264_enc_finalize(GObject *object)
 {
-	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(object);
-
-	if (enc->sps_buffer != NULL)
-		gst_buffer_unref(enc->sps_buffer);
-	if (enc->pps_buffer != NULL)
-		gst_buffer_unref(enc->pps_buffer);
-
 	G_OBJECT_CLASS(gst_imx_vpu_h264_enc_parent_class)->finalize(object);
 }
 
@@ -203,6 +193,9 @@ static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_
 		gst_caps_unref(allowed_caps);
 	}
 
+	if (enc->produce_access_units)
+		open_param->VpuEncStdParam.avcParam.avc_audEnable = 1;
+
 	GST_DEBUG_OBJECT(vpu_base_enc, "produce access unit: %s", enc->produce_access_units ? "yes" : "no");
 
 	gst_caps_unref(template_caps);
@@ -235,210 +228,31 @@ static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_
 }
 
 
-static void gst_imx_vpu_h264_enc_copy_nalu(guint8 *in_data, guint8 **out_data_cur, guint8 *out_data_end, gsize nalu_size)
-{
-	g_assert((*out_data_cur + 4 + nalu_size) <= out_data_end);
-
-	**out_data_cur = 0x00; ++(*out_data_cur);
-	**out_data_cur = 0x00; ++(*out_data_cur);
-	**out_data_cur = 0x00; ++(*out_data_cur);
-	**out_data_cur = 0x01; ++(*out_data_cur);
-
-	memcpy(*out_data_cur, in_data, nalu_size);
-	(*out_data_cur) += nalu_size;
-}
-
-
 static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecFrame *frame, gsize output_offset, void *encoded_data_addr, gsize encoded_data_size, G_GNUC_UNUSED gboolean contains_header)
 {
-	GstMapInfo map_info;
-	guint num_found_starts;
-	guint32 nal_start_code_offsets[2];
-	guint8 *in_data, *out_data_end, *out_data_cur;
-	guint32 ofs;
-	guint32 start_code;
-	gsize actual_output_size;
+	guint8 *in_data;
+	static guint8 start_code[] = { 0x00, 0x00, 0x00, 0x01 };
+	gsize start_code_size = sizeof(start_code);
 	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(vpu_base_enc);
 
-	gst_buffer_map(frame->output_buffer, &map_info, GST_MAP_WRITE);
-
+	/* If the first NAL unit is an SPS then this frame is a sync point */
 	in_data = (guint8 *)encoded_data_addr;
-	out_data_cur = map_info.data + output_offset;
-	out_data_end = map_info.data + map_info.size;
-	num_found_starts = 0;
-	start_code = 0;
-
-	/* This loop searches for NAL units. It does so by looking for start codes, which are the
-	 * "boundaries" or delimiters of NAL units (in Annex.B format, which is what the VPU encoder
-	 * produces).
-	 *
-	 * The offsets of the locations inside the encoded data which follow the start codes are kept.
-	 * So, for example, if at offset 441 a 4-byte start code is found, the offset 445 is stored. 
-	 * The most recently found two offsets are kept. Older offsets are discarded. The older offset
-	 * is always found by start code. The newer one may be found by start code, or may simply be
-	 * the end of the encoded data buffer. This is the case when only one NAL unit is contained;
-	 * in that case, there will be only one start code inside, marking the beginning of the NAL unit.
-	 * If the newer offset is found by start code, it is decremented by the start code size, to make
-	 * sure both offsets exclude the start code bytes.
-	 * The older offset then becomes the start offset, the newer offset the end one.
-	 *
-	 * Once the start and end offsets of the NAL unit are found, its type is retrieved.
-	 * SPS/PPS NAL units are read, their headers stored in buffers. With IDR NAL units, the loop
-	 * prepends the SPS/PPS headers. This makes sure proper playback is possible even with discontinuous
-	 * streams such as Apple HLS.
-	 *
-	 * If access units are used, the access unit delimiter is written first, followed by SPS/PPS headers
-	 * (if necessary) and then by the VCL NAL unit.
-	 */
-
-	for (ofs = 0; ofs < encoded_data_size;)
+	if (memcmp(in_data, start_code, start_code_size) == 0)
 	{
-		gsize nalu_size;
-		guint32 nalu_start_ofs, nalu_end_ofs;
+		guint8 nalu_type;
 
-		/* Start code is found by appending the current byte to the existing code;
-		 * the start code (usually a 3- or 4-byte code, 0x000001 / 0x00000001) is then detected
-		 * by simple AND masking & comparison */
-		start_code <<= 8;
-		start_code |= in_data[ofs++];
-
-		/* Store current offset if a 3- or 4-byte start code was found or if the end of the encoded data is reached */
-		if (((start_code & 0x00FFFFFF) == 0x000001) || (ofs == encoded_data_size))
+		/* Retrieve the NAL unit type from the 5 lower bits of the first byte in the NAL unit */
+		nalu_type = in_data[start_code_size] & 0x1F;
+		if (nalu_type == NALU_TYPE_SPS)
 		{
-			/* offset #1 is the older one, #0 the newer one */
-			nal_start_code_offsets[1] = nal_start_code_offsets[0];
-			nal_start_code_offsets[0] = ofs;
-			num_found_starts = (num_found_starts < 2) ? (num_found_starts + 1) : 2;
-
-			/* Two offsets are known; computing the NAL unit size is now possible */
-			if (num_found_starts == 2)
-			{
-				guint num_start_code_bytes;
-
-				/* Subtract either 3 or 4 byte (depending on the start code length) from the offset
-				 * difference to get the NAL unit size without including the start code bytes.
-				 * If no start code was found, then it means the end of the encoded data was reached;
-				 * do not subtract in that case. */
-				if (start_code == 0x00000001)
-					num_start_code_bytes = 4;
-				else if ((start_code & 0x00FFFFFF) == 0x000001)
-					num_start_code_bytes = 3;
-				else
-					num_start_code_bytes = 0; /* end-of-encoded-data case */
-
-				nalu_start_ofs = nal_start_code_offsets[1];
-				nalu_end_ofs = nal_start_code_offsets[0];
-				nalu_size = nalu_end_ofs - nalu_start_ofs - num_start_code_bytes;
-
-				GST_DEBUG_OBJECT(enc, "found NAL unit from offset %u to %u, size %u (minus %u start code bytes)", nal_start_code_offsets[1], nal_start_code_offsets[0], nalu_size, num_start_code_bytes);
-			}
-
-			start_code = 0;
-		}
-
-		/* Start and end of the NAL unit are known; the NAL unit can be analyzed */
-		if (num_found_starts == 2)
-		{
-			gboolean write_headers;
-			guint8 nalu_type;
-
-			/* If header output is forced, set initial write_headers value to TRUE */
-			write_headers = GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME_HEADERS(frame) || GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame);
-
-			/* Retrieve the NAL unit type from the 5 lower bits of the first byte in the NAL unit */
-			nalu_type = in_data[nalu_start_ofs] & 0x1F;
-
-			GST_DEBUG_OBJECT(enc, "NAL unit is of type %02x", nalu_type);
-
-			/* AU delimiter bytes ; payload type is set to allow any type of slice */
-			static guint8 access_unit_delimiter[] = { 0x09, 0xF0 };
-
-			switch (nalu_type)
-			{
-				case NALU_TYPE_SPS:
-				{
-					GST_DEBUG_OBJECT(enc, "new SPS header found, size %u", nalu_size);
-					if (enc->sps_buffer != NULL)
-						gst_buffer_unref(enc->sps_buffer);
-					enc->sps_buffer = gst_buffer_new_allocate(NULL, nalu_size, NULL);
-					write_headers = FALSE;
-					gst_buffer_fill(enc->sps_buffer, 0, in_data + nalu_start_ofs, nalu_size);
-					break;
-				}
-				case NALU_TYPE_PPS:
-				{
-					GST_DEBUG_OBJECT(enc, "new PPS header found, size %u", nalu_size);
-					if (enc->pps_buffer != NULL)
-						gst_buffer_unref(enc->pps_buffer);
-					enc->pps_buffer = gst_buffer_new_allocate(NULL, nalu_size, NULL);
-					write_headers = FALSE;
-					gst_buffer_fill(enc->pps_buffer, 0, in_data + nalu_start_ofs, nalu_size);
-					break;
-				}
-				case NALU_TYPE_IDR:
-				{
-					GST_DEBUG_OBJECT(enc, "IDR NAL found, size %u, setting sync point", nalu_size);
-					/* This is an IDR unit -> prepend SPS/PPS headers and set the frame as a sync point */
-					write_headers = TRUE;
-					GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(frame);
-
-					break;
-				}
-				default:
-					break;
-			}
-
-			if ((nalu_type >= 1) && (nalu_type <= 5))
-			{
-				/* This NAL unit is a VCL unit (VCL = types 1..5) */
-
-				/* Add access unit delimiter if downstream requested it in the caps */
-				if (enc->produce_access_units)
-				{
-					GST_TRACE_OBJECT(enc, "adding access unit delimiter to output");
-					gst_imx_vpu_h264_enc_copy_nalu(access_unit_delimiter, &out_data_cur, out_data_end, sizeof(access_unit_delimiter));
-				}
-
-				/* SPS & PPS headers are to be written (usually happens because an IDR NAL unit was read) */
-				if (write_headers)
-				{
-					if ((enc->sps_buffer != NULL) && (enc->pps_buffer != NULL))
-					{
-						GstMapInfo hdr_map_info;
-
-						GST_TRACE_OBJECT(enc, "inserting SPS & PPS headers");
-
-						gst_buffer_map(enc->sps_buffer, &hdr_map_info, GST_MAP_READ);
-						gst_imx_vpu_h264_enc_copy_nalu(hdr_map_info.data, &out_data_cur, out_data_end, hdr_map_info.size);
-						gst_buffer_unmap(enc->sps_buffer, &hdr_map_info);
-
-						gst_buffer_map(enc->pps_buffer, &hdr_map_info, GST_MAP_READ);
-						gst_imx_vpu_h264_enc_copy_nalu(hdr_map_info.data, &out_data_cur, out_data_end, hdr_map_info.size);
-						gst_buffer_unmap(enc->pps_buffer, &hdr_map_info);
-					}
-					else
-						GST_WARNING_OBJECT(enc, "cannot insert SPS & PPS headers, since no headers were previously found");
-				}
-
-				GST_TRACE_OBJECT(enc, "copying VCL NAL unit to output");
-				gst_imx_vpu_h264_enc_copy_nalu(in_data + nalu_start_ofs, &out_data_cur, out_data_end, nalu_size);
-			}
-
-			/* The older offset is no longer necessary, since the NAL unit was processed.
-			 * Setting num_found_starts to 1 causes the code to not process anything until another start code is
-			 * found (or the end of encoded data is reached. */
-			num_found_starts = 1;
+			GST_DEBUG_OBJECT(enc, "SPS NAL found, setting sync point");
+			GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(frame);
 		}
 	}
 
-	/* Compute the actual output size, which may be bigger than the initial encoded data
-	 * (because the loop above always writes 4-byte start codes, and sometimes inserts
-	 * SPS/PPS headers and access unit delimiters) */
-	actual_output_size = out_data_cur - (map_info.data + output_offset);
+	gst_buffer_fill(frame->output_buffer, output_offset, encoded_data_addr, encoded_data_size);
 
-	gst_buffer_unmap(frame->output_buffer, &map_info);
-
-	return actual_output_size;
+	return encoded_data_size;
 }
 
 
