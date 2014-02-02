@@ -65,7 +65,7 @@ GST_DEBUG_CATEGORY_STATIC(gst_imx_v4l2src_debug_category);
 			"imxv4l2src", 0, "V4L2 CSI video source");
 
 G_DEFINE_TYPE_WITH_CODE(GstImxV4l2Src, gst_imx_v4l2src,
-	GST_TYPE_PUSH_SRC, DEBUG_INIT);
+	GST_TYPE_PUSH_SRC, DEBUG_INIT)
 
 static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 {
@@ -257,7 +257,7 @@ static GstCaps *gst_imx_v4l2src_fixate(GstBaseSrc *src, GstCaps *caps)
 	GstStructure *structure = NULL;
 	guint i;
 
-	GST_INFO_OBJECT(src, "fixating caps %" GST_PTR_FORMAT, caps);
+	GST_INFO_OBJECT(src, "fixating caps %" GST_PTR_FORMAT, (gpointer)caps);
 
 	caps = gst_caps_make_writable(caps);
 
@@ -274,7 +274,7 @@ static GstCaps *gst_imx_v4l2src_fixate(GstBaseSrc *src, GstCaps *caps)
 		gst_structure_set(structure, "format", G_TYPE_STRING, "I420", NULL);
 	}
 
-	GST_INFO_OBJECT(src, "fixated caps %" GST_PTR_FORMAT, caps);
+	GST_INFO_OBJECT(src, "fixated caps %" GST_PTR_FORMAT, (gpointer)caps);
 
 	caps = GST_BASE_SRC_CLASS(gst_imx_v4l2src_parent_class)->fixate(src, caps);
 
@@ -286,7 +286,7 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
 
-	GST_INFO_OBJECT(v4l2src, "get caps filter %" GST_PTR_FORMAT, filter);
+	GST_INFO_OBJECT(v4l2src, "get caps filter %" GST_PTR_FORMAT, (gpointer)filter);
 
 	caps = gst_caps_new_simple("video/x-raw",
 			"format", G_TYPE_STRING, "I420",
@@ -296,7 +296,7 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 			"pixel-aspect-ratio", GST_TYPE_FRACTION_RANGE, 0, 1, 100, 1,
 			NULL);
 
-	GST_INFO_OBJECT(v4l2src, "get caps %" GST_PTR_FORMAT, caps);
+	GST_INFO_OBJECT(v4l2src, "get caps %" GST_PTR_FORMAT, (gpointer)caps);
 
 	return caps;
 }
@@ -305,7 +305,7 @@ static gboolean gst_imx_v4l2src_set_caps(GstBaseSrc *src, GstCaps *caps)
 {
 	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
 
-	GST_INFO_OBJECT(v4l2src, "set caps %" GST_PTR_FORMAT, caps);
+	GST_INFO_OBJECT(v4l2src, "set caps %" GST_PTR_FORMAT, (gpointer)caps);
 
 	return TRUE;
 }

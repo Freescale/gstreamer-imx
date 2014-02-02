@@ -145,7 +145,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 		return GST_FLOW_ERROR;
 	}
 
-	GST_DEBUG_OBJECT(pool, "alloc %u %p", pool->num_allocated, buf);
+	GST_DEBUG_OBJECT(pool, "alloc %u %p", pool->num_allocated, (gpointer)buf);
 
 	meta = GST_IMX_V4L2_META_ADD(buf);
 	meta->vbuffer.index = pool->num_allocated;
@@ -199,7 +199,7 @@ static void gst_imx_v4l2_buffer_pool_free_buffer(GstBufferPool *bpool, GstBuffer
 	meta = GST_IMX_V4L2_META_GET(buf);
 	g_assert(meta);
 
-	GST_DEBUG_OBJECT(pool, "free %u %p", meta->vbuffer.index, buf);
+	GST_DEBUG_OBJECT(pool, "free %u %p", meta->vbuffer.index, (gpointer)buf);
 
 	munmap(meta->mem, meta->vbuffer.length);
 	pool->buffers[meta->vbuffer.index] = NULL;
@@ -229,7 +229,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_acquire_buffer(GstBufferPool *bpoo
 	buf = pool->buffers[vbuffer.index];
 	g_assert(buf);
 
-	GST_DEBUG_OBJECT(pool, "dqbuf %u %p", vbuffer.index, buf);
+	GST_DEBUG_OBJECT(pool, "dqbuf %u %p", vbuffer.index, (gpointer)buf);
 
 	pool->buffers[vbuffer.index] = NULL;
 
@@ -257,12 +257,12 @@ static void gst_imx_v4l2_buffer_pool_release_buffer(GstBufferPool *bpool, GstBuf
 	meta = GST_IMX_V4L2_META_GET(buf);
 	if (!meta)
 	{
-		GST_DEBUG_OBJECT(pool, "unref copied buffer %p", buf);
+		GST_DEBUG_OBJECT(pool, "unref copied buffer %p", (gpointer)buf);
 		gst_buffer_unref(buf);
 		return;
 	}
 
-	GST_DEBUG_OBJECT(pool, "qbuf %u %p", meta->vbuffer.index, buf);
+	GST_DEBUG_OBJECT(pool, "qbuf %u %p", meta->vbuffer.index, (gpointer)buf);
 
 	if (ioctl(pool->fd, VIDIOC_QBUF, &meta->vbuffer) < 0)
 	{
