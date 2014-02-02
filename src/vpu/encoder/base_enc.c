@@ -414,7 +414,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 		vpu_base_enc->output_phys_buffer = NULL;
 	}
 
-	memset(&(vpu_base_enc->open_param), 0, sizeof(VpuEncOpenParamSimp));
+	memset(&(vpu_base_enc->open_param), 0, sizeof(VpuEncOpenParam));
 
 	/* These params are usually not set by derived classes */
 	vpu_base_enc->open_param.nPicWidth = GST_VIDEO_INFO_WIDTH(&(state->info));
@@ -426,6 +426,13 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 
 	GST_DEBUG_OBJECT(vpu_base_enc, "setting bitrate to %u kbps and GOP size to %u", vpu_base_enc->open_param.nBitRate, vpu_base_enc->open_param.nGOPSize);
 
+	/* These are default settings from VPU_EncOpenSimp */
+	vpu_base_enc->open_param.sliceMode.sliceMode = 0; /* 1 slice per picture */
+	vpu_base_enc->open_param.sliceMode.sliceSizeMode = 0; /* sliceSize is bits */
+	vpu_base_enc->open_param.sliceMode.sliceSize = 4000;
+	vpu_base_enc->open_param.nRcIntraQp = -1;
+	vpu_base_enc->open_param.nUserGamma = 0.75 * 32768;
+
 	/* Give the derived class a chance to set params */
 	if (!klass->set_open_params(vpu_base_enc, &(vpu_base_enc->open_param)))
 	{
@@ -435,7 +442,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 
 	/* The actual initialization; requires bitstream information (such as the codec type), which
 	 * is determined by the fill_param_set call before */
-	ret = VPU_EncOpenSimp(&(vpu_base_enc->handle), &(vpu_base_enc->mem_info), &(vpu_base_enc->open_param));
+	ret = VPU_EncOpen(&(vpu_base_enc->handle), &(vpu_base_enc->mem_info), &(vpu_base_enc->open_param));
 	if (ret != VPU_ENC_RET_SUCCESS)
 	{
 		GST_ERROR_OBJECT(vpu_base_enc, "opening new VPU handle failed: %s", gst_imx_vpu_strerror(ret));

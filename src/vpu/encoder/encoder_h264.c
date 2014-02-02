@@ -70,9 +70,9 @@ G_DEFINE_TYPE(GstImxVpuH264Enc, gst_imx_vpu_h264_enc, GST_TYPE_IMX_VPU_BASE_ENC)
 
 
 static void gst_imx_vpu_h264_enc_finalize(GObject *object);
-static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParamSimp *open_param);
+static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
 static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base_enc);
-static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParamSimp *open_param);
+static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
 static void gst_imx_vpu_h264_enc_copy_nalu(guint8 *in_data, guint8 **out_data_cur, guint8 *out_data_end, gsize nalu_size);
 static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecFrame *frame, gsize output_offset, void *encoded_data_addr, gsize encoded_data_size, gboolean contains_header);
 static void gst_imx_vpu_h264_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
@@ -151,13 +151,25 @@ static void gst_imx_vpu_h264_enc_finalize(GObject *object)
 }
 
 
-static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParamSimp *open_param)
+static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param)
 {
 	GstCaps *template_caps, *allowed_caps;
 	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(vpu_base_enc);
 
 	open_param->eFormat = VPU_V_AVC;
 	open_param->eColorFormat = VPU_COLOR_420;
+
+	/* These are default settings from VPU_EncOpenSimp */
+	open_param->VpuEncStdParam.avcParam.avc_constrainedIntraPredFlag = 0;
+	open_param->VpuEncStdParam.avcParam.avc_disableDeblk = 0;
+	open_param->VpuEncStdParam.avcParam.avc_deblkFilterOffsetAlpha = 6;
+	open_param->VpuEncStdParam.avcParam.avc_deblkFilterOffsetBeta = 0;
+	open_param->VpuEncStdParam.avcParam.avc_chromaQpOffset = 10;
+	open_param->VpuEncStdParam.avcParam.avc_audEnable = 0;
+	open_param->VpuEncStdParam.avcParam.avc_fmoEnable = 0;
+	open_param->VpuEncStdParam.avcParam.avc_fmoType = 0;
+	open_param->VpuEncStdParam.avcParam.avc_fmoSliceNum = 1;
+	open_param->VpuEncStdParam.avcParam.avc_fmoSliceSaveBufSize = 32;
 
 	/* Since this call is part of set_format, it is a suitable place for looking up whether or not
 	 * downstream requires access units. The src caps are retrieved and examined for this purpose. */
@@ -212,7 +224,7 @@ static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(G_GNUC_UNUSED GstImxVpuBase
 }
 
 
-static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, G_GNUC_UNUSED VpuEncOpenParamSimp *open_param)
+static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, G_GNUC_UNUSED VpuEncOpenParam *open_param)
 {
 	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(vpu_base_enc);
 

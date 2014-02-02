@@ -57,7 +57,7 @@ struct _GstImxVpuBaseEnc
 
 	GstVideoInfo video_info;
 
-	VpuEncOpenParamSimp open_param;
+	VpuEncOpenParam open_param;
 
 	gboolean vpu_inst_opened;
 
@@ -79,9 +79,9 @@ struct _GstImxVpuBaseEncClass
 	GstVideoEncoderClass parent_class;
 	gint inst_counter;
 
-	gboolean (*set_open_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParamSimp *open_param);
+	gboolean (*set_open_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
 	GstCaps* (*get_output_caps)(GstImxVpuBaseEnc *vpu_base_enc);
-	gboolean (*set_frame_enc_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParamSimp *open_param);
+	gboolean (*set_frame_enc_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
 	gsize (*fill_output_buffer)(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecFrame *frame, gsize output_offset, void *encoded_data_addr, gsize encoded_data_size, gboolean contains_header);
 	
 };
