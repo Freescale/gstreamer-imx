@@ -66,11 +66,16 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 struct _GstImxIpuVideoTransformPrivate
 {
 	GstImxIpuBlitter *blitter;
+	GMutex mutex;
 
 	GstImxIpuBlitterRotationMode output_rotation;
 	gboolean input_crop;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 };
+
+
+#define LOCK_BLITTER_MUTEX(obj) g_mutex_lock(&(((GstImxIpuVideoTransform*)obj)->priv->mutex))
+#define UNLOCK_BLITTER_MUTEX(obj) g_mutex_unlock(&(((GstImxIpuVideoTransform*)obj)->priv->mutex))
 
 
 G_DEFINE_TYPE(GstImxIpuVideoTransform, gst_imx_ipu_video_transform, GST_TYPE_VIDEO_FILTER)
@@ -182,6 +187,7 @@ void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transfo
 
 	ipu_video_transform->priv = g_slice_alloc(sizeof(GstImxIpuVideoTransformPrivate));
 	ipu_video_transform->priv->blitter = NULL;
+	g_mutex_init(&(ipu_video_transform->priv->mutex));
 	ipu_video_transform->inout_caps_equal = FALSE;
 
 	ipu_video_transform->priv->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
@@ -203,7 +209,9 @@ static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement 
 	{
 		case GST_STATE_CHANGE_NULL_TO_READY:
 		{
+			LOCK_BLITTER_MUTEX(ipu_video_transform);
 			gst_imx_ipu_video_transform_init_device(ipu_video_transform);
+			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 			break;
 		}
 
@@ -219,7 +227,9 @@ static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement 
 	{
 		case GST_STATE_CHANGE_READY_TO_NULL:
 		{
+			LOCK_BLITTER_MUTEX(ipu_video_transform);
 			gst_imx_ipu_video_transform_uninit_device(ipu_video_transform);
+			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 			break;
 		}
 
@@ -233,6 +243,8 @@ static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement 
 
 static void gst_imx_ipu_video_transform_init_device(GstImxIpuVideoTransform *ipu_video_transform)
 {
+	/* must be called with lock */
+
 	g_assert(ipu_video_transform->priv != NULL);
 	ipu_video_transform->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
 
@@ -244,6 +256,7 @@ static void gst_imx_ipu_video_transform_init_device(GstImxIpuVideoTransform *ipu
 
 static void gst_imx_ipu_video_transform_uninit_device(GstImxIpuVideoTransform *ipu_video_transform)
 {
+	/* must be called with lock */
 
 	if (ipu_video_transform->priv != NULL)
 	{
@@ -261,6 +274,7 @@ static void gst_imx_ipu_video_transform_finalize(GObject *object)
 	gst_imx_ipu_video_transform_uninit_device(ipu_video_transform);
 	if (ipu_video_transform->priv != NULL)
 	{
+		g_mutex_clear(&(ipu_video_transform->priv->mutex));
 		g_slice_free1(sizeof(GstImxIpuVideoTransformPrivate), ipu_video_transform->priv);
 	}
 
@@ -275,20 +289,29 @@ static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
+			LOCK_BLITTER_MUTEX(ipu_video_transform);
 			ipu_video_transform->priv->output_rotation = g_value_get_enum(value);
 			if (ipu_video_transform->priv->blitter != NULL)
 				gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_transform->priv->blitter, ipu_video_transform->priv->output_rotation);
+			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 			break;
+
 		case PROP_INPUT_CROP:
+			LOCK_BLITTER_MUTEX(ipu_video_transform);
 			ipu_video_transform->priv->input_crop = g_value_get_boolean(value);
 			if (ipu_video_transform->priv->blitter != NULL)
 				gst_imx_ipu_blitter_enable_crop(ipu_video_transform->priv->blitter, ipu_video_transform->priv->input_crop);
+			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 			break;
+
 		case PROP_DEINTERLACE_MODE:
+			LOCK_BLITTER_MUTEX(ipu_video_transform);
 			ipu_video_transform->priv->deinterlace_mode = g_value_get_enum(value);
 			if (ipu_video_transform->priv->blitter != NULL)
 				gst_imx_ipu_blitter_set_deinterlace_mode(ipu_video_transform->priv->blitter, ipu_video_transform->priv->deinterlace_mode);
+			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 			break;
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -303,14 +326,23 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
+			LOCK_BLITTER_MUTEX(ipu_video_transform);
 			g_value_set_enum(value, ipu_video_transform->priv->output_rotation);
+			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 			break;
+
 		case PROP_INPUT_CROP:
+			LOCK_BLITTER_MUTEX(ipu_video_transform);
 			g_value_set_boolean(value, ipu_video_transform->priv->input_crop);
+			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 			break;
+
 		case PROP_DEINTERLACE_MODE:
+			LOCK_BLITTER_MUTEX(ipu_video_transform);
 			g_value_set_enum(value, ipu_video_transform->priv->deinterlace_mode);
+			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 			break;
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -1091,6 +1123,8 @@ static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTr
 	gboolean passthrough = FALSE;
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(trans);
 
+	LOCK_BLITTER_MUTEX(ipu_video_transform);
+
 	/* Test if passthrough should be enabled */
 	if ((input != NULL) && ipu_video_transform->inout_caps_equal)
 	{
@@ -1174,6 +1208,8 @@ static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTr
 	else if (input == NULL)
 		GST_LOG_OBJECT(trans, "input buffer is NULL");
 
+	UNLOCK_BLITTER_MUTEX(ipu_video_transform);
+
 	GST_LOG_OBJECT(trans, "passthrough: %s", passthrough ? "yes" : "no");
 	gst_base_transform_set_passthrough(trans, passthrough);
 
@@ -1183,15 +1219,19 @@ static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTr
 
 static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out)
 {
+	gboolean ret;
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(filter);
 
-	if (
-		gst_imx_ipu_blitter_set_input_buffer(ipu_video_transform->priv->blitter, in->buffer) &&
-		gst_imx_ipu_blitter_set_output_buffer(ipu_video_transform->priv->blitter, out->buffer) &&
-		gst_imx_ipu_blitter_blit(ipu_video_transform->priv->blitter)
-	)
-		return GST_FLOW_OK;
-	else
-		return GST_FLOW_ERROR;
+	LOCK_BLITTER_MUTEX(ipu_video_transform);
+
+	/* using early exit optimization here to avoid calls if necessary */
+	ret = TRUE;
+	ret = ret && gst_imx_ipu_blitter_set_input_buffer(ipu_video_transform->priv->blitter, in->buffer);
+	ret = ret && gst_imx_ipu_blitter_set_output_buffer(ipu_video_transform->priv->blitter, out->buffer);
+	ret = ret && gst_imx_ipu_blitter_blit(ipu_video_transform->priv->blitter);
+
+	UNLOCK_BLITTER_MUTEX(ipu_video_transform);
+
+	return ret ? GST_FLOW_OK : GST_FLOW_ERROR;
 }
 
