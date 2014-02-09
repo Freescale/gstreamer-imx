@@ -7,7 +7,7 @@ About
 This is a set of [GStreamer 1.0](http://gstreamer.freedesktop.org/) plugins for plugins for Freescale's
 i.MX platform, with emphasis on video en/decoding using the i.MX VPU engine.
 
-Currently, this software has been tested on the i.MX 6 Sabre SD Dual Lite platform only.
+Currently, this software has been tested only with the i.MX6 SoC family.
 
 The software as a whole is currently in beta stage.
 
@@ -22,10 +22,13 @@ Available plugins
 -----------------
 
 * `imxvpudec` : video decoder plugin
-* `imxvpuenc_h264` : h.264 baseline profile Annex.B encoder (currently unfinished)
+* `imxvpuenc_h263` : h.263 encoder
+* `imxvpuenc_h264` : h.264 baseline profile Annex.B encoder
+* `imxvpuenc_mpeg4` : MPEG-4 encoder
 * `imxipusink` : video sink using the IPU to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxipuvideotransform` : video transform element using the IPU, capable of scaling, deinterlacing, rotating (in 90 degree steps), flipping frames, and converting between color spaces
-* `eglvivsink` : modified EGLGLES video sink from the 1.0.x gst-plugins-bad package; uses the Vivante direct textures with DMA buffers for smooth HD playback
+* `imxeglvivsink` : custom OpenGL ES 2.x based video sink; using the Vivante direct textures, which allow for smooth playback
+* `imxv4l2src` : customized Video4Linux source with i.MX specific tweaks
 
 
 Dependencies
