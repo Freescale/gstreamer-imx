@@ -896,7 +896,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * used at the same time and min_framebuffer_count >= 10
 			 * the 10 framebuffers figure is an empirically estimated default */
 			min_fbcount_indicated_by_vpu = (guint)(fbparams.min_framebuffer_count);
-			fbparams.min_framebuffer_count = MAX((min_fbcount_indicated_by_vpu + 3), vpu_dec->min_num_framebuffers);
+			fbparams.min_framebuffer_count = MAX((min_fbcount_indicated_by_vpu + 0), vpu_dec->min_num_framebuffers);
 			GST_DEBUG_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen minimum: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
 
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
@@ -1172,6 +1172,26 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 		else
 			GST_DEBUG_OBJECT(decoder, "no pool supports VPU buffers; creating new pool");
 		pool = gst_imx_vpu_fb_buffer_pool_new(vpu_dec->current_framebuffers);
+	}
+
+	/* the buffer pool must not try to create more buffers than available framebuffes,
+	 * because no additional framebuffers can be generated after VPU initialization
+	 * max = 0 would mean no maximum amount, and max > num_available_framebuffers
+	 * would mean that more buffers can be allocated than there are frames
+	 * -> limit max value to max(num_available_framebuffers, 3)
+	 * this defines a minimum of 3 to account for cases like deinterlacing, but ultimately,
+	 * situations where the buffer pool maximum is reached cannot be fully prevented
+	 */
+	if ((max == 0) || (max > (guint)(vpu_dec->current_framebuffers->num_available_framebuffers)))
+	{
+		guint new_max = MAX(3, vpu_dec->current_framebuffers->num_available_framebuffers);
+		GST_DEBUG_OBJECT(
+			pool,
+			"max buffers value is set to %u -> setting max buffers value to %u",
+			max,
+			new_max
+		);
+		max = new_max;
 	}
 
 	GST_DEBUG_OBJECT(
