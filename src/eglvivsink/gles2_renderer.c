@@ -953,7 +953,7 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_stop(GstImxEglVivSinkGLES2Renderer 
 		/* no need to explicitely unref the thread, since g_thread_join() does this already */
 
 		if (renderer->current_frame != NULL)
-			gst_buffer_ref(renderer->current_frame);
+			gst_buffer_unref(renderer->current_frame);
 		renderer->current_frame = NULL;
 
 		renderer->thread_started = FALSE;
