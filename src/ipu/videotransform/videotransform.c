@@ -75,16 +75,16 @@ G_DEFINE_TYPE(GstImxIpuVideoTransform, gst_imx_ipu_video_transform, GST_TYPE_VID
 static void gst_imx_ipu_video_transform_finalize(GObject *object);
 static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
-static gboolean gst_ipu_video_transform_src_event(GstBaseTransform *transform, GstEvent *event);
-static GstCaps* gst_ipu_video_transform_transform_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *filter);
-static GstCaps* gst_ipu_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
-static GstCaps* gst_ipu_video_transform_fixate_size_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
-static void gst_ipu_video_transform_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps);
+static gboolean gst_imx_ipu_video_transform_src_event(GstBaseTransform *transform, GstEvent *event);
+static GstCaps* gst_imx_ipu_video_transform_transform_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *filter);
+static GstCaps* gst_imx_ipu_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
+static GstCaps* gst_imx_ipu_video_transform_fixate_size_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
+static void gst_imx_ipu_video_transform_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps);
 static gboolean gst_imx_ipu_video_transform_propose_allocation(GstBaseTransform *transform, GstQuery *decide_query, GstQuery *query);
 static gboolean gst_imx_ipu_video_transform_decide_allocation(GstBaseTransform *transform, GstQuery *query);
-static gboolean gst_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info);
+static gboolean gst_imx_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info);
 static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTransform * trans, GstBuffer *input, GstBuffer **outbuf);
-static GstFlowReturn gst_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out);
+static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out);
 
 
 
@@ -119,14 +119,14 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 	object_class->finalize                      = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_finalize);
 	object_class->set_property                  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_property);
 	object_class->get_property                  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_get_property);
-	base_transform_class->src_event             = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_src_event);
-	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_caps);
-	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_fixate_caps);
+	base_transform_class->src_event             = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_src_event);
+	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_transform_caps);
+	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_fixate_caps);
 	base_transform_class->propose_allocation    = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_propose_allocation);
 	base_transform_class->decide_allocation     = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_decide_allocation);
 	base_transform_class->prepare_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_prepare_output_buffer);
-	video_filter_class->set_info                = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_set_info);
-	video_filter_class->transform_frame         = GST_DEBUG_FUNCPTR(gst_ipu_video_transform_transform_frame);
+	video_filter_class->set_info                = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_info);
+	video_filter_class->transform_frame         = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_transform_frame);
 
 	base_transform_class->passthrough_on_same_caps = FALSE;
 
@@ -241,7 +241,7 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 }
 
 
-static gboolean gst_ipu_video_transform_src_event(GstBaseTransform *transform, GstEvent *event)
+static gboolean gst_imx_ipu_video_transform_src_event(GstBaseTransform *transform, GstEvent *event)
 {
 	gdouble a;
 	GstStructure *structure;
@@ -287,7 +287,7 @@ static gboolean gst_ipu_video_transform_src_event(GstBaseTransform *transform, G
 }
 
 
-static GstCaps* gst_ipu_video_transform_transform_caps(GstBaseTransform *transform, G_GNUC_UNUSED GstPadDirection direction, GstCaps *caps, GstCaps *filter)
+static GstCaps* gst_imx_ipu_video_transform_transform_caps(GstBaseTransform *transform, G_GNUC_UNUSED GstPadDirection direction, GstCaps *caps, GstCaps *filter)
 {
 	GstCaps *tmpcaps1, *tmpcaps2, *result;
 	GstStructure *structure;
@@ -342,21 +342,21 @@ static GstCaps* gst_ipu_video_transform_transform_caps(GstBaseTransform *transfo
 }
 
 
-static GstCaps* gst_ipu_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
+static GstCaps* gst_imx_ipu_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
 {
 	othercaps = gst_caps_truncate(othercaps);
 	othercaps = gst_caps_make_writable(othercaps);
 
 	GST_DEBUG_OBJECT(transform, "trying to fixate othercaps %" GST_PTR_FORMAT " based on caps %" GST_PTR_FORMAT, (gpointer)othercaps, (gpointer)caps);
 
-	othercaps = gst_ipu_video_transform_fixate_size_caps(transform, direction, caps, othercaps);
-	gst_ipu_video_transform_fixate_format_caps(transform, caps, othercaps);
+	othercaps = gst_imx_ipu_video_transform_fixate_size_caps(transform, direction, caps, othercaps);
+	gst_imx_ipu_video_transform_fixate_format_caps(transform, caps, othercaps);
 
 	return othercaps;
 }
 
 
-static GstCaps* gst_ipu_video_transform_fixate_size_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
+static GstCaps* gst_imx_ipu_video_transform_fixate_size_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
 {
 	GstStructure *ins, *outs;
 	GValue const *from_par, *to_par;
@@ -755,7 +755,7 @@ static GstCaps* gst_ipu_video_transform_fixate_size_caps(GstBaseTransform *trans
 	}
 
 done:
-	gst_ipu_video_transform_fixate_format_caps(transform, caps, othercaps);
+	gst_imx_ipu_video_transform_fixate_format_caps(transform, caps, othercaps);
 
 	GST_DEBUG_OBJECT(transform, "fixated othercaps to %" GST_PTR_FORMAT, (gpointer)othercaps);
 
@@ -844,7 +844,7 @@ static void score_value(GstBaseTransform * base, const GstVideoFormatInfo * in_i
 }
 
 
-static void gst_ipu_video_transform_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps)
+static void gst_imx_ipu_video_transform_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps)
 {
 	GstStructure *ins, *outs;
 	const gchar *in_format;
@@ -987,7 +987,7 @@ static gboolean gst_imx_ipu_video_transform_decide_allocation(GstBaseTransform *
 }
 
 
-static gboolean gst_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info)
+static gboolean gst_imx_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info)
 {
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(filter);
 
@@ -1104,7 +1104,7 @@ static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTr
 }
 
 
-static GstFlowReturn gst_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out)
+static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out)
 {
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(filter);
 
