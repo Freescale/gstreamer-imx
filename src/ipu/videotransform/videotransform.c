@@ -66,12 +66,19 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 struct _GstImxIpuVideoTransformPrivate
 {
 	GstImxIpuBlitter *blitter;
+
+	GstImxIpuBlitterRotationMode output_rotation;
+	gboolean input_crop;
+	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 };
 
 
 G_DEFINE_TYPE(GstImxIpuVideoTransform, gst_imx_ipu_video_transform, GST_TYPE_VIDEO_FILTER)
 
 
+static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement *element, GstStateChange transition);
+static void gst_imx_ipu_video_transform_init_device(GstImxIpuVideoTransform *ipu_video_transform);
+static void gst_imx_ipu_video_transform_uninit_device(GstImxIpuVideoTransform *ipu_video_transform);
 static void gst_imx_ipu_video_transform_finalize(GObject *object);
 static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
@@ -116,6 +123,7 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
+	element_class->change_state                 = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_change_state);
 	object_class->finalize                      = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_finalize);
 	object_class->set_property                  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_property);
 	object_class->get_property                  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_get_property);
@@ -173,8 +181,12 @@ void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transfo
 	GstBaseTransform *base_transform = GST_BASE_TRANSFORM(ipu_video_transform);
 
 	ipu_video_transform->priv = g_slice_alloc(sizeof(GstImxIpuVideoTransformPrivate));
-	ipu_video_transform->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
+	ipu_video_transform->priv->blitter = NULL;
 	ipu_video_transform->inout_caps_equal = FALSE;
+
+	ipu_video_transform->priv->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
+	ipu_video_transform->priv->input_crop = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
+	ipu_video_transform->priv->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 
 	/* Set passthrough initially to FALSE ; passthrough will later be
 	 * enabled/disabled on a per-frame basis */
@@ -182,14 +194,73 @@ void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transfo
 }
 
 
-static void gst_imx_ipu_video_transform_finalize(GObject *object)
+static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement *element, GstStateChange transition)
 {
-	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(object);
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(element);
+	GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
+
+	switch (transition)
+	{
+		case GST_STATE_CHANGE_NULL_TO_READY:
+		{
+			gst_imx_ipu_video_transform_init_device(ipu_video_transform);
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	ret = GST_ELEMENT_CLASS(gst_imx_ipu_video_transform_parent_class)->change_state(element, transition);
+	if (ret == GST_STATE_CHANGE_FAILURE)
+		return ret;
+
+	switch (transition)
+	{
+		case GST_STATE_CHANGE_READY_TO_NULL:
+		{
+			gst_imx_ipu_video_transform_uninit_device(ipu_video_transform);
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return ret;
+}
+
+
+static void gst_imx_ipu_video_transform_init_device(GstImxIpuVideoTransform *ipu_video_transform)
+{
+	g_assert(ipu_video_transform->priv != NULL);
+	ipu_video_transform->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
+
+	gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_transform->priv->blitter, ipu_video_transform->priv->output_rotation);
+	gst_imx_ipu_blitter_enable_crop(ipu_video_transform->priv->blitter, ipu_video_transform->priv->input_crop);
+	gst_imx_ipu_blitter_set_deinterlace_mode(ipu_video_transform->priv->blitter, ipu_video_transform->priv->deinterlace_mode);
+}
+
+
+static void gst_imx_ipu_video_transform_uninit_device(GstImxIpuVideoTransform *ipu_video_transform)
+{
 
 	if (ipu_video_transform->priv != NULL)
 	{
 		if (ipu_video_transform->priv->blitter != NULL)
 			gst_object_unref(ipu_video_transform->priv->blitter);
+		ipu_video_transform->priv->blitter = NULL;
+	}
+}
+
+
+static void gst_imx_ipu_video_transform_finalize(GObject *object)
+{
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(object);
+
+	gst_imx_ipu_video_transform_uninit_device(ipu_video_transform);
+	if (ipu_video_transform->priv != NULL)
+	{
 		g_slice_free1(sizeof(GstImxIpuVideoTransformPrivate), ipu_video_transform->priv);
 	}
 
@@ -204,13 +275,19 @@ static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
-			gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_transform->priv->blitter, g_value_get_enum(value));
+			ipu_video_transform->priv->output_rotation = g_value_get_enum(value);
+			if (ipu_video_transform->priv->blitter != NULL)
+				gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_transform->priv->blitter, ipu_video_transform->priv->output_rotation);
 			break;
 		case PROP_INPUT_CROP:
-			gst_imx_ipu_blitter_enable_crop(ipu_video_transform->priv->blitter, g_value_get_boolean(value));
+			ipu_video_transform->priv->input_crop = g_value_get_boolean(value);
+			if (ipu_video_transform->priv->blitter != NULL)
+				gst_imx_ipu_blitter_enable_crop(ipu_video_transform->priv->blitter, ipu_video_transform->priv->input_crop);
 			break;
 		case PROP_DEINTERLACE_MODE:
-			gst_imx_ipu_blitter_set_deinterlace_mode(ipu_video_transform->priv->blitter, g_value_get_enum(value));
+			ipu_video_transform->priv->deinterlace_mode = g_value_get_enum(value);
+			if (ipu_video_transform->priv->blitter != NULL)
+				gst_imx_ipu_blitter_set_deinterlace_mode(ipu_video_transform->priv->blitter, ipu_video_transform->priv->deinterlace_mode);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -226,13 +303,13 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
-			g_value_set_enum(value, gst_imx_ipu_blitter_get_output_rotation_mode(ipu_video_transform->priv->blitter));
+			g_value_set_enum(value, ipu_video_transform->priv->output_rotation);
 			break;
 		case PROP_INPUT_CROP:
-			g_value_set_boolean(value, gst_imx_ipu_blitter_is_crop_enabled(ipu_video_transform->priv->blitter));
+			g_value_set_boolean(value, ipu_video_transform->priv->input_crop);
 			break;
 		case PROP_DEINTERLACE_MODE:
-			g_value_set_enum(value, gst_imx_ipu_blitter_get_deinterlace_mode(ipu_video_transform->priv->blitter));
+			g_value_set_enum(value, ipu_video_transform->priv->deinterlace_mode);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
