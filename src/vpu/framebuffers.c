@@ -181,7 +181,7 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 	else
 		framebuffers->pic_height = ALIGN_VAL_TO(params->pic_height, FRAME_ALIGN);
 
-	framebuffers->y_stride = params->pic_width;
+	framebuffers->y_stride = framebuffers->pic_width;
 	framebuffers->y_size = framebuffers->y_stride * framebuffers->pic_height;
 
 	switch (params->mjpeg_source_format)
@@ -212,9 +212,28 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 	}
 
 	framebuffers->total_size = framebuffers->y_size + framebuffers->u_size + framebuffers->v_size + framebuffers->mv_size + alignment;
-	GST_DEBUG_OBJECT(framebuffers, "num framebuffers:  total: %u  reserved: %u  available: %d", framebuffers->num_framebuffers, framebuffers->num_reserve_framebuffers, framebuffers->num_available_framebuffers);
-	GST_DEBUG_OBJECT(framebuffers, "framebuffer memory block size:  total: %d  Y: %d  U: %d  V: %d  Mv:  %d  alignment: %d", framebuffers->total_size, framebuffers->y_size, framebuffers->u_size, framebuffers->v_size, framebuffers->mv_size, alignment);
-	GST_DEBUG_OBJECT(framebuffers, "total memory required for all framebuffers: %d * %d = %d byte", framebuffers->total_size, framebuffers->num_framebuffers, framebuffers->total_size * framebuffers->num_framebuffers);
+	GST_DEBUG_OBJECT(
+		framebuffers,
+		"framebuffer requested width/height: %u/%u  actual width/height (after alignment): %u/%u  Y stride: %u",
+		params->pic_width, params->pic_height,
+		framebuffers->pic_width, framebuffers->pic_height,
+		framebuffers->y_stride
+	);
+	GST_DEBUG_OBJECT(
+		framebuffers,
+		"num framebuffers:  total: %u  reserved: %u  available: %d",
+		framebuffers->num_framebuffers, framebuffers->num_reserve_framebuffers, framebuffers->num_available_framebuffers
+	);
+	GST_DEBUG_OBJECT(
+		framebuffers,
+		"framebuffer memory block size:  total: %d  Y: %d  U: %d  V: %d  Mv:  %d  alignment: %d",
+		framebuffers->total_size, framebuffers->y_size, framebuffers->u_size, framebuffers->v_size, framebuffers->mv_size, alignment
+	);
+	GST_DEBUG_OBJECT(
+		framebuffers,
+		"total memory required for all framebuffers: %d * %d = %d byte",
+		framebuffers->total_size, framebuffers->num_framebuffers, framebuffers->total_size * framebuffers->num_framebuffers
+	);
 
 	for (i = 0; i < framebuffers->num_framebuffers; ++i)
 	{
