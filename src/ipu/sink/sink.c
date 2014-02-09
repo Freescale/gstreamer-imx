@@ -58,12 +58,19 @@ struct _GstImxIpuSinkPrivate
 	int framebuffer_fd;
 	GstBuffer *fb_buffer;
 	GstImxIpuBlitter *blitter;
+
+	GstImxIpuBlitterRotationMode output_rotation;
+	gboolean input_crop;
+	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 };
 
 
 G_DEFINE_TYPE(GstImxIpuSink, gst_imx_ipu_sink, GST_TYPE_VIDEO_SINK)
 
 
+static GstStateChangeReturn gst_imx_ipu_sink_change_state(GstElement *element, GstStateChange transition);
+static gboolean gst_imx_ipu_sink_init_device(GstImxIpuSink *ipu_sink);
+static void gst_imx_ipu_sink_uninit_device(GstImxIpuSink *ipu_sink);
 static void gst_imx_ipu_sink_finalize(GObject *object);
 static void gst_imx_ipu_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_ipu_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
@@ -103,6 +110,7 @@ void gst_imx_ipu_sink_class_init(GstImxIpuSinkClass *klass)
 	base_class->set_caps = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_set_caps);
 	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_ipu_propose_allocation);
 	parent_class->show_frame = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_show_frame);
+	element_class->change_state = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_change_state);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_finalize);
 	object_class->set_property = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_set_property);
 	object_class->get_property = GST_DEBUG_FUNCPTR(gst_imx_ipu_sink_get_property);
@@ -151,29 +159,84 @@ void gst_imx_ipu_sink_init(GstImxIpuSink *ipu_sink)
 	ipu_sink->priv->framebuffer_fd = -1;
 	ipu_sink->priv->blitter = NULL;
 
+	ipu_sink->priv->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
+	ipu_sink->priv->input_crop = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
+	ipu_sink->priv->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
+
+
+static GstStateChangeReturn gst_imx_ipu_sink_change_state(GstElement *element, GstStateChange transition)
+{
+	GstImxIpuSink *ipu_sink = GST_IMX_IPU_SINK(element);
+	GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
+
+	switch (transition)
+	{
+		case GST_STATE_CHANGE_NULL_TO_READY:
+		{
+			if (!gst_imx_ipu_sink_init_device(ipu_sink))
+			{
+				gst_imx_ipu_sink_uninit_device(ipu_sink);
+				return GST_STATE_CHANGE_FAILURE;
+			}
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	ret = GST_ELEMENT_CLASS(gst_imx_ipu_sink_parent_class)->change_state(element, transition);
+	if (ret == GST_STATE_CHANGE_FAILURE)
+		return ret;
+
+	switch (transition)
+	{
+		case GST_STATE_CHANGE_READY_TO_NULL:
+		{
+			gst_imx_ipu_sink_uninit_device(ipu_sink);
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return ret;
+}
+
+static gboolean gst_imx_ipu_sink_init_device(GstImxIpuSink *ipu_sink)
+{
+
+	g_assert(ipu_sink->priv != NULL);
+
 	ipu_sink->priv->framebuffer_fd = open("/dev/fb0", O_RDWR, 0);
 	if (ipu_sink->priv->framebuffer_fd < 0)
 	{
 		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("could not open /dev/fb0: %s", strerror(errno)), (NULL));
-		return;
+		return FALSE;
 	}
 
 	ipu_sink->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
+
+	gst_imx_ipu_blitter_set_output_rotation_mode(ipu_sink->priv->blitter, ipu_sink->priv->output_rotation);
+	gst_imx_ipu_blitter_enable_crop(ipu_sink->priv->blitter, ipu_sink->priv->input_crop);
+	gst_imx_ipu_blitter_set_deinterlace_mode(ipu_sink->priv->blitter, ipu_sink->priv->deinterlace_mode);
 
 	ipu_sink->priv->fb_buffer = gst_imx_ipu_blitter_wrap_framebuffer(ipu_sink->priv->blitter, ipu_sink->priv->framebuffer_fd, 0, 0, 0, 0);
 	if (ipu_sink->priv->fb_buffer == NULL)
 	{
 		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("wrapping framebuffer in GstBuffer failed"), (NULL));
-		return;
+		return FALSE;
 	}
 
 	gst_imx_ipu_blitter_set_output_buffer(ipu_sink->priv->blitter, ipu_sink->priv->fb_buffer);
+
+	return TRUE;
 }
 
 
-static void gst_imx_ipu_sink_finalize(GObject *object)
+static void gst_imx_ipu_sink_uninit_device(GstImxIpuSink *ipu_sink)
 {
-	GstImxIpuSink *ipu_sink = GST_IMX_IPU_SINK(object);
 
 	if (ipu_sink->priv != NULL)
 	{
@@ -183,6 +246,21 @@ static void gst_imx_ipu_sink_finalize(GObject *object)
 			gst_object_unref(ipu_sink->priv->blitter);
 		if (ipu_sink->priv->framebuffer_fd >= 0)
 			close(ipu_sink->priv->framebuffer_fd);
+
+		ipu_sink->priv->fb_buffer = NULL;
+		ipu_sink->priv->blitter = NULL;
+		ipu_sink->priv->framebuffer_fd = -1;
+	}
+}
+
+
+static void gst_imx_ipu_sink_finalize(GObject *object)
+{
+	GstImxIpuSink *ipu_sink = GST_IMX_IPU_SINK(object);
+
+	gst_imx_ipu_sink_uninit_device(ipu_sink);
+	if (ipu_sink->priv != NULL)
+	{
 		g_slice_free1(sizeof(GstImxIpuSinkPrivate), ipu_sink->priv);
 	}
 
@@ -197,13 +275,19 @@ static void gst_imx_ipu_sink_set_property(GObject *object, guint prop_id, GValue
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
-			gst_imx_ipu_blitter_set_output_rotation_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
+			ipu_sink->priv->output_rotation = g_value_get_enum(value);
+			if (ipu_sink->priv->blitter != NULL)
+				gst_imx_ipu_blitter_set_output_rotation_mode(ipu_sink->priv->blitter, ipu_sink->priv->output_rotation);
 			break;
 		case PROP_INPUT_CROP:
-			gst_imx_ipu_blitter_enable_crop(ipu_sink->priv->blitter, g_value_get_boolean(value));
+			ipu_sink->priv->input_crop = g_value_get_boolean(value);
+			if (ipu_sink->priv->blitter != NULL)
+				gst_imx_ipu_blitter_enable_crop(ipu_sink->priv->blitter, ipu_sink->priv->input_crop);
 			break;
 		case PROP_DEINTERLACE_MODE:
-			gst_imx_ipu_blitter_set_deinterlace_mode(ipu_sink->priv->blitter, g_value_get_enum(value));
+			ipu_sink->priv->deinterlace_mode = g_value_get_enum(value);
+			if (ipu_sink->priv->blitter != NULL)
+				gst_imx_ipu_blitter_set_deinterlace_mode(ipu_sink->priv->blitter, ipu_sink->priv->deinterlace_mode);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -219,13 +303,13 @@ static void gst_imx_ipu_sink_get_property(GObject *object, guint prop_id, GValue
 	switch (prop_id)
 	{
 		case PROP_OUTPUT_ROTATION:
-			g_value_set_enum(value, gst_imx_ipu_blitter_get_output_rotation_mode(ipu_sink->priv->blitter));
+			g_value_set_enum(value, ipu_sink->priv->output_rotation);
 			break;
 		case PROP_INPUT_CROP:
-			g_value_set_boolean(value, gst_imx_ipu_blitter_is_crop_enabled(ipu_sink->priv->blitter));
+			g_value_set_boolean(value, ipu_sink->priv->input_crop);
 			break;
 		case PROP_DEINTERLACE_MODE:
-			g_value_set_enum(value, gst_imx_ipu_blitter_get_deinterlace_mode(ipu_sink->priv->blitter));
+			g_value_set_enum(value, ipu_sink->priv->deinterlace_mode);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -313,6 +397,7 @@ static gboolean gst_imx_ipu_propose_allocation(GstBaseSink *sink, GstQuery *quer
 
 static GstFlowReturn gst_imx_ipu_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
+	gboolean ret;
 	GstImxIpuSink *ipu_sink;
 
 	ipu_sink = GST_IMX_IPU_SINK(video_sink);
@@ -323,12 +408,13 @@ static GstFlowReturn gst_imx_ipu_sink_show_frame(GstVideoSink *video_sink, GstBu
 		return GST_FLOW_ERROR;
 	}
 
-	if (!gst_imx_ipu_blitter_set_input_buffer(ipu_sink->priv->blitter, buf))
-		return GST_FLOW_ERROR;
 
-	if (!gst_imx_ipu_blitter_blit(ipu_sink->priv->blitter))
-		return GST_FLOW_ERROR;
+	/* using early exit optimization here to avoid calls if necessary */
+	ret = TRUE;
+	ret = ret && gst_imx_ipu_blitter_set_input_buffer(ipu_sink->priv->blitter, buf);
+	ret = ret && gst_imx_ipu_blitter_blit(ipu_sink->priv->blitter);
 
-	return GST_FLOW_OK;
+
+	return ret ? GST_FLOW_OK : GST_FLOW_ERROR;
 }
 
