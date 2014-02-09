@@ -156,14 +156,12 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 		/* VPU_V_MJPG */
 		"image/jpeg; "
 
-/* TODO: WMV disabled for now, since it does not work properly.
- * It is necessary to find out how to prepare WMV3/VC1 data for the VPU first. */
 		/* VPU_V_VC1_AP and VPU_V_VC1 */
 		/* WVC1 = VC1-AP (VPU_V_VC1_AP) */
 		/* WMV3 = VC1-SPMP (VPU_V_VC1) */
-		/*"video/x-wmv, "
+		"video/x-wmv, "
 		"wmvversion = (int) 3, "
-		"format = (string) { WVC1, WMV3 }; "*/
+		"format = (string) { WVC1, WMV3 }; "
 
 		/* VPU_V_VP8 */
 		"video/x-vp8; "
@@ -788,47 +786,24 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	VpuBufferNode in_data;
 	GstMapInfo in_map_info;
 	gboolean do_memcpy;
-	guint8 *combined_input;
-	gsize combined_input_size;
+	GstMapInfo codecdata_map_info;
 	GstImxVpuDec *vpu_dec;
 
-	combined_input = NULL;
 	vpu_dec = GST_IMX_VPU_DEC(decoder);
 
 	memset(&in_data, 0, sizeof(in_data));
 
 	gst_buffer_map(cur_frame->input_buffer, &in_map_info, GST_MAP_READ);
 
-	/* If there is codec data, prepend it to the input frame data
-	 * To do that, allocate a temporary memory block big enough for both
-	 * codec and input frame data, copy the codec data first, then the frame data
-	 */
+	in_data.pPhyAddr = NULL;
+	in_data.pVirAddr = (unsigned char *)(in_map_info.data);
+	in_data.nSize = in_map_info.size;
+
 	if (vpu_dec->codec_data != NULL)
 	{
-		GstMapInfo cd_in_map_info;
-		gst_buffer_map(vpu_dec->codec_data, &cd_in_map_info, GST_MAP_READ);
-
-		combined_input_size = cd_in_map_info.size + in_map_info.size;
-		combined_input = g_slice_alloc(combined_input_size);
-		memcpy(combined_input, cd_in_map_info.data, cd_in_map_info.size);
-		memcpy(combined_input + cd_in_map_info.size, in_map_info.data, in_map_info.size);
-
-		GST_DEBUG_OBJECT(vpu_dec, "preparing combined input: codec data size: %u  input frame size: %u", cd_in_map_info.size, in_map_info.size);
-
-		gst_buffer_unmap(vpu_dec->codec_data, &cd_in_map_info);
-
-		gst_buffer_unref(vpu_dec->codec_data);
-		vpu_dec->codec_data = NULL;
-
-		in_data.pPhyAddr = NULL;
-		in_data.pVirAddr = (unsigned char *)(combined_input);
-		in_data.nSize = combined_input_size;
-	}
-	else
-	{
-		in_data.pPhyAddr = NULL;
-		in_data.pVirAddr = (unsigned char *)(in_map_info.data);
-		in_data.nSize = in_map_info.size;
+		gst_buffer_map(vpu_dec->codec_data, &codecdata_map_info, GST_MAP_READ);
+		in_data.sCodecData.pData = codecdata_map_info.data;
+		in_data.sCodecData.nSize = codecdata_map_info.size;
 	}
 
 	GST_DEBUG_OBJECT(vpu_dec, "codecframe: %p  total input frame size: %u", (gpointer)cur_frame, in_data.nSize);
@@ -850,10 +825,10 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 	GST_LOG_OBJECT(vpu_dec, "VPU_DecDecodeBuf returns: %x", buffer_ret_code);
 
-	/* Cleanup temporary combined block and input frame mapping */
-	if (combined_input != NULL)
-		g_slice_free1(combined_input_size, combined_input);
+	/* Cleanup temporary input frame and codec data mapping */
 	gst_buffer_unmap(cur_frame->input_buffer, &in_map_info);
+	if (vpu_dec->codec_data != NULL)
+		gst_buffer_unmap(vpu_dec->codec_data, &codecdata_map_info);
 
 	if (buffer_ret_code & VPU_DEC_INIT_OK)
 	{
