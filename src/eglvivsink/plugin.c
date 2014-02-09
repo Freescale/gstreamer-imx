@@ -25,7 +25,7 @@
 
 static gboolean plugin_init(GstPlugin *plugin)
 {
-	return gst_element_register(plugin, "eglvivsink", GST_RANK_PRIMARY + 1, gst_imx_egl_viv_sink_get_type());
+	return gst_element_register(plugin, "imxeglvivsink", GST_RANK_PRIMARY + 1, gst_imx_egl_viv_sink_get_type());
 }
 
 
@@ -33,7 +33,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 GST_PLUGIN_DEFINE(
 	GST_VERSION_MAJOR,
 	GST_VERSION_MINOR,
-	eglvivsink,
+	imxeglvivsink,
 	"EGL/GLES sink using Vivante direct textures",
 	plugin_init,
 	VERSION,

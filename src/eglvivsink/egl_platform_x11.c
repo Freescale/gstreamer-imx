@@ -11,8 +11,8 @@
 #include "gl_headers.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(eglplatform_x11_debug);
-#define GST_CAT_DEFAULT eglplatform_x11_debug
+GST_DEBUG_CATEGORY_STATIC(imx_egl_platform_x11_debug);
+#define GST_CAT_DEFAULT imx_egl_platform_x11_debug
 
 
 struct _GstImxEglVivSinkEGLPlatform
@@ -42,7 +42,7 @@ static void init_debug_category(void)
 	static gboolean initialized = FALSE;
 	if (!initialized)
 	{
-		GST_DEBUG_CATEGORY_INIT(eglplatform_x11_debug, "eglplatform_x11", 0, "eglvivsink X11 platform");
+		GST_DEBUG_CATEGORY_INIT(imx_egl_platform_x11_debug, "imxeglplatform_x11", 0, "imxeglvivsink X11 platform");
 		initialized = TRUE;
 
 		XInitThreads();

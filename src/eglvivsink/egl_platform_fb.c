@@ -8,8 +8,8 @@
 #include "gl_headers.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(eglplatform_fb_debug);
-#define GST_CAT_DEFAULT eglplatform_fb_debug
+GST_DEBUG_CATEGORY_STATIC(imx_egl_platform_fb_debug);
+#define GST_CAT_DEFAULT imx_egl_platform_fb_debug
 
 
 struct _GstImxEglVivSinkEGLPlatform
@@ -30,7 +30,7 @@ static void init_debug_category(void)
 	static gboolean initialized = FALSE;
 	if (!initialized)
 	{
-		GST_DEBUG_CATEGORY_INIT(eglplatform_fb_debug, "eglplatform_fb", 0, "eglvivsink FB platform");
+		GST_DEBUG_CATEGORY_INIT(imx_egl_platform_fb_debug, "imxeglplatform_fb", 0, "imxeglvivsink FB platform");
 		initialized = TRUE;
 	}
 }

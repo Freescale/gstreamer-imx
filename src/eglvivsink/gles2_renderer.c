@@ -7,8 +7,8 @@
 #include "../common/phys_mem_meta.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(gles2renderer_debug);
-#define GST_CAT_DEFAULT gles2renderer_debug
+GST_DEBUG_CATEGORY_STATIC(imx_gles2renderer_debug);
+#define GST_CAT_DEFAULT imx_gles2renderer_debug
 
 
 struct _GstImxEglVivSinkGLES2Renderer
@@ -115,7 +115,7 @@ static void init_debug_category(void)
 	static gboolean initialized = FALSE;
 	if (!initialized)
 	{
-		GST_DEBUG_CATEGORY_INIT(gles2renderer_debug, "gles2_renderer", 0, "eglvivsink OpenGL ES 2 renderer");
+		GST_DEBUG_CATEGORY_INIT(imx_gles2renderer_debug, "imx_gles2_renderer", 0, "imxeglvivsink OpenGL ES 2 renderer");
 		initialized = TRUE;
 	}
 }
