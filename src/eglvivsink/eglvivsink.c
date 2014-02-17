@@ -24,6 +24,8 @@
 #include <gst/video/video.h>
 #include <gst/video/gstvideopool.h>
 #include <gst/video/gstvideometa.h>
+#include <gst/video/navigation.h>
+#include <gst/video/videooverlay.h>
 
 #include "eglvivsink.h"
 
