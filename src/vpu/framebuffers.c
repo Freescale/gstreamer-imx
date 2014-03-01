@@ -211,7 +211,7 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 		framebuffers->mv_size = ALIGN_VAL_TO(framebuffers->mv_size, alignment);
 	}
 
-	framebuffers->total_size = framebuffers->y_size + framebuffers->u_size + framebuffers->v_size + framebuffers->mv_size + alignment;
+	framebuffers->total_size = framebuffers->y_size + framebuffers->u_size + framebuffers->v_size + framebuffers->mv_size;
 	GST_DEBUG_OBJECT(
 		framebuffers,
 		"framebuffer requested width/height: %u/%u  actual width/height (after alignment): %u/%u  Y stride: %u",
