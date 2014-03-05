@@ -109,9 +109,12 @@ GstImxVpuFramebufferParams;
 
 
 GType gst_imx_vpu_framebuffers_get_type(void);
+
 GstImxVpuFramebuffers * gst_imx_vpu_framebuffers_new(GstImxVpuFramebufferParams *params, GstAllocator *allocator);
+
 gboolean gst_imx_vpu_framebuffers_register_with_decoder(GstImxVpuFramebuffers *framebuffers, VpuDecHandle handle);
 gboolean gst_imx_vpu_framebuffers_register_with_encoder(GstImxVpuFramebuffers *framebuffers, VpuEncHandle handle, guint src_stride);
+
 void gst_imx_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstImxVpuFramebufferParams *params);
 void gst_imx_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info, GstImxVpuFramebufferParams *params);
 

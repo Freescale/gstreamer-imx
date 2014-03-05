@@ -285,6 +285,8 @@ static void gst_imx_vpu_framebuffers_finalize(GObject *object)
 {
 	GstImxVpuFramebuffers *framebuffers = GST_IMX_VPU_FRAMEBUFFERS(object);
 
+	g_mutex_clear(&(framebuffers->available_fb_mutex));
+
 	GST_DEBUG_OBJECT(framebuffers, "freeing framebuffer memory");
 
 	if (framebuffers->framebuffers != NULL)
