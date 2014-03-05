@@ -204,6 +204,8 @@ static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 		 * still allocated memory */
 		gst_buffer_remove_all_memory(buffer);
 
+		g_cond_signal(&(vpu_pool->framebuffers->cond));
+
 		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_pool->framebuffers);
 	}
 
@@ -271,9 +273,8 @@ void gst_imx_vpu_fb_buffer_pool_set_framebuffers(GstBufferPool *pool, GstImxVpuF
 }
 
 
-gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer, gboolean heap_mode)
+gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer)
 {
-	VpuDecRetCode dec_ret;
 	GstVideoMeta *video_meta;
 	GstImxVpuBufferMeta *vpu_meta;
 	GstImxPhysMemMeta *phys_mem_meta;
@@ -300,30 +301,6 @@ gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffer
 		return FALSE;
 	}
 
-	if (heap_mode)
-	{
-		GstMapInfo map_info;
-
-		memory = gst_allocator_alloc(NULL, framebuffers->total_size, NULL);
-		gst_memory_map(memory, &map_info, GST_MAP_WRITE);
-		memcpy(map_info.data, framebuffer->pbufVirtY, framebuffers->y_size);
-		memcpy(map_info.data + framebuffers->y_size, framebuffer->pbufVirtCb, framebuffers->u_size);
-		memcpy(map_info.data + framebuffers->y_size + framebuffers->u_size, framebuffer->pbufVirtCr, framebuffers->v_size);
-		gst_memory_unmap(memory, &map_info);
-
-		vpu_meta->framebuffer = NULL;
-
-		phys_mem_meta->phys_addr = 0;
-		phys_mem_meta->padding = 0;
-
-		if (framebuffers->registration_state == GST_IMX_VPU_FRAMEBUFFERS_DECODER_REGISTERED)
-		{
-			dec_ret = VPU_DecOutFrameDisplayed(framebuffers->decenc_states.dec.handle, framebuffer);
-			if (dec_ret != VPU_DEC_RET_SUCCESS)
-				GST_ERROR("clearing display framebuffer failed: %s", gst_imx_vpu_strerror(dec_ret));
-		}
-	}
-	else
 	{
 		gint y_padding = 0;
 

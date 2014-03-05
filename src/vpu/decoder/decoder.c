@@ -72,23 +72,15 @@
  * The fundamental problem with the VPU wrapper memory model is the case where all framebuffers are occupied.
  * Then, the wrapper cannot pick a framebuffer to decode into, and decoding fails. This can easily happen if
  * the GStreamer pipeline uses queues and downstream is not consuming the frames fast enough for some reason.
- * To counter this effect, a trick was devised: the vpu_framebuffers structure allocates an extra set of
- * framebuffers These are called the "reserved" framebuffers, while the others are the "available" ones.
- * A counter is used (called "num_available_framebuffers"). This counts the number of available framebuffers,
- * and initially equals the number of available framebuffers. Every time VPU_DecDecodeBuf() reports that a frame
- * was consumed (NOTE: not to be confused with "a frame was decoded"), the counter is decremented.
+ * To counter this effect, a condition variable is used, which causes the handle_frame() function to wait until
+ * a buffer is available. A counter is used (called "num_available_framebuffers"). This counts the number of
+ * available framebuffers, and initially equals the number of allocated framebuffers. Every time VPU_DecDecodeBuf()
+ * reports that a frame was consumed (NOTE: not to be confused with "a frame was decoded"), the counter is decremented.
  * If the handle_frame() function is entered with a num_available_framebuffers value of zero, it means that all
- * available framebuffers are occupied; only the reserved framebuffers are free. Decoding then switches to a
- * secondary mode; inside handle_frame, do_memcpy is set to TRUE. Decoding continues as usual. But instead of
- * wrapping the framebuffer containing the decoded frame, the decoded frame pixels are copied with memcpy()
- * to a GstMemory block that was allocated on the heap. This block is then added to the buffer. The framebuffer
- * is immediately marked as displayed (as opposed to when the buffer is returned to the buffer pool), and the
- * buffer is sent downstream.
- * In short: instead of sending the framebuffers downstream directly, their contents are copied to the heap,
- * and the *copies* are sent downstream.
- *
- * This would not be necessary if it was possible to allocate new VPU framebuffers on the fly. Hopefully,
- * Freescale will eventually adopt a different model, based on DMABUF.
+ * available framebuffers are occupied. This is when the decoder waits until the condition variable is signaled.
+ * A release_buffer() implementation inside fb_buffer_pool.c incremens the counter, and signals the condition.
+ * The condition is also signaled if for some other reason the decoder should no longer wait (for example, when stopping,
+ * or when switching format).
  */
 
 
@@ -196,17 +188,11 @@ static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state);
 static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *frame);
-/*static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard);*/
+static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard);
 static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
 
 static void gst_imx_vpu_dec_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
 static void gst_imx_vpu_dec_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
-
-/* TODO: reset() is disabled because the VPU_DecFlushAll() inside it
- * causes the imx6 to freeze.
- * Tests show that clean seeking is possible even without calling this.
- * Disabling for now, until the reason for the freezes is better understood.
- */
 
 
 
@@ -235,7 +221,7 @@ void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 	base_class->stop              = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_stop);
 	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_set_format);
 	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_handle_frame);
-	/*base_class->reset             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_reset);*/
+	base_class->reset             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_reset);
 	base_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_decide_allocation);
 
 	klass->inst_counter = 0;
@@ -630,6 +616,7 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 		/* Using mutexes here to prevent race conditions when decoder_open is set to
 		 * FALSE at the same time as it is checked in the buffer pool release() function */
 		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
+		gst_imx_vpu_framebuffers_set_flushing(vpu_dec->current_framebuffers, TRUE);
 		vpu_dec->current_framebuffers->decenc_states.dec.decoder_open = FALSE;
 		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 
@@ -696,6 +683,7 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 		/* Using mutexes here to prevent race conditions when decoder_open is set to
 		 * FALSE at the same time as it is checked in the buffer pool release() function */
 		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
+		gst_imx_vpu_framebuffers_set_flushing(vpu_dec->current_framebuffers, TRUE);
 		vpu_dec->current_framebuffers->decenc_states.dec.decoder_open = FALSE;
 		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 
@@ -785,7 +773,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	VpuDecRetCode dec_ret;
 	VpuBufferNode in_data;
 	GstMapInfo in_map_info;
-	gboolean do_memcpy;
 	GstMapInfo codecdata_map_info;
 	GstImxVpuDec *vpu_dec;
 
@@ -921,8 +908,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		return GST_FLOW_ERROR;
 	}
 
-	do_memcpy = FALSE;
-
 	/* The following code block may cause a race condition if not synchronized;
 	 * the buffer pool release() function must not run at the same time */
 	{
@@ -945,25 +930,14 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		/* TODO: is this a bug in this library? */
 		if (buffer_ret_code & VPU_DEC_ONE_FRM_CONSUMED)
 		{
-			/* Decrement only if framebuffers are available
-			 * if none are available, then fallback mode kicks in, and data is copied immediately
-			 * from the framebuffer memory, so decrementing the counter makes no sense then */
-			if (vpu_dec->current_framebuffers->num_available_framebuffers > 0)
-			{
-				gint old_num_available_framebuffers = vpu_dec->current_framebuffers->num_available_framebuffers;
+			gint old_num_available_framebuffers = vpu_dec->current_framebuffers->num_available_framebuffers;
 
-				vpu_dec->current_framebuffers->num_available_framebuffers--;
-				vpu_dec->current_framebuffers->decremented_availbuf_counter++;
-				GST_DEBUG_OBJECT(vpu_dec, "number of available buffers: %d -> %d", old_num_available_framebuffers, vpu_dec->current_framebuffers->num_available_framebuffers);
-			}
-			else
-			{
-				/* There are no available framebuffers left; only the reserved ones
-				 * -> instead of sending them downstream, mark their contents to be
-				 * copied to memory allocated on the heap */
-				GST_WARNING_OBJECT(vpu_dec, "no framebuffers available - copying decoded contents to a heap buffer");
-				do_memcpy = TRUE;
-			}
+			/* wait until frames are available or until flushing occurs */
+			gst_imx_vpu_framebuffers_wait_until_frames_available(vpu_dec->current_framebuffers);
+
+			vpu_dec->current_framebuffers->num_available_framebuffers--;
+			vpu_dec->current_framebuffers->decremented_availbuf_counter++;
+			GST_DEBUG_OBJECT(vpu_dec, "number of available buffers: %d -> %d -> %d", old_num_available_framebuffers, vpu_dec->current_framebuffers->num_available_framebuffers + 1, vpu_dec->current_framebuffers->num_available_framebuffers);
 		}
 
 		/* Unlock the mutex; the subsequent steps are safe */
@@ -1005,10 +979,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 		/* Create empty buffer */
 		buffer = gst_video_decoder_allocate_output_buffer(decoder);
-		/* ... and set its contents; either pass on the framebuffer directly,
-		 * or have set_contents() copy its pixels to a memory block on the heap,
-		 * depending on do_memcpy */
-		if (!gst_imx_vpu_set_buffer_contents(buffer, vpu_dec->current_framebuffers, out_frame_info.pDisplayFrameBuf, do_memcpy))
+		/* ... and set its contents */
+		if (!gst_imx_vpu_set_buffer_contents(buffer, vpu_dec->current_framebuffers, out_frame_info.pDisplayFrameBuf))
 		{
 			gst_buffer_unref(buffer);
 			return GST_FLOW_ERROR;
@@ -1026,15 +998,12 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			GST_DEBUG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %p  system frame number: <none; oldest frame>  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gpointer)(out_frame_info.pDisplayFrameBuf->pbufY), (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
 		}
 
-		if (!do_memcpy)
-		{
-			/* If a framebuffer is sent downstream directly, it will
-			 * have to be marked later as displayed after it was used,
-			 * to allow the VPU wrapper to reuse it for new decoded
-			 * frames. Since this is a fresh frame, and it wasn't
-			 * used yet, mark it now as undisplayed. */
-			gst_imx_vpu_mark_buf_as_not_displayed(buffer);
-		}
+		/* If a framebuffer is sent downstream directly, it will
+		 * have to be marked later as displayed after it was used,
+		 * to allow the VPU wrapper to reuse it for new decoded
+		 * frames. Since this is a fresh frame, and it wasn't
+		 * used yet, mark it now as undisplayed. */
+		gst_imx_vpu_mark_buf_as_not_displayed(buffer);
 
 		out_frame->output_buffer = buffer;
 
@@ -1059,14 +1028,14 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			return GST_FLOW_ERROR;
 		}
 
-		if (!do_memcpy) /* do not increase the counter if fallback mode is used */
-			vpu_dec->current_framebuffers->num_available_framebuffers++;
+		vpu_dec->current_framebuffers->num_available_framebuffers++;
+		GST_DEBUG_OBJECT(vpu_dec, "number of available buffers after dropping mosaic frame: %d -> %d", vpu_dec->current_framebuffers->num_available_framebuffers - 1, vpu_dec->current_framebuffers->num_available_framebuffers);
 	}
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_DROPPED)
 	{
 		GST_DEBUG_OBJECT(vpu_dec, "dropping frame");
-		if (!do_memcpy) /* do not increase the counter if fallback mode is used */
-			vpu_dec->current_framebuffers->num_available_framebuffers++;
+		vpu_dec->current_framebuffers->num_available_framebuffers++;
+		GST_DEBUG_OBJECT(vpu_dec, "number of available buffers after dropping frame: %d -> %d", vpu_dec->current_framebuffers->num_available_framebuffers - 1, vpu_dec->current_framebuffers->num_available_framebuffers);
 //		gst_video_decoder_drop_frame(decoder, frame); // TODO
 	}
 	else if (buffer_ret_code & VPU_DEC_NO_ENOUGH_BUF)
@@ -1080,25 +1049,41 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 }
 
 
-#if 0
-static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard)
+static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, G_GNUC_UNUSED gboolean hard)
 {
-	VpuDecRetCode ret;
 	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(decoder);
 
 	if (!vpu_dec->vpu_inst_opened)
 		return TRUE;
 
-	ret = VPU_DecFlushAll(vpu_dec->handle);
-	if (ret != VPU_DEC_RET_SUCCESS)
+	if (vpu_dec->current_framebuffers != NULL)
 	{
-		GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_imx_vpu_strerror(ret));
-		return FALSE;
+		/* Using mutexes here to prevent race conditions when decoder_open is set to
+		 * FALSE at the same time as it is checked in the buffer pool release() function */
+		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
+		gst_imx_vpu_framebuffers_set_flushing(vpu_dec->current_framebuffers, TRUE);
+		g_cond_signal(&(vpu_dec->current_framebuffers->cond));
+		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 	}
+
+/* TODO: the code block below is disabled because the VPU_DecFlushAll() inside it
+ * causes the imx6 to freeze.
+ * Tests show that clean seeking is possible even without calling this.
+ * Disabling for now, until the reason for the freezes is better understood.
+ */
+#if 0
+	{
+		VpuDecRetCode ret = VPU_DecFlushAll(vpu_dec->handle);
+		if (ret != VPU_DEC_RET_SUCCESS)
+		{
+			GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_imx_vpu_strerror(ret));
+			return FALSE;
+		}
+	}
+#endif
 
 	return TRUE;
 }
-#endif
 
 
 static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query)

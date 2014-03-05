@@ -76,10 +76,11 @@ struct _GstImxVpuFramebuffers
 
 	VpuFrameBuffer *framebuffers;
 	guint num_framebuffers;
-	guint num_reserve_framebuffers;
 	gint num_available_framebuffers, decremented_availbuf_counter;
 	GSList *fb_mem_blocks;
 	GMutex available_fb_mutex;
+	GCond cond;
+	gboolean flushing;
 
 	int y_stride, uv_stride;
 	int y_size, u_size, v_size, mv_size;
@@ -110,6 +111,8 @@ GstImxVpuFramebufferParams;
 
 #define GST_IMX_VPU_FRAMEBUFFERS_LOCK(framebuffers)   (g_mutex_lock(&(((GstImxVpuFramebuffers*)(framebuffers))->available_fb_mutex)))
 #define GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(framebuffers) (g_mutex_unlock(&(((GstImxVpuFramebuffers*)(framebuffers))->available_fb_mutex)))
+
+
 GType gst_imx_vpu_framebuffers_get_type(void);
 
 GstImxVpuFramebuffers * gst_imx_vpu_framebuffers_new(GstImxVpuFramebufferParams *params, GstAllocator *allocator);
@@ -119,6 +122,10 @@ gboolean gst_imx_vpu_framebuffers_register_with_encoder(GstImxVpuFramebuffers *f
 
 void gst_imx_vpu_framebuffers_dec_init_info_to_params(VpuDecInitInfo *init_info, GstImxVpuFramebufferParams *params);
 void gst_imx_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info, GstImxVpuFramebufferParams *params);
+
+/* NOTE: the two functions below must be called with a lock held on framebuffers! */
+void gst_imx_vpu_framebuffers_set_flushing(GstImxVpuFramebuffers *framebuffers, gboolean flushing);
+void gst_imx_vpu_framebuffers_wait_until_frames_available(GstImxVpuFramebuffers *framebuffers);
 
 
 G_END_DECLS

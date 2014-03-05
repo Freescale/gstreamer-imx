@@ -70,7 +70,10 @@ void gst_imx_vpu_framebuffers_init(GstImxVpuFramebuffers *framebuffers)
 	framebuffers->y_size = framebuffers->u_size = framebuffers->v_size = framebuffers->mv_size = 0;
 	framebuffers->total_size = 0;
 
+	framebuffers->flushing = FALSE;
+
 	g_mutex_init(&(framebuffers->available_fb_mutex));
+	g_cond_init(&(framebuffers->cond));
 }
 
 
@@ -159,6 +162,21 @@ void gst_imx_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info,
 }
 
 
+void gst_imx_vpu_framebuffers_set_flushing(GstImxVpuFramebuffers *framebuffers, gboolean flushing)
+{
+	framebuffers->flushing = flushing;
+	if (flushing)
+		g_cond_signal(&(framebuffers->cond));
+}
+
+
+void gst_imx_vpu_framebuffers_wait_until_frames_available(GstImxVpuFramebuffers *framebuffers)
+{
+	while ((framebuffers->num_available_framebuffers <= 0) && !(framebuffers->flushing))
+		g_cond_wait(&(framebuffers->cond), &(framebuffers->available_fb_mutex));
+}
+
+
 static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *framebuffers, GstImxVpuFramebufferParams *params, GstAllocator *allocator)
 {
 	int alignment;
@@ -167,11 +185,8 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 
 	g_assert(GST_IS_IMX_PHYS_MEM_ALLOCATOR(allocator));
 
-	/* Only one reserved framebuffer is necessary, since such framebuffers are used only as temporary storage; their pixels
-	 * get immediately copied with memcpy() */
-	framebuffers->num_reserve_framebuffers = 1;
-	framebuffers->num_framebuffers = params->min_framebuffer_count + framebuffers->num_reserve_framebuffers;
-	framebuffers->num_available_framebuffers = framebuffers->num_framebuffers - framebuffers->num_reserve_framebuffers;
+	framebuffers->num_framebuffers = params->min_framebuffer_count;
+	framebuffers->num_available_framebuffers = framebuffers->num_framebuffers;
 	framebuffers->decremented_availbuf_counter = 0;
 	framebuffers->framebuffers = (VpuFrameBuffer *)g_slice_alloc(sizeof(VpuFrameBuffer) * framebuffers->num_framebuffers);
 
@@ -223,8 +238,8 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 	);
 	GST_DEBUG_OBJECT(
 		framebuffers,
-		"num framebuffers:  total: %u  reserved: %u  available: %d",
-		framebuffers->num_framebuffers, framebuffers->num_reserve_framebuffers, framebuffers->num_available_framebuffers
+		"num framebuffers:  total: %u  available: %d",
+		framebuffers->num_framebuffers, framebuffers->num_available_framebuffers
 	);
 	GST_DEBUG_OBJECT(
 		framebuffers,
@@ -287,7 +302,13 @@ static void gst_imx_vpu_framebuffers_finalize(GObject *object)
 {
 	GstImxVpuFramebuffers *framebuffers = GST_IMX_VPU_FRAMEBUFFERS(object);
 
+	GST_IMX_VPU_FRAMEBUFFERS_LOCK(framebuffers);
+	gst_imx_vpu_framebuffers_set_flushing(framebuffers, TRUE);
+	g_cond_signal(&(framebuffers->cond));
+	GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(framebuffers);
+
 	g_mutex_clear(&(framebuffers->available_fb_mutex));
+	g_cond_clear(&(framebuffers->cond));
 
 	GST_DEBUG_OBJECT(framebuffers, "freeing framebuffer memory");
 
