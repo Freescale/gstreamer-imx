@@ -943,18 +943,18 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 		/* With some bitstreams, libfslvpuwrap does not report VPU_DEC_ONE_FRM_CONSUMED for consumed frames for some strange reason */
 		/* TODO: is this a bug in this library? */
-		if (buffer_ret_code & (VPU_DEC_ONE_FRM_CONSUMED | VPU_DEC_OUTPUT_DIS | VPU_DEC_OUTPUT_MOSAIC_DIS))
+		if (buffer_ret_code & VPU_DEC_ONE_FRM_CONSUMED)
 		{
 			/* Decrement only if framebuffers are available
 			 * if none are available, then fallback mode kicks in, and data is copied immediately
 			 * from the framebuffer memory, so decrementing the counter makes no sense then */
 			if (vpu_dec->current_framebuffers->num_available_framebuffers > 0)
 			{
-				/* VPU_DEC_NO_ENOUGH_BUF is sometimes set even when a decoded output frame is available;
-				 * however, the counter must not be decreased then, since no new frame was consumed (yet) */
-				if (!(buffer_ret_code & VPU_DEC_NO_ENOUGH_BUF))
-					vpu_dec->current_framebuffers->num_available_framebuffers--;
-				GST_DEBUG_OBJECT(vpu_dec, "number of available buffers is %d", vpu_dec->current_framebuffers->num_available_framebuffers);
+				gint old_num_available_framebuffers = vpu_dec->current_framebuffers->num_available_framebuffers;
+
+				vpu_dec->current_framebuffers->num_available_framebuffers--;
+				vpu_dec->current_framebuffers->decremented_availbuf_counter++;
+				GST_DEBUG_OBJECT(vpu_dec, "number of available buffers: %d -> %d", old_num_available_framebuffers, vpu_dec->current_framebuffers->num_available_framebuffers);
 			}
 			else
 			{

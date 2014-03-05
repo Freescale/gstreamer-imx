@@ -178,7 +178,12 @@ static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 				else
 				{
 					vpu_meta->not_displayed_yet = FALSE;
-					vpu_pool->framebuffers->num_available_framebuffers++;
+					if (vpu_pool->framebuffers->decremented_availbuf_counter > 0)
+					{
+						vpu_pool->framebuffers->num_available_framebuffers++;
+						vpu_pool->framebuffers->decremented_availbuf_counter--;
+						GST_DEBUG_OBJECT(pool, "number of available buffers: %d -> %d", vpu_pool->framebuffers->num_available_framebuffers - 1, vpu_pool->framebuffers->num_available_framebuffers);
+					}
 					GST_DEBUG_OBJECT(pool, "cleared buffer %p", (gpointer)buffer);
 				}
 			}

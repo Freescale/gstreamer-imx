@@ -63,6 +63,7 @@ void gst_imx_vpu_framebuffers_init(GstImxVpuFramebuffers *framebuffers)
 	framebuffers->framebuffers = NULL;
 	framebuffers->num_framebuffers = 0;
 	framebuffers->num_available_framebuffers = 0;
+	framebuffers->decremented_availbuf_counter = 0;
 	framebuffers->fb_mem_blocks = NULL;
 
 	framebuffers->y_stride = framebuffers->uv_stride = 0;
@@ -171,6 +172,7 @@ static gboolean gst_imx_vpu_framebuffers_configure(GstImxVpuFramebuffers *frameb
 	framebuffers->num_reserve_framebuffers = 1;
 	framebuffers->num_framebuffers = params->min_framebuffer_count + framebuffers->num_reserve_framebuffers;
 	framebuffers->num_available_framebuffers = framebuffers->num_framebuffers - framebuffers->num_reserve_framebuffers;
+	framebuffers->decremented_availbuf_counter = 0;
 	framebuffers->framebuffers = (VpuFrameBuffer *)g_slice_alloc(sizeof(VpuFrameBuffer) * framebuffers->num_framebuffers);
 
 	framebuffers->allocator = allocator;
