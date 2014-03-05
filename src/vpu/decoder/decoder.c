@@ -866,12 +866,12 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			GstImxVpuFramebufferParams fbparams;
 			gst_imx_vpu_framebuffers_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
 
-			/* Make sure at least 10 framebuffers are used (helps with smooth playback;
-			 * the min_framebuffer_count+1 part takes care of corner cases where one more framebuffer is
-			 * used at the same time and min_framebuffer_count >= 10
-			 * the 10 framebuffers figure is an empirically estimated default */
+			/* Make sure at least a certain framebuffers are used
+			 * either the minimum number specified in the properties, or the one indicated by the VPU +3
+			 * (+3 , because this is a common extra number of frames held by various parts in GStreamer
+			 * pipelines), whichever is bigger */
 			min_fbcount_indicated_by_vpu = (guint)(fbparams.min_framebuffer_count);
-			fbparams.min_framebuffer_count = MAX((min_fbcount_indicated_by_vpu + 0), vpu_dec->min_num_framebuffers);
+			fbparams.min_framebuffer_count = MAX((min_fbcount_indicated_by_vpu + 3), vpu_dec->min_num_framebuffers);
 			GST_DEBUG_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen minimum: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
 
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
@@ -950,7 +950,10 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * from the framebuffer memory, so decrementing the counter makes no sense then */
 			if (vpu_dec->current_framebuffers->num_available_framebuffers > 0)
 			{
-				vpu_dec->current_framebuffers->num_available_framebuffers--;
+				/* VPU_DEC_NO_ENOUGH_BUF is sometimes set even when a decoded output frame is available;
+				 * however, the counter must not be decreased then, since no new frame was consumed (yet) */
+				if (!(buffer_ret_code & VPU_DEC_NO_ENOUGH_BUF))
+					vpu_dec->current_framebuffers->num_available_framebuffers--;
 				GST_DEBUG_OBJECT(vpu_dec, "number of available buffers is %d", vpu_dec->current_framebuffers->num_available_framebuffers);
 			}
 			else
