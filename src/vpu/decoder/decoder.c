@@ -1058,8 +1058,6 @@ static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, G_GNUC_UNUSED gb
 
 	if (vpu_dec->current_framebuffers != NULL)
 	{
-		/* Using mutexes here to prevent race conditions when decoder_open is set to
-		 * FALSE at the same time as it is checked in the buffer pool release() function */
 		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
 		gst_imx_vpu_framebuffers_set_flushing(vpu_dec->current_framebuffers, TRUE);
 		g_cond_signal(&(vpu_dec->current_framebuffers->cond));

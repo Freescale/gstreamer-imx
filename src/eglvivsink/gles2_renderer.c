@@ -727,11 +727,12 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 		GLvoid *virt_addr;
 		GLuint phys_addr;
 
-		GST_DEBUG("mapping physical address of video frame into VIV texture");
+		phys_addr = (GLuint)(phys_mem_meta->phys_addr);
+
+		GST_DEBUG("mapping physical address 0x%x of video frame in buffer %p into VIV texture", phys_addr, (gpointer)buffer);
 
 		gst_buffer_map(buffer, &map_info, GST_MAP_READ);
 		virt_addr = map_info.data;
-		phys_addr = (GLuint)(phys_mem_meta->phys_addr);
 
 		renderer->viv_planes[0] = NULL;
 
@@ -743,6 +744,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 		);
 
 		gst_buffer_unmap(buffer, &map_info);
+		GST_DEBUG("done showing frame in buffer %p with physical address 0x%x", (gpointer)buffer, phys_addr);
 
 		if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectVIVMap"))
 			return FALSE;
