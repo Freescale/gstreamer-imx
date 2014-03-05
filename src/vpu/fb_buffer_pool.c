@@ -166,7 +166,7 @@ static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 		vpu_meta = GST_IMX_VPU_BUFFER_META_GET(buffer);
 		phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(buffer);
 
-		g_mutex_lock(&(vpu_pool->framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_pool->framebuffers);
 
 		if ((vpu_meta->framebuffer != NULL) && (phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0))
 		{
@@ -204,7 +204,7 @@ static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 		 * still allocated memory */
 		gst_buffer_remove_all_memory(buffer);
 
-		g_mutex_unlock(&(vpu_pool->framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_pool->framebuffers);
 	}
 
 	GST_BUFFER_POOL_CLASS(gst_imx_vpu_fb_buffer_pool_parent_class)->release_buffer(pool, buffer);

@@ -629,9 +629,9 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 	{
 		/* Using mutexes here to prevent race conditions when decoder_open is set to
 		 * FALSE at the same time as it is checked in the buffer pool release() function */
-		g_mutex_lock(&(vpu_dec->current_framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
 		vpu_dec->current_framebuffers->decenc_states.dec.decoder_open = FALSE;
-		g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 
 		gst_object_unref(vpu_dec->current_framebuffers);
 		vpu_dec->current_framebuffers = NULL;
@@ -695,9 +695,9 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	{
 		/* Using mutexes here to prevent race conditions when decoder_open is set to
 		 * FALSE at the same time as it is checked in the buffer pool release() function */
-		g_mutex_lock(&(vpu_dec->current_framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
 		vpu_dec->current_framebuffers->decenc_states.dec.decoder_open = FALSE;
-		g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 
 		gst_object_unref(vpu_dec->current_framebuffers);
 		vpu_dec->current_framebuffers = NULL;
@@ -812,10 +812,10 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	 * available framebuffer, and at the same time, the bufferpool release() function
 	 * might be returning a framebuffer to the list of available ones */
 	if (vpu_dec->current_framebuffers != NULL)
-		g_mutex_lock(&(vpu_dec->current_framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
 	dec_ret = VPU_DecDecodeBuf(vpu_dec->handle, &in_data, &buffer_ret_code);
 	if (vpu_dec->current_framebuffers != NULL)
-		g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 
 	if (dec_ret != VPU_DEC_RET_SUCCESS)
 	{
@@ -926,7 +926,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	/* The following code block may cause a race condition if not synchronized;
 	 * the buffer pool release() function must not run at the same time */
 	{
-		g_mutex_lock(&(vpu_dec->current_framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
 
 		if (buffer_ret_code & VPU_DEC_ONE_FRM_CONSUMED)
 		{
@@ -967,7 +967,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		}
 
 		/* Unlock the mutex; the subsequent steps are safe */
-		g_mutex_unlock(&(vpu_dec->current_framebuffers->available_fb_mutex));
+		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 	}
 
 	if (buffer_ret_code & VPU_DEC_OUTPUT_DIS)

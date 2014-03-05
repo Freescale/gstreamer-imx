@@ -108,6 +108,8 @@ typedef struct
 GstImxVpuFramebufferParams;
 
 
+#define GST_IMX_VPU_FRAMEBUFFERS_LOCK(framebuffers)   (g_mutex_lock(&(((GstImxVpuFramebuffers*)(framebuffers))->available_fb_mutex)))
+#define GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(framebuffers) (g_mutex_unlock(&(((GstImxVpuFramebuffers*)(framebuffers))->available_fb_mutex)))
 GType gst_imx_vpu_framebuffers_get_type(void);
 
 GstImxVpuFramebuffers * gst_imx_vpu_framebuffers_new(GstImxVpuFramebufferParams *params, GstAllocator *allocator);
