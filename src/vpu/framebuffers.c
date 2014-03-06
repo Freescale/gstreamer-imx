@@ -172,7 +172,7 @@ void gst_imx_vpu_framebuffers_set_flushing(GstImxVpuFramebuffers *framebuffers, 
 
 void gst_imx_vpu_framebuffers_wait_until_frames_available(GstImxVpuFramebuffers *framebuffers)
 {
-	while ((framebuffers->num_available_framebuffers <= 0) && !(framebuffers->flushing))
+	while ((framebuffers->num_available_framebuffers < GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS) && !(framebuffers->flushing))
 		g_cond_wait(&(framebuffers->cond), &(framebuffers->available_fb_mutex));
 }
 

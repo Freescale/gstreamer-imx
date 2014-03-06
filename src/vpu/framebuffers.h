@@ -39,6 +39,8 @@ typedef struct _GstImxVpuFramebuffersClass GstImxVpuFramebuffersClass;
 #define GST_IS_IMX_VPU_FRAMEBUFFERS(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_VPU_FRAMEBUFFERS))
 #define GST_IS_IMX_VPU_FRAMEBUFFERS_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_VPU_FRAMEBUFFERS))
 
+#define GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS 6
+
 
 typedef enum
 {
