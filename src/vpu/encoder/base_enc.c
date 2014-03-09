@@ -162,10 +162,11 @@ static gboolean gst_imx_vpu_base_enc_alloc_enc_mem_blocks(GstImxVpuBaseEnc *vpu_
 	int size;
 	unsigned char *ptr;
 
+	GST_INFO_OBJECT(vpu_base_enc, "need to allocate %d sub blocks for decoding", vpu_base_enc->mem_info.nSubBlockNum);
 	for (i = 0; i < vpu_base_enc->mem_info.nSubBlockNum; ++i)
  	{
 		size = vpu_base_enc->mem_info.MemSubBlock[i].nAlignment + vpu_base_enc->mem_info.MemSubBlock[i].nSize;
-		GST_DEBUG_OBJECT(vpu_base_enc, "sub block %d  type: %s  size: %d", i, (vpu_base_enc->mem_info.MemSubBlock[i].MemType == VPU_MEM_VIRT) ? "virtual" : "phys", size);
+		GST_INFO_OBJECT(vpu_base_enc, "sub block %d  type: %s  size: %d", i, (vpu_base_enc->mem_info.MemSubBlock[i].MemType == VPU_MEM_VIRT) ? "virtual" : "phys", size);
  
 		if (vpu_base_enc->mem_info.MemSubBlock[i].MemType == VPU_MEM_VIRT)
 		{
@@ -436,7 +437,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	vpu_base_enc->open_param.nBitRate = vpu_base_enc->bitrate;
 	vpu_base_enc->open_param.nGOPSize = vpu_base_enc->gop_size;
 
-	GST_DEBUG_OBJECT(vpu_base_enc, "setting bitrate to %u kbps and GOP size to %u", vpu_base_enc->open_param.nBitRate, vpu_base_enc->open_param.nGOPSize);
+	GST_INFO_OBJECT(vpu_base_enc, "setting bitrate to %u kbps and GOP size to %u", vpu_base_enc->open_param.nBitRate, vpu_base_enc->open_param.nGOPSize);
 
 	/* These are default settings from VPU_EncOpenSimp */
 	vpu_base_enc->open_param.sliceMode.sliceMode = 0; /* 1 slice per picture */
@@ -686,7 +687,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(frame) || GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME_HEADERS(frame))
 	{
 		enc_enc_param.nForceIPicture = 1;
-		GST_DEBUG_OBJECT(vpu_base_enc, "got request to make this a keyframe - forcing first I frame");
+		GST_LOG_OBJECT(vpu_base_enc, "got request to make this a keyframe - forcing I frame");
 	}
 
 	/* Give the derived class a chance to set up encoding parameters too */
@@ -734,7 +735,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 					frame->output_buffer = output_buffer;
 				}
 
-				GST_DEBUG_OBJECT(vpu_base_enc, "processing output data: %u bytes, output buffer offset %u", enc_enc_param.nOutOutputSize, output_buffer_offset);
+				GST_LOG_OBJECT(vpu_base_enc, "processing output data: %u bytes, output buffer offset %u", enc_enc_param.nOutOutputSize, output_buffer_offset);
 
 				if (klass->fill_output_buffer != NULL)
 				{

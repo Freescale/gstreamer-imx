@@ -47,7 +47,7 @@ gboolean gst_imx_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size)
 		return FALSE;
 	}
 	else
-		GST_DEBUG("allocated %d bytes of heap memory at virt addr %p", size, *mem_block);
+		GST_INFO("allocated %d bytes of heap memory at virt addr %p", size, *mem_block);
 
 	return TRUE;
 }
@@ -76,7 +76,7 @@ gboolean gst_imx_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks)
 	for (; mem_block_node != NULL; mem_block_node = mem_block_node->next)
 	{
 		g_free(mem_block_node->data);
-		GST_DEBUG("freed heap memory block at virt addr %p", mem_block_node->data);
+		GST_INFO("freed heap memory block at virt addr %p", mem_block_node->data);
 	}
 
 	g_slist_free(*virt_mem_blocks);
@@ -110,7 +110,7 @@ gboolean gst_imx_vpu_free_phys_mem_blocks(GstImxPhysMemAllocator *phys_mem_alloc
 	{
 		GstMemory *memory = (GstMemory *)(mem_block_node->data);
 		gst_allocator_free((GstAllocator *)phys_mem_allocator, memory);
-		GST_DEBUG("freed phys memory block with %u bytes at phys addr 0x%x", memory->size, ((GstImxPhysMemory *)memory)->phys_addr);
+		GST_INFO("freed phys memory block with %u bytes at phys addr 0x%x", memory->size, ((GstImxPhysMemory *)memory)->phys_addr);
 	}
 
 	g_slist_free(*phys_mem_blocks);

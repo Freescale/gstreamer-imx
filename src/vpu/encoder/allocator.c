@@ -137,7 +137,7 @@ static void gst_imx_vpu_enc_allocator_init(GstImxVpuEncAllocator *allocator)
 
 static void gst_imx_vpu_enc_allocator_finalize(GObject *object)
 {
-	GST_DEBUG_OBJECT(object, "shutting down IMX VPU encoder allocator");
+	GST_INFO_OBJECT(object, "shutting down IMX VPU encoder allocator");
 	G_OBJECT_CLASS(gst_imx_vpu_enc_allocator_parent_class)->finalize(object);
 }
 

@@ -31,6 +31,8 @@ gboolean gst_imx_vpu_alloc_virt_mem_block(unsigned char **mem_block, int size);
 void gst_imx_vpu_append_virt_mem_block(unsigned char *mem_block, GSList **virt_mem_blocks);
 gboolean gst_imx_vpu_free_virt_mem_blocks(GSList **virt_mem_blocks);
 
+/* currently, there is no gst_imx_vpu_alloc_phys_mem_block function, because
+ * every subsystem (IPU, VPU ..) has its own set of physical memory allocators */
 void gst_imx_vpu_append_phys_mem_block(GstImxPhysMemory *memory, GSList **phys_mem_blocks);
 gboolean gst_imx_vpu_free_phys_mem_blocks(GstImxPhysMemAllocator *phys_mem_allocator, GSList **phys_mem_blocks);
 

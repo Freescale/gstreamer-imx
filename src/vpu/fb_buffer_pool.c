@@ -182,9 +182,9 @@ static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 					{
 						vpu_pool->framebuffers->num_available_framebuffers++;
 						vpu_pool->framebuffers->decremented_availbuf_counter--;
-						GST_DEBUG_OBJECT(pool, "number of available buffers: %d -> %d", vpu_pool->framebuffers->num_available_framebuffers - 1, vpu_pool->framebuffers->num_available_framebuffers);
+						GST_LOG_OBJECT(pool, "number of available buffers: %d -> %d", vpu_pool->framebuffers->num_available_framebuffers - 1, vpu_pool->framebuffers->num_available_framebuffers);
 					}
-					GST_DEBUG_OBJECT(pool, "cleared buffer %p", (gpointer)buffer);
+					GST_LOG_OBJECT(pool, "cleared buffer %p", (gpointer)buffer);
 				}
 			}
 			else if (!vpu_pool->framebuffers->decenc_states.dec.decoder_open)
@@ -236,7 +236,7 @@ static void gst_imx_vpu_fb_buffer_pool_init(GstImxVpuFbBufferPool *pool)
 	pool->framebuffers = NULL;
 	pool->add_videometa = FALSE;
 
-	GST_DEBUG_OBJECT(pool, "initializing VPU buffer pool");
+	GST_INFO_OBJECT(pool, "initializing VPU buffer pool");
 }
 
 

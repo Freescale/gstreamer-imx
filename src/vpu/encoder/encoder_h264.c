@@ -196,7 +196,7 @@ static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_
 	if (enc->produce_access_units)
 		open_param->VpuEncStdParam.avcParam.avc_audEnable = 1;
 
-	GST_DEBUG_OBJECT(vpu_base_enc, "produce access unit: %s", enc->produce_access_units ? "yes" : "no");
+	GST_INFO_OBJECT(vpu_base_enc, "produce h.264 access units: %s", enc->produce_access_units ? "yes" : "no");
 
 	gst_caps_unref(template_caps);
 
@@ -245,7 +245,7 @@ static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_
 		nalu_type = in_data[start_code_size] & 0x1F;
 		if (nalu_type == NALU_TYPE_SPS)
 		{
-			GST_DEBUG_OBJECT(enc, "SPS NAL found, setting sync point");
+			GST_LOG_OBJECT(enc, "SPS NAL found, setting sync point");
 			GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(frame);
 		}
 	}

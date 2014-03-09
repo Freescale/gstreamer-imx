@@ -71,7 +71,7 @@ void gst_imx_phys_mem_allocator_init(GstImxPhysMemAllocator *allocator)
 
 static void gst_imx_phys_mem_allocator_finalize(GObject *object)
 {
-	GST_DEBUG_OBJECT(object, "shutting down physical memory allocator");
+	GST_INFO_OBJECT(object, "shutting down physical memory allocator");
 	G_OBJECT_CLASS (gst_imx_phys_mem_allocator_parent_class)->finalize(object);
 }
 
@@ -99,7 +99,7 @@ static GstImxPhysMemory* gst_imx_phys_mem_allocator_alloc_internal(GstAllocator 
 	phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(allocator);
 	klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(allocator));
 
-	GST_DEBUG_OBJECT(
+	GST_INFO_OBJECT(
 		allocator,
 		"alloc_internal called: maxsize: %u, align: %u, offset: %u, size: %u",
 		maxsize,
@@ -135,7 +135,7 @@ static GstMemory* gst_imx_phys_mem_allocator_alloc(GstAllocator *allocator, gsiz
 	phys_mem = gst_imx_phys_mem_allocator_alloc_internal(allocator, NULL, maxsize, params->flags, params->align, params->prefix, size);
 
 	if (phys_mem != NULL)
-		GST_DEBUG_OBJECT(allocator, "allocated memory block %p at phys addr 0x%x with %u bytes", (gpointer)phys_mem, phys_mem->phys_addr, size);
+		GST_INFO_OBJECT(allocator, "allocated memory block %p at phys addr 0x%x with %u bytes", (gpointer)phys_mem, phys_mem->phys_addr, size);
 	else
 		GST_WARNING_OBJECT(allocator, "could not allocate memory block with %u bytes", size);
 
@@ -151,7 +151,7 @@ static void gst_imx_phys_mem_allocator_free(GstAllocator *allocator, GstMemory *
 
 	klass->free_phys_mem(phys_mem_alloc, phys_mem);
 
-	GST_DEBUG_OBJECT(allocator, "freed block %p at phys addr 0x%x with size: %u", (gpointer)memory, phys_mem->phys_addr, memory->size);
+	GST_INFO_OBJECT(allocator, "freed block %p at phys addr 0x%x with size: %u", (gpointer)memory, phys_mem->phys_addr, memory->size);
 }
 
 
@@ -202,7 +202,7 @@ static GstMemory* gst_imx_phys_mem_allocator_copy(GstMemory *mem, gssize offset,
 		klass->unmap_phys_mem(phys_mem_alloc, (GstImxPhysMemory *)mem);
 	}
 
-	GST_DEBUG_OBJECT(
+	GST_INFO_OBJECT(
 		mem->allocator,
 		"copied block %p, new copied block %p; offset: %d, size: %d; source block maxsize: %u, align: %u, offset: %u, size: %u",
 		(gpointer)mem, (gpointer)copy,
@@ -244,7 +244,7 @@ static GstMemory* gst_imx_phys_mem_allocator_share(GstMemory *mem, gssize offset
 	sub->phys_addr = phys_mem->phys_addr;
 	sub->cpu_addr = phys_mem->cpu_addr;
 
-	GST_DEBUG_OBJECT(
+	GST_INFO_OBJECT(
 		mem->allocator,
 		"shared block %p, new sub block %p; offset: %d, size: %d; source block maxsize: %u, align: %u, offset: %u, size: %u",
 		(gpointer)mem, (gpointer)sub,

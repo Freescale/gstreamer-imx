@@ -189,7 +189,7 @@ static void gst_imx_phys_mem_buffer_pool_finalize(GObject *object)
 {
 	GstImxPhysMemBufferPool *imx_phys_mem_pool = GST_IMX_PHYS_MEM_BUFFER_POOL(object);
 
-	GST_DEBUG_OBJECT(object, "shutting down physical memory buffer pool");
+	GST_INFO_OBJECT(object, "shutting down physical memory buffer pool");
 	G_OBJECT_CLASS (gst_imx_phys_mem_buffer_pool_parent_class)->finalize(object);
 
 	/* unref'ing AFTER calling the parent class' finalize function, since the parent
@@ -216,7 +216,7 @@ static void gst_imx_phys_mem_buffer_pool_class_init(GstImxPhysMemBufferPoolClass
 static void gst_imx_phys_mem_buffer_pool_init(GstImxPhysMemBufferPool *pool)
 {
 	pool->add_video_meta = FALSE;
-	GST_DEBUG_OBJECT(pool, "initializing physical memory buffer pool");
+	GST_INFO_OBJECT(pool, "initializing physical memory buffer pool");
 }
 
 
