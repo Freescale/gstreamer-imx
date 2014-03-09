@@ -848,7 +848,9 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			{
 				case 0: fmt = GST_VIDEO_FORMAT_I420; break;
 				case 1: fmt = GST_VIDEO_FORMAT_Y42B; break;
+				/* XXX: case 2 would be "4:2:2 vertical" - what is this supposed to be in GStreamer? */
 				case 3: fmt = GST_VIDEO_FORMAT_Y444; break;
+				case 4: fmt = GST_VIDEO_FORMAT_GRAY8: break;
 				default:
 					GST_ERROR_OBJECT(vpu_dec, "unsupported MJPEG output format %d", vpu_dec->init_info.nMjpgSourceFormat);
 					return GST_FLOW_ERROR;
