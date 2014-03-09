@@ -1072,8 +1072,10 @@ static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, G_GNUC_UNUSED gb
 
 	if (vpu_dec->current_framebuffers != NULL)
 	{
+		GST_INFO_OBJECT(decoder, "resetting decoder");
+
 		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
-		gst_imx_vpu_framebuffers_set_flushing(vpu_dec->current_framebuffers, TRUE);
+		gst_imx_vpu_framebuffers_exit_wait_loop(vpu_dec->current_framebuffers);
 		g_cond_signal(&(vpu_dec->current_framebuffers->cond));
 		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 	}

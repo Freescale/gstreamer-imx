@@ -82,7 +82,7 @@ struct _GstImxVpuFramebuffers
 	GSList *fb_mem_blocks;
 	GMutex available_fb_mutex;
 	GCond cond;
-	gboolean flushing;
+	gboolean flushing, exit_loop;
 
 	int y_stride, uv_stride;
 	int y_size, u_size, v_size, mv_size;
@@ -128,6 +128,7 @@ void gst_imx_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info,
 /* NOTE: the two functions below must be called with a lock held on framebuffers! */
 void gst_imx_vpu_framebuffers_set_flushing(GstImxVpuFramebuffers *framebuffers, gboolean flushing);
 void gst_imx_vpu_framebuffers_wait_until_frames_available(GstImxVpuFramebuffers *framebuffers);
+void gst_imx_vpu_framebuffers_exit_wait_loop(GstImxVpuFramebuffers *framebuffers);
 
 
 G_END_DECLS

@@ -71,6 +71,7 @@ void gst_imx_vpu_framebuffers_init(GstImxVpuFramebuffers *framebuffers)
 	framebuffers->total_size = 0;
 
 	framebuffers->flushing = FALSE;
+	framebuffers->exit_loop = FALSE;
 
 	g_mutex_init(&(framebuffers->available_fb_mutex));
 	g_cond_init(&(framebuffers->cond));
@@ -172,8 +173,16 @@ void gst_imx_vpu_framebuffers_set_flushing(GstImxVpuFramebuffers *framebuffers, 
 
 void gst_imx_vpu_framebuffers_wait_until_frames_available(GstImxVpuFramebuffers *framebuffers)
 {
-	while ((framebuffers->num_available_framebuffers < GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS) && !(framebuffers->flushing))
+	GST_LOG_OBJECT(framebuffers, "flushing = %d  exit_loop = %d", framebuffers->flushing ? 1 : 0, framebuffers->exit_loop ? 1 : 0);
+	while ((framebuffers->num_available_framebuffers < GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS) && !(framebuffers->flushing) && !(framebuffers->exit_loop))
 		g_cond_wait(&(framebuffers->cond), &(framebuffers->available_fb_mutex));
+	framebuffers->exit_loop = FALSE;
+}
+
+
+void gst_imx_vpu_framebuffers_exit_wait_loop(GstImxVpuFramebuffers *framebuffers)
+{
+	framebuffers->exit_loop = TRUE;
 }
 
 
