@@ -93,11 +93,11 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_dec_debug);
 enum
 {
 	PROP_0,
-	PROP_MIN_NUM_FRAMEBUFFERS
+	PROP_NUM_ADDITIONAL_FRAMEBUFFERS
 };
 
 
-#define DEFAULT_MIN_NUM_FRAMEBUFFERS 10
+#define DEFAULT_NUM_ADDITIONAL_FRAMEBUFFERS 0
 
 
 #define ALIGN_VAL_TO(LENGTH, ALIGN_SIZE)  ( ((guintptr)((LENGTH) + (ALIGN_SIZE) - 1) / (ALIGN_SIZE)) * (ALIGN_SIZE) )
@@ -228,13 +228,13 @@ void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 
 	g_object_class_install_property(
 		object_class,
-		PROP_MIN_NUM_FRAMEBUFFERS,
+		PROP_NUM_ADDITIONAL_FRAMEBUFFERS,
 		g_param_spec_uint(
-			"min-num-framebuffers",
-			"Min number of framebuffers",
-			"Minimum number of framebuffers to allocate for holding decoded pictures",
-			1, 32767,
-			DEFAULT_MIN_NUM_FRAMEBUFFERS,
+			"num-additional-framebuffers",
+			"Number of additional output framebuffers",
+			"Number of output framebuffers to allocate for decoding in addition to the minimum number indicated by the VPU and the necessary number of free buffers",
+			0, 32767,
+			DEFAULT_NUM_ADDITIONAL_FRAMEBUFFERS,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -255,7 +255,7 @@ void gst_imx_vpu_dec_init(GstImxVpuDec *vpu_dec)
 
 	vpu_dec->codec_data = NULL;
 	vpu_dec->current_framebuffers = NULL;
-	vpu_dec->min_num_framebuffers = DEFAULT_MIN_NUM_FRAMEBUFFERS;
+	vpu_dec->num_additional_framebuffers = DEFAULT_NUM_ADDITIONAL_FRAMEBUFFERS;
 	vpu_dec->current_output_state = NULL;
 
 	vpu_dec->virt_dec_mem_blocks = NULL;
@@ -853,13 +853,10 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			GstImxVpuFramebufferParams fbparams;
 			gst_imx_vpu_framebuffers_dec_init_info_to_params(&(vpu_dec->init_info), &fbparams);
 
-			/* Make sure at least a certain framebuffers are used
-			 * either the minimum number specified in the properties, or the one indicated by the VPU +3
-			 * (+3 , because this is a common extra number of frames held by various parts in GStreamer
-			 * pipelines), whichever is bigger */
 			min_fbcount_indicated_by_vpu = (guint)(fbparams.min_framebuffer_count);
-			fbparams.min_framebuffer_count = MAX((min_fbcount_indicated_by_vpu + (GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS - 1)), vpu_dec->min_num_framebuffers);
-			GST_DEBUG_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen minimum: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
+
+			fbparams.min_framebuffer_count = min_fbcount_indicated_by_vpu + (GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS - 1) + vpu_dec->num_additional_framebuffers;
+			GST_DEBUG_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen number: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
 
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
 			if (vpu_dec->current_framebuffers == NULL)
@@ -1173,18 +1170,18 @@ static void gst_imx_vpu_dec_set_property(GObject *object, guint prop_id, const G
 
 	switch (prop_id)
 	{
-		case PROP_MIN_NUM_FRAMEBUFFERS:
+		case PROP_NUM_ADDITIONAL_FRAMEBUFFERS:
 		{
 			guint num;
 
 			if (vpu_dec->vpu_inst_opened)
 			{
-				GST_ERROR_OBJECT(vpu_dec, "cannot change minimum number of framebuffers while a VPU decoder instance is open");
+				GST_ERROR_OBJECT(vpu_dec, "cannot change number of additional framebuffers while a VPU decoder instance is open");
 				return;
 			}
 
 			num = g_value_get_uint(value);
-			vpu_dec->min_num_framebuffers = num;
+			vpu_dec->num_additional_framebuffers = num;
 
 			break;
 		}
@@ -1201,8 +1198,8 @@ static void gst_imx_vpu_dec_get_property(GObject *object, guint prop_id, GValue 
 
 	switch (prop_id)
 	{
-		case PROP_MIN_NUM_FRAMEBUFFERS:
-			g_value_set_uint(value, vpu_dec->min_num_framebuffers);
+		case PROP_NUM_ADDITIONAL_FRAMEBUFFERS:
+			g_value_set_uint(value, vpu_dec->num_additional_framebuffers);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
