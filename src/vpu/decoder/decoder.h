@@ -59,6 +59,7 @@ struct _GstImxVpuDec
 
 	GstImxVpuFramebuffers *current_framebuffers;
 	guint num_additional_framebuffers;
+	gboolean recalculate_num_avail_framebuffers;
 
 	GstVideoCodecState *current_output_state;
 

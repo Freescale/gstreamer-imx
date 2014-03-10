@@ -1,2 +1,0 @@
-1. Videos that change the resolution produce "mosaic frames". Is is unknown what that actually is. These frames are currently dropped.
-2. Seek events do not call VPU_DecFlushAll() , because then, the imx6 freezes. It is unclear why. Seeking works without it though.
