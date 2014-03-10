@@ -78,7 +78,7 @@ struct _GstImxVpuFramebuffers
 
 	VpuFrameBuffer *framebuffers;
 	guint num_framebuffers;
-	gint num_available_framebuffers, decremented_availbuf_counter;
+	gint num_available_framebuffers, decremented_availbuf_counter, num_framebuffers_in_buffers;
 	GSList *fb_mem_blocks;
 	GMutex available_fb_mutex;
 	GCond cond;

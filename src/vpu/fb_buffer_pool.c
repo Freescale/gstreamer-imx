@@ -182,6 +182,7 @@ static void gst_imx_vpu_fb_buffer_pool_release_buffer(GstBufferPool *pool, GstBu
 					{
 						vpu_pool->framebuffers->num_available_framebuffers++;
 						vpu_pool->framebuffers->decremented_availbuf_counter--;
+						vpu_pool->framebuffers->num_framebuffers_in_buffers--;
 						GST_LOG_OBJECT(pool, "number of available buffers: %d -> %d", vpu_pool->framebuffers->num_available_framebuffers - 1, vpu_pool->framebuffers->num_available_framebuffers);
 					}
 					GST_LOG_OBJECT(pool, "cleared buffer %p", (gpointer)buffer);
@@ -322,6 +323,10 @@ gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffer
 			NULL
 		);
 	}
+
+	GST_IMX_VPU_FRAMEBUFFERS_LOCK(framebuffers);
+	framebuffers->num_framebuffers_in_buffers++;
+	GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(framebuffers);
 
 	/* remove any existing memory blocks */
 	gst_buffer_remove_all_memory(buffer);

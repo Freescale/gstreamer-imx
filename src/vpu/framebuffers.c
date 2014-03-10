@@ -64,6 +64,7 @@ void gst_imx_vpu_framebuffers_init(GstImxVpuFramebuffers *framebuffers)
 	framebuffers->num_framebuffers = 0;
 	framebuffers->num_available_framebuffers = 0;
 	framebuffers->decremented_availbuf_counter = 0;
+	framebuffers->num_framebuffers_in_buffers = 0;
 	framebuffers->fb_mem_blocks = NULL;
 
 	framebuffers->y_stride = framebuffers->uv_stride = 0;
