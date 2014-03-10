@@ -822,7 +822,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			vpu_dec->current_framebuffers->num_available_framebuffers = vpu_dec->current_framebuffers->num_framebuffers - vpu_dec->current_framebuffers->num_framebuffers_in_buffers;
 			vpu_dec->recalculate_num_avail_framebuffers = FALSE;
 		}
-		GST_DEBUG_OBJECT(vpu_dec, "availbuf counter: %d   actual: %d", vpu_dec->current_framebuffers->num_available_framebuffers, VPU_DecGetNumAvailableFrameBuffers(vpu_dec->handle));
 		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 	}
 	else
