@@ -1014,6 +1014,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		sys_frame_nr_valid = FALSE;
 		if (out_system_frame_number > 0)
 		{
+			g_hash_table_remove(vpu_dec->frame_table, (gpointer)(out_frame_info.pDisplayFrameBuf));
+
 			out_system_frame_number--;
 			out_frame = gst_video_decoder_get_frame(decoder, out_system_frame_number);
 			if (out_frame != NULL)
