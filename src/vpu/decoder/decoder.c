@@ -203,6 +203,7 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state);
 static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *frame);
 static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, gboolean hard);
+static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
 
 static void gst_imx_vpu_dec_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
@@ -236,6 +237,7 @@ void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_set_format);
 	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_handle_frame);
 	base_class->reset             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_reset);
+	base_class->finish            = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_finish);
 	base_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_decide_allocation);
 
 	klass->inst_counter = 0;
@@ -796,11 +798,14 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 	memset(&in_data, 0, sizeof(in_data));
 
-	gst_buffer_map(cur_frame->input_buffer, &in_map_info, GST_MAP_READ);
+	if (cur_frame != NULL)
+	{
+		gst_buffer_map(cur_frame->input_buffer, &in_map_info, GST_MAP_READ);
 
-	in_data.pPhyAddr = NULL;
-	in_data.pVirAddr = (unsigned char *)(in_map_info.data);
-	in_data.nSize = in_map_info.size;
+		in_data.pPhyAddr = NULL;
+		in_data.pVirAddr = (unsigned char *)(in_map_info.data);
+		in_data.nSize = in_map_info.size;
+	}
 
 	if (vpu_dec->codec_data != NULL)
 	{
@@ -836,7 +841,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	GST_LOG_OBJECT(vpu_dec, "VPU_DecDecodeBuf returns: %x", buffer_ret_code);
 
 	/* Cleanup temporary input frame and codec data mapping */
-	gst_buffer_unmap(cur_frame->input_buffer, &in_map_info);
+	if (cur_frame != NULL)
+		gst_buffer_unmap(cur_frame->input_buffer, &in_map_info);
 	if (vpu_dec->codec_data != NULL)
 		gst_buffer_unmap(vpu_dec->codec_data, &codecdata_map_info);
 
@@ -943,7 +949,10 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			if (dec_ret != VPU_DEC_RET_SUCCESS)
 				GST_ERROR_OBJECT(vpu_dec, "could not get information about consumed frame: %s", gst_imx_vpu_strerror(dec_ret));
 
-			GST_LOG_OBJECT(vpu_dec, "one frame got consumed: cur_frame: %p  framebuffer: %p  system frame number: %u  stuff length: %d  frame length: %d", (gpointer)cur_frame, (gpointer)(dec_framelen_info.pFrame), cur_frame->system_frame_number, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
+			if (cur_frame != NULL)
+				GST_LOG_OBJECT(vpu_dec, "one frame got consumed: cur_frame: %p  framebuffer: %p  system frame number: %u  stuff length: %d  frame length: %d", (gpointer)cur_frame, (gpointer)(dec_framelen_info.pFrame), cur_frame->system_frame_number, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
+			else
+				GST_LOG_OBJECT(vpu_dec, "one frame got consumed: (no cur_frame)  framebuffer: %p  (no system frame number)  stuff length: %d  frame length: %d", (gpointer)(dec_framelen_info.pFrame), dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
 
 			/* Association of input and output frames is not always straightforward.
 			 * If frame reordering or a significant delay is present, then input frames might
@@ -958,7 +967,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * decoded frame will end up. Therefore, a hash table is used, which uses the framebuffer's
 			 * address as key, and the frame number as value. When the VPU wrapper reports a frame as
 			 * available for display, the associated frame number is looked up in this table. */
-			g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(cur_frame->system_frame_number + 1));
+			if (cur_frame != NULL)
+				g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(cur_frame->system_frame_number + 1));
 		}
 
 		/* With some bitstreams, libfslvpuwrap does not report VPU_DEC_ONE_FRM_CONSUMED for consumed frames for some strange reason */
@@ -1085,9 +1095,10 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	else
 		GST_DEBUG_OBJECT(vpu_dec, "nothing to output (ret code: 0x%X)", buffer_ret_code);
 
-	gst_video_codec_frame_unref(cur_frame);
+	if (cur_frame != NULL)
+		gst_video_codec_frame_unref(cur_frame);
 
-	return GST_FLOW_OK;
+	return (buffer_ret_code & VPU_DEC_OUTPUT_EOS) ? GST_FLOW_EOS : GST_FLOW_OK;
 }
 
 
@@ -1123,6 +1134,55 @@ static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, G_GNUC_UNUSED gb
 	}
 
 	return TRUE;
+}
+
+
+static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder)
+{
+	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(decoder);
+
+	if (!vpu_dec->vpu_inst_opened)
+		return TRUE;
+
+	if (vpu_dec->current_framebuffers != NULL)
+	{
+		int config_param;
+		VpuDecRetCode vpu_ret;
+
+		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
+
+		GST_INFO_OBJECT(vpu_dec, "setting VPU decoder in drain mode");
+		config_param = VPU_DEC_IN_DRAIN;
+		vpu_ret = VPU_DecConfig(vpu_dec->handle, VPU_DEC_CONF_INPUTTYPE, &config_param);
+
+		if (vpu_ret != VPU_DEC_RET_SUCCESS)
+		{
+			GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
+			GST_ERROR_OBJECT(vpu_dec, "could not configure skip mode: %s", gst_imx_vpu_strerror(vpu_ret));
+			return FALSE;
+		}
+		else
+		{
+			gst_imx_vpu_framebuffers_set_flushing(vpu_dec->current_framebuffers, TRUE);
+
+			GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
+
+			GST_INFO_OBJECT(vpu_dec, "pushing out all remaining unfinished frames");
+			while (TRUE)
+			{
+				GstFlowReturn flow_ret = gst_imx_vpu_dec_handle_frame(decoder, NULL);
+				if (flow_ret == GST_FLOW_EOS)
+				{
+					GST_INFO_OBJECT(vpu_dec, "last remaining unfinished frame pushed");
+					break;
+				}
+				else
+					GST_LOG_OBJECT(vpu_dec, "unfinished frame pushed, others remain");
+			}
+		}
+	}
+
+	return GST_FLOW_OK;
 }
 
 

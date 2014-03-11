@@ -1,6 +1,3 @@
 1. eglvivsink videooverlay functionality needs to be tested, in particular how well it works with embedding
-2. end-of-stream flushing isn't done properly in the VPU de- and encoders
-   planned approach in the decoder: in a finish() vfunc, set the VPU_DEC_CONF_INPUTTYPE to DRAIN, then call
-   VPU_DecDecodebuf() repeatedly with NULL data until no more output frames are available
-3. Wayland support in eglvivsink
-4. eglvivsink+ipuvideotransform (with deinterlacing)+playbin sometimes cause the IPU to report errors; cause is unknown
+2. Wayland support in eglvivsink
+3. eglvivsink+ipuvideotransform (with deinterlacing)+playbin sometimes cause the IPU to report errors; cause is unknown
