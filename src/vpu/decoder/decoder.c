@@ -1098,10 +1098,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 	}
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_DROPPED)
-	{
-		GST_DEBUG_OBJECT(vpu_dec, "dropping frame");
-//		gst_video_decoder_drop_frame(decoder, frame); // TODO should the frame be dropped?
-	}
+		GST_DEBUG_OBJECT(vpu_dec, "VPU dropped output frame internally");
 	else
 		GST_DEBUG_OBJECT(vpu_dec, "nothing to output (ret code: 0x%X)", buffer_ret_code);
 
