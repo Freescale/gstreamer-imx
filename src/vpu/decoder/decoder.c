@@ -368,6 +368,7 @@ static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCo
 		{
 			open_param->CodecFormat = VPU_V_AVC;
 			open_param->nReorderEnable = 1;
+			vpu_dec->flush_vpu_upon_reset = TRUE;
 			GST_INFO_OBJECT(vpu_dec, "setting h.264 as stream format");
 		}
 		else if (g_strcmp0(name, "video/mpeg") == 0)
@@ -404,6 +405,7 @@ static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCo
 			}
 
 			do_codec_data = TRUE;
+			vpu_dec->flush_vpu_upon_reset = TRUE;
 		}
 		else if (g_strcmp0(name, "video/x-divx") == 0)
 		{
@@ -427,20 +429,24 @@ static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCo
 				if (format_set)
 					GST_INFO_OBJECT(vpu_dec, "setting DivX %d as stream format", divxversion);
 			}
+			vpu_dec->flush_vpu_upon_reset = TRUE;
 		}
 		else if (g_strcmp0(name, "video/x-xvid") == 0)
 		{
 			open_param->CodecFormat = VPU_V_XVID;
+			vpu_dec->flush_vpu_upon_reset = TRUE;
 			GST_INFO_OBJECT(vpu_dec, "setting xvid as stream format");
 		}
 		else if (g_strcmp0(name, "video/x-h263") == 0)
 		{
 			open_param->CodecFormat = VPU_V_H263;
+			vpu_dec->flush_vpu_upon_reset = FALSE;
 			GST_INFO_OBJECT(vpu_dec, "setting h.263 as stream format");
 		}
 		else if (g_strcmp0(name, "image/jpeg") == 0)
 		{
 			open_param->CodecFormat = VPU_V_MJPG;
+			vpu_dec->flush_vpu_upon_reset = TRUE;
 			GST_INFO_OBJECT(vpu_dec, "setting motion JPEG as stream format");
 		}
 		else if (g_strcmp0(name, "video/x-wmv") == 0)
@@ -479,10 +485,12 @@ static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCo
 			}
 
 			do_codec_data = TRUE;
+			vpu_dec->flush_vpu_upon_reset = FALSE;
 		}
 		else if (g_strcmp0(name, "video/x-vp8") == 0)
 		{
 			open_param->CodecFormat = VPU_V_VP8;
+			vpu_dec->flush_vpu_upon_reset = TRUE;
 			GST_INFO_OBJECT(vpu_dec, "setting VP8 as stream format");
 		}
 
@@ -1113,7 +1121,7 @@ static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, G_GNUC_UNUSED gb
 
 	if (vpu_dec->current_framebuffers != NULL)
 	{
-		VpuDecRetCode ret;
+		VpuDecRetCode ret = VPU_DEC_RET_SUCCESS;
 
 		GST_INFO_OBJECT(decoder, "resetting decoder");
 
@@ -1122,9 +1130,12 @@ static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, G_GNUC_UNUSED gb
 		gst_imx_vpu_framebuffers_exit_wait_loop(vpu_dec->current_framebuffers);
 		g_cond_signal(&(vpu_dec->current_framebuffers->cond));
 
-		ret = VPU_DecFlushAll(vpu_dec->handle);
+		if (vpu_dec->flush_vpu_upon_reset)
+		{
+			ret = VPU_DecFlushAll(vpu_dec->handle);
 
-		vpu_dec->recalculate_num_avail_framebuffers = TRUE;
+			vpu_dec->recalculate_num_avail_framebuffers = TRUE;
+		}
 
 		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 
