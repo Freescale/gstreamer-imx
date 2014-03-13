@@ -22,7 +22,7 @@ struct _GstImxEglVivSinkEGLPlatform
 	EGLDisplay egl_display;
 	EGLContext egl_context;
 	EGLSurface egl_surface;
-	gboolean internal_window;
+	Window parent_window;
 	Atom wm_delete_atom;
 	GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb;
 	gpointer user_context;
@@ -144,15 +144,6 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 
 	EGL_PLATFORM_LOCK(platform);
 
-	if (window_handle != 0)
-	{
-		platform->native_window = window_handle;
-		platform->internal_window = FALSE;
-		/* TODO: select EGL config with matching visual */
-
-		gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(platform, event_handling);
-	}
-	else
 	{
 		EGLint native_visual_id;
 		XVisualInfo visual_info_template;
@@ -162,6 +153,8 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		int screen_num;
 		Window root_window;
 		Atom net_wm_state_atom, net_wm_state_fullscreen_atom;
+
+		GST_INFO("Creating new X11 window with EGL context (parent window: %" G_GUINTPTR_FORMAT ")", window_handle);
 
 		if (!eglGetConfigAttrib(platform->egl_display, config, EGL_NATIVE_VISUAL_ID, &native_visual_id))
 		{
@@ -193,10 +186,21 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		attr.override_redirect = False;
 		attr.cursor            = None;
 
+		if (window_handle != 0)
+		{
+			platform->parent_window = (Window)window_handle;
+			/* Out of the parent window events, only the structure
+			 * notifications are of interest here */
+			XSelectInput(x11_display, platform->parent_window, StructureNotifyMask);
+		}
+
 		// TODO: xlib error handler
 
+		/* This video output window can be embedded into other windows, for example inside
+		 * media player user interfaces. This is done by making the specified window as
+		 * the parent of the video playback window. */
 		x11_window = XCreateWindow(
-			x11_display, root_window,
+			x11_display, (window_handle != 0) ? platform->parent_window : root_window,
 			0, 0, GST_VIDEO_INFO_WIDTH(video_info), GST_VIDEO_INFO_HEIGHT(video_info),
 			0, visual_info->depth, InputOutput, visual_info->visual,
 			CWBackPixel | CWColormap  | CWBorderPixel | CWBackingStore | CWOverrideRedirect,
@@ -204,7 +208,6 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		);
 
 		platform->native_window = (EGLNativeWindowType)x11_window;
-		platform->internal_window = TRUE;
 
 		net_wm_state_atom = XInternAtom(x11_display, "_NET_WM_STATE", True);
 		net_wm_state_fullscreen_atom = XInternAtom(x11_display, "_NET_WM_STATE_FULLSCREEN", True);
@@ -315,8 +318,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_shutdown_window(GstImxEglVivSinkEGLPl
 		XNextEvent(x11_display, &xevent);
 	}
 
-	if (platform->internal_window)
-		XDestroyWindow(x11_display, x11_window);
+	XDestroyWindow(x11_display, x11_window);
 
 	platform->native_window = 0;
 
@@ -331,7 +333,12 @@ static void gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(GstImxEg
 	Window x11_window;
 	Display *x11_display = (Display *)(platform->native_display);
 
-	static long const basic_event_mask = ExposureMask | StructureNotifyMask | PointerMotionMask | KeyPressMask | KeyReleaseMask;
+	/* Select user input events only if it is requested (= when event_handling is TRUE)
+	 * Select the StructureNotifyMask only if this window is standalone, because otherwise,
+	 * we are interested in structure notifications of the parent (for example, when it gets
+	 * resized), to let the event handlers auto-resize this window to fit in the parent one */
+	long user_input_mask = event_handling ? (PointerMotionMask | KeyPressMask | KeyReleaseMask | ButtonPressMask | ButtonReleaseMask) : 0;
+	long window_event_mask = (platform->parent_window != 0) ? 0 : StructureNotifyMask;
 
 	if (platform->native_window == 0)
 	{
@@ -340,21 +347,7 @@ static void gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(GstImxEg
 	}
 	x11_window = (Window)(platform->native_window);
 
-	if (event_handling)
-	{
-		if (platform->internal_window)
-		{
-			XSelectInput(x11_display, x11_window, basic_event_mask | ButtonPressMask | ButtonReleaseMask);
-		}
-		else
-		{
-			XSelectInput(x11_display, x11_window, basic_event_mask);
-		}
-	}
-	else
-	{ 
-		XSelectInput(x11_display, x11_window, 0);
-	}
+	XSelectInput(x11_display, x11_window, ExposureMask | window_event_mask | user_input_mask);
 }
 
 
@@ -431,8 +424,41 @@ GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_even
 			switch (xevent.type)
 			{
 				case Expose:
+				{
+					Window this_window = (Window)(platform->native_window);
+
+					/* In case this window is child of another window that is not the root
+					 * window, resize this window; sometimes, ConfigureNotify is not trigger
+					 * when the windows show up for the first time*/
+					if ((xevent.xexpose.count == 0) && (platform->parent_window != 0))
+					{
+						Window root_window;
+						int x, y;
+						unsigned int width, height, border_width, depth;
+
+						XGetGeometry(
+							x11_display,
+							platform->parent_window,
+							&root_window,
+							&x, &y,
+							&width, &height,
+							&border_width,
+							&depth
+						);
+
+						XResizeWindow(x11_display, this_window, width, height);
+						if (platform->window_resized_event_cb != NULL)
+							platform->window_resized_event_cb(platform, width, height, platform->user_context);
+					}
+
+					/* Make sure no more expose events are there */
+					while (XCheckTypedWindowEvent(x11_display, platform->parent_window, Expose, &xevent) == True);
+					while (XCheckTypedWindowEvent(x11_display, this_window, Expose, &xevent) == True);
+
 					expose_required = TRUE;
+
 					break;
+				}
 
 				case ClientMessage:
 					if ((xevent.xclient.format == 32) && (xevent.xclient.data.l[0] == (long)(platform->wm_delete_atom)))
@@ -442,11 +468,25 @@ GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_even
 					break;
 
 				case ConfigureNotify:
+				{
+					Window this_window = (Window)(platform->native_window);
+
 					GST_DEBUG("received ConfigureNotify event -> calling resize callback");
+
+					/* Make sure no other ConfigureNotify events are there */
+					while (XCheckTypedWindowEvent(x11_display, platform->parent_window, ConfigureNotify, &xevent) == True);
+
+					/* Resize if this is a child window of a non-root parent window;
+					 * this is usually the case when this window is embedded inside another one */
+					if (platform->parent_window != 0)
+						XResizeWindow(x11_display, this_window, xevent.xconfigure.width, xevent.xconfigure.height);
+
 					if (platform->window_resized_event_cb != NULL)
 						platform->window_resized_event_cb(platform, xevent.xconfigure.width, xevent.xconfigure.height, platform->user_context);
+
 					expose_required = TRUE;
 					break;
+				}
 
 				case ResizeRequest:
 					GST_DEBUG("received ResizeRequest event -> calling resize callback");
