@@ -441,12 +441,14 @@ static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCo
 		{
 			open_param->CodecFormat = VPU_V_H263;
 			vpu_dec->flush_vpu_upon_reset = FALSE;
+			vpu_dec->no_explicit_frame_boundary = TRUE;
 			GST_INFO_OBJECT(vpu_dec, "setting h.263 as stream format");
 		}
 		else if (g_strcmp0(name, "image/jpeg") == 0)
 		{
 			open_param->CodecFormat = VPU_V_MJPG;
 			vpu_dec->flush_vpu_upon_reset = TRUE;
+			vpu_dec->no_explicit_frame_boundary = TRUE;
 			GST_INFO_OBJECT(vpu_dec, "setting motion JPEG as stream format");
 		}
 		else if (g_strcmp0(name, "video/x-wmv") == 0)
@@ -486,11 +488,13 @@ static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCo
 
 			do_codec_data = TRUE;
 			vpu_dec->flush_vpu_upon_reset = FALSE;
+			vpu_dec->no_explicit_frame_boundary = TRUE;
 		}
 		else if (g_strcmp0(name, "video/x-vp8") == 0)
 		{
 			open_param->CodecFormat = VPU_V_VP8;
 			vpu_dec->flush_vpu_upon_reset = TRUE;
+			vpu_dec->no_explicit_frame_boundary = TRUE;
 			GST_INFO_OBJECT(vpu_dec, "setting VP8 as stream format");
 		}
 
@@ -979,9 +983,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 				g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(cur_frame->system_frame_number + 1));
 		}
 
-		/* With some bitstreams, libfslvpuwrap does not report VPU_DEC_ONE_FRM_CONSUMED for consumed frames for some strange reason */
-		/* TODO: is this a bug in this library? */
-
 		/* If VPU_DEC_OUTPUT_DROPPED is set, then the internal counter will not be modified */
 		if ((buffer_ret_code & VPU_DEC_ONE_FRM_CONSUMED) && !(buffer_ret_code & VPU_DEC_OUTPUT_DROPPED))
 		{
@@ -1002,6 +1003,21 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	if (buffer_ret_code & VPU_DEC_NO_ENOUGH_BUF)
 		GST_WARNING_OBJECT(vpu_dec, "no free output frame available (ret code: 0x%X)", buffer_ret_code);
 
+	if (buffer_ret_code & VPU_DEC_OUTPUT_NODIS)
+	{
+		if (vpu_dec->no_explicit_frame_boundary)
+		{
+			GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
+
+			/* wait until frames are available or until flushing occurs */
+			gst_imx_vpu_framebuffers_wait_until_frames_available(vpu_dec->current_framebuffers);
+
+			GST_LOG_OBJECT(vpu_dec, "number of available buffers: %d (%d)", vpu_dec->current_framebuffers->num_available_framebuffers, VPU_DecGetNumAvailableFrameBuffers(vpu_dec->handle));
+
+			GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
+		}
+	}
+
 	if (buffer_ret_code & VPU_DEC_OUTPUT_DIS)
 	{
 		GstBuffer *buffer;
@@ -1018,24 +1034,45 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			return GST_FLOW_ERROR;
 		}
 
+		if (vpu_dec->no_explicit_frame_boundary)
+		{
+			GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
+
+			/* wait until frames are available or until flushing occurs */
+			gst_imx_vpu_framebuffers_wait_until_frames_available(vpu_dec->current_framebuffers);
+
+			vpu_dec->current_framebuffers->num_available_framebuffers--;
+			vpu_dec->current_framebuffers->decremented_availbuf_counter++;
+			GST_LOG_OBJECT(vpu_dec, "number of available buffers: %d (%d)", vpu_dec->current_framebuffers->num_available_framebuffers, VPU_DecGetNumAvailableFrameBuffers(vpu_dec->handle));
+
+			GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
+		}
+
 		out_system_frame_number = (guint32)(g_hash_table_lookup(vpu_dec->frame_table, (gpointer)(out_frame_info.pDisplayFrameBuf)));
 		sys_frame_nr_valid = FALSE;
-		if (out_system_frame_number > 0)
+		if (vpu_dec->no_explicit_frame_boundary)
 		{
-			g_hash_table_remove(vpu_dec->frame_table, (gpointer)(out_frame_info.pDisplayFrameBuf));
-
-			out_system_frame_number--;
-			out_frame = gst_video_decoder_get_frame(decoder, out_system_frame_number);
-			if (out_frame != NULL)
-			{
-				GST_LOG_OBJECT(vpu_dec, "system frame number valid and corresponding frame is still pending");
-				sys_frame_nr_valid = TRUE;
-			}
-			else
-				GST_WARNING_OBJECT(vpu_dec, "valid system frame number present, but corresponding frame has been handled already");
+			GST_LOG_OBJECT(vpu_dec, "not using system frame numbers with this bitstream format");
 		}
 		else
-			GST_LOG_OBJECT(vpu_dec, "display framebuffer is unknown -> no valid system frame number can be retrieved; assuming no reordering is done");
+		{
+			if (out_system_frame_number > 0)
+			{
+				g_hash_table_remove(vpu_dec->frame_table, (gpointer)(out_frame_info.pDisplayFrameBuf));
+
+				out_system_frame_number--;
+				out_frame = gst_video_decoder_get_frame(decoder, out_system_frame_number);
+				if (out_frame != NULL)
+				{
+					GST_LOG_OBJECT(vpu_dec, "system frame number valid and corresponding frame is still pending");
+					sys_frame_nr_valid = TRUE;
+				}
+				else
+					GST_WARNING_OBJECT(vpu_dec, "valid system frame number present, but corresponding frame has been handled already");
+			}
+			else
+				GST_LOG_OBJECT(vpu_dec, "display framebuffer is unknown -> no valid system frame number can be retrieved; assuming no reordering is done");
+		}
 
 		/* Create empty buffer */
 		buffer = gst_video_decoder_allocate_output_buffer(decoder);

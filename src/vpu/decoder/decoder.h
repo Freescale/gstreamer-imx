@@ -60,6 +60,7 @@ struct _GstImxVpuDec
 	GstImxVpuFramebuffers *current_framebuffers;
 	guint num_additional_framebuffers;
 	gboolean recalculate_num_avail_framebuffers;
+	gboolean no_explicit_frame_boundary; /* if TRUE, it means VPU_DEC_ONE_FRM_CONSUMED will never be returned by the decoder function */
 
 	GstVideoCodecState *current_output_state;
 
