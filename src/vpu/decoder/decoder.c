@@ -894,7 +894,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 			min_fbcount_indicated_by_vpu = (guint)(fbparams.min_framebuffer_count);
 
-			fbparams.min_framebuffer_count = min_fbcount_indicated_by_vpu + (GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS - 1) + vpu_dec->num_additional_framebuffers;
+			fbparams.min_framebuffer_count = min_fbcount_indicated_by_vpu + GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS + vpu_dec->num_additional_framebuffers;
 			GST_INFO_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen number: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
 
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
