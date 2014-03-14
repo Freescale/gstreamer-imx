@@ -667,7 +667,6 @@ static gboolean gst_imx_egl_viv_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 static gboolean gst_imx_egl_viv_propose_allocation(GstBaseSink *sink, GstQuery *query)
 {
-#if 1
 	GstCaps *caps;
 	GstVideoInfo info;
 	GstBufferPool *pool;
@@ -723,10 +722,6 @@ static gboolean gst_imx_egl_viv_propose_allocation(GstBaseSink *sink, GstQuery *
 		gst_object_unref(pool);
 		gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, NULL);
 	}
-#else
-	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, NULL);
-	gst_query_add_allocation_meta(query, GST_VIDEO_CROP_META_API_TYPE, NULL);
-#endif
 
 	return TRUE;
 }

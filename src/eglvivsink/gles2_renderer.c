@@ -188,7 +188,7 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 
 	GLES2_RENDERER_UNLOCK(renderer);
 
-	GST_DEBUG("starting loop");
+	GST_INFO("starting GLES2 renderer loop");
 
 	while (TRUE)
 	{	
@@ -229,7 +229,7 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 
 			glViewport(0, 0, renderer->window_width, renderer->window_height);
 
-			GST_DEBUG("resizing viewport to %ux%u pixel", renderer->window_width, renderer->window_height);
+			GST_LOG("resizing viewport to %ux%u pixel", renderer->window_width, renderer->window_height);
 
 			gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info));
 
@@ -241,7 +241,7 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 
 		if (!renderer->loop_running)
 		{
-			GST_DEBUG("loop running flag has been set to FALSE");
+			GST_LOG("loop running flag has been set to FALSE");
 			exit_loop = TRUE;
 		}
 
@@ -346,7 +346,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_build_shader(GLuint *shader,
 		return FALSE;
 	}
 	else
-		GST_DEBUG("successfully compiled %s", shader_type_name);
+		GST_LOG("successfully compiled %s", shader_type_name);
 
 	return TRUE;
 }
@@ -414,7 +414,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_link_program(GLuint *program
 		return FALSE;
 	}
 	else
-		GST_DEBUG("successfully linked program");
+		GST_LOG("successfully linked program");
 
 	glUseProgram(*program);
 
@@ -740,7 +740,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 
 		phys_addr = (GLuint)(phys_mem_meta->phys_addr);
 
-		GST_DEBUG("mapping physical address 0x%x of video frame in buffer %p into VIV texture", phys_addr, (gpointer)buffer);
+		GST_LOG("mapping physical address 0x%x of video frame in buffer %p into VIV texture", phys_addr, (gpointer)buffer);
 
 		gst_buffer_map(buffer, &map_info, GST_MAP_READ);
 		virt_addr = map_info.data;
@@ -755,7 +755,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 		);
 
 		gst_buffer_unmap(buffer, &map_info);
-		GST_DEBUG("done showing frame in buffer %p with physical address 0x%x", (gpointer)buffer, phys_addr);
+		GST_LOG("done showing frame in buffer %p with physical address 0x%x", (gpointer)buffer, phys_addr);
 
 		if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectVIVMap"))
 			return FALSE;
@@ -774,7 +774,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 				return FALSE;
 		}
 
-		GST_DEBUG("copying pixels into VIV direct texture buffer");
+		GST_LOG("copying pixels into VIV direct texture buffer");
 
 		gst_buffer_map(buffer, &map_info, GST_MAP_READ);
 		switch (fmt)
@@ -836,7 +836,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 static void gst_imx_egl_viv_sink_gles2_renderer_resize_callback(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, guint window_width, guint window_height, gpointer user_context)
 {
 	GstImxEglVivSinkGLES2Renderer *gles2_renderer = (GstImxEglVivSinkGLES2Renderer *)user_context;
-	GST_DEBUG("resize_callback w/h: %d/%d", window_width, window_height);
+	GST_TRACE("resize_callback w/h: %d/%d", window_width, window_height);
 	gles2_renderer->new_window_width = window_width;
 	gles2_renderer->new_window_height = window_height;
 }
@@ -908,12 +908,12 @@ void gst_imx_egl_viv_sink_gles2_renderer_destroy(GstImxEglVivSinkGLES2Renderer *
 	if (renderer == NULL)
 		return;
 
-	GST_DEBUG("stopping renderer");
+	GST_INFO("stopping renderer");
 	gst_imx_egl_viv_sink_gles2_renderer_stop(renderer);
 
 	if (renderer->egl_platform != NULL)
 	{
-		GST_DEBUG("destroying EGL platform");
+		GST_INFO("destroying EGL platform");
 		gst_imx_egl_viv_sink_egl_platform_destroy(renderer->egl_platform);
 	}
 
@@ -966,7 +966,7 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_stop(GstImxEglVivSinkGLES2Renderer 
 
 		gst_imx_egl_viv_sink_egl_platform_expose(renderer->egl_platform);
 
-		GST_DEBUG("waiting for thread to finish");
+		GST_LOG("waiting for thread to finish");
 
 		g_thread_join(renderer->thread);
 		/* no need to explicitely unref the thread, since g_thread_join() does this already */
@@ -980,7 +980,7 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_stop(GstImxEglVivSinkGLES2Renderer 
 	}
 	else
 	{
-		GST_DEBUG("thread not running - nothing to stop");
+		GST_LOG("thread not running - nothing to stop");
 	}
 
 	return ret;
@@ -1006,6 +1006,7 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_handle(GstImxEglVivSinkG
 	{
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_stop(renderer);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_start(renderer);
+		/* TODO: set window x,y,width,height again */
 	}
 
 	return ret;
@@ -1050,7 +1051,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxE
 
 		norm_ratio = (float)(renderer->display_ratio_n) / (float)(renderer->display_ratio_d) * (float)(renderer->window_height) / (float)(renderer->window_width);
 
-		GST_DEBUG(
+		GST_LOG(
 			"video width/height: %dx%d  video pixel aspect ratio: %d/%d  window pixel aspect ratio: %d/%d  calculated display ratio: %d/%d  window width/height: %dx%d  norm ratio: %f",
 			video_info->width, video_info->height,
 			video_par_n, video_par_d,
@@ -1081,7 +1082,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxE
 
 	if (renderer->frame_rect_uloc != -1)
 	{
-		GST_DEBUG(
+		GST_LOG(
 			"display scale: %f/%f",
 			display_scale_w, display_scale_h
 		);

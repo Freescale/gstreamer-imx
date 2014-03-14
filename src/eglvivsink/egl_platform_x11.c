@@ -474,7 +474,7 @@ GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_even
 				{
 					Window this_window = (Window)(platform->native_window);
 
-					GST_DEBUG("received ConfigureNotify event -> calling resize callback");
+					GST_TRACE("received ConfigureNotify event -> calling resize callback");
 
 					/* Make sure no other ConfigureNotify events are there */
 					while (XCheckTypedWindowEvent(x11_display, platform->parent_window, ConfigureNotify, &xevent) == True);
@@ -492,7 +492,7 @@ GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_even
 				}
 
 				case ResizeRequest:
-					GST_DEBUG("received ResizeRequest event -> calling resize callback");
+					GST_TRACE("received ResizeRequest event -> calling resize callback");
 					if (platform->window_resized_event_cb != NULL)
 						platform->window_resized_event_cb(platform, xevent.xresizerequest.width, xevent.xresizerequest.height, platform->user_context);
 					expose_required = TRUE;
