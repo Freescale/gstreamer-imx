@@ -54,6 +54,7 @@ struct _GstImxVpuDec
 	VpuMemInfo mem_info;
 
 	gboolean vpu_inst_opened, is_mjpeg, flush_vpu_upon_reset;
+	VpuCodStd codec_format;
 
 	GstBuffer *codec_data;
 
