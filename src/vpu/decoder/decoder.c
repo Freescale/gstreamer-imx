@@ -1015,8 +1015,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			/* wait until frames are available or until flushing occurs */
 			gst_imx_vpu_framebuffers_wait_until_frames_available(vpu_dec->current_framebuffers);
 
-			GST_LOG_OBJECT(vpu_dec, "number of available buffers: %d (%d)", vpu_dec->current_framebuffers->num_available_framebuffers, VPU_DecGetNumAvailableFrameBuffers(vpu_dec->handle));
-
 			GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 		}
 
@@ -1059,7 +1057,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 			vpu_dec->current_framebuffers->num_available_framebuffers--;
 			vpu_dec->current_framebuffers->decremented_availbuf_counter++;
-			GST_LOG_OBJECT(vpu_dec, "number of available buffers: %d (%d)", vpu_dec->current_framebuffers->num_available_framebuffers, VPU_DecGetNumAvailableFrameBuffers(vpu_dec->handle));
 
 			GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 		}
