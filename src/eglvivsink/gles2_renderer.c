@@ -21,6 +21,8 @@ struct _GstImxEglVivSinkGLES2Renderer
 	GstVideoInfo video_info;
 	gboolean video_info_updated;
 	gboolean fullscreen;
+	gint manual_x_coord, manual_y_coord, manual_width, manual_height;
+	gboolean borderless;
 
 	GstBuffer *current_frame;
 
@@ -130,7 +132,16 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 	{
 		GLubyte const *extensions;
 
-		if (!gst_imx_egl_viv_sink_egl_platform_init_window(renderer->egl_platform, renderer->window_handle, renderer->event_handling, &(renderer->video_info), renderer->fullscreen))
+		if (!gst_imx_egl_viv_sink_egl_platform_init_window(
+			renderer->egl_platform,
+			renderer->window_handle,
+			renderer->event_handling,
+			&(renderer->video_info),
+			renderer->fullscreen,
+			renderer->manual_x_coord, renderer->manual_y_coord,
+			renderer->manual_width, renderer->manual_height,
+			renderer->borderless
+		))
 		{
 			GST_ERROR("could not open window");
 			renderer->loop_flow_retval = GST_FLOW_ERROR;
@@ -852,6 +863,12 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char c
 	renderer->video_info_updated = TRUE;
 	renderer->fullscreen = FALSE;
 
+	renderer->manual_x_coord = 0;
+	renderer->manual_y_coord = 0;
+	renderer->manual_width = 0;
+	renderer->manual_height = 0;
+	renderer->borderless = FALSE;
+
 	renderer->current_frame = NULL;
 
 	renderer->egl_platform = gst_imx_egl_viv_sink_egl_platform_create(native_display_name, gst_imx_egl_viv_sink_gles2_renderer_resize_callback, renderer);
@@ -1132,6 +1149,29 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_force_aspect_ratio(GstImxEglViv
 	GLES2_RENDERER_UNLOCK(renderer);
 
 	return TRUE;
+}
+
+
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_coords(GstImxEglVivSinkGLES2Renderer *renderer, gint window_x_coord, gint window_y_coord)
+{
+	renderer->manual_x_coord = window_x_coord;
+	renderer->manual_y_coord = window_y_coord;
+	return renderer->thread_started ? gst_imx_egl_viv_sink_egl_platform_set_coords(renderer->egl_platform, window_x_coord, window_y_coord) : TRUE;
+}
+
+
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_size(GstImxEglVivSinkGLES2Renderer *renderer, guint window_width, guint window_height)
+{
+	renderer->manual_width = window_width;
+	renderer->manual_height = window_height;
+	return renderer->thread_started ? gst_imx_egl_viv_sink_egl_platform_set_size(renderer->egl_platform, window_width, window_height) : TRUE;
+}
+
+
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_borderless_window(GstImxEglVivSinkGLES2Renderer *renderer, gboolean borderless_window)
+{
+	renderer->borderless = borderless_window;
+	return renderer->thread_started ? gst_imx_egl_viv_sink_egl_platform_set_borderless(renderer->egl_platform, borderless_window) : TRUE;
 }
 
 

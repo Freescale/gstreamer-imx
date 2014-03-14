@@ -51,6 +51,9 @@ struct _GstImxEglVivSink
 	GstVideoInfo video_info;
 	guintptr window_handle;
 	gboolean handle_events, fullscreen, force_aspect_ratio;
+	gint window_x_coord, window_y_coord;
+	guint window_width, window_height;
+	gboolean borderless_window;
 	gchar *native_display_name;
 	GMutex renderer_access_mutex;
 };

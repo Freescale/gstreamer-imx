@@ -41,13 +41,23 @@ enum
 	PROP_0,
 	PROP_FULLSCREEN,
 	PROP_FORCE_ASPECT_RATIO,
-	PROP_NATIVE_DISPLAY
+	PROP_NATIVE_DISPLAY,
+	PROP_WINDOW_X_COORD,
+	PROP_WINDOW_Y_COORD,
+	PROP_WINDOW_WIDTH,
+	PROP_WINDOW_HEIGHT,
+	PROP_BORDERLESS_WINDOW
 };
 
 
 #define DEFAULT_FULLSCREEN FALSE
 #define DEFAULT_FORCE_ASPECT_RATIO TRUE
 #define DEFAULT_NATIVE_DISPLAY NULL
+#define DEFAULT_WINDOW_X_COORD 0
+#define DEFAULT_WINDOW_Y_COORD 0
+#define DEFAULT_WINDOW_WIDTH 0
+#define DEFAULT_WINDOW_HEIGHT 0
+#define DEFAULT_BORDERLESS_WINDOW FALSE
 
 
 #ifdef HAVE_VIV_I420
@@ -198,7 +208,65 @@ void gst_imx_egl_viv_sink_class_init(GstImxEglVivSinkClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
-
+	g_object_class_install_property(
+		object_class,
+		PROP_WINDOW_X_COORD,
+		g_param_spec_int(
+			"window-x-coord",
+			"Window x coordinate",
+			"X coordinate of the window's top left corner, in pixels",
+			G_MININT, G_MAXINT,
+			DEFAULT_WINDOW_X_COORD,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_WINDOW_Y_COORD,
+		g_param_spec_int(
+			"window-y-coord",
+			"Window y coordinate",
+			"Y coordinate of the window's top left corner, in pixels",
+			G_MININT, G_MAXINT,
+			DEFAULT_WINDOW_Y_COORD,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_WINDOW_WIDTH,
+		g_param_spec_uint(
+			"window-width",
+			"Window width",
+			"Window width, in pixels (0 = automatically set to the video input width)",
+			0, G_MAXINT,
+			DEFAULT_WINDOW_WIDTH,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_WINDOW_HEIGHT,
+		g_param_spec_uint(
+			"window-height",
+			"Window height",
+			"Window height, in pixels (0 = automatically set to the video input height)",
+			0, G_MAXINT,
+			DEFAULT_WINDOW_HEIGHT,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_BORDERLESS_WINDOW,
+		g_param_spec_boolean(
+			"borderless-window",
+			"Borderless window",
+			"Disable window borders, bypassing any window manager",
+			DEFAULT_BORDERLESS_WINDOW,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -338,6 +406,96 @@ static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GV
 			break;
 		}
 
+		case PROP_WINDOW_X_COORD:
+		{
+			gint i = g_value_get_int(value);
+
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				if (i != egl_viv_sink->window_x_coord)
+				{
+					egl_viv_sink->window_x_coord = i;
+					if (egl_viv_sink->gles2_renderer != NULL)
+						gst_imx_egl_viv_sink_gles2_renderer_set_window_size(egl_viv_sink->gles2_renderer, i, egl_viv_sink->window_y_coord);
+				}
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+
+			break;
+		}
+
+		case PROP_WINDOW_Y_COORD:
+		{
+			gint i = g_value_get_int(value);
+
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				if (i != egl_viv_sink->window_y_coord)
+				{
+					egl_viv_sink->window_y_coord = i;
+					if (egl_viv_sink->gles2_renderer != NULL)
+						gst_imx_egl_viv_sink_gles2_renderer_set_window_size(egl_viv_sink->gles2_renderer, egl_viv_sink->window_x_coord, i);
+				}
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+
+			break;
+		}
+
+		case PROP_WINDOW_WIDTH:
+		{
+			guint i = g_value_get_uint(value);
+
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				if (i != egl_viv_sink->window_width)
+				{
+					egl_viv_sink->window_width = i;
+					if (egl_viv_sink->gles2_renderer != NULL)
+						gst_imx_egl_viv_sink_gles2_renderer_set_window_size(egl_viv_sink->gles2_renderer, i, egl_viv_sink->window_height);
+				}
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+
+			break;
+		}
+
+		case PROP_WINDOW_HEIGHT:
+		{
+			guint i = g_value_get_uint(value);
+
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				if (i != egl_viv_sink->window_height)
+				{
+					egl_viv_sink->window_height = i;
+					if (egl_viv_sink->gles2_renderer != NULL)
+						gst_imx_egl_viv_sink_gles2_renderer_set_window_size(egl_viv_sink->gles2_renderer, egl_viv_sink->window_width, i);
+				}
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+
+			break;
+		}
+
+		case PROP_BORDERLESS_WINDOW:
+		{
+			gboolean b = g_value_get_boolean(value);
+
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				if (b != egl_viv_sink->borderless_window)
+				{
+					egl_viv_sink->borderless_window = b;
+					if (egl_viv_sink->gles2_renderer != NULL)
+						gst_imx_egl_viv_sink_gles2_renderer_set_borderless_window(egl_viv_sink->gles2_renderer, b);
+				}
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+
+			break;
+		}
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -366,6 +524,36 @@ static void gst_imx_egl_viv_sink_get_property(GObject *object, guint prop_id, GV
 		case PROP_NATIVE_DISPLAY:
 			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
 			g_value_set_string(value, egl_viv_sink->native_display_name);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+
+		case PROP_WINDOW_X_COORD:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			g_value_set_int(value, egl_viv_sink->window_x_coord);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+
+		case PROP_WINDOW_Y_COORD:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			g_value_set_int(value, egl_viv_sink->window_y_coord);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+
+		case PROP_WINDOW_WIDTH:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			g_value_set_uint(value, egl_viv_sink->window_width);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+
+		case PROP_WINDOW_HEIGHT:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			g_value_set_uint(value, egl_viv_sink->window_height);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+
+		case PROP_BORDERLESS_WINDOW:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			g_value_set_boolean(value, egl_viv_sink->borderless_window);
 			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
 			break;
 
@@ -461,6 +649,9 @@ static gboolean gst_imx_egl_viv_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_video_info(egl_viv_sink->gles2_renderer, &(egl_viv_sink->video_info));
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_fullscreen(egl_viv_sink->gles2_renderer, egl_viv_sink->fullscreen);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_force_aspect_ratio(egl_viv_sink->gles2_renderer, egl_viv_sink->force_aspect_ratio);
+		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_window_coords(egl_viv_sink->gles2_renderer, egl_viv_sink->window_x_coord, egl_viv_sink->window_y_coord);
+		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_window_size(egl_viv_sink->gles2_renderer, egl_viv_sink->window_width, egl_viv_sink->window_height);
+		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_borderless_window(egl_viv_sink->gles2_renderer, egl_viv_sink->borderless_window);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_start(egl_viv_sink->gles2_renderer);
 	}
 	else

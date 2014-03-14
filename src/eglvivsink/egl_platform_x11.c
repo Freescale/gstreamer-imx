@@ -112,7 +112,7 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 }
 
 
-gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, guintptr window_handle, gboolean event_handling, GstVideoInfo *video_info, gboolean fullscreen)
+gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, guintptr window_handle, gboolean event_handling, GstVideoInfo *video_info, gboolean fullscreen, gint x_coord, gint y_coord, guint width, guint height, gboolean borderless)
 {
 	EGLint num_configs;
 	EGLConfig config;
@@ -183,7 +183,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		attr.border_pixmap     = CopyFromParent;
 		attr.border_pixel      = BlackPixel(x11_display, screen_num);
 		attr.backing_store     = NotUseful;
-		attr.override_redirect = False;
+		attr.override_redirect = borderless ? True : False;
 		attr.cursor            = None;
 
 		if (window_handle != 0)
@@ -201,7 +201,10 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		 * the parent of the video playback window. */
 		x11_window = XCreateWindow(
 			x11_display, (window_handle != 0) ? platform->parent_window : root_window,
-			0, 0, GST_VIDEO_INFO_WIDTH(video_info), GST_VIDEO_INFO_HEIGHT(video_info),
+			x_coord,
+			y_coord,
+			(width != 0) ? (gint)width : GST_VIDEO_INFO_WIDTH(video_info),
+			(height != 0) ? (gint)height : GST_VIDEO_INFO_HEIGHT(video_info),
 			0, visual_info->depth, InputOutput, visual_info->visual,
 			CWBackPixel | CWColormap  | CWBorderPixel | CWBackingStore | CWOverrideRedirect,
 			&attr
@@ -502,6 +505,44 @@ GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_even
 	}
 
 	return expose_required ? GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_EXPOSE_REQUIRED : GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_OK;
+}
+
+
+gboolean gst_imx_egl_viv_sink_egl_platform_set_coords(GstImxEglVivSinkEGLPlatform *platform, gint x_coord, gint y_coord)
+{
+	if (platform->parent_window != 0)
+	{
+		Display *x11_display = (Display *)(platform->native_display);
+		Window this_window = (Window)(platform->native_window);
+		XMoveWindow(x11_display, this_window, x_coord, y_coord);
+	}
+	return TRUE;
+}
+
+
+gboolean gst_imx_egl_viv_sink_egl_platform_set_size(GstImxEglVivSinkEGLPlatform *platform, guint width, guint height)
+{
+	if (platform->parent_window != 0)
+	{
+		Display *x11_display = (Display *)(platform->native_display);
+		Window this_window = (Window)(platform->native_window);
+		XResizeWindow(x11_display, this_window, width, height);
+	}
+	return TRUE;
+}
+
+
+gboolean gst_imx_egl_viv_sink_egl_platform_set_borderless(GstImxEglVivSinkEGLPlatform *platform, gboolean borderless)
+{
+	XSetWindowAttributes attr;
+	Display *x11_display = (Display *)(platform->native_display);
+	Window this_window = (Window)(platform->native_window);
+
+	attr.override_redirect = borderless ? True : False;
+	XChangeWindowAttributes(x11_display, this_window, CWOverrideRedirect, &attr);
+	XRaiseWindow(x11_display, this_window);
+
+	return TRUE;
 }
 
 
