@@ -97,11 +97,11 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 }
 
 
-gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED guintptr window_handle, G_GNUC_UNUSED gboolean event_handling, G_GNUC_UNUSED GstVideoInfo *video_info, G_GNUC_UNUSED gboolean fullscreen)
+gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED guintptr window_handle, G_GNUC_UNUSED gboolean event_handling, G_GNUC_UNUSED GstVideoInfo *video_info, G_GNUC_UNUSED gboolean fullscreen, gint x_coord, gint y_coord, guint width, guint height, G_GNUC_UNUSED gboolean borderless)
 {
 	EGLint num_configs;
 	EGLConfig config;
-	int x, y, width, height;
+	int actual_x, actual_y, actual_width, actual_height;
 
 	static EGLint const eglconfig_attribs[] =
 	{
@@ -125,10 +125,10 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		return FALSE;
 	}
 
-	platform->native_window = fbCreateWindow(platform->native_display, 0, 0, 0, 0);
+	platform->native_window = fbCreateWindow(platform->native_display, x_coord, y_coord, width, height);
 
-	fbGetWindowGeometry(platform->native_window, &x, &y, &width, &height);
-	GST_DEBUG("fbGetWindowGeometry: x/y %d/%d width/height %d/%d", x, y, width, height);
+	fbGetWindowGeometry(platform->native_window, &actual_x, &actual_y, &actual_width, &actual_height);
+	GST_LOG("fbGetWindowGeometry: x/y %d/%d width/height %d/%d", actual_x, actual_y, actual_width, actual_height);
 
 	eglBindAPI(EGL_OPENGL_ES_API);
 
@@ -138,9 +138,9 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 	eglMakeCurrent(platform->egl_display, platform->egl_surface, platform->egl_surface, platform->egl_context);
 
 	if (platform->window_resized_event_cb != NULL)
-		platform->window_resized_event_cb(platform, width, height, platform->user_context);
+		platform->window_resized_event_cb(platform, actual_width, actual_height, platform->user_context);
 	else
-		glViewport(x, y, width, height);
+		glViewport(actual_x, actual_y, actual_width, actual_height);
 
 	return TRUE;
 }
@@ -221,5 +221,23 @@ GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_even
 	}
 
 	return expose_required ? GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_EXPOSE_REQUIRED : GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_OK;
+}
+
+
+gboolean gst_imx_egl_viv_sink_egl_platform_set_coords(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED gint x_coord, G_GNUC_UNUSED gint y_coord)
+{
+	return TRUE;
+}
+
+
+gboolean gst_imx_egl_viv_sink_egl_platform_set_size(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED guint width, G_GNUC_UNUSED guint height)
+{
+	return TRUE;
+}
+
+
+gboolean gst_imx_egl_viv_sink_egl_platform_set_borderless(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED gboolean borderless)
+{
+	return TRUE;
 }
 
