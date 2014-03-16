@@ -83,6 +83,22 @@
  * condition. The condition is also signaled if for some other reason the decoder should no longer wait
  * (for example, when stopping, or when switching format).
  *
+ * Two additional counters exist: decremented_availbuf_counter and num_framebuffers_in_buffers . The former
+ * counts the times num_available_framebuffers has been decremented. This is necessary to make sure the
+ * value of num_available_framebuffers is not decremented in the release_buffer vfunc (in fb_buffer_pool.c) unless
+ * it is required.
+ * num_framebuffers_in_buffers counts how many VPU framebuffers are currently inside GstBuffers and have not been
+ * made available again by calling VPU_DecOutFrameDisplayed() yet. This counter is necessary to handle the case
+ * when recalculate_num_avail_framebuffers is true. Then, the value of num_additional_framebuffers is calculated
+ * this way:  num_additional_framebuffers = num_framebuffers - num_framebuffers_in_buffers , because this is how
+ * the VPU wrapper internally operates: after VPU_DecFlushAll() and the subsequent VPU_DecDecodeBuf() call, the
+ * wrapper will return all framebuffers to the free framebuffer pool except for the ones who contain output data
+ * and have not been marked as displayed (= free) yet.
+ *
+ * (These counters would all not be necessary if it were possible to query the number of free framebuffers from
+ * the VPU wrapper directly, but currently, no such function is present in the wrapper API, and without this
+ * number, it is not possible to let the decoder wait until enough frames are free..)
+ *
  * Currently, the minimum number of free output framebuffers is 6, meaning that the num_available_framebuffers
  * counter must always be at least at that value. Combined with the maximum number of frames h.264 could require
  * with frame reordering (which is 17 frames), this means that up to 23 frames will have to be allocated with the

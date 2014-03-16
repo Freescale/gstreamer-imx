@@ -58,10 +58,19 @@ struct _GstImxVpuDec
 
 	GstBuffer *codec_data;
 
+	/* set of framebuffers currently registered and in use by the decoder */
 	GstImxVpuFramebuffers *current_framebuffers;
+	/* number of framebuffers allocated in addition to the minimum number indicated
+	 *by the VPU and the number of framebuffers that must be free at all times */
 	guint num_additional_framebuffers;
+	/* if true, the number of available framebuffers will be recalculated
+	 * after the next VPU_DecDecodeBuf() call ; this value is true after the
+	 * reset() vfunc is called (not to be confused with VPU_DecReset() ) */
 	gboolean recalculate_num_avail_framebuffers;
-	gboolean no_explicit_frame_boundary; /* if TRUE, it means VPU_DEC_ONE_FRM_CONSUMED will never be returned by the decoder function */
+	/* if true, it means VPU_DecDecodeBuf() will never return the
+	 * VPU_DEC_ONE_FRM_CONSUMED output flag, and therefore, consumed frame info
+	 * cannot be used for associating input and output frames */
+	gboolean no_explicit_frame_boundary;
 
 	GstVideoCodecState *current_output_state;
 
