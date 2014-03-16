@@ -542,12 +542,21 @@ static void gst_imx_vpu_dec_close_decoder(GstImxVpuDec *vpu_dec)
 	if (vpu_dec->vpu_inst_opened)
 	{
 		dec_ret = VPU_DecFlushAll(vpu_dec->handle);
-		if (dec_ret != VPU_DEC_RET_SUCCESS)
+		if (dec_ret == VPU_DEC_RET_FAILURE_TIMEOUT)
+		{
+			GST_WARNING_OBJECT(vpu_dec, "resetting decoder after a timeout occurred");
+			dec_ret = VPU_DecReset(vpu_dec->handle);
+			if (dec_ret != VPU_DEC_RET_SUCCESS)
+				GST_ERROR_OBJECT(vpu_dec, "resetting decoder failed: %s", gst_imx_vpu_strerror(dec_ret));
+		}
+		else if (dec_ret != VPU_DEC_RET_SUCCESS)
 			GST_ERROR_OBJECT(vpu_dec, "flushing decoder failed: %s", gst_imx_vpu_strerror(dec_ret));
 
 		dec_ret = VPU_DecClose(vpu_dec->handle);
 		if (dec_ret != VPU_DEC_RET_SUCCESS)
 			GST_ERROR_OBJECT(vpu_dec, "closing decoder failed: %s", gst_imx_vpu_strerror(dec_ret));
+
+		GST_INFO_OBJECT(vpu_dec, "VPU decoder closed");
 
 		vpu_dec->vpu_inst_opened = FALSE;
 	}
@@ -567,6 +576,8 @@ static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder)
 
 	vpu_dec = GST_IMX_VPU_DEC(decoder);
 	klass = GST_IMX_VPU_DEC_CLASS(G_OBJECT_GET_CLASS(vpu_dec));
+
+	GST_INFO_OBJECT(vpu_dec, "starting VPU decoder");
 
 #define VPUINIT_ERR(RET, DESC, UNLOAD) \
 	if ((RET) != VPU_DEC_RET_SUCCESS) \
@@ -627,6 +638,8 @@ static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder)
 	/* The decoder is initialized in set_format, not here, since only then the input bitstream
 	 * format is known (and this information is necessary for initialization). */
 
+	GST_INFO_OBJECT(vpu_dec, "VPU decoder started");
+
 	return TRUE;
 }
 
@@ -676,6 +689,8 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 		g_hash_table_destroy(vpu_dec->frame_table);
 		vpu_dec->frame_table = NULL;
 	}
+
+	GST_INFO_OBJECT(vpu_dec, "VPU decoder stopped");
 
 	g_mutex_lock(&inst_counter_mutex);
 	if (klass->inst_counter > 0)
@@ -928,7 +943,18 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	if (buffer_ret_code & VPU_DEC_FLUSH)
 	{
 		dec_ret = VPU_DecFlushAll(vpu_dec->handle);
-		if (dec_ret != VPU_DEC_RET_SUCCESS)
+
+		if (dec_ret == VPU_DEC_RET_FAILURE_TIMEOUT)
+		{
+			GST_WARNING_OBJECT(vpu_dec, "resetting decoder after a timeout occurred");
+			dec_ret = VPU_DecReset(vpu_dec->handle);
+			if (dec_ret != VPU_DEC_RET_SUCCESS)
+			{
+				GST_ERROR_OBJECT(vpu_dec, "resetting decoder failed: %s", gst_imx_vpu_strerror(dec_ret));
+				return GST_FLOW_ERROR;
+			}
+		}
+		else if (dec_ret != VPU_DEC_RET_SUCCESS)
 		{
 			GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_imx_vpu_strerror(dec_ret));
 			return GST_FLOW_ERROR;
@@ -1180,6 +1206,16 @@ static gboolean gst_imx_vpu_dec_reset(GstVideoDecoder *decoder, G_GNUC_UNUSED gb
 		if (vpu_dec->flush_vpu_upon_reset)
 		{
 			ret = VPU_DecFlushAll(vpu_dec->handle);
+
+			if (ret == VPU_DEC_RET_FAILURE_TIMEOUT)
+			{
+				GST_WARNING_OBJECT(vpu_dec, "resetting decoder after a timeout occurred");
+				ret = VPU_DecReset(vpu_dec->handle);
+				if (ret != VPU_DEC_RET_SUCCESS)
+					GST_ERROR_OBJECT(vpu_dec, "resetting decoder failed: %s", gst_imx_vpu_strerror(ret));
+			}
+			else if (ret != VPU_DEC_RET_SUCCESS)
+				GST_ERROR_OBJECT(vpu_dec, "flushing VPU failed: %s", gst_imx_vpu_strerror(ret));
 
 			vpu_dec->recalculate_num_avail_framebuffers = TRUE;
 		}
