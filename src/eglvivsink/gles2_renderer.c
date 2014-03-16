@@ -1006,7 +1006,6 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_handle(GstImxEglVivSinkG
 	{
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_stop(renderer);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_start(renderer);
-		/* TODO: set window x,y,width,height again */
 	}
 
 	return ret;
