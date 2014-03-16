@@ -853,6 +853,11 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		in_data.nSize = in_map_info.size;
 	}
 
+	/* cur_frame is NULL if handle_frame() is being called inside finish(); in other words,
+	 * when the decoder is shutting down, and output frames are being flushed.
+	 * This requires the decoder output mode to have been set to DRAIN before, which is
+	 * done in finish(). */
+
 	if (vpu_dec->codec_data != NULL)
 	{
 		gst_buffer_map(vpu_dec->codec_data, &codecdata_map_info, GST_MAP_READ);
@@ -1256,6 +1261,7 @@ static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder)
 	if (!vpu_dec->vpu_inst_opened)
 		return TRUE;
 
+	/* need to flush any output framebuffers present inside the VPU */
 	if (vpu_dec->current_framebuffers != NULL)
 	{
 		int config_param;
@@ -1263,6 +1269,8 @@ static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder)
 
 		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
 
+		/* first, set the output mode to DRAIN, to instruct the VPU to
+		 * flush output framebuffers and not expect any more input */
 		GST_INFO_OBJECT(vpu_dec, "setting VPU decoder in drain mode");
 		config_param = VPU_DEC_IN_DRAIN;
 		vpu_ret = VPU_DecConfig(vpu_dec->handle, VPU_DEC_CONF_INPUTTYPE, &config_param);
@@ -1279,6 +1287,7 @@ static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder)
 
 			GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 
+			/* get as many output frames as possible, until the decoder reports the EOS */
 			GST_INFO_OBJECT(vpu_dec, "pushing out all remaining unfinished frames");
 			while (TRUE)
 			{
