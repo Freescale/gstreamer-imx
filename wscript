@@ -92,10 +92,6 @@ def configure(conf):
 	conf.check_cfg(package = 'gstreamer-base-1.0 >= 1.0.0', uselib_store = 'GSTREAMER_BASE', args = '--cflags --libs', mandatory = 1)
 	conf.check_cfg(package = 'gstreamer-video-1.0 >= 1.0.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 1)
 
-	# test for Freescale libraries
-
-	conf.check_cfg(package = 'libfslvpuwrap', uselib_store = 'FSLVPUWRAPPER', args = '--cflags --libs', mandatory = 1)
-
 
 	# misc definitions & env vars
 
