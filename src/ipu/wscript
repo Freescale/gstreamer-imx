@@ -10,8 +10,25 @@ def configure(conf):
 	from waflib.Build import Logs
 	incpaths = []
 	notfound = None
+	with_uapi = conf.check_cc(fragment = '''
+		#include <linux/version.h>
+		int main() {
+		#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 5, 0)
+			return 0;
+		#else
+		#error fail
+		#endif
+		}
+		''',
+		mandatory = False,
+		execute = False,
+		msg = 'checking whether or not the kernel version is greater than 3.5.0'
+	)
 	if conf.options.kernel_headers:
-		incpaths += [os.path.abspath(os.path.expanduser(conf.options.kernel_headers))]
+		kernel_headers_fullpath = os.path.abspath(os.path.expanduser(conf.options.kernel_headers))
+		if with_uapi:
+			incpaths += [os.path.join(kernel_headers_fullpath, 'uapi')]
+		incpaths += [kernel_headers_fullpath]
 	if conf.check_cc(fragment = '''
 		#include <sys/types.h>
 		#include <linux/fb.h>
