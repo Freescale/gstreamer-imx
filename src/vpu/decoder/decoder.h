@@ -76,6 +76,11 @@ struct _GstImxVpuDec
 
 	GSList *virt_dec_mem_blocks, *phys_dec_mem_blocks;
 
+	/* the first time VPU_DecDecodeBuf() is called, for most formats, a delay of one frame
+	 * happens at the beginning, in addition to any codec related delay -> handle this by
+	 * storing the system frame number of the *last* input frame seen in handle_frame() */
+	gint last_sys_frame_num;
+
 	GHashTable *frame_table;
 };
 
