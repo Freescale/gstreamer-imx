@@ -1,3 +1,4 @@
-1. Wayland support in eglvivsink
-2. eglvivsink+ipuvideotransform (with deinterlacing)+playbin sometimes cause the IPU to report errors; cause is unknown
-3. motion JPEG encoder
+1. eglvivsink videooverlay functionality needs to be tested, in particular how well it works with embedding
+2. Wayland support in eglvivsink
+3. eglvivsink+ipuvideotransform (with deinterlacing)+playbin sometimes cause the IPU to report errors; cause is unknown
+4. motion JPEG encoder
