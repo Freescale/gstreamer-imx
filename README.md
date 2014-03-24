@@ -34,7 +34,7 @@ Available plugins
 Dependencies
 ------------
 
-You'll need a GStreamer 1.0 installation, and Freescale's VPU wrapper library (at least version 1.0.17).
+You'll need a GStreamer 1.2 installation, and Freescale's VPU wrapper library (at least version 1.0.45).
 
 
 Building and installing

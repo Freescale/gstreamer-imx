@@ -88,9 +88,9 @@ def configure(conf):
 
 	# test for GStreamer libraries
 
-	conf.check_cfg(package = 'gstreamer-1.0 >= 1.0.0', uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
-	conf.check_cfg(package = 'gstreamer-base-1.0 >= 1.0.0', uselib_store = 'GSTREAMER_BASE', args = '--cflags --libs', mandatory = 1)
-	conf.check_cfg(package = 'gstreamer-video-1.0 >= 1.0.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 1)
+	conf.check_cfg(package = 'gstreamer-1.0 >= 1.2.0', uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
+	conf.check_cfg(package = 'gstreamer-base-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_BASE', args = '--cflags --libs', mandatory = 1)
+	conf.check_cfg(package = 'gstreamer-video-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 1)
 
 
 	# misc definitions & env vars

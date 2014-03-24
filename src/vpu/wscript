@@ -2,7 +2,7 @@
 
 
 def configure(conf):
-	conf.check_cfg(package = 'libfslvpuwrap', uselib_store = 'FSLVPUWRAPPER', args = '--cflags --libs', mandatory = 1)
+	conf.check_cfg(package = 'libfslvpuwrap >= 1.0.45', uselib_store = 'FSLVPUWRAPPER', args = '--cflags --libs', mandatory = 1)
 
 
 def build(bld):
