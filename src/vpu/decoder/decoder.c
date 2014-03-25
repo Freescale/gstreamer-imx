@@ -959,6 +959,9 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 			vpu_dec->current_output_state = NULL;
 		}
+
+		vpu_dec->delay_sys_frame_numbers = TRUE;
+		vpu_dec->last_sys_frame_number = cur_frame->system_frame_number;
 	}
 
 	if (buffer_ret_code & VPU_DEC_FLUSH)
@@ -989,6 +992,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		/* Not dropping frame here on purpose; the next input frame may
 		 * complete the input */
 		GST_DEBUG_OBJECT(vpu_dec, "need more input");
+		if ((cur_frame != NULL) && vpu_dec->delay_sys_frame_numbers)
+			vpu_dec->last_sys_frame_number = cur_frame->system_frame_number;
 		return GST_FLOW_OK;
 	}
 
@@ -1006,13 +1011,23 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		if (buffer_ret_code & VPU_DEC_ONE_FRM_CONSUMED)
 		{
 			VpuDecFrameLengthInfo dec_framelen_info;
+			gint frame_number;
 
 			dec_ret = VPU_DecGetConsumedFrameInfo(vpu_dec->handle, &dec_framelen_info);
 			if (dec_ret != VPU_DEC_RET_SUCCESS)
 				GST_ERROR_OBJECT(vpu_dec, "could not get information about consumed frame: %s", gst_imx_vpu_strerror(dec_ret));
 
+			if (vpu_dec->delay_sys_frame_numbers)
+				frame_number = vpu_dec->last_sys_frame_number;
+			else if (cur_frame != NULL)
+				frame_number = cur_frame->system_frame_number;
+			else
+				frame_number = -1;
+
 			if (cur_frame != NULL)
-				GST_LOG_OBJECT(vpu_dec, "one frame got consumed: cur_frame: %p  framebuffer: %p  system frame number: %u  stuff length: %d  frame length: %d", (gpointer)cur_frame, (gpointer)(dec_framelen_info.pFrame), cur_frame->system_frame_number, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
+				GST_LOG_OBJECT(vpu_dec, "one frame got consumed: cur_frame: %p  framebuffer: %p  system frame number: %u  stuff length: %d  frame length: %d", (gpointer)cur_frame, (gpointer)(dec_framelen_info.pFrame), frame_number, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
+			else if (frame_number != -1)
+				GST_LOG_OBJECT(vpu_dec, "one frame got consumed: (no cur_frame)  framebuffer: %p  system frame number: %u  stuff length: %d  frame length: %d", (gpointer)(dec_framelen_info.pFrame), frame_number, dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
 			else
 				GST_LOG_OBJECT(vpu_dec, "one frame got consumed: (no cur_frame)  framebuffer: %p  (no system frame number)  stuff length: %d  frame length: %d", (gpointer)(dec_framelen_info.pFrame), dec_framelen_info.nStuffLength, dec_framelen_info.nFrameLength);
 
@@ -1029,8 +1044,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * decoded frame will end up. Therefore, a hash table is used, which uses the framebuffer's
 			 * address as key, and the frame number as value. When the VPU wrapper reports a frame as
 			 * available for display, the associated frame number is looked up in this table. */
-			if (cur_frame != NULL)
-				g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(cur_frame->system_frame_number + 1));
+			if (frame_number != -1)
+				g_hash_table_replace(vpu_dec->frame_table, (gpointer)(dec_framelen_info.pFrame), (gpointer)(frame_number + 1));
 		}
 
 		/* If VPU_DEC_OUTPUT_DROPPED is set, then the internal counter will not be modified */
@@ -1049,6 +1064,11 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		/* Unlock the mutex; the subsequent steps are safe */
 		GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 	}
+
+	if (cur_frame != NULL)
+		vpu_dec->last_sys_frame_number = cur_frame->system_frame_number;
+	else
+		vpu_dec->last_sys_frame_number = -1;
 
 	if (buffer_ret_code & VPU_DEC_NO_ENOUGH_BUF)
 		GST_WARNING_OBJECT(vpu_dec, "no free output frame available (ret code: 0x%X)", buffer_ret_code);
@@ -1217,6 +1237,8 @@ static gboolean gst_imx_vpu_dec_flush(GstVideoDecoder *decoder)
 
 	if (!vpu_dec->vpu_inst_opened)
 		return TRUE;
+
+	vpu_dec->delay_sys_frame_numbers = FALSE;
 
 	if (vpu_dec->current_framebuffers != NULL)
 	{

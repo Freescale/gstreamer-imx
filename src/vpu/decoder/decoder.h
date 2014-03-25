@@ -72,6 +72,9 @@ struct _GstImxVpuDec
 	 * cannot be used for associating input and output frames */
 	gboolean no_explicit_frame_boundary;
 
+	gint last_sys_frame_number;
+	gboolean delay_sys_frame_numbers;
+
 	GstVideoCodecState *current_output_state;
 
 	GSList *virt_dec_mem_blocks, *phys_dec_mem_blocks;

@@ -166,6 +166,7 @@ void gst_imx_vpu_framebuffers_enc_init_info_to_params(VpuEncInitInfo *init_info,
 
 void gst_imx_vpu_framebuffers_set_flushing(GstImxVpuFramebuffers *framebuffers, gboolean flushing)
 {
+	GST_LOG_OBJECT(framebuffers, "setting flushing value to %d", flushing ? 1 : 0);
 	framebuffers->flushing = flushing;
 	if (flushing)
 		g_cond_signal(&(framebuffers->cond));
