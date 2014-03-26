@@ -838,7 +838,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	GstMapInfo in_map_info;
 	GstMapInfo codecdata_map_info;
 	GstImxVpuDec *vpu_dec;
-	gboolean dealloc_input_frame = TRUE;
 
 	vpu_dec = GST_IMX_VPU_DEC(decoder);
 
@@ -1092,12 +1091,12 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 			GST_VIDEO_CODEC_FRAME_SET_DECODE_ONLY(cur_frame);
 			gst_video_decoder_finish_frame(decoder, cur_frame);
-			dealloc_input_frame = FALSE;
+
+			/* not unref'ing cur_frame here, since it hasn't been
+			 * ref'd before (it has not been retrieved by using get_frame()
+			 * or get_oldest_frame() here) */
 		}
 	}
-
-	if (cur_frame != NULL)
-		GST_LOG_OBJECT(vpu_dec, "frame %d decode only: %d", cur_frame->system_frame_number, dealloc_input_frame ? 0 : 1);
 
 	if (buffer_ret_code & VPU_DEC_OUTPUT_DIS)
 	{
@@ -1175,6 +1174,9 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			GST_LOG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %p  system frame number: <none; oldest frame>  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gpointer)(out_frame_info.pDisplayFrameBuf->pbufY), (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
 		}
 
+		/* Unref output frame, since get_frame() and get_oldest_frame() ref it */
+		gst_video_codec_frame_unref(out_frame);
+
 		/* If a framebuffer is sent downstream directly, it will
 		 * have to be marked later as displayed after it was used,
 		 * to allow the VPU wrapper to reuse it for new decoded
@@ -1217,6 +1219,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_DROPPED)
 	{
 		GstVideoCodecFrame *out_frame = gst_video_decoder_get_oldest_frame(decoder);
+		gst_video_codec_frame_unref(out_frame);
 		gst_video_decoder_drop_frame(decoder, out_frame);
 
 		GST_DEBUG_OBJECT(vpu_dec, "VPU dropped output frame internally");
@@ -1224,8 +1227,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	else
 		GST_DEBUG_OBJECT(vpu_dec, "nothing to output (ret code: 0x%X)", buffer_ret_code);
 
-	if ((cur_frame != NULL) && dealloc_input_frame)
-		gst_video_codec_frame_unref(cur_frame);
 
 	return (buffer_ret_code & VPU_DEC_OUTPUT_EOS) ? GST_FLOW_EOS : GST_FLOW_OK;
 }
