@@ -23,6 +23,7 @@
 #include "encoder/encoder_h263.h"
 #include "encoder/encoder_h264.h"
 #include "encoder/encoder_mpeg4.h"
+#include "encoder/encoder_mjpeg.h"
 
 
 
@@ -33,6 +34,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 	ret = ret && gst_element_register(plugin, "imxvpuenc_h263", GST_RANK_PRIMARY + 1, gst_imx_vpu_h263_enc_get_type());
 	ret = ret && gst_element_register(plugin, "imxvpuenc_h264", GST_RANK_PRIMARY + 1, gst_imx_vpu_h264_enc_get_type());
 	ret = ret && gst_element_register(plugin, "imxvpuenc_mpeg4", GST_RANK_PRIMARY + 1, gst_imx_vpu_mpeg4_enc_get_type());
+	ret = ret && gst_element_register(plugin, "imxvpuenc_mjpeg", GST_RANK_PRIMARY + 1, gst_imx_vpu_mjpeg_enc_get_type());
 	return ret;
 }
 
