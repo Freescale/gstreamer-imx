@@ -25,6 +25,7 @@ Available plugins
 * `imxvpuenc_h263` : h.263 encoder
 * `imxvpuenc_h264` : h.264 baseline profile Annex.B encoder
 * `imxvpuenc_mpeg4` : MPEG-4 encoder
+* `imxvpuenc_mjpeg` : Motion JPEG encoder
 * `imxipusink` : video sink using the IPU to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxipuvideotransform` : video transform element using the IPU, capable of scaling, deinterlacing, rotating (in 90 degree steps), flipping frames, and converting between color spaces
 * `imxeglvivsink` : custom OpenGL ES 2.x based video sink; using the Vivante direct textures, which allow for smooth playback
