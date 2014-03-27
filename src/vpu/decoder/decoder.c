@@ -1174,9 +1174,6 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			GST_LOG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %p  system frame number: <none; oldest frame>  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gpointer)(out_frame_info.pDisplayFrameBuf->pbufY), (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
 		}
 
-		/* Unref output frame, since get_frame() and get_oldest_frame() ref it */
-		gst_video_codec_frame_unref(out_frame);
-
 		/* If a framebuffer is sent downstream directly, it will
 		 * have to be marked later as displayed after it was used,
 		 * to allow the VPU wrapper to reuse it for new decoded
@@ -1184,9 +1181,20 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		 * used yet, mark it now as undisplayed. */
 		gst_imx_vpu_mark_buf_as_not_displayed(buffer);
 
-		out_frame->output_buffer = buffer;
+		if (out_frame != NULL)
+		{
+			/* Unref output frame, since get_frame() and get_oldest_frame() ref it */
+			gst_video_codec_frame_unref(out_frame);
 
-		gst_video_decoder_finish_frame(decoder, out_frame);
+			out_frame->output_buffer = buffer;
+			gst_video_decoder_finish_frame(decoder, out_frame);
+		}
+		else
+		{
+			/* In rare cases (mainly with VC-1), there may not be any frames left to handle while flushing
+			 * If such a case occurs, just discard the output buffer, since it cannot be used anywhere */
+			gst_buffer_unref(buffer);
+		}
 	}
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_MOSAIC_DIS)
 	{
