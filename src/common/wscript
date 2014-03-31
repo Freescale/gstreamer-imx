@@ -11,7 +11,7 @@ def build(bld):
 		includes = ['.', '../..'],
 		uselib = bld.env['COMMON_USELIB'],
 		target = 'gstimxcommon',
-		vnum = '0.9.1',
+		vnum = '0.9.5',
 		source = bld.path.ant_glob('*.c')
 	)
 
