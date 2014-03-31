@@ -122,6 +122,8 @@ GType gst_imx_ipu_blitter_deinterlace_mode_get_type(void);
 
 GType gst_imx_ipu_blitter_get_type(void);
 
+gboolean gst_imx_ipu_blitter_open_device(GstImxIpuBlitter *ipu_blitter);
+
 void gst_imx_ipu_blitter_enable_crop(GstImxIpuBlitter *ipu_blitter, gboolean crop);
 gboolean gst_imx_ipu_blitter_is_crop_enabled(GstImxIpuBlitter *ipu_blitter);
 

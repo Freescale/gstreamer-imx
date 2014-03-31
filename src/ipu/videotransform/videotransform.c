@@ -82,7 +82,7 @@ G_DEFINE_TYPE(GstImxIpuVideoTransform, gst_imx_ipu_video_transform, GST_TYPE_VID
 
 
 static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement *element, GstStateChange transition);
-static void gst_imx_ipu_video_transform_init_device(GstImxIpuVideoTransform *ipu_video_transform);
+static gboolean gst_imx_ipu_video_transform_init_device(GstImxIpuVideoTransform *ipu_video_transform);
 static void gst_imx_ipu_video_transform_uninit_device(GstImxIpuVideoTransform *ipu_video_transform);
 static void gst_imx_ipu_video_transform_finalize(GObject *object);
 static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
@@ -209,9 +209,15 @@ static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement 
 	{
 		case GST_STATE_CHANGE_NULL_TO_READY:
 		{
+			gboolean b;
+
 			LOCK_BLITTER_MUTEX(ipu_video_transform);
-			gst_imx_ipu_video_transform_init_device(ipu_video_transform);
+			b = gst_imx_ipu_video_transform_init_device(ipu_video_transform);
 			UNLOCK_BLITTER_MUTEX(ipu_video_transform);
+
+			if (!b)
+				return GST_STATE_CHANGE_FAILURE;
+
 			break;
 		}
 
@@ -241,16 +247,21 @@ static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement 
 }
 
 
-static void gst_imx_ipu_video_transform_init_device(GstImxIpuVideoTransform *ipu_video_transform)
+static gboolean gst_imx_ipu_video_transform_init_device(GstImxIpuVideoTransform *ipu_video_transform)
 {
 	/* must be called with lock */
 
 	g_assert(ipu_video_transform->priv != NULL);
 	ipu_video_transform->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
 
+	if (!gst_imx_ipu_blitter_open_device(ipu_video_transform->priv->blitter))
+		return FALSE;
+
 	gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_transform->priv->blitter, ipu_video_transform->priv->output_rotation);
 	gst_imx_ipu_blitter_enable_crop(ipu_video_transform->priv->blitter, ipu_video_transform->priv->input_crop);
 	gst_imx_ipu_blitter_set_deinterlace_mode(ipu_video_transform->priv->blitter, ipu_video_transform->priv->deinterlace_mode);
+
+	return TRUE;
 }
 
 

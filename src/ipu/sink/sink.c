@@ -231,6 +231,13 @@ static gboolean gst_imx_ipu_sink_init_device(GstImxIpuSink *ipu_sink)
 
 	ipu_sink->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
 
+	if (!gst_imx_ipu_blitter_open_device(ipu_sink->priv->blitter))
+	{
+		close(ipu_sink->priv->framebuffer_fd);
+		ipu_sink->priv->framebuffer_fd = -1;
+		return FALSE;
+	}
+
 	gst_imx_ipu_blitter_set_output_rotation_mode(ipu_sink->priv->blitter, ipu_sink->priv->output_rotation);
 	gst_imx_ipu_blitter_enable_crop(ipu_sink->priv->blitter, ipu_sink->priv->input_crop);
 	gst_imx_ipu_blitter_set_deinterlace_mode(ipu_sink->priv->blitter, ipu_sink->priv->deinterlace_mode);
@@ -238,6 +245,8 @@ static gboolean gst_imx_ipu_sink_init_device(GstImxIpuSink *ipu_sink)
 	ipu_sink->priv->fb_buffer = gst_imx_ipu_blitter_wrap_framebuffer(ipu_sink->priv->blitter, ipu_sink->priv->framebuffer_fd, 0, 0, 0, 0);
 	if (ipu_sink->priv->fb_buffer == NULL)
 	{
+		close(ipu_sink->priv->framebuffer_fd);
+		ipu_sink->priv->framebuffer_fd = -1;
 		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("wrapping framebuffer in GstBuffer failed"), (NULL));
 		return FALSE;
 	}

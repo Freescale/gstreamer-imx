@@ -182,13 +182,7 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 {
 	ipu_blitter->priv = g_slice_alloc(sizeof(GstImxIpuBlitterPrivate));
 
-	/* This FD is necessary for using the IPU ioctls */
-	ipu_blitter->priv->ipu_fd = open("/dev/mxc_ipu", O_RDWR, 0);
-	if (ipu_blitter->priv->ipu_fd < 0)
-	{
-		GST_ELEMENT_ERROR(ipu_blitter, RESOURCE, OPEN_READ_WRITE, ("could not open /dev/mxc_ipu: %s", strerror(errno)), (NULL));
-		return;
-	}
+	ipu_blitter->priv->ipu_fd = -1;
 
 	ipu_blitter->internal_bufferpool = NULL;
 	ipu_blitter->actual_input_buffer = NULL;
@@ -197,6 +191,24 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 	ipu_blitter->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 
 	memset(&(ipu_blitter->priv->task), 0, sizeof(struct ipu_task));
+}
+
+
+gboolean gst_imx_ipu_blitter_open_device(GstImxIpuBlitter *ipu_blitter)
+{
+	/* Don't do anything if there is already a FD */
+	if (ipu_blitter->priv->ipu_fd != -1)
+		return TRUE;
+
+	/* This FD is necessary for using the IPU ioctls */
+	ipu_blitter->priv->ipu_fd = open("/dev/mxc_ipu", O_RDWR, 0);
+	if (ipu_blitter->priv->ipu_fd < 0)
+	{
+		GST_ERROR_OBJECT(ipu_blitter, "could not open /dev/mxc_ipu: %s", strerror(errno));
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 
