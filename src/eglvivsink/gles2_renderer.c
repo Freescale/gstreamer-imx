@@ -15,7 +15,6 @@ struct _GstImxEglVivSinkGLES2Renderer
 {
 	guintptr window_handle;
 	guint window_width, window_height;
-	guint new_window_width, new_window_height;
 	gboolean event_handling;
 	guint display_ratio_n, display_ratio_d;
 	GstVideoInfo video_info;
@@ -28,7 +27,7 @@ struct _GstImxEglVivSinkGLES2Renderer
 
 	GstImxEglVivSinkEGLPlatform *egl_platform;
 
-	gboolean thread_started, loop_running, force_aspect_ratio;
+	gboolean thread_started, force_aspect_ratio;
 	GstFlowReturn loop_flow_retval;
 	GThread *thread;
 	GMutex mutex;
@@ -48,6 +47,7 @@ struct _GstImxEglVivSinkGLES2Renderer
 
 
 static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data);
+static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_frame(GstImxEglVivSinkEGLPlatform *platform, gpointer user_context);
 
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_check_gl_error(char const *category, char const *label);
 static gboolean gst_imx_egl_viv_sink_gles2_renderer_build_shader(GLuint *shader, GLenum shader_type, char const *code);
@@ -127,6 +127,7 @@ static void init_debug_category(void)
 
 static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 {
+	GstImxEglVivSinkMainloopRetval mainloop_retval;
 	GstImxEglVivSinkGLES2Renderer *renderer = (GstImxEglVivSinkGLES2Renderer *)thread_data;
 
 	{
@@ -196,82 +197,23 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 
 	GST_INFO("starting GLES2 renderer loop");
 
-	while (TRUE)
-	{	
-		GstImxEglVivSinkHandleEventsRetval event_retval;
-		gboolean redraw = FALSE;
-		gboolean exit_loop = FALSE;
+	mainloop_retval = gst_imx_egl_viv_sink_egl_platform_mainloop(renderer->egl_platform);
 
-		event_retval = gst_imx_egl_viv_sink_egl_platform_handle_events(renderer->egl_platform);
-
-		GLES2_RENDERER_LOCK(renderer);
-
-		switch (event_retval)
-		{
-			case GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_OK:
-				renderer->loop_flow_retval = GST_FLOW_OK;
-				break;
-			case GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_WINDOW_CLOSED:
-				GST_INFO("EOS detected - stopping thread");
-				renderer->loop_flow_retval = GST_FLOW_EOS;
-				exit_loop = TRUE;
-				break;
-			case GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_EXPOSE_REQUIRED:
-				redraw = TRUE;
-				renderer->loop_flow_retval = GST_FLOW_OK;
-				break;
-			case GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_ERROR:
-				exit_loop = TRUE;
-				renderer->loop_flow_retval = GST_FLOW_ERROR;
-				break;
-		}
-
-		if ((renderer->new_window_width != 0) && (renderer->new_window_height != 0))
-		{
-			glGetError(); /* clear out any existing error */
-
-			renderer->window_width = renderer->new_window_width;
-			renderer->window_height = renderer->new_window_height;
-
-			glViewport(0, 0, renderer->window_width, renderer->window_height);
-
-			GST_LOG("resizing viewport to %ux%u pixel", renderer->window_width, renderer->window_height);
-
-			gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info));
-
-			gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("viewport", "glViewport");
-
-			renderer->new_window_width = 0;
-			renderer->new_window_height = 0;
-		}
-
-		if (!renderer->loop_running)
-		{
-			GST_LOG("loop running flag has been set to FALSE");
-			exit_loop = TRUE;
-		}
-
-		if (redraw && !exit_loop)
-		{
-			if (!gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(renderer))
-			{
-				GST_ERROR("could not render frame");
-				renderer->loop_flow_retval = GST_FLOW_ERROR;
-				renderer->loop_running = FALSE;
-
-				exit_loop = TRUE;
-			}
-			else
-				gst_imx_egl_viv_sink_egl_platform_swap_buffers(renderer->egl_platform);
-		}
-
-		GLES2_RENDERER_UNLOCK(renderer);
-
-		if (exit_loop)
+	GLES2_RENDERER_LOCK(renderer);
+	switch (mainloop_retval)
+	{
+		case GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_OK:
+			renderer->loop_flow_retval = GST_FLOW_OK;
+			break;
+		case GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_WINDOW_CLOSED:
+			GST_INFO("Window closed - stopping thread");
+			renderer->loop_flow_retval = GST_FLOW_EOS;
+			break;
+		case GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_ERROR:
+			renderer->loop_flow_retval = GST_FLOW_ERROR;
 			break;
 	}
 
-	GLES2_RENDERER_LOCK(renderer);
 	if (!gst_imx_egl_viv_sink_gles2_renderer_teardown_resources(renderer))
 	{
 		GST_ERROR("tearing down resources failed");
@@ -283,7 +225,25 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 			GST_ERROR("could not close window");
 	}
 
+	GST_LOG("thread function finished");
+
 	return 0;
+}
+
+
+static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_frame(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, gpointer user_context)
+{
+	gboolean ret = TRUE;
+	GstImxEglVivSinkGLES2Renderer *renderer = (GstImxEglVivSinkGLES2Renderer *)user_context;
+
+	GLES2_RENDERER_LOCK(renderer);
+
+	if (!(ret = gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(renderer)))
+		GST_ERROR("could not render frame");
+
+	GLES2_RENDERER_UNLOCK(renderer);
+
+	return ret;
 }
 
 
@@ -841,10 +801,29 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 
 static void gst_imx_egl_viv_sink_gles2_renderer_resize_callback(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, guint window_width, guint window_height, gpointer user_context)
 {
-	GstImxEglVivSinkGLES2Renderer *gles2_renderer = (GstImxEglVivSinkGLES2Renderer *)user_context;
+	GstImxEglVivSinkGLES2Renderer *renderer = (GstImxEglVivSinkGLES2Renderer *)user_context;
+
 	GST_TRACE("resize_callback w/h: %d/%d", window_width, window_height);
-	gles2_renderer->new_window_width = window_width;
-	gles2_renderer->new_window_height = window_height;
+
+	GLES2_RENDERER_LOCK(renderer);
+
+	if ((window_width != 0) && (window_height != 0))
+	{
+		glGetError(); /* clear out any existing error */
+
+		renderer->window_width = window_width;
+		renderer->window_height = window_height;
+
+		glViewport(0, 0, renderer->window_width, renderer->window_height);
+
+		GST_LOG("resizing viewport to %ux%u pixel", renderer->window_width, renderer->window_height);
+
+		gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info));
+
+		gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("viewport", "glViewport");
+	}
+
+	GLES2_RENDERER_UNLOCK(renderer);
 }
 
 
@@ -861,8 +840,6 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char c
 	renderer->window_handle = 0;
 	renderer->window_width = 0;
 	renderer->window_height = 0;
-	renderer->new_window_width = 0;
-	renderer->new_window_height = 0;
 	renderer->event_handling = TRUE;
 	renderer->display_ratio_n = 1;
 	renderer->display_ratio_d = 1;
@@ -877,7 +854,12 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char c
 
 	renderer->current_frame = NULL;
 
-	renderer->egl_platform = gst_imx_egl_viv_sink_egl_platform_create(native_display_name, gst_imx_egl_viv_sink_gles2_renderer_resize_callback, renderer);
+	renderer->egl_platform = gst_imx_egl_viv_sink_egl_platform_create(
+		native_display_name,
+		gst_imx_egl_viv_sink_gles2_renderer_resize_callback,
+		gst_imx_egl_viv_sink_gles2_renderer_render_frame,
+		renderer
+	);
 	if (renderer->egl_platform == NULL)
 	{
 		g_slice_free1(sizeof(GstImxEglVivSinkGLES2Renderer), renderer);
@@ -885,7 +867,6 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char c
 	}
 
 	renderer->thread_started = FALSE;
-	renderer->loop_running = FALSE;
 	renderer->force_aspect_ratio = TRUE;
 	renderer->loop_flow_retval = GST_FLOW_OK;
 	renderer->thread = NULL;
@@ -936,7 +917,6 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_start(GstImxEglVivSinkGLES2Renderer
 	if (renderer->thread_started)
 		return TRUE;
 
-	renderer->loop_running = TRUE;
 	renderer->loop_flow_retval = GST_FLOW_OK;
 	renderer->video_info_updated = TRUE;
 
@@ -966,11 +946,7 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_stop(GstImxEglVivSinkGLES2Renderer 
 
 	if (renderer->thread_started)
 	{
-		GLES2_RENDERER_LOCK(renderer);
-		renderer->loop_running = FALSE;
-		GLES2_RENDERER_UNLOCK(renderer);
-
-		gst_imx_egl_viv_sink_egl_platform_expose(renderer->egl_platform);
+		gst_imx_egl_viv_sink_egl_platform_stop_mainloop(renderer->egl_platform);
 
 		GST_LOG("waiting for thread to finish");
 
@@ -1201,11 +1177,15 @@ GstFlowReturn gst_imx_egl_viv_sink_gles2_renderer_show_frame(GstImxEglVivSinkGLE
 			renderer->viv_planes[0] = NULL;
 		}
 
-		if (!gst_imx_egl_viv_sink_gles2_renderer_expose(renderer))
-			ret = GST_FLOW_ERROR;
 	}
 
 	GLES2_RENDERER_UNLOCK(renderer);
+
+	if (ret == GST_FLOW_OK)
+	{
+		if (!gst_imx_egl_viv_sink_gles2_renderer_expose(renderer))
+			ret = GST_FLOW_ERROR;
+	}
 
 	return ret;
 }

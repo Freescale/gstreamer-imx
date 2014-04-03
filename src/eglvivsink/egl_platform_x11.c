@@ -25,7 +25,9 @@ struct _GstImxEglVivSinkEGLPlatform
 	Window parent_window;
 	Atom wm_delete_atom;
 	GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb;
+	GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb;
 	gpointer user_context;
+	gboolean run_mainloop;
 	GMutex mutex;
 };
  
@@ -50,17 +52,22 @@ static void init_debug_category(void)
 }
 
 
-GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar const *native_display_name, GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb, gpointer user_context)
+GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar const *native_display_name, GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb, GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb, gpointer user_context)
 {
 	EGLint ver_major, ver_minor;
 	GstImxEglVivSinkEGLPlatform* platform;
 	Display *x11_display;
 
+	g_assert(window_resized_event_cb != NULL);
+	g_assert(render_frame_cb != NULL);
+
 	init_debug_category();
 
 	platform = (GstImxEglVivSinkEGLPlatform *)g_new0(GstImxEglVivSinkEGLPlatform, 1);
 	platform->window_resized_event_cb = window_resized_event_cb;
+	platform->render_frame_cb = render_frame_cb;
 	platform->user_context = user_context;
+	platform->run_mainloop = TRUE;
 
 	g_mutex_init(&(platform->mutex));
 
@@ -411,123 +418,173 @@ gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *p
 }
 
 
-GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_events(GstImxEglVivSinkEGLPlatform *platform)
+GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImxEglVivSinkEGLPlatform *platform)
 {
 	Display *x11_display = (Display *)(platform->native_display);
-	gboolean expose_required = FALSE;
+	gboolean expose_required = TRUE;
+	gboolean continue_loop = TRUE;
 
+	while (continue_loop)
 	{
+		XEvent xevent;
+		XNextEvent(x11_display, &xevent);
+
 		/* handle X11 events */
+		EGL_PLATFORM_LOCK(platform);
 
+		switch (xevent.type)
 		{
-			XEvent xevent;
-
-			XNextEvent(x11_display, &xevent);
-
-			switch (xevent.type)
+			case Expose:
 			{
-				case Expose:
+				Window this_window = (Window)(platform->native_window);
+
+				/* In case this window is child of another window that is not the root
+				 * window, resize this window; sometimes, ConfigureNotify is not trigger
+				 * when the windows show up for the first time*/
+				if ((xevent.xexpose.count == 0) && (platform->parent_window != 0))
 				{
-					Window this_window = (Window)(platform->native_window);
+					Window root_window;
+					int x, y;
+					unsigned int width, height, border_width, depth;
 
-					/* In case this window is child of another window that is not the root
-					 * window, resize this window; sometimes, ConfigureNotify is not trigger
-					 * when the windows show up for the first time*/
-					if ((xevent.xexpose.count == 0) && (platform->parent_window != 0))
-					{
-						Window root_window;
-						int x, y;
-						unsigned int width, height, border_width, depth;
+					XGetGeometry(
+						x11_display,
+						platform->parent_window,
+						&root_window,
+						&x, &y,
+						&width, &height,
+						&border_width,
+						&depth
+					);
 
-						XGetGeometry(
-							x11_display,
-							platform->parent_window,
-							&root_window,
-							&x, &y,
-							&width, &height,
-							&border_width,
-							&depth
-						);
-
-						XResizeWindow(x11_display, this_window, width, height);
-						if (platform->window_resized_event_cb != NULL)
-							platform->window_resized_event_cb(platform, width, height, platform->user_context);
-					}
-
-					/* Make sure no more expose events are there */
-					while (XCheckTypedWindowEvent(x11_display, platform->parent_window, Expose, &xevent) == True);
-					while (XCheckTypedWindowEvent(x11_display, this_window, Expose, &xevent) == True);
-
-					expose_required = TRUE;
-
-					break;
+					XResizeWindow(x11_display, this_window, width, height);
+					if (platform->window_resized_event_cb != NULL)
+						platform->window_resized_event_cb(platform, width, height, platform->user_context);
 				}
 
-				case ClientMessage:
-					if ((xevent.xclient.format == 32) && (xevent.xclient.data.l[0] == (long)(platform->wm_delete_atom)))
-						return GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_WINDOW_CLOSED;
-					else if ((xevent.xclient.format == 32) && (xevent.xclient.data.l[0] == 0))
-						expose_required = TRUE;
-					break;
+				/* Make sure no more expose events are there */
+				while (XCheckTypedWindowEvent(x11_display, platform->parent_window, Expose, &xevent) == True);
+				while (XCheckTypedWindowEvent(x11_display, this_window, Expose, &xevent) == True);
 
-				case ConfigureNotify:
-				{
-					Window this_window = (Window)(platform->native_window);
+				expose_required = TRUE;
 
-					GST_TRACE("received ConfigureNotify event -> calling resize callback");
-
-					/* Make sure no other ConfigureNotify events are there */
-					while (XCheckTypedWindowEvent(x11_display, platform->parent_window, ConfigureNotify, &xevent) == True);
-
-					/* Resize if this is a child window of a non-root parent window;
-					 * this is usually the case when this window is embedded inside another one */
-					if (platform->parent_window != 0)
-						XResizeWindow(x11_display, this_window, xevent.xconfigure.width, xevent.xconfigure.height);
-
-					if (platform->window_resized_event_cb != NULL)
-						platform->window_resized_event_cb(platform, xevent.xconfigure.width, xevent.xconfigure.height, platform->user_context);
-
-					expose_required = TRUE;
-					break;
-				}
-
-				case ResizeRequest:
-					GST_TRACE("received ResizeRequest event -> calling resize callback");
-					if (platform->window_resized_event_cb != NULL)
-						platform->window_resized_event_cb(platform, xevent.xresizerequest.width, xevent.xresizerequest.height, platform->user_context);
-					expose_required = TRUE;
-					break;
-
-				default:
-					break;
+				break;
 			}
+
+			case ClientMessage:
+				if ((xevent.xclient.format == 32) && (xevent.xclient.data.l[0] == (long)(platform->wm_delete_atom)))
+				{
+					GST_INFO("window got closed");
+					EGL_PLATFORM_UNLOCK(platform);
+					return GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_WINDOW_CLOSED;
+				}
+				else if ((xevent.xclient.format == 32) && (xevent.xclient.data.l[0] == 0))
+					expose_required = TRUE;
+				break;
+
+			case ConfigureNotify:
+			{
+				Window this_window = (Window)(platform->native_window);
+
+				GST_TRACE("received ConfigureNotify event -> calling resize callback");
+
+				/* Make sure no other ConfigureNotify events are there */
+				while (XCheckTypedWindowEvent(x11_display, platform->parent_window, ConfigureNotify, &xevent) == True);
+
+				/* Resize if this is a child window of a non-root parent window;
+				 * this is usually the case when this window is embedded inside another one */
+				if (platform->parent_window != 0)
+					XResizeWindow(x11_display, this_window, xevent.xconfigure.width, xevent.xconfigure.height);
+
+				if (platform->window_resized_event_cb != NULL)
+					platform->window_resized_event_cb(platform, xevent.xconfigure.width, xevent.xconfigure.height, platform->user_context);
+
+				expose_required = TRUE;
+				break;
+			}
+
+			default:
+				break;
+		}
+
+		continue_loop = platform->run_mainloop;
+
+		EGL_PLATFORM_UNLOCK(platform);
+
+		if (expose_required)
+		{
+			platform->render_frame_cb(platform, platform->user_context);
+			eglSwapBuffers(platform->egl_display, platform->egl_surface);
+			expose_required = FALSE;
 		}
 	}
 
-	return expose_required ? GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_EXPOSE_REQUIRED : GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_OK;
+	return GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_OK;
+}
+
+
+void gst_imx_egl_viv_sink_egl_platform_stop_mainloop(GstImxEglVivSinkEGLPlatform *platform)
+{
+	Window x11_window;
+	Display *x11_display = (Display *)(platform->native_display);
+
+	EGL_PLATFORM_LOCK(platform);
+
+	GST_LOG("stopping mainloop");
+
+	if (platform->native_window == 0)
+	{
+		GST_LOG("window not open - cannot send event");
+		EGL_PLATFORM_UNLOCK(platform);
+		return;
+	}
+	x11_window = (Window)(platform->native_window);
+
+	XClientMessageEvent dummy_event;
+	memset(&dummy_event, 0, sizeof(dummy_event));
+	dummy_event.type = ClientMessage;
+	dummy_event.window = x11_window;
+	dummy_event.format = 32;
+	XSendEvent(x11_display, x11_window, 0, 0, (XEvent *)(&dummy_event));
+	XFlush(x11_display);
+
+	platform->run_mainloop = FALSE;
+
+
+	EGL_PLATFORM_UNLOCK(platform);
 }
 
 
 gboolean gst_imx_egl_viv_sink_egl_platform_set_coords(GstImxEglVivSinkEGLPlatform *platform, gint x_coord, gint y_coord)
 {
+	EGL_PLATFORM_LOCK(platform);
+
 	if (platform->parent_window != 0)
 	{
 		Display *x11_display = (Display *)(platform->native_display);
 		Window this_window = (Window)(platform->native_window);
 		XMoveWindow(x11_display, this_window, x_coord, y_coord);
 	}
+
+	EGL_PLATFORM_UNLOCK(platform);
+
 	return TRUE;
 }
 
 
 gboolean gst_imx_egl_viv_sink_egl_platform_set_size(GstImxEglVivSinkEGLPlatform *platform, guint width, guint height)
 {
+	EGL_PLATFORM_LOCK(platform);
+
 	if (platform->parent_window != 0)
 	{
 		Display *x11_display = (Display *)(platform->native_display);
 		Window this_window = (Window)(platform->native_window);
 		XResizeWindow(x11_display, this_window, width, height);
 	}
+
+	EGL_PLATFORM_UNLOCK(platform);
+
 	return TRUE;
 }
 
@@ -539,16 +596,14 @@ gboolean gst_imx_egl_viv_sink_egl_platform_set_borderless(GstImxEglVivSinkEGLPla
 	Window this_window = (Window)(platform->native_window);
 
 	attr.override_redirect = borderless ? True : False;
+
+	EGL_PLATFORM_LOCK(platform);
+
 	XChangeWindowAttributes(x11_display, this_window, CWOverrideRedirect, &attr);
 	XRaiseWindow(x11_display, this_window);
 
+	EGL_PLATFORM_UNLOCK(platform);
+
 	return TRUE;
-}
-
-
-void gst_imx_egl_viv_sink_egl_platform_swap_buffers(GstImxEglVivSinkEGLPlatform *platform)
-{
-	if (platform->native_window != 0)
-		eglSwapBuffers(platform->egl_display, platform->egl_surface);
 }
 
