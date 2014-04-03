@@ -1235,6 +1235,16 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	else
 		GST_DEBUG_OBJECT(vpu_dec, "nothing to output (ret code: 0x%X)", buffer_ret_code);
 
+	/* In case the VPU didn't use the input and no consumed frame info is available,
+	 * drop the input frame to make sure timestamps are okay
+	 * (If consumed frame info is present it is still possible it might be used for input-output frame
+	 * associations; unlikely to occur thought) */
+	if ((cur_frame != NULL) && !(buffer_ret_code & (VPU_DEC_ONE_FRM_CONSUMED | VPU_DEC_INPUT_USED)))
+	{
+		GST_DEBUG_OBJECT(vpu_dec, "VPU did not use input frame, and no consumed frame info available -> drop input frame");
+		gst_video_decoder_drop_frame(decoder, cur_frame);
+	}
+
 
 	return (buffer_ret_code & VPU_DEC_OUTPUT_EOS) ? GST_FLOW_EOS : GST_FLOW_OK;
 }
