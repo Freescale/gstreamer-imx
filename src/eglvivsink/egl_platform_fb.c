@@ -20,8 +20,10 @@ struct _GstImxEglVivSinkEGLPlatform
 	EGLContext egl_context;
 	EGLSurface egl_surface;
 	GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb;
+	GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb;
 	gpointer user_context;
 	int ctrl_pipe[2];
+	gboolean run_mainloop;
 };
 
 
@@ -38,7 +40,7 @@ static void init_debug_category(void)
 
 
 
-GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar const *native_display_name, GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb, gpointer user_context)
+GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar const *native_display_name, GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb, GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb, gpointer user_context)
 {
 	gint64 display_index;
 	EGLint ver_major, ver_minor;
@@ -48,6 +50,7 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 
 	platform = (GstImxEglVivSinkEGLPlatform *)g_new0(GstImxEglVivSinkEGLPlatform, 1);
 	platform->window_resized_event_cb = window_resized_event_cb;
+	platform->render_frame_cb = render_frame_cb;
 	platform->user_context = user_context;
 
 	if (pipe(platform->ctrl_pipe) == -1)
@@ -190,37 +193,53 @@ gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *p
 }
 
 
-void gst_imx_egl_viv_sink_egl_platform_swap_buffers(GstImxEglVivSinkEGLPlatform *platform)
-{
-	if (platform->native_window != 0)
-		eglSwapBuffers(platform->egl_display, platform->egl_surface);
-}
-
-
-GstImxEglVivSinkHandleEventsRetval gst_imx_egl_viv_sink_egl_platform_handle_events(GstImxEglVivSinkEGLPlatform *platform)
+GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImxEglVivSinkEGLPlatform *platform)
 {
 	struct pollfd fds[1];
 	int const nfds = sizeof(fds) / sizeof(struct pollfd);
 	gboolean expose_required = FALSE;
 
-	memset(&fds[0], 0, sizeof(fds));
-	fds[0].fd = platform->ctrl_pipe[0];
-	fds[0].events = POLLIN;
+	platform->run_mainloop = TRUE; // TODO: lock
 
-	if (poll(&fds[0], nfds, -1) == -1)
+	while (platform->run_mainloop)
 	{
-		GST_ERROR("error creating POSIX pipe: %s", strerror(errno));
-		return GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_ERROR;
+		memset(&fds[0], 0, sizeof(fds));
+		fds[0].fd = platform->ctrl_pipe[0];
+		fds[0].events = POLLIN;
+
+		if (poll(&fds[0], nfds, -1) == -1)
+		{
+			GST_ERROR("error creating POSIX pipe: %s", strerror(errno));
+			return GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_ERROR;
+		}
+
+		if (fds[0].revents & POLLIN)
+		{
+			char buf[256];
+			read(fds[0].fd, buf, sizeof(buf));
+			expose_required = TRUE;
+		}
+
+		if (expose_required)
+		{
+			if (platform->render_frame_cb != NULL)
+			{
+				platform->render_frame_cb(platform, platform->user_context);
+				eglSwapBuffers(platform->egl_display, platform->egl_surface);
+			}
+
+			expose_required = FALSE;
+		}
 	}
 
-	if (fds[0].revents & POLLIN)
-	{
-		char buf[256];
-		read(fds[0].fd, buf, sizeof(buf));
-		expose_required = TRUE;
-	}
+	return GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_OK;
+}
 
-	return expose_required ? GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_EXPOSE_REQUIRED : GST_IMX_EGL_VIV_SINK_HANDLE_EVENTS_RETVAL_OK;
+
+void gst_imx_egl_viv_sink_egl_platform_stop_mainloop(GstImxEglVivSinkEGLPlatform *platform)
+{
+	platform->run_mainloop = FALSE; // TODO: lock
+	gst_imx_egl_viv_sink_egl_platform_expose(platform);
 }
 
 
