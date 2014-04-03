@@ -144,7 +144,9 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 		))
 		{
 			GST_ERROR("could not open window");
+			GLES2_RENDERER_LOCK(renderer);
 			renderer->loop_flow_retval = GST_FLOW_ERROR;
+			GLES2_RENDERER_UNLOCK(renderer);
 			return 0;
 		}
 
@@ -152,7 +154,9 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 		if (extensions == NULL)
 		{
 			GST_ERROR("OpenGL ES extension string is NULL");
+			GLES2_RENDERER_LOCK(renderer);
 			renderer->loop_flow_retval = GST_FLOW_ERROR;
+			GLES2_RENDERER_UNLOCK(renderer);
 			return 0;
 		}
 
@@ -161,7 +165,9 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 		else
 		{
 			GST_ERROR("Vivante direct texture extension (GL_VIV_direct_texture) missing");
+			GLES2_RENDERER_LOCK(renderer);
 			renderer->loop_flow_retval = GST_FLOW_ERROR;
+			GLES2_RENDERER_UNLOCK(renderer);
 			return 0;
 		}
 	}
