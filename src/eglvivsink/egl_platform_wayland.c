@@ -15,6 +15,12 @@ GST_DEBUG_CATEGORY_STATIC(imx_egl_platform_wl_debug);
 #define GST_CAT_DEFAULT imx_egl_platform_wl_debug
 
 
+enum
+{
+	GSTIMX_EGLWAYLAND_STOP = 1
+};
+
+
 struct _GstImxEglVivSinkEGLPlatform
 {
 	EGLNativeDisplayType native_display;
@@ -26,7 +32,7 @@ struct _GstImxEglVivSinkEGLPlatform
 	GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb;
 	gpointer user_context;
 
-	gboolean run_mainloop, do_render;
+	gboolean do_render;
 
 	struct wl_display *display;
 	struct wl_registry *registry;
@@ -447,8 +453,6 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 	struct pollfd fds[2];
 	int const nfds = sizeof(fds) / sizeof(struct pollfd);
 
-	platform->run_mainloop = TRUE; // TODO: lock
-
 	/* This is necessary to trigger the frame render callback, which in turns makes sure
 	 * it is triggered again for the next frame; in other words, this starts a continuous
 	 * callback-based playback loop */
@@ -465,9 +469,6 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 		fds[0].events = POLLIN | POLLERR | POLLHUP;
 		fds[1].fd = platform->display_fd;
 		fds[1].events = POLLIN | POLLERR | POLLHUP;
-
-		if (!platform->run_mainloop)
-			break;
 
 		/* Start event handling; wl_display_prepare_read() announces the intention
 		 * to read all events, taking care of race conditions that otherwise occur */
@@ -498,14 +499,6 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 			return GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_ERROR;
 		}
 
-		/* The pipe FD data is irrelevant, and is just read to empty the pipe
-		 * the whole purpose of that FD is to be a way to wake up the poll() call above */
-		if (fds[0].revents & POLLIN)
-		{
-			char buf[256];
-			read(fds[0].fd, buf, sizeof(buf));
-		}
-
 		/* If there is something to read from the display FD, handle events */
 		if (fds[1].revents & POLLIN)
 		{
@@ -518,6 +511,23 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 			GST_LOG("Nothing to read from the display FD - canceling read");
 			wl_display_cancel_read(platform->display);
 		}
+
+		/* Read messages from the control pipe
+		 * Note that this is done *after* reading from the display FD
+		 * above, to make sure the event read block is finished by the
+		 * time this place is reached */
+		if (fds[0].revents & POLLIN)
+		{
+			char buf[256];
+			read(fds[0].fd, buf, sizeof(buf));
+
+			/* Stop if requested */
+			if (buf[0] == GSTIMX_EGLWAYLAND_STOP)
+			{
+				GST_LOG("Mainloop stop requested");
+				break;
+			}
+		}
 	}
 
 	/* At this point, the sink is shutting down. Disable rendering in the frame callback. */
@@ -529,9 +539,8 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 
 void gst_imx_egl_viv_sink_egl_platform_stop_mainloop(GstImxEglVivSinkEGLPlatform *platform)
 {
-	platform->run_mainloop = FALSE; // TODO: lock
-	char dummy = 1;
-	write(platform->ctrl_pipe[1], &dummy, 1);
+	char msg = GSTIMX_EGLWAYLAND_STOP;
+	write(platform->ctrl_pipe[1], &msg, 1);
 }
 
 
