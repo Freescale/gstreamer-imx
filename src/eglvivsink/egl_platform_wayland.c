@@ -26,7 +26,7 @@ struct _GstImxEglVivSinkEGLPlatform
 	GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb;
 	gpointer user_context;
 
-	gboolean run_mainloop;
+	gboolean run_mainloop, do_render;
 
 	struct wl_display *display;
 	struct wl_registry *registry;
@@ -116,17 +116,22 @@ static void frame_callback(void *data, struct wl_callback *callback, G_GNUC_UNUS
 {
 	GstImxEglVivSinkEGLPlatform *platform = data;
 
+	/* Cleanup old callback */
 	if (callback)
 		wl_callback_destroy(callback);
 
-	if (platform->render_frame_cb != NULL)
-	{
-		platform->render_frame_cb(platform, platform->user_context);
-	}
+	if (!platform->do_render)
+		return;
 
+	/* The actual rendering */
+	if (platform->render_frame_cb != NULL)
+		platform->render_frame_cb(platform, platform->user_context);
+
+	/* Setup new callback */
 	platform->frame_cb = wl_surface_frame(platform->surface);
 	wl_callback_add_listener(platform->frame_cb, &frame_listener, platform);
 
+	/* Finally, do the actual commit to the server */
 	if (platform->render_frame_cb != NULL)
 		eglSwapBuffers(platform->egl_display, platform->egl_surface);
 }
@@ -421,7 +426,19 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(G_GNUC_UNUSED GstImxEglViv
 
 gboolean gst_imx_egl_viv_sink_egl_platform_expose(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform)
 {
+	/* Unused, since the sink renders whenever the frame callback is invoked */
 	return TRUE;
+}
+
+
+static void start_rendering(GstImxEglVivSinkEGLPlatform *platform)
+{
+	if (platform->render_frame_cb == NULL)
+		return;
+
+	platform->do_render = TRUE;
+	platform->render_frame_cb(platform, platform->user_context);
+	eglSwapBuffers(platform->egl_display, platform->egl_surface);
 }
 
 
@@ -432,17 +449,17 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 
 	platform->run_mainloop = TRUE; // TODO: lock
 
-	if (platform->render_frame_cb != NULL)
-	{
-		platform->render_frame_cb(platform, platform->user_context);
-		eglSwapBuffers(platform->egl_display, platform->egl_surface);
-	}
-
+	/* This is necessary to trigger the frame render callback, which in turns makes sure
+	 * it is triggered again for the next frame; in other words, this starts a continuous
+	 * callback-based playback loop */
+	start_rendering(platform);
 
 	while (TRUE)
 	{
 		int ret;
 
+		/* Watch the display FD and a pipe that is used when poll() shall wake up
+		 * (for example, when the pipeline is being shut down and run_mainloop has been set to FALSE) */
 		memset(&fds[0], 0, sizeof(fds));
 		fds[0].fd = platform->ctrl_pipe[0];
 		fds[0].events = POLLIN | POLLERR | POLLHUP;
@@ -452,9 +469,13 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 		if (!platform->run_mainloop)
 			break;
 
+		/* Start event handling; wl_display_prepare_read() announces the intention
+		 * to read all events, taking care of race conditions that otherwise occur */
 		while (wl_display_prepare_read(platform->display) != 0)
 			wl_display_dispatch_pending(platform->display);
 
+		/* Flush requests, sending them to the server; if not all data could be sent to
+		 * the server, have poll() also let it wait until it the display FD is writable again */
 		ret = wl_display_flush(platform->display);
 		if (ret < 0)
 		{
@@ -469,6 +490,7 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 			}
 		}
 
+		/* Wait for activity */
 		if (poll(&fds[0], nfds, -1) == -1)
 		{
 			GST_ERROR("error in poll() call: %s", strerror(errno));
@@ -476,23 +498,30 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 			return GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_ERROR;
 		}
 
+		/* The pipe FD data is irrelevant, and is just read to empty the pipe
+		 * the whole purpose of that FD is to be a way to wake up the poll() call above */
 		if (fds[0].revents & POLLIN)
 		{
 			char buf[256];
 			read(fds[0].fd, buf, sizeof(buf));
 		}
 
+		/* If there is something to read from the display FD, handle events */
 		if (fds[1].revents & POLLIN)
 		{
-			GST_DEBUG("WL display dispatch");
+			GST_LOG("There is something to read from the display FD - handling events");
 			wl_display_read_events(platform->display);
 			wl_display_dispatch(platform->display);
 		}
 		else
+		{
+			GST_LOG("Nothing to read from the display FD - canceling read");
 			wl_display_cancel_read(platform->display);
+		}
 	}
 
-	platform->render_frame_cb = NULL;
+	/* At this point, the sink is shutting down. Disable rendering in the frame callback. */
+	platform->do_render = FALSE;
 
 	return GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_OK;
 }
