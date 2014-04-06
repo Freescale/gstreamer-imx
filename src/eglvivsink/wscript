@@ -14,6 +14,12 @@ def check_x11(conf, uselib = ''):
 	  conf.check_cc(mandatory = 0, lib = 'X11', uselib = uselib, uselib_store = 'X11') and \
 	  conf.check_cc(mandatory = 0, header_name = 'X11/Xlib.h', uselib = uselib, uselib_store = 'X11')
 
+def check_wayland(conf, uselib = ''):
+	return \
+	  conf.check_cfg(mandatory = 0, package = 'wayland-client', uselib_store = 'WAYLAND_CLIENT', args = '--cflags --libs') and \
+	  conf.check_cfg(mandatory = 0, package = 'wayland-cursor', uselib_store = 'WAYLAND_CURSOR', args = '--cflags --libs') and \
+	  conf.check_cfg(mandatory = 0, package = 'wayland-egl',    uselib_store = 'WAYLAND_EGL',    args = '--cflags --libs')
+
 def check_gles2(conf, uselib = 'EGL', lib_list = ['GLESv2']):
 	retval = \
 	  check_lib_list(conf = conf, uselib = uselib, uselib_store = 'GLES2', lib_list = lib_list) and \
@@ -55,7 +61,7 @@ def check_viv_texformat(conf, texformat):
 	return conf.check(fragment = (test_code % texformat), mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for GLES texture format %s' % texformat, uselib = ['EGL', 'GLES2'] + conf.env['PLATFORM_USELIBS'], okmsg = 'yes', errmsg = 'no')
 
 
-valid_egl_platforms = ['fb', 'x11']
+valid_egl_platforms = ['fb', 'x11', 'wayland']
 
 
 def options(opt):
@@ -73,6 +79,11 @@ def check_dependencies(conf):
 		if not check_vivante_egl(conf, ['EGL_API_FB']):
 			return False
 		conf.env['PLATFORM_SOURCE'] = ['egl_platform_fb.c']
+	elif platform == 'wayland':
+		if not check_wayland(conf) or not check_vivante_egl(conf, ['EGL_API_FB', 'WL_EGL_PLATFORM']):
+			return False
+		conf.env['PLATFORM_SOURCE'] = ['egl_platform_wayland.c']
+		conf.env['PLATFORM_USELIBS'] += ["WAYLAND_CLIENT", "WAYLAND_CURSOR", "WAYLAND_EGL"]
 
 	if not check_gles2(conf):
 		return False
