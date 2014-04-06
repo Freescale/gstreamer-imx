@@ -57,7 +57,7 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 	{
 		GST_ERROR("error creating POSIX pipe: %s", strerror(errno));
 		g_free(platform);
-		return NULL;
+		goto cleanup;
 	}
 
 	if (native_display_name == NULL)
@@ -71,28 +71,45 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 	{
 		GST_ERROR("eglGetDisplay failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
 		g_free(platform);
-		return NULL;
+		goto cleanup;
 	}
 
 	if (!eglInitialize(platform->egl_display, &ver_major, &ver_minor))
 	{
 		GST_ERROR("eglInitialize failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
 		g_free(platform);
-		return NULL;
+		goto cleanup;
 	}
 
 	GST_INFO("FB EGL platform initialized, using EGL %d.%d", ver_major, ver_minor);
 
 	return platform;
+
+
+cleanup:
+	/* either both are set, or none is */
+	if (platform->ctrl_pipe[0] != -1)
+	{
+		close(platform->ctrl_pipe[0]);
+		close(platform->ctrl_pipe[1]);
+	}
+
+	g_free(platform);
+	return NULL;
 }
 
 
 void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *platform)
 {
-	if (platform != NULL)
+	if (platform == NULL)
+		return;
+
+	if (platform->egl_display != EGL_NO_DISPLAY)
+		eglTerminate(platform->egl_display);
+
+	/* either both are set, or none is */
+	if (platform->ctrl_pipe[0] != -1)
 	{
-		if (platform->egl_display != EGL_NO_DISPLAY)
-			eglTerminate(platform->egl_display);
 		close(platform->ctrl_pipe[0]);
 		close(platform->ctrl_pipe[1]);
 		g_free(platform);
