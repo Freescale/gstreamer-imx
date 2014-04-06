@@ -699,36 +699,40 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 
 	glUniform2f(renderer->uv_scale_uloc, (float)w / (float)total_w, (float)h / (float)total_h);
 
-	if (is_phys_buf)
+	/* Only update texture if the video frame actually changed */
+	if ((renderer->viv_planes[0] == NULL) || (renderer->video_info_updated))
 	{
-		GLvoid *virt_addr;
-		GLuint phys_addr;
+		GST_LOG("video frame did change");
 
-		phys_addr = (GLuint)(phys_mem_meta->phys_addr);
+		if (is_phys_buf)
+		{
+			GLvoid *virt_addr;
+			GLuint phys_addr;
 
-		GST_LOG("mapping physical address 0x%x of video frame in buffer %p into VIV texture", phys_addr, (gpointer)buffer);
+			phys_addr = (GLuint)(phys_mem_meta->phys_addr);
 
-		gst_buffer_map(buffer, &map_info, GST_MAP_READ);
-		virt_addr = map_info.data;
+			GST_LOG("mapping physical address 0x%x of video frame in buffer %p into VIV texture", phys_addr, (gpointer)buffer);
 
-		renderer->viv_planes[0] = NULL;
+			gst_buffer_map(buffer, &map_info, GST_MAP_READ);
+			virt_addr = map_info.data;
 
-		glTexDirectVIVMap(
-			GL_TEXTURE_2D,
-			total_w, total_h,
-			gl_format,
-			(GLvoid **)(&virt_addr), &phys_addr
-		);
+			/* Just set to make sure the == NULL check above is false */
+			renderer->viv_planes[0] = virt_addr;
 
-		gst_buffer_unmap(buffer, &map_info);
-		GST_LOG("done showing frame in buffer %p with physical address 0x%x", (gpointer)buffer, phys_addr);
+			glTexDirectVIVMap(
+				GL_TEXTURE_2D,
+				total_w, total_h,
+				gl_format,
+				(GLvoid **)(&virt_addr), &phys_addr
+			);
 
-		if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectVIVMap"))
-			return FALSE;
-	}
-	else
-	{
-		//if ((renderer->viv_planes[0] == NULL) || (renderer->video_info_updated))
+			gst_buffer_unmap(buffer, &map_info);
+			GST_LOG("done showing frame in buffer %p with physical address 0x%x", (gpointer)buffer, phys_addr);
+
+			if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectVIVMap"))
+				return FALSE;
+		}
+		else
 		{
 			glTexDirectVIV(
 				GL_TEXTURE_2D,
@@ -738,36 +742,40 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 			);
 			if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectVIV"))
 				return FALSE;
+
+			GST_LOG("copying pixels into VIV direct texture buffer");
+
+			gst_buffer_map(buffer, &map_info, GST_MAP_READ);
+			switch (fmt)
+			{
+				case GST_VIDEO_FORMAT_I420:
+				case GST_VIDEO_FORMAT_YV12:
+					memcpy(renderer->viv_planes[0], map_info.data + offset[0], stride[0] * total_h);
+					memcpy(renderer->viv_planes[1], map_info.data + offset[1], stride[1] * total_h / 2);
+					memcpy(renderer->viv_planes[2], map_info.data + offset[2], stride[2] * total_h / 2);
+					break;
+				case GST_VIDEO_FORMAT_NV12:
+				case GST_VIDEO_FORMAT_NV21:
+					memcpy(renderer->viv_planes[0], map_info.data + offset[0], stride[0] * total_h);
+					memcpy(renderer->viv_planes[1], map_info.data + offset[1], stride[1] * total_h / 2);
+					break;
+				default:
+					memcpy(renderer->viv_planes[0], map_info.data, stride[0] * total_h);
+			}
+			gst_buffer_unmap(buffer, &map_info);
+
 		}
 
-		GST_LOG("copying pixels into VIV direct texture buffer");
+		glTexDirectInvalidateVIV(GL_TEXTURE_2D);
+		if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectInvalidateVIV"))
+			return FALSE;
 
-		gst_buffer_map(buffer, &map_info, GST_MAP_READ);
-		switch (fmt)
-		{
-			case GST_VIDEO_FORMAT_I420:
-			case GST_VIDEO_FORMAT_YV12:
-				memcpy(renderer->viv_planes[0], map_info.data + offset[0], stride[0] * total_h);
-				memcpy(renderer->viv_planes[1], map_info.data + offset[1], stride[1] * total_h / 2);
-				memcpy(renderer->viv_planes[2], map_info.data + offset[2], stride[2] * total_h / 2);
-				break;
-			case GST_VIDEO_FORMAT_NV12:
-			case GST_VIDEO_FORMAT_NV21:
-				memcpy(renderer->viv_planes[0], map_info.data + offset[0], stride[0] * total_h);
-				memcpy(renderer->viv_planes[1], map_info.data + offset[1], stride[1] * total_h / 2);
-				break;
-			default:
-				memcpy(renderer->viv_planes[0], map_info.data, stride[0] * total_h);
-		}
-		gst_buffer_unmap(buffer, &map_info);
-
+		renderer->video_info_updated = FALSE;
 	}
-
-	glTexDirectInvalidateVIV(GL_TEXTURE_2D);
-	if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectInvalidateVIV"))
-		return FALSE;
-
-	renderer->video_info_updated = FALSE;
+	else
+	{
+		GST_LOG("video frame did not change - not doing anything");
+	}
 
 	return TRUE;
 }
