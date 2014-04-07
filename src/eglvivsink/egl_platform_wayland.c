@@ -15,9 +15,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_egl_platform_wl_debug);
 #define GST_CAT_DEFAULT imx_egl_platform_wl_debug
 
 
+//#define USE_CALLBACK_BASED_RENDERING
+
+
 enum
 {
-	GSTIMX_EGLWAYLAND_STOP = 1
+	GSTIMX_EGLWAYLAND_STOP = 1,
+	GSTIMX_EGLWAYLAND_RENDER = 2
 };
 
 
@@ -296,9 +300,10 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		return FALSE;
 	}
 
-	GST_DEBUG("IOI");
+#ifdef USE_CALLBACK_BASED_RENDERING
 	platform->frame_cb = wl_surface_frame(platform->surface);
 	wl_callback_add_listener(platform->frame_cb, &frame_listener, platform);
+#endif
 
 	if ((platform->shell_surface = wl_shell_get_shell_surface(platform->shell, platform->surface)) == NULL)
 	{
@@ -432,7 +437,10 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(G_GNUC_UNUSED GstImxEglViv
 
 gboolean gst_imx_egl_viv_sink_egl_platform_expose(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform)
 {
-	/* Unused, since the sink renders whenever the frame callback is invoked */
+#ifndef USE_CALLBACK_BASED_RENDERING
+	char const msg = GSTIMX_EGLWAYLAND_RENDER;
+	write(platform->ctrl_pipe[1], &msg, 1);
+#endif
 	return TRUE;
 }
 
@@ -527,6 +535,13 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 				GST_LOG("Mainloop stop requested");
 				break;
 			}
+#ifndef USE_CALLBACK_BASED_RENDERING
+			else if (buf[0] == GSTIMX_EGLWAYLAND_RENDER)
+			{
+				platform->render_frame_cb(platform, platform->user_context);
+				eglSwapBuffers(platform->egl_display, platform->egl_surface);
+			}
+#endif
 		}
 	}
 
