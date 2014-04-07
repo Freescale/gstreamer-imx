@@ -21,7 +21,8 @@ GST_DEBUG_CATEGORY_STATIC(imx_egl_platform_wl_debug);
 enum
 {
 	GSTIMX_EGLWAYLAND_STOP = 1,
-	GSTIMX_EGLWAYLAND_RENDER = 2
+	GSTIMX_EGLWAYLAND_RENDER = 2,
+	GSTIMX_EGLWAYLAND_RESIZE = 3
 };
 
 
@@ -460,13 +461,14 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 {
 	struct pollfd fds[2];
 	int const nfds = sizeof(fds) / sizeof(struct pollfd);
+	gboolean run_loop = TRUE;
 
 	/* This is necessary to trigger the frame render callback, which in turns makes sure
 	 * it is triggered again for the next frame; in other words, this starts a continuous
 	 * callback-based playback loop */
 	start_rendering(platform);
 
-	while (TRUE)
+	while (run_loop)
 	{
 		int ret;
 
@@ -526,22 +528,37 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 		 * time this place is reached */
 		if (fds[0].revents & POLLIN)
 		{
-			char buf[256];
-			read(fds[0].fd, buf, sizeof(buf));
+			char msg;
+			read(fds[0].fd, &msg, sizeof(msg));
 
 			/* Stop if requested */
-			if (buf[0] == GSTIMX_EGLWAYLAND_STOP)
+			switch (msg)
 			{
-				GST_LOG("Mainloop stop requested");
-				break;
-			}
+				case GSTIMX_EGLWAYLAND_STOP:
+					run_loop = FALSE;
+					GST_LOG("Mainloop stop requested");
+					break;
+
+				case GSTIMX_EGLWAYLAND_RESIZE:
+				{
+					guint w, h;
+					read(fds[0].fd, &w, sizeof(w));
+					read(fds[0].fd, &h, sizeof(h));
+					GST_LOG("Resizing EGL window to %dx%d pixels", w, h);
+					wl_egl_window_resize(platform->native_window, w, h, 0, 0);
+					break;
+				}
+
 #ifndef USE_CALLBACK_BASED_RENDERING
-			else if (buf[0] == GSTIMX_EGLWAYLAND_RENDER)
-			{
-				platform->render_frame_cb(platform, platform->user_context);
-				eglSwapBuffers(platform->egl_display, platform->egl_surface);
-			}
+				case GSTIMX_EGLWAYLAND_RENDER:
+					platform->render_frame_cb(platform, platform->user_context);
+					eglSwapBuffers(platform->egl_display, platform->egl_surface);
+					break;
 #endif
+
+				default:
+					break;
+			}
 		}
 	}
 
@@ -561,18 +578,24 @@ void gst_imx_egl_viv_sink_egl_platform_stop_mainloop(GstImxEglVivSinkEGLPlatform
 
 gboolean gst_imx_egl_viv_sink_egl_platform_set_coords(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED gint x_coord, G_GNUC_UNUSED gint y_coord)
 {
+	/* Since windows cannot be positioned explicitely in Wayland, nothing can be done here */
 	return TRUE;
 }
 
 
 gboolean gst_imx_egl_viv_sink_egl_platform_set_size(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED guint width, G_GNUC_UNUSED guint height)
 {
+	char msg = GSTIMX_EGLWAYLAND_RESIZE;
+	write(platform->ctrl_pipe[1], &msg, 1);
+	write(platform->ctrl_pipe[1], &width, sizeof(width));
+	write(platform->ctrl_pipe[1], &height, sizeof(height));
 	return TRUE;
 }
 
 
 gboolean gst_imx_egl_viv_sink_egl_platform_set_borderless(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED gboolean borderless)
 {
+	/* Since borders are client-side in Wayland, nothing needs to be done here */
 	return TRUE;
 }
 
