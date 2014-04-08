@@ -27,7 +27,6 @@ struct _GstImxEglVivSinkEGLPlatform
 	GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb;
 	GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb;
 	gpointer user_context;
-	gboolean run_mainloop;
 	GMutex mutex;
 	gboolean fullscreen;
 	guint fixed_window_width, fixed_window_height, video_width, video_height;
@@ -36,6 +35,15 @@ struct _GstImxEglVivSinkEGLPlatform
  
 #define EGL_PLATFORM_LOCK(platform) g_mutex_lock(&((platform)->mutex))
 #define EGL_PLATFORM_UNLOCK(platform) g_mutex_unlock(&((platform)->mutex))
+
+
+typedef enum
+{
+	GSTIMX_EGLX11_CMD_EXPOSE = 1,
+	GSTIMX_EGLX11_CMD_CALL_RESIZE_CB = 2,
+	GSTIMX_EGLX11_CMD_STOP_MAINLOOP = 3
+}
+GstImxEGLX11Cmds;
 
 
 static void gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(GstImxEglVivSinkEGLPlatform *platform, gboolean event_handling);
@@ -69,7 +77,6 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 	platform->window_resized_event_cb = window_resized_event_cb;
 	platform->render_frame_cb = render_frame_cb;
 	platform->user_context = user_context;
-	platform->run_mainloop = TRUE;
 
 	g_mutex_init(&(platform->mutex));
 
@@ -375,6 +382,32 @@ static void gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(GstImxEg
 }
 
 
+static void gst_imx_egl_viv_sink_egl_platform_send_cmd(GstImxEglVivSinkEGLPlatform *platform, GstImxEGLX11Cmds cmd)
+{
+	/* must be called with lock */
+
+	Window x11_window;
+	Display *x11_display = (Display *)(platform->native_display);
+
+	if (platform->native_window == 0)
+	{
+		GST_LOG("window not open - cannot send cmd");
+		EGL_PLATFORM_UNLOCK(platform);
+		return;
+	}
+	x11_window = (Window)(platform->native_window);
+
+	XClientMessageEvent event;
+	memset(&event, 0, sizeof(event));
+	event.type = ClientMessage;
+	event.window = x11_window;
+	event.format = 32;
+	event.data.l[1] = cmd;
+	XSendEvent(x11_display, x11_window, 0, 0, (XEvent *)(&event));
+	XFlush(x11_display);
+}
+
+
 void gst_imx_egl_viv_sink_egl_platform_set_event_handling(GstImxEglVivSinkEGLPlatform *platform, gboolean event_handling)
 {
 	EGL_PLATFORM_LOCK(platform);
@@ -407,9 +440,9 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatfor
 		 * video frame sizes */
 		if (platform->window_resized_event_cb != NULL)
 		{
-			// TODO: do not call this here; instead, notify the main loop about this change
+			// do not call the resize callback here directly; instead, notify the main loop about this change
 			// because here, the EGL context is not and cannot be set
-			platform->window_resized_event_cb(platform, platform->fixed_window_width, platform->fixed_window_height, platform->user_context);
+			gst_imx_egl_viv_sink_egl_platform_send_cmd(platform, GSTIMX_EGLX11_CMD_CALL_RESIZE_CB);
 		}
 	}
 	else
@@ -425,27 +458,8 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatfor
 
 gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *platform)
 {
-	Window x11_window;
-	Display *x11_display = (Display *)(platform->native_display);
-
 	EGL_PLATFORM_LOCK(platform);
-
-	if (platform->native_window == 0)
-	{
-		GST_LOG("window not open - cannot expose");
-		EGL_PLATFORM_UNLOCK(platform);
-		return TRUE;
-	}
-	x11_window = (Window)(platform->native_window);
-
-	XClientMessageEvent dummy_event;
-	memset(&dummy_event, 0, sizeof(dummy_event));
-	dummy_event.type = ClientMessage;
-	dummy_event.window = x11_window;
-	dummy_event.format = 32;
-	XSendEvent(x11_display, x11_window, 0, 0, (XEvent *)(&dummy_event));
-	XFlush(x11_display);
-
+	gst_imx_egl_viv_sink_egl_platform_send_cmd(platform, GSTIMX_EGLX11_CMD_EXPOSE);
 	EGL_PLATFORM_UNLOCK(platform);
 
 	return TRUE;
@@ -520,7 +534,23 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 					return GST_IMX_EGL_VIV_SINK_MAINLOOP_RETVAL_WINDOW_CLOSED;
 				}
 				else if ((xevent.xclient.format == 32) && (xevent.xclient.data.l[0] == 0))
-					expose_required = TRUE;
+				{
+					switch (xevent.xclient.data.l[1])
+					{
+						case GSTIMX_EGLX11_CMD_EXPOSE:
+							expose_required = TRUE;
+							break;
+						case GSTIMX_EGLX11_CMD_CALL_RESIZE_CB:
+							if (platform->window_resized_event_cb != NULL)
+								platform->window_resized_event_cb(platform, platform->fixed_window_width, platform->fixed_window_height, platform->user_context);
+							break;
+						case GSTIMX_EGLX11_CMD_STOP_MAINLOOP:
+							continue_loop = FALSE;
+							break;
+						default:
+							break;
+					}
+				}
 				break;
 
 			case ConfigureNotify:
@@ -554,8 +584,6 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 				break;
 		}
 
-		continue_loop = platform->run_mainloop;
-
 		EGL_PLATFORM_UNLOCK(platform);
 
 		if (expose_required)
@@ -572,32 +600,10 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 
 void gst_imx_egl_viv_sink_egl_platform_stop_mainloop(GstImxEglVivSinkEGLPlatform *platform)
 {
-	Window x11_window;
-	Display *x11_display = (Display *)(platform->native_display);
+	GST_LOG("sending stop mainloop command");
 
 	EGL_PLATFORM_LOCK(platform);
-
-	GST_LOG("stopping mainloop");
-
-	if (platform->native_window == 0)
-	{
-		GST_LOG("window not open - cannot send event");
-		EGL_PLATFORM_UNLOCK(platform);
-		return;
-	}
-	x11_window = (Window)(platform->native_window);
-
-	XClientMessageEvent dummy_event;
-	memset(&dummy_event, 0, sizeof(dummy_event));
-	dummy_event.type = ClientMessage;
-	dummy_event.window = x11_window;
-	dummy_event.format = 32;
-	XSendEvent(x11_display, x11_window, 0, 0, (XEvent *)(&dummy_event));
-	XFlush(x11_display);
-
-	platform->run_mainloop = FALSE;
-
-
+	gst_imx_egl_viv_sink_egl_platform_send_cmd(platform, GSTIMX_EGLX11_CMD_STOP_MAINLOOP);
 	EGL_PLATFORM_UNLOCK(platform);
 }
 
