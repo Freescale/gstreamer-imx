@@ -221,8 +221,12 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 
 		platform->fullscreen = fullscreen;
 
-		chosen_width = ((width != 0) || fullscreen) ? width : platform->video_width;
-		chosen_height = ((height != 0) || fullscreen) ? height : platform->video_height;
+		/* If either no fixed size is set, or fullscreen is requested, use the video frame size
+		 * In the fullscreen case, the size is actually irrelevant, since it will be overwritten
+		 * with the screen size. But passing zero for the width/height values is invalid, the
+		 * video frame size is used. */
+		chosen_width = ((width == 0) || fullscreen) ? platform->video_width : width;
+		chosen_height = ((height == 0) || fullscreen) ? platform->video_height : height;
 
 		/* This video output window can be embedded into other windows, for example inside
 		 * media player user interfaces. This is done by making the specified window as
@@ -303,6 +307,12 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 	{
 		XWindowAttributes window_attr;
 		XGetWindowAttributes(x11_display, x11_window, &window_attr);
+
+		if (fullscreen || (platform->fixed_window_width != 0) || (platform->fixed_window_height != 0))
+		{
+			platform->fixed_window_width = window_attr.width;
+			platform->fixed_window_height = window_attr.height;
+		}
 
 		if (platform->window_resized_event_cb != NULL)
 			platform->window_resized_event_cb(platform, window_attr.width, window_attr.height, platform->user_context);

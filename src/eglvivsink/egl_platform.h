@@ -42,6 +42,9 @@ G_BEGIN_DECLS
 	  window size should still not change just because the video frame size did)
 	* otherwise, the window size equals the video frame size; this is how other GStreamer
 	  sinks also behave
+
+	implementation-wise, it is often useful to interpret fullscreen as a special fixed window
+	size case where the window cannot be manually resized in the set_size() call
  */
 
 
