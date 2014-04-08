@@ -416,7 +416,7 @@ static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GV
 				{
 					egl_viv_sink->window_x_coord = i;
 					if (egl_viv_sink->gles2_renderer != NULL)
-						gst_imx_egl_viv_sink_egl_platform_set_coords(egl_viv_sink->gles2_renderer, i, egl_viv_sink->window_y_coord);
+						gst_imx_egl_viv_sink_gles2_renderer_set_window_coords(egl_viv_sink->gles2_renderer, i, egl_viv_sink->window_y_coord);
 				}
 			}
 			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
@@ -434,7 +434,7 @@ static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GV
 				{
 					egl_viv_sink->window_y_coord = i;
 					if (egl_viv_sink->gles2_renderer != NULL)
-						gst_imx_egl_viv_sink_egl_platform_set_coords(egl_viv_sink->gles2_renderer, egl_viv_sink->window_x_coord, i);
+						gst_imx_egl_viv_sink_gles2_renderer_set_window_coords(egl_viv_sink->gles2_renderer, egl_viv_sink->window_x_coord, i);
 				}
 			}
 			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
