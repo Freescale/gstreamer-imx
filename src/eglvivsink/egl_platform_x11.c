@@ -29,6 +29,8 @@ struct _GstImxEglVivSinkEGLPlatform
 	gpointer user_context;
 	gboolean run_mainloop;
 	GMutex mutex;
+	gboolean fullscreen;
+	guint fixed_window_width, fixed_window_height, video_width, video_height;
 };
  
  
@@ -160,6 +162,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		int screen_num;
 		Window root_window;
 		Atom net_wm_state_atom, net_wm_state_fullscreen_atom;
+		guint chosen_width, chosen_height;
 
 		GST_INFO("Creating new X11 window with EGL context (parent window: %" G_GUINTPTR_FORMAT ")", window_handle);
 
@@ -203,6 +206,17 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 
 		// TODO: xlib error handler
 
+		platform->fixed_window_width = width;
+		platform->fixed_window_height = height;
+
+		platform->video_width = GST_VIDEO_INFO_WIDTH(video_info);
+		platform->video_height = GST_VIDEO_INFO_HEIGHT(video_info);
+
+		platform->fullscreen = fullscreen;
+
+		chosen_width = ((width != 0) || fullscreen) ? width : platform->video_width;
+		chosen_height = ((height != 0) || fullscreen) ? height : platform->video_height;
+
 		/* This video output window can be embedded into other windows, for example inside
 		 * media player user interfaces. This is done by making the specified window as
 		 * the parent of the video playback window. */
@@ -210,8 +224,8 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 			x11_display, (window_handle != 0) ? platform->parent_window : root_window,
 			x_coord,
 			y_coord,
-			(width != 0) ? (gint)width : GST_VIDEO_INFO_WIDTH(video_info),
-			(height != 0) ? (gint)height : GST_VIDEO_INFO_HEIGHT(video_info),
+			chosen_width,
+			chosen_height,
 			0, visual_info->depth, InputOutput, visual_info->visual,
 			CWBackPixel | CWColormap  | CWBorderPixel | CWBackingStore | CWOverrideRedirect,
 			&attr
@@ -231,8 +245,8 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		XSizeHints sizehints;
 		sizehints.x = 0;
 		sizehints.y = 0;
-		sizehints.width  = GST_VIDEO_INFO_WIDTH(video_info);
-		sizehints.height = GST_VIDEO_INFO_HEIGHT(video_info);
+		sizehints.width  = chosen_width;
+		sizehints.height = chosen_height;
 		sizehints.flags = PPosition | PSize;
 		XSetNormalHints(x11_display, x11_window, &sizehints);
 
@@ -383,7 +397,27 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatfor
 
 	x11_window = (Window)(platform->native_window);
 
-	XResizeWindow((Display *)(platform->native_display), x11_window, GST_VIDEO_INFO_WIDTH(video_info), GST_VIDEO_INFO_HEIGHT(video_info));
+	platform->video_width = GST_VIDEO_INFO_WIDTH(video_info);
+	platform->video_height = GST_VIDEO_INFO_HEIGHT(video_info);
+
+	if (platform->fullscreen || (platform->fixed_window_width != 0) || (platform->fixed_window_height != 0) || (platform->parent_window != 0))
+	{
+		/* even though the window itself might not have been resized, the callback
+		 * still needs to be invoked, because it depends on both the window and the
+		 * video frame sizes */
+		if (platform->window_resized_event_cb != NULL)
+		{
+			// TODO: do not call this here; instead, notify the main loop about this change
+			// because here, the EGL context is not and cannot be set
+			platform->window_resized_event_cb(platform, platform->fixed_window_width, platform->fixed_window_height, platform->user_context);
+		}
+	}
+	else
+	{
+		/* not calling the resize callback here, since the XResizeWindow() call
+		 * creates a resize event that will be handled in the main loop */
+		XResizeWindow((Display *)(platform->native_display), x11_window, GST_VIDEO_INFO_WIDTH(video_info), GST_VIDEO_INFO_HEIGHT(video_info));
+	}
 
 	EGL_PLATFORM_UNLOCK(platform);
 }
@@ -458,6 +492,13 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 					);
 
 					XResizeWindow(x11_display, this_window, width, height);
+
+					if ((platform->fixed_window_width != 0) || (platform->fixed_window_height != 0))
+					{
+						platform->fixed_window_width = width;
+						platform->fixed_window_height = height;
+					}
+
 					if (platform->window_resized_event_cb != NULL)
 						platform->window_resized_event_cb(platform, width, height, platform->user_context);
 				}
@@ -495,6 +536,12 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 				 * this is usually the case when this window is embedded inside another one */
 				if (platform->parent_window != 0)
 					XResizeWindow(x11_display, this_window, xevent.xconfigure.width, xevent.xconfigure.height);
+
+				if ((platform->fixed_window_width != 0) || (platform->fixed_window_height != 0))
+				{
+					platform->fixed_window_width = xevent.xconfigure.width;
+					platform->fixed_window_height = xevent.xconfigure.height;
+				}
 
 				if (platform->window_resized_event_cb != NULL)
 					platform->window_resized_event_cb(platform, xevent.xconfigure.width, xevent.xconfigure.height, platform->user_context);
@@ -576,11 +623,27 @@ gboolean gst_imx_egl_viv_sink_egl_platform_set_size(GstImxEglVivSinkEGLPlatform 
 {
 	EGL_PLATFORM_LOCK(platform);
 
-	if (platform->parent_window != 0)
+	platform->fixed_window_width = width;
+	platform->fixed_window_height = height;
+
+	/* not calling the resize callback here, since the XResizeWindow() call
+	 * creates a resize event that will be handled in the main loop */
+
+	if ((platform->fullscreen) || (platform->parent_window != 0))
+	{
+		// do nothing
+	}
+	else if ((width != 0) || (height != 0))
 	{
 		Display *x11_display = (Display *)(platform->native_display);
 		Window this_window = (Window)(platform->native_window);
 		XResizeWindow(x11_display, this_window, width, height);
+	}
+	else
+	{
+		Display *x11_display = (Display *)(platform->native_display);
+		Window this_window = (Window)(platform->native_window);
+		XResizeWindow(x11_display, this_window, platform->video_width, platform->video_height);
 	}
 
 	EGL_PLATFORM_UNLOCK(platform);

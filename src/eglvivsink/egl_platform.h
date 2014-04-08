@@ -8,6 +8,43 @@
 G_BEGIN_DECLS
 
 
+/* Resize behavior:
+	gst_imx_egl_viv_sink_egl_platform_init_window():
+		same as gst_imx_egl_viv_sink_egl_platform_set_size()
+
+	gst_imx_egl_viv_sink_egl_platform_set_size():
+		if fullscreen:
+			store specified fixed window size, but do not actually resize window
+		else if window is embedded (= parent window is defined):
+			store specified fixed window size, but do not actually resize window
+		else if neither fixed width nor fixed height are null:
+			store and set fixed window size
+		else:
+			set fixed window size to null; use video size as window size
+	gst_imx_egl_viv_sink_egl_platform_set_video_info():
+		if fullscreen or (stored fixed window size is not null) or (window is embedded):
+			set video size, call resize callback, but do not resize window
+		else:
+			set video size, call resize callback, resize window to video size
+
+	if the window system signals a size change:
+		if the stored fixed window size is non-NULL, set it to whatever the window system
+		specified
+		call the resize callback
+
+	rationale:
+	* in the fullscreen and embedded cases, the window size is determined by
+	  external factors (in fullscreen, the screen size is determined by the system,
+	  in the embedded case, the parent window defines and controls the size)
+	* if the window size is explicitely defined, and the window is neither fullscreen nor
+	  embedded, then the caller wants the window size to be fixed to whatever was specified
+	  (the size may be changed later by the system; this cannot be avoided, but then, the
+	  window size should still not change just because the video frame size did)
+	* otherwise, the window size equals the video frame size; this is how other GStreamer
+	  sinks also behave
+ */
+
+
 typedef struct _GstImxEglVivSinkEGLPlatform GstImxEglVivSinkEGLPlatform;
 
 
