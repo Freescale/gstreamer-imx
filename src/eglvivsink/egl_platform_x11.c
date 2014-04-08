@@ -2,10 +2,9 @@
 #include <X11/Xutil.h>
 #include <X11/cursorfont.h>
 #include <X11/Xatom.h>
+
 #include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <poll.h>
+
 #include "egl_platform.h"
 #include "egl_misc.h"
 #include "gl_headers.h"
@@ -22,14 +21,19 @@ struct _GstImxEglVivSinkEGLPlatform
 	EGLDisplay egl_display;
 	EGLContext egl_context;
 	EGLSurface egl_surface;
-	Window parent_window;
-	Atom wm_delete_atom;
+
 	GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb;
 	GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb;
+
 	gpointer user_context;
-	GMutex mutex;
+
 	gboolean fullscreen;
 	guint fixed_window_width, fixed_window_height, video_width, video_height;
+
+	GMutex mutex;
+
+	Window parent_window;
+	Atom wm_delete_atom;
 };
  
  
@@ -49,7 +53,7 @@ GstImxEGLX11Cmds;
 static void gst_imx_egl_viv_sink_egl_platform_set_event_handling_nolock(GstImxEglVivSinkEGLPlatform *platform, gboolean event_handling);
 
 
-static void init_debug_category(void)
+static void static_global_init(void)
 {
 	static gboolean initialized = FALSE;
 	if (!initialized)
@@ -71,7 +75,7 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 	g_assert(window_resized_event_cb != NULL);
 	g_assert(render_frame_cb != NULL);
 
-	init_debug_category();
+	static_global_init();
 
 	platform = (GstImxEglVivSinkEGLPlatform *)g_new0(GstImxEglVivSinkEGLPlatform, 1);
 	platform->window_resized_event_cb = window_resized_event_cb;
@@ -115,16 +119,19 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 
 void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *platform)
 {
-	if (platform != NULL)
-	{
-		g_mutex_clear(&(platform->mutex));
+	if (platform == NULL)
+		return;
 
-		if (platform->egl_display != EGL_NO_DISPLAY)
-			eglTerminate(platform->egl_display);
-		if (platform->native_display != NULL)
-			XCloseDisplay((Display*)(platform->native_display));
-		g_free(platform);
-	}
+	eglMakeCurrent(platform->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+
+	if (platform->egl_display != EGL_NO_DISPLAY)
+		eglTerminate(platform->egl_display);
+	if (platform->native_display != NULL)
+		XCloseDisplay((Display*)(platform->native_display));
+
+	g_mutex_clear(&(platform->mutex));
+
+	g_free(platform);
 }
 
 
@@ -300,9 +307,27 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 	eglBindAPI(EGL_OPENGL_ES_API);
 
 	platform->egl_context = eglCreateContext(platform->egl_display, config, EGL_NO_CONTEXT, ctx_attribs);
-	platform->egl_surface = eglCreateWindowSurface(platform->egl_display, config, platform->native_window, NULL);
+	if (platform->egl_context == EGL_NO_CONTEXT)
+	{
+		GST_ERROR("eglCreateContext failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
+		EGL_PLATFORM_UNLOCK(platform);
+		return FALSE;
+	}
 
-	eglMakeCurrent(platform->egl_display, platform->egl_surface, platform->egl_surface, platform->egl_context);
+	platform->egl_surface = eglCreateWindowSurface(platform->egl_display, config, platform->native_window, NULL);
+	if (platform->egl_surface == EGL_NO_SURFACE)
+	{
+		GST_ERROR("eglCreateWindowSurface failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
+		EGL_PLATFORM_UNLOCK(platform);
+		return FALSE;
+	}
+
+	if (!eglMakeCurrent(platform->egl_display, platform->egl_surface, platform->egl_surface, platform->egl_context))
+	{
+		GST_ERROR("eglMakeCurrent failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
+		EGL_PLATFORM_UNLOCK(platform);
+		return FALSE;
+	}
 
 	{
 		XWindowAttributes window_attr;
@@ -342,10 +367,6 @@ gboolean gst_imx_egl_viv_sink_egl_platform_shutdown_window(GstImxEglVivSinkEGLPl
 	if (platform->egl_surface != EGL_NO_SURFACE)
 		eglDestroySurface(platform->egl_display, platform->egl_surface);
 
-	if (platform->egl_display != EGL_NO_DISPLAY)
-		eglTerminate(platform->egl_display);
-
-	platform->egl_display = EGL_NO_DISPLAY;
 	platform->egl_context = EGL_NO_CONTEXT;
 	platform->egl_surface = EGL_NO_SURFACE;
 
@@ -639,8 +660,12 @@ gboolean gst_imx_egl_viv_sink_egl_platform_set_size(GstImxEglVivSinkEGLPlatform 
 {
 	EGL_PLATFORM_LOCK(platform);
 
-	platform->fixed_window_width = width;
-	platform->fixed_window_height = height;
+	/* Only allow overwriting values if the window size can actually be modified */
+	if ((platform->fullscreen) || (platform->parent_window != 0))
+	{
+		platform->fixed_window_width = width;
+		platform->fixed_window_height = height;
+	}
 
 	/* not calling the resize callback here, since the XResizeWindow() call
 	 * creates a resize event that will be handled in the main loop */
