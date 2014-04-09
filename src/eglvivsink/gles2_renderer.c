@@ -811,25 +811,25 @@ static void gst_imx_egl_viv_sink_gles2_renderer_resize_callback(G_GNUC_UNUSED Gs
 {
 	GstImxEglVivSinkGLES2Renderer *renderer = (GstImxEglVivSinkGLES2Renderer *)user_context;
 
-	GST_TRACE("resize_callback w/h: %d/%d", window_width, window_height);
+	GST_LOG("resize_callback w/h: %d/%d", window_width, window_height);
 
 	GLES2_RENDERER_LOCK(renderer);
 
+	glGetError(); /* clear out any existing error */
+
 	if ((window_width != 0) && (window_height != 0))
 	{
-		glGetError(); /* clear out any existing error */
-
 		renderer->window_width = window_width;
 		renderer->window_height = window_height;
-
-		glViewport(0, 0, renderer->window_width, renderer->window_height);
-
-		GST_LOG("resizing viewport to %ux%u pixel", renderer->window_width, renderer->window_height);
-
-		gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info));
-
-		gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("viewport", "glViewport");
 	}
+
+	glViewport(0, 0, renderer->window_width, renderer->window_height);
+
+	GST_LOG("resizing viewport to %ux%u pixel", renderer->window_width, renderer->window_height);
+
+	gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info));
+
+	gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("viewport", "glViewport");
 
 	GLES2_RENDERER_UNLOCK(renderer);
 }
@@ -1026,8 +1026,8 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxE
 		gint video_par_n, video_par_d, window_par_n, window_par_d;
 		float norm_ratio;
 
-		video_par_n = video_info->par_n;
-		video_par_d = video_info->par_d;
+		video_par_n = GST_VIDEO_INFO_PAR_N(video_info);
+		video_par_d = GST_VIDEO_INFO_PAR_D(video_info);
 		window_par_n = 1;
 		window_par_d = 1;
 
@@ -1041,7 +1041,8 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxE
 		norm_ratio = (float)(renderer->display_ratio_n) / (float)(renderer->display_ratio_d) * (float)(renderer->window_height) / (float)(renderer->window_width);
 
 		GST_LOG(
-			"video width/height: %dx%d  video pixel aspect ratio: %d/%d  window pixel aspect ratio: %d/%d  calculated display ratio: %d/%d  window width/height: %dx%d  norm ratio: %f",
+			"force aspect ratio: %d  video width/height: %dx%d  video pixel aspect ratio: %d/%d  window pixel aspect ratio: %d/%d  calculated display ratio: %d/%d  window width/height: %dx%d  norm ratio: %f",
+			renderer->force_aspect_ratio,
 			video_info->width, video_info->height,
 			video_par_n, video_par_d,
 			window_par_n, window_par_d,
@@ -1129,6 +1130,8 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_force_aspect_ratio(GstImxEglViv
 {
 	GLES2_RENDERER_LOCK(renderer);
 
+	GST_LOG("setting force_aspect_ratio to %d", force_aspect_ratio);
+
 	renderer->force_aspect_ratio = force_aspect_ratio;
 	if (!gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(renderer, &(renderer->video_info)))
 	{
@@ -1144,23 +1147,29 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_force_aspect_ratio(GstImxEglViv
 
 gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_coords(GstImxEglVivSinkGLES2Renderer *renderer, gint window_x_coord, gint window_y_coord)
 {
+	GLES2_RENDERER_LOCK(renderer);
 	renderer->manual_x_coord = window_x_coord;
 	renderer->manual_y_coord = window_y_coord;
+	GLES2_RENDERER_UNLOCK(renderer);
 	return renderer->thread_started ? gst_imx_egl_viv_sink_egl_platform_set_coords(renderer->egl_platform, window_x_coord, window_y_coord) : TRUE;
 }
 
 
 gboolean gst_imx_egl_viv_sink_gles2_renderer_set_window_size(GstImxEglVivSinkGLES2Renderer *renderer, guint window_width, guint window_height)
 {
+	GLES2_RENDERER_LOCK(renderer);
 	renderer->manual_width = window_width;
 	renderer->manual_height = window_height;
+	GLES2_RENDERER_UNLOCK(renderer);
 	return renderer->thread_started ? gst_imx_egl_viv_sink_egl_platform_set_size(renderer->egl_platform, window_width, window_height) : TRUE;
 }
 
 
 gboolean gst_imx_egl_viv_sink_gles2_renderer_set_borderless_window(GstImxEglVivSinkGLES2Renderer *renderer, gboolean borderless_window)
 {
+	GLES2_RENDERER_LOCK(renderer);
 	renderer->borderless = borderless_window;
+	GLES2_RENDERER_UNLOCK(renderer);
 	return renderer->thread_started ? gst_imx_egl_viv_sink_egl_platform_set_borderless(renderer->egl_platform, borderless_window) : TRUE;
 }
 

@@ -28,6 +28,7 @@ struct _GstImxEglVivSinkEGLPlatform
 	gpointer user_context;
 
 	gboolean fullscreen;
+	guint video_par_n, video_par_d;
 	guint fixed_window_width, fixed_window_height, video_width, video_height;
 	guint current_width, current_height;
 
@@ -212,6 +213,51 @@ static struct wl_callback_listener configure_callback_listener =
 
 
 
+static void calculate_adjusted_window_size(GstImxEglVivSinkEGLPlatform *platform, guint *actual_width, guint *actual_height)
+{
+	gboolean b;
+	guint window_par_n, window_par_d, display_ratio_n, display_ratio_d;
+
+	window_par_n = 4;
+	window_par_d = 3;
+
+	b = gst_video_calculate_display_ratio(
+		&display_ratio_n, &display_ratio_d,
+		platform->video_width, platform->video_height,
+		platform->video_par_n, platform->video_par_d,
+		window_par_n, window_par_d
+	);
+
+	if (b)
+	{
+		*actual_width = platform->video_width * platform->video_par_n / platform->video_par_d;
+		*actual_height = platform->video_height;
+	}
+	else
+	{
+		*actual_width = platform->video_width;
+		*actual_height = platform->video_height;
+	}
+
+	GST_LOG(
+		"calculate_adjusted_window_size:  video size: %dx%d  video ratio: %d/%d  display ratio: %d/%d  actual size: %ux%u",
+		platform->video_width, platform->video_height,
+		platform->video_par_n, platform->video_par_d,
+		display_ratio_n, display_ratio_d,
+		*actual_width, *actual_height
+	);
+}
+
+
+static void resize_window_to_video(GstImxEglVivSinkEGLPlatform *platform)
+{
+	guint actual_width, actual_height;
+	calculate_adjusted_window_size(platform, &actual_width, &actual_height);
+	platform->current_width = actual_width;
+	platform->current_height = actual_height;
+	wl_egl_window_resize(platform->native_window, actual_width, actual_height, 0, 0);
+}
+
 
 GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar const *native_display_name, GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb, GstImxEglVivSinkWindowRenderFrameCallback render_frame_cb, gpointer user_context)
 {
@@ -392,6 +438,8 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 	platform->fixed_window_width = width;
 	platform->fixed_window_height = height;
 
+	platform->video_par_n = GST_VIDEO_INFO_PAR_N(video_info);
+	platform->video_par_d = GST_VIDEO_INFO_PAR_D(video_info);
 	platform->video_width = GST_VIDEO_INFO_WIDTH(video_info);
 	platform->video_height = GST_VIDEO_INFO_HEIGHT(video_info);
 
@@ -401,8 +449,17 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 	 * In the fullscreen case, the size is actually irrelevant, since it will be overwritten
 	 * with the screen size. But passing zero for the width/height values is invalid, the
 	 * video frame size is used. */
-	chosen_width = ((width == 0) || fullscreen) ? platform->video_width : width;
-	chosen_height = ((height == 0) || fullscreen) ? platform->video_height : height;
+	if ((width == 0) || (height == 0) || fullscreen)
+	{
+		calculate_adjusted_window_size(platform, &chosen_width, &chosen_height);
+		/*chosen_width = platform->video_width;
+		chosen_height = platform->video_height;*/
+	}
+	else
+	{
+		chosen_width = width;
+		chosen_height = height;
+	}
 
 
 	platform->native_window = wl_egl_window_create(platform->surface, chosen_width, chosen_height);
@@ -452,7 +509,12 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 	}
 
 
+#if 1
+	actual_width = chosen_width;
+	actual_height = chosen_height;
+#else
 	wl_egl_window_get_attached_size(platform->native_window, &actual_width, &actual_height);
+#endif
 
 	platform->current_width = actual_width;
 	platform->current_height = actual_height;
@@ -553,6 +615,8 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatfor
 	}
 
 
+	platform->video_par_n = GST_VIDEO_INFO_PAR_N(video_info);
+	platform->video_par_d = GST_VIDEO_INFO_PAR_D(video_info);
 	platform->video_width = GST_VIDEO_INFO_WIDTH(video_info);
 	platform->video_height = GST_VIDEO_INFO_HEIGHT(video_info);
 
@@ -562,8 +626,11 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatfor
 	}
 	else
 	{
-		wl_egl_window_resize(platform->native_window, platform->video_height, platform->video_height, 0, 0);
+		resize_window_to_video(platform);
 	}
+
+
+	EGL_PLATFORM_UNLOCK(platform);
 
 
 	/* even though the window itself might not have been resized, the callback
@@ -576,9 +643,6 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatfor
 		char const cmd = GSTIMX_EGLWL_CMD_CALL_RESIZE_CB;
 		write(platform->ctrl_pipe[1], &cmd, 1);
 	}
-
-
-	EGL_PLATFORM_UNLOCK(platform);
 }
 
 
@@ -607,7 +671,7 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 		fds[1].fd = platform->display_fd;
 		fds[1].events = POLLIN | POLLERR | POLLHUP;
 
-		EGL_PLATFORM_LOCK(platform);
+		//EGL_PLATFORM_LOCK(platform);
 
 		/* Start event handling; wl_display_prepare_read() announces the intention
 		 * to read all events, taking care of race conditions that otherwise occur */
@@ -658,11 +722,13 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 		 * time this place is reached */
 		if (fds[0].revents & POLLIN)
 		{
-			char msg;
-			read(fds[0].fd, &msg, sizeof(msg));
+			char cmd;
+			read(fds[0].fd, &cmd, sizeof(cmd));
+
+			GST_LOG("received cmd: %d", (int)cmd);
 
 			/* Stop if requested */
-			switch (msg)
+			switch (cmd)
 			{
 				case GSTIMX_EGLWL_CMD_STOP_MAINLOOP:
 					continue_loop = FALSE;
@@ -670,8 +736,9 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 					break;
 
 				case GSTIMX_EGLWL_CMD_CALL_RESIZE_CB:
+					GST_LOG("Resize callback requested");
 					if (platform->window_resized_event_cb != NULL)
-						platform->window_resized_event_cb(platform, platform->fixed_window_width, platform->fixed_window_height, platform->user_context);
+						platform->window_resized_event_cb(platform, platform->current_width, platform->current_height, platform->user_context);
 					break;
 
 				default:
@@ -679,7 +746,7 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 			}
 		}
 
-		EGL_PLATFORM_UNLOCK(platform);
+		//EGL_PLATFORM_UNLOCK(platform);
 	}
 
 	/* At this point, the sink is shutting down. Disable rendering in the frame callback. */
@@ -724,8 +791,10 @@ gboolean gst_imx_egl_viv_sink_egl_platform_set_size(GstImxEglVivSinkEGLPlatform 
 	}
 	else
 	{
-		wl_egl_window_resize(platform->native_window, platform->video_width, platform->video_height, 0, 0);
+		resize_window_to_video(platform);
 	}
+
+	EGL_PLATFORM_UNLOCK(platform);
 
 	if (platform->window_resized_event_cb != NULL)
 	{
@@ -734,8 +803,6 @@ gboolean gst_imx_egl_viv_sink_egl_platform_set_size(GstImxEglVivSinkEGLPlatform 
 		char const cmd = GSTIMX_EGLWL_CMD_CALL_RESIZE_CB;
 		write(platform->ctrl_pipe[1], &cmd, 1);
 	}
-
-	EGL_PLATFORM_UNLOCK(platform);
 
 	return TRUE;
 }
