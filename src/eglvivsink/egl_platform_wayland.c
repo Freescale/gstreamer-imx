@@ -31,6 +31,7 @@ struct _GstImxEglVivSinkEGLPlatform
 	guint video_par_n, video_par_d;
 	guint fixed_window_width, fixed_window_height, video_width, video_height;
 	guint current_width, current_height;
+	guint screen_width, screen_height;
 
 	GMutex mutex;
 
@@ -39,6 +40,7 @@ struct _GstImxEglVivSinkEGLPlatform
 	int display_fd;
 	struct wl_compositor *compositor;
 	struct wl_shell *shell;
+	struct wl_output *output;
 
 	struct wl_surface *surface;
 	struct wl_shell_surface *shell_surface;
@@ -89,6 +91,57 @@ static void static_global_init(void)
 
 
 
+static void calculate_adjusted_window_size(GstImxEglVivSinkEGLPlatform *platform, guint *actual_width, guint *actual_height)
+{
+	gboolean b;
+	guint window_par_n, window_par_d, display_ratio_n, display_ratio_d;
+
+	window_par_n = 4;
+	window_par_d = 3;
+
+	b = gst_video_calculate_display_ratio(
+		&display_ratio_n, &display_ratio_d,
+		platform->video_width, platform->video_height,
+		platform->video_par_n, platform->video_par_d,
+		window_par_n, window_par_d
+	);
+
+	if (b)
+	{
+		*actual_width = platform->video_width * platform->video_par_n / platform->video_par_d;
+		*actual_height = platform->video_height;
+	}
+	else
+	{
+		*actual_width = platform->video_width;
+		*actual_height = platform->video_height;
+	}
+
+	GST_LOG(
+		"calculate_adjusted_window_size:  video size: %dx%d  video ratio: %d/%d  display ratio: %d/%d  actual size: %ux%u",
+		platform->video_width, platform->video_height,
+		platform->video_par_n, platform->video_par_d,
+		display_ratio_n, display_ratio_d,
+		*actual_width, *actual_height
+	);
+}
+
+
+static void resize_window_to_video(GstImxEglVivSinkEGLPlatform *platform)
+{
+	guint actual_width, actual_height;
+
+	calculate_adjusted_window_size(platform, &actual_width, &actual_height);
+	platform->current_width = ((platform->screen_width == 0) || (actual_width < platform->screen_width)) ? actual_width : platform->screen_width;
+	platform->current_height = ((platform->screen_height == 0) || (actual_height < platform->screen_height)) ? actual_height : platform->screen_height;
+	GST_LOG("final size: %dx%d", platform->current_width, platform->current_height);
+
+	wl_egl_window_resize(platform->native_window, platform->current_width, platform->current_height, 0, 0);
+}
+
+
+
+
 static void registry_handle_global(void *data, struct wl_registry *registry, uint32_t id, char const *interface, G_GNUC_UNUSED uint32_t version)
 {
 	GstImxEglVivSinkEGLPlatform *platform = data;
@@ -97,6 +150,8 @@ static void registry_handle_global(void *data, struct wl_registry *registry, uin
 		platform->compositor = wl_registry_bind(registry, id, &wl_compositor_interface, 1);
 	else if (g_strcmp0(interface, "wl_shell") == 0)
 		platform->shell = wl_registry_bind(registry, id, &wl_shell_interface, 1);
+	else if (g_strcmp0(interface, "wl_output") == 0)
+		platform->output = wl_registry_bind(registry, id, &wl_output_interface, 2);
 }
 
 static void registry_handle_global_remove(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_registry *registry, G_GNUC_UNUSED uint32_t name)
@@ -107,6 +162,60 @@ static const struct wl_registry_listener registry_listener =
 {
 	registry_handle_global,
 	registry_handle_global_remove
+};
+
+
+
+
+static void output_geometry(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_output *wl_output, G_GNUC_UNUSED int x, G_GNUC_UNUSED int y, G_GNUC_UNUSED int w, G_GNUC_UNUSED int h, G_GNUC_UNUSED int subpixel, G_GNUC_UNUSED const char *make, G_GNUC_UNUSED const char *model, G_GNUC_UNUSED int transform)
+{
+}
+
+static void output_mode(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_output *wl_output, G_GNUC_UNUSED unsigned int flags, int w, int h, G_GNUC_UNUSED int refresh)
+{
+	GstImxEglVivSinkEGLPlatform *platform = data;
+
+	if (flags & WL_OUTPUT_MODE_CURRENT)
+	{
+		GST_LOG("reported screen size: %dx%d", w, h);
+
+		platform->screen_width = w;
+		platform->screen_height = h;
+
+		/* resize again in case the window is set to the video size
+		 * (this makes sure the window is not larger than the screen) */
+		if (
+			   !platform->fullscreen
+			&& (platform->fixed_window_width == 0) && (platform->fixed_window_height == 0)
+			&& (platform->video_width != 0) && (platform->video_height != 0)
+			//&& (platform->parent_window != 0) // TODO
+		)
+		{
+			resize_window_to_video(platform);
+
+			if (platform->window_resized_event_cb != NULL)
+			{
+				char const cmd = GSTIMX_EGLWL_CMD_CALL_RESIZE_CB;
+				write(platform->ctrl_pipe[1], &cmd, 1);
+			}
+		}
+	}
+}
+
+static void output_done(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_output *output)
+{
+}
+
+static void output_scale(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_output *output, G_GNUC_UNUSED int scale)
+{
+}
+
+static const struct wl_output_listener output_listener =
+{
+	output_geometry,
+	output_mode,
+	output_done,
+	output_scale
 };
 
 
@@ -158,7 +267,6 @@ static const struct wl_callback_listener frame_listener =
 
 static void frame_callback(void *data, struct wl_callback *callback, G_GNUC_UNUSED uint32_t time)
 {
-	struct wl_region *region;
 	GstImxEglVivSinkEGLPlatform *platform = data;
 
 	/* Cleanup old callback */
@@ -195,52 +303,6 @@ static struct wl_callback_listener configure_callback_listener =
 
 
 
-
-
-static void calculate_adjusted_window_size(GstImxEglVivSinkEGLPlatform *platform, guint *actual_width, guint *actual_height)
-{
-	gboolean b;
-	guint window_par_n, window_par_d, display_ratio_n, display_ratio_d;
-
-	window_par_n = 4;
-	window_par_d = 3;
-
-	b = gst_video_calculate_display_ratio(
-		&display_ratio_n, &display_ratio_d,
-		platform->video_width, platform->video_height,
-		platform->video_par_n, platform->video_par_d,
-		window_par_n, window_par_d
-	);
-
-	if (b)
-	{
-		*actual_width = platform->video_width * platform->video_par_n / platform->video_par_d;
-		*actual_height = platform->video_height;
-	}
-	else
-	{
-		*actual_width = platform->video_width;
-		*actual_height = platform->video_height;
-	}
-
-	GST_LOG(
-		"calculate_adjusted_window_size:  video size: %dx%d  video ratio: %d/%d  display ratio: %d/%d  actual size: %ux%u",
-		platform->video_width, platform->video_height,
-		platform->video_par_n, platform->video_par_d,
-		display_ratio_n, display_ratio_d,
-		*actual_width, *actual_height
-	);
-}
-
-
-static void resize_window_to_video(GstImxEglVivSinkEGLPlatform *platform)
-{
-	guint actual_width, actual_height;
-	calculate_adjusted_window_size(platform, &actual_width, &actual_height);
-	platform->current_width = actual_width;
-	platform->current_height = actual_height;
-	wl_egl_window_resize(platform->native_window, actual_width, actual_height, 0, 0);
-}
 
 
 static void redraw(GstImxEglVivSinkEGLPlatform *platform)
@@ -304,12 +366,13 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 
 	platform->registry = wl_display_get_registry(platform->display);
 	wl_registry_add_listener(platform->registry, &registry_listener, platform);
-
 	if (wl_display_dispatch(platform->display) == -1)
 	{
 		GST_ERROR("wl_display_dispatch failed: %s", strerror(errno));
 		goto cleanup;
 	}
+
+	wl_output_add_listener(platform->output, &output_listener, platform);
 
 	platform->display_fd = wl_display_get_fd(platform->display);
 
@@ -368,6 +431,9 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 
 	if (platform->compositor != NULL)
 		wl_compositor_destroy(platform->compositor);
+
+	if (platform->output != NULL)
+		wl_output_destroy(platform->output);
 
 	wl_display_flush(platform->display);
 	wl_display_disconnect(platform->display);
@@ -520,17 +586,11 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 	}
 
 
-#if 1
 	actual_width = chosen_width;
 	actual_height = chosen_height;
-#else
-	wl_egl_window_get_attached_size(platform->native_window, &actual_width, &actual_height);
-#endif
 
 	platform->current_width = actual_width;
 	platform->current_height = actual_height;
-
-	GST_INFO("size after initializing: %dx%d pixels", actual_width, actual_height);
 
 	if (fullscreen || (platform->fixed_window_width != 0) || (platform->fixed_window_height != 0))
 	{
