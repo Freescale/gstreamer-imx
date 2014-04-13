@@ -44,6 +44,7 @@ struct _GstImxEglVivSinkEGLPlatform
 	struct wl_shell_surface *shell_surface;
 
 	struct wl_callback *frame_cb;
+	gboolean frame_callback_invoked;
 
 	int ctrl_pipe[2];
 
@@ -57,6 +58,7 @@ struct _GstImxEglVivSinkEGLPlatform
 
 typedef enum
 {
+	GSTIMX_EGLWL_CMD_REDRAW,
 	GSTIMX_EGLWL_CMD_CALL_RESIZE_CB,
 	GSTIMX_EGLWL_CMD_STOP_MAINLOOP
 }
@@ -147,14 +149,14 @@ static const struct wl_shell_surface_listener shell_surface_listener =
 
 
 
-static void redraw_frame(void *data, struct wl_callback *callback, uint32_t time);
+static void frame_callback(void *data, struct wl_callback *callback, G_GNUC_UNUSED uint32_t time);
 
 static const struct wl_callback_listener frame_listener =
 {
-	redraw_frame
+	frame_callback
 };
 
-static void redraw_frame(void *data, struct wl_callback *callback, G_GNUC_UNUSED uint32_t time)
+static void frame_callback(void *data, struct wl_callback *callback, G_GNUC_UNUSED uint32_t time)
 {
 	struct wl_region *region;
 	GstImxEglVivSinkEGLPlatform *platform = data;
@@ -163,30 +165,12 @@ static void redraw_frame(void *data, struct wl_callback *callback, G_GNUC_UNUSED
 	if (callback != NULL)
 		wl_callback_destroy(callback);
 
-	if (!platform->configured || !platform->do_render)
-		return;
-
-	/* The actual rendering */
-	if (platform->render_frame_cb != NULL)
-		platform->render_frame_cb(platform, platform->user_context);
-
-	/* Define opaque region */
-	region = wl_compositor_create_region(platform->compositor);
-	wl_region_add(
-		region,
-		0, 0,
-		platform->current_width,
-		platform->current_height
-	);
-	wl_surface_set_opaque_region(platform->surface, region);
-	wl_region_destroy(region);
+	platform->frame_callback_invoked = TRUE;
+	GST_LOG("frame_callback_invoked set to TRUE");
 
 	/* Setup new callback */
 	platform->frame_cb = wl_surface_frame(platform->surface);
 	wl_callback_add_listener(platform->frame_cb, &frame_listener, platform);
-
-	/* Finally, do the actual commit to the server */
-	eglSwapBuffers(platform->egl_display, platform->egl_surface);
 }
 
 
@@ -201,7 +185,7 @@ static void configure_callback(void *data, struct wl_callback *callback, uint32_
 	platform->configured = TRUE;
 
 	if (platform->frame_cb == NULL)
-		redraw_frame(data, NULL, time);
+		frame_callback(data, NULL, time);
 }
 
 static struct wl_callback_listener configure_callback_listener =
@@ -256,6 +240,33 @@ static void resize_window_to_video(GstImxEglVivSinkEGLPlatform *platform)
 	platform->current_width = actual_width;
 	platform->current_height = actual_height;
 	wl_egl_window_resize(platform->native_window, actual_width, actual_height, 0, 0);
+}
+
+
+static void redraw(GstImxEglVivSinkEGLPlatform *platform)
+{
+	struct wl_region *region;
+
+	if (!platform->configured || !platform->do_render)
+		return;
+
+	/* The actual rendering */
+	if (platform->render_frame_cb != NULL)
+		platform->render_frame_cb(platform, platform->user_context);
+
+	/* Define opaque region */
+	region = wl_compositor_create_region(platform->compositor);
+	wl_region_add(
+		region,
+		0, 0,
+		platform->current_width,
+		platform->current_height
+	);
+	wl_surface_set_opaque_region(platform->surface, region);
+	wl_region_destroy(region);
+
+	/* Finally, do the actual commit to the server */
+	eglSwapBuffers(platform->egl_display, platform->egl_surface);
 }
 
 
@@ -648,6 +659,8 @@ void gst_imx_egl_viv_sink_egl_platform_set_video_info(GstImxEglVivSinkEGLPlatfor
 
 gboolean gst_imx_egl_viv_sink_egl_platform_expose(GstImxEglVivSinkEGLPlatform *platform)
 {
+	char const cmd = GSTIMX_EGLWL_CMD_REDRAW;
+	write(platform->ctrl_pipe[1], &cmd, 1);
 	return TRUE;
 }
 
@@ -662,6 +675,7 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 	while (continue_loop)
 	{
 		int ret;
+		gboolean do_redraw = FALSE;
 
 		/* Watch the display FD and a pipe that is used when poll() shall wake up
 		 * (for example, when the pipeline is being shut down and run_mainloop has been set to FALSE) */
@@ -730,6 +744,10 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 			/* Stop if requested */
 			switch (cmd)
 			{
+				case GSTIMX_EGLWL_CMD_REDRAW:
+					do_redraw = TRUE;
+					break;
+
 				case GSTIMX_EGLWL_CMD_STOP_MAINLOOP:
 					continue_loop = FALSE;
 					GST_LOG("Mainloop stop requested");
@@ -744,6 +762,13 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 				default:
 					break;
 			}
+		}
+
+		if (do_redraw && platform->frame_callback_invoked)
+		{
+			redraw(platform);
+			platform->frame_callback_invoked = FALSE;
+			GST_LOG("frame_callback_invoked set to FALSE");
 		}
 
 		//EGL_PLATFORM_UNLOCK(platform);
