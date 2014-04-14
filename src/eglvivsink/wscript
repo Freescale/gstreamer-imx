@@ -28,7 +28,7 @@ def check_gles2(conf, uselib = 'EGL', lib_list = ['GLESv2']):
 	return retval
 
 def check_vivante_egl(conf, egl_extra_defines):
-	if not conf.check_cc(mandatory = 0, lib = ['EGL', 'GAL'], uselib_store = 'EGL'):
+	if not conf.check_cc(mandatory = 0, lib = ['EGL'], uselib_store = 'EGL'):
 		return False
 	old_cflags = list(conf.env['CFLAGS'])
 	extra_defines = ['LINUX']
