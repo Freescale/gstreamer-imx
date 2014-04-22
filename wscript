@@ -51,6 +51,7 @@ def options(opt):
 	opt.add_option('--with-package-origin', action = 'store', default = "Unknown package origin", help = 'specify package origin URL to use in plugin [default: %default]')
 	opt.add_option('--plugin-install-path', action = 'store', default = "${PREFIX}/lib/gstreamer-1.0", help = 'where to install the plugin for GStreamer 1.0 [default: %default]')
 	opt.load('compiler_c')
+	opt.load('gnu_dirs')
 	opt.recurse('src/ipu')
 	opt.recurse('src/eglvivsink')
 
@@ -59,6 +60,7 @@ def configure(conf):
 	import os
 
 	conf.load('compiler_c')
+	conf.load('gnu_dirs')
 
 	# check and add compiler flags
 
