@@ -262,8 +262,6 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_check_gl_error(char const *c
 		case GL_INVALID_OPERATION:             GST_ERROR("[%s] [%s] error: invalid operation", category, label); break;
 		case GL_INVALID_FRAMEBUFFER_OPERATION: GST_ERROR("[%s] [%s] error: invalid framebuffer operation", category, label); break;
 		case GL_OUT_OF_MEMORY:                 GST_ERROR("[%s] [%s] error: out of memory", category, label); break;
-		case GL_STACK_UNDERFLOW:               GST_ERROR("[%s] [%s] error: stack underflow", category, label); break;
-		case GL_STACK_OVERFLOW:                GST_ERROR("[%s] [%s] error: stack overflow", category, label); break;
 		default:                               GST_ERROR("[%s] [%s] error: unknown GL error 0x%x", category, label, err);
 	}
 

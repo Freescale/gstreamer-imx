@@ -28,7 +28,7 @@ def check_gles2(conf, uselib = 'EGL', lib_list = ['GLESv2']):
 	return retval
 
 def check_vivante_egl(conf, egl_extra_defines):
-	if not conf.check_cc(mandatory = 0, lib = ['EGL', 'GAL'], uselib_store = 'EGL'):
+	if not conf.check_cc(mandatory = 0, lib = ['EGL'], uselib_store = 'EGL'):
 		return False
 	old_cflags = list(conf.env['CFLAGS'])
 	extra_defines = ['LINUX']
@@ -46,10 +46,6 @@ def check_vivante_egl(conf, egl_extra_defines):
 
 def check_viv_texformat(conf, texformat):
 	test_code = """
-		#include <EGL/egl.h>
-		#include <EGL/eglext.h>
-		#include <GLES/gl.h>
-		#include <GLES/glext.h>
 		#include <GLES2/gl2.h>
 		#include <GLES2/gl2ext.h>
 
@@ -58,7 +54,7 @@ def check_viv_texformat(conf, texformat):
 			return (GL_%s) * 0;
 		}
 	"""
-	return conf.check(fragment = (test_code % texformat), mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for GLES texture format %s' % texformat, uselib = ['EGL', 'GLES2'] + conf.env['PLATFORM_USELIBS'], okmsg = 'yes', errmsg = 'no')
+	return conf.check(fragment = (test_code % texformat), mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for GLES texture format %s' % texformat, uselib = ['GLES2'], okmsg = 'yes', errmsg = 'no')
 
 
 valid_egl_platforms = ['fb', 'x11', 'wayland']
