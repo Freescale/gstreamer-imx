@@ -1305,7 +1305,7 @@ static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder)
 	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(decoder);
 
 	if (!vpu_dec->vpu_inst_opened)
-		return TRUE;
+		return GST_FLOW_OK;
 
 	/* need to flush any output framebuffers present inside the VPU */
 	if (vpu_dec->current_framebuffers != NULL)
@@ -1325,7 +1325,7 @@ static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder)
 		{
 			GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
 			GST_ERROR_OBJECT(vpu_dec, "could not configure skip mode: %s", gst_imx_vpu_strerror(vpu_ret));
-			return FALSE;
+			return GST_FLOW_ERROR;
 		}
 		else
 		{

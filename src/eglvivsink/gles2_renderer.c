@@ -725,7 +725,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 			);
 
 			gst_buffer_unmap(buffer, &map_info);
-			GST_LOG("done showing frame in buffer %p with physical address 0x%x", (gpointer)buffer, phys_addr);
+			GST_LOG("done showing frame in buffer %p with virtual address %p physical address 0x%x", (gpointer)buffer, virt_addr, phys_addr);
 
 			if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectVIVMap"))
 				return FALSE;
