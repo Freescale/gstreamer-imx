@@ -80,6 +80,12 @@ static GstImxPhysMemory* gst_imx_phys_mem_new_internal(GstImxPhysMemAllocator *p
 {
 	GstImxPhysMemory *phys_mem;
 	phys_mem = g_slice_alloc(sizeof(GstImxPhysMemory));
+	if (phys_mem == NULL)
+	{
+		GST_ERROR_OBJECT(phys_mem_alloc, "could not allocate memory for physmem structure");
+		return NULL;
+	}
+
 	phys_mem->mapped_virt_addr = NULL;
 	phys_mem->phys_addr = 0;
 	phys_mem->cpu_addr = 0;
@@ -109,6 +115,12 @@ static GstImxPhysMemory* gst_imx_phys_mem_allocator_alloc_internal(GstAllocator 
 	);
 
 	phys_mem = gst_imx_phys_mem_new_internal(phys_mem_alloc, parent, maxsize, flags, align, offset, size);
+	if (phys_mem == NULL)
+	{
+		GST_WARNING_OBJECT(phys_mem_alloc, "could not create new physmem structure");
+		return NULL;
+	}
+
 	if (!klass->alloc_phys_mem(phys_mem_alloc, phys_mem, maxsize))
 	{
 		g_slice_free1(sizeof(GstImxPhysMemory), phys_mem);
@@ -182,15 +194,20 @@ static void gst_imx_phys_mem_allocator_unmap(GstMemory *mem)
 static GstMemory* gst_imx_phys_mem_allocator_copy(GstMemory *mem, gssize offset, gssize size)
 {
 	GstImxPhysMemory *copy;
+	GstImxPhysMemAllocator *phys_mem_alloc = (GstImxPhysMemAllocator*)(mem->allocator);
 
 	if (size == -1)
 		size = ((gssize)(mem->size) > offset) ? (mem->size - offset) : 0;
 
 	copy = gst_imx_phys_mem_allocator_alloc_internal(mem->allocator, NULL, mem->maxsize, 0, mem->align, mem->offset + offset, size);
+	if (copy == NULL)
+	{
+		GST_WARNING_OBJECT(phys_mem_alloc, "could not copy memory block - allocation failed");
+		return NULL;
+	}
 
 	{
 		gpointer srcptr, destptr;
-		GstImxPhysMemAllocator *phys_mem_alloc = (GstImxPhysMemAllocator*)(mem->allocator);
 		GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
 		srcptr = klass->map_phys_mem(phys_mem_alloc, (GstImxPhysMemory *)mem, mem->maxsize, GST_MAP_READ);
@@ -241,6 +258,12 @@ static GstMemory* gst_imx_phys_mem_allocator_share(GstMemory *mem, gssize offset
 		phys_mem->mem.offset + offset,
 		size
 	);
+	if (sub == NULL)
+	{
+		GST_WARNING_OBJECT(mem->allocator, "could not create new physmem substructure");
+		return NULL;
+	}
+
 	sub->phys_addr = phys_mem->phys_addr;
 	sub->cpu_addr = phys_mem->cpu_addr;
 
