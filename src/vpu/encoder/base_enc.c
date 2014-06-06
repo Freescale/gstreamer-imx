@@ -688,6 +688,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 	{
 		enc_enc_param.nForceIPicture = 1;
 		GST_LOG_OBJECT(vpu_base_enc, "got request to make this a keyframe - forcing I frame");
+		GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(frame);
 	}
 
 	/* Give the derived class a chance to set up encoding parameters too */
