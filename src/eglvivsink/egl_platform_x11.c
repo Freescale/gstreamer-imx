@@ -122,10 +122,13 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 	if (platform == NULL)
 		return;
 
-	eglMakeCurrent(platform->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 
 	if (platform->egl_display != EGL_NO_DISPLAY)
+	{
+		eglMakeCurrent(platform->egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 		eglTerminate(platform->egl_display);
+	}
+
 	if (platform->native_display != NULL)
 		XCloseDisplay((Display*)(platform->native_display));
 
