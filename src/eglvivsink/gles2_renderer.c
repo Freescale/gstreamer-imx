@@ -536,7 +536,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_search_extension(GLubyte con
 				GST_LOG("found extension: %s", buf);
 
 				/* this sink needs direct texture extension is necessary for playback */
-				if (strcmp("GL_VIV_direct_texture", buf) == 0)
+				if ((strcmp("GL_VIV_direct_texture", buf) == 0) || (strcmp("GL_VIV_tex_direct", buf) == 0))
 					viv_direct_ext_found = TRUE;
 			}
 
