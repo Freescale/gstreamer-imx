@@ -1400,7 +1400,10 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 		if (pool == NULL)
 			GST_INFO_OBJECT(decoder, "no pool present; creating new pool");
 		else
+		{
+			gst_object_unref(pool);
 			GST_INFO_OBJECT(decoder, "no pool supports VPU buffers; creating new pool");
+		}
 		pool = gst_imx_vpu_fb_buffer_pool_new(vpu_dec->current_framebuffers);
 	}
 

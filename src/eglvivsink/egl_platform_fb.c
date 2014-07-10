@@ -112,8 +112,8 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 	{
 		close(platform->ctrl_pipe[0]);
 		close(platform->ctrl_pipe[1]);
-		g_free(platform);
 	}
+	g_free(platform);
 }
 
 
@@ -185,7 +185,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_shutdown_window(GstImxEglVivSinkEGLPl
 	platform->egl_display = EGL_NO_DISPLAY;
 	platform->egl_context = EGL_NO_CONTEXT;
 	platform->egl_surface = EGL_NO_SURFACE;
-
+	fbDestroyWindow(platform->native_window);
 	platform->native_window = 0;
 
 	return TRUE;

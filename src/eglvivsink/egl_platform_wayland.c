@@ -386,7 +386,6 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 	if (!eglInitialize(platform->egl_display, &ver_major, &ver_minor))
 	{
 		GST_ERROR("eglInitialize failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
-		g_free(platform);
 		goto cleanup;
 	}
 
