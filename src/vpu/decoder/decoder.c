@@ -225,6 +225,8 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 static void gst_imx_vpu_dec_set_property(GObject *object, guint prop_id, const GValue *value, GParamSpec *pspec);
 static void gst_imx_vpu_dec_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
+/* function for decoder state changes */
+static GstStateChangeReturn gst_imx_vpu_dec_change_state (GstElement *element, GstStateChange transition);
 
 
 
@@ -255,6 +257,8 @@ void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 	base_class->flush             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_flush);
 	base_class->finish            = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_finish);
 	base_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_decide_allocation);
+
+	element_class->change_state   = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_change_state);
 
 	klass->inst_counter = 0;
 
@@ -1482,3 +1486,23 @@ static void gst_imx_vpu_dec_get_property(GObject *object, guint prop_id, GValue 
 	}
 }
 
+
+static GstStateChangeReturn gst_imx_vpu_dec_change_state (GstElement *element, GstStateChange transition)
+{
+	GstVideoDecoder *decoder = GST_VIDEO_DECODER(element);
+	GstStateChangeReturn result;
+
+	/* Handle downward change PAUSED -> READY */
+	switch (transition) 
+	{
+		case GST_STATE_CHANGE_PAUSED_TO_READY:
+			gst_imx_vpu_dec_flush(decoder);
+			break;
+		default:
+			break;
+	}
+
+	result = GST_ELEMENT_CLASS (gst_imx_vpu_dec_parent_class)->change_state(element, transition);
+
+	return result;
+}
