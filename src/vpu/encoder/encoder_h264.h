@@ -42,7 +42,9 @@ struct _GstImxVpuH264Enc
 {
 	GstImxVpuBaseEnc parent;
 	guint quant_param;
+	guint idr_interval;
 	gboolean produce_access_units;
+	guint frame_cnt;
 };
 
 
