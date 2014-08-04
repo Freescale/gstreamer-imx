@@ -160,7 +160,7 @@ void gst_imx_ipu_sink_class_init(GstImxIpuSinkClass *klass)
 
 void gst_imx_ipu_sink_init(GstImxIpuSink *ipu_sink)
 {
-	ipu_sink->priv = g_slice_alloc(sizeof(GstImxIpuSinkPrivate));
+	ipu_sink->priv = g_slice_alloc0(sizeof(GstImxIpuSinkPrivate));
 	ipu_sink->priv->framebuffer_fd = -1;
 	ipu_sink->priv->blitter = NULL;
 	g_mutex_init(&(ipu_sink->priv->mutex));
