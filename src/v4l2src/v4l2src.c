@@ -259,34 +259,25 @@ static GstFlowReturn gst_imx_v4l2src_fill(GstPushSrc *src, GstBuffer *buf)
 	return GST_FLOW_OK;
 }
 
-static GstCaps *gst_imx_v4l2src_fixate(GstBaseSrc *src, GstCaps *caps)
+static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 {
 	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
-	GstStructure *structure = NULL;
-	guint i;
+	GstCaps *caps;
 
-	GST_INFO_OBJECT(src, "fixating caps %" GST_PTR_FORMAT, (gpointer)caps);
+	/* not much to negotiate;
+	 * we already performed setup, so that is what will be streamed */
 
-	caps = gst_caps_make_writable(caps);
+	caps = gst_caps_new_simple("video/x-raw",
+			"format", G_TYPE_STRING, "I420",
+			"width", G_TYPE_INT, v4l2src->capture_width,
+			"height", G_TYPE_INT, v4l2src->capture_height,
+			"framerate", GST_TYPE_FRACTION, v4l2src->fps_n, v4l2src->fps_d,
+			"pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
+			NULL);
 
-	for (i = 0; i < gst_caps_get_size(caps); ++i) {
-		structure = gst_caps_get_structure(caps, i);
-		gst_structure_fixate_field_nearest_int(structure, "width",
-				v4l2src->capture_width);
-		gst_structure_fixate_field_nearest_int(structure, "height",
-				v4l2src->capture_height);
-		gst_structure_fixate_field_nearest_fraction(structure, "framerate",
-				v4l2src->fps_n, v4l2src->fps_d);
-		gst_structure_fixate_field_nearest_fraction(structure,
-				"pixel-aspect-ratio", 1, 1);
-		gst_structure_set(structure, "format", G_TYPE_STRING, "I420", NULL);
-	}
+	GST_INFO_OBJECT(src, "negotiated caps %" GST_PTR_FORMAT, (gpointer)caps);
 
-	GST_INFO_OBJECT(src, "fixated caps %" GST_PTR_FORMAT, (gpointer)caps);
-
-	caps = GST_BASE_SRC_CLASS(gst_imx_v4l2src_parent_class)->fixate(src, caps);
-
-	return caps;
+	return gst_base_src_set_caps(src, caps);
 }
 
 static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
@@ -450,7 +441,7 @@ static void gst_imx_v4l2src_class_init(GstImxV4l2SrcClass *klass)
 				0, G_MAXINT, DEFAULT_QUEUE_SIZE,
 				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-	basesrc_class->fixate = gst_imx_v4l2src_fixate;
+	basesrc_class->negotiate = gst_imx_v4l2src_negotiate;
 	basesrc_class->get_caps = gst_imx_v4l2src_get_caps;
 	basesrc_class->set_caps = gst_imx_v4l2src_set_caps;
 	basesrc_class->start = gst_imx_v4l2src_start;
