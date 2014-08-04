@@ -79,6 +79,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 	struct v4l2_dbg_chip_ident chip;
 #endif
 	struct v4l2_frmsizeenum fszenum = {0};
+	v4l2_std_id id;
 	gint input;
 	gint fd_v4l;
 
@@ -96,6 +97,16 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 	else
 		GST_INFO_OBJECT(v4l2src, "sensor chip is %s", chip.match.name);
 #endif
+
+	if (ioctl (fd_v4l, VIDIOC_G_STD, &id) < 0) {
+		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed");
+	} else {
+		if (ioctl (fd_v4l, VIDIOC_S_STD, &id) < 0) {
+			GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_STD failed");
+			close(fd_v4l);
+			return -1;
+		}
+	}
 
 	fszenum.index = v4l2src->capture_mode;
 	fszenum.pixel_format = V4L2_PIX_FMT_YUV420;
