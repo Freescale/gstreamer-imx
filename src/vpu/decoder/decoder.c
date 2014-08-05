@@ -678,6 +678,8 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 
 	if (vpu_dec->current_framebuffers != NULL)
 	{
+		GST_INFO_OBJECT(decoder, "Setting flushing flag of framebuffers object during stop call");
+
 		/* Using mutexes here to prevent race conditions when decoder_open is set to
 		 * FALSE at the same time as it is checked in the buffer pool release() function */
 		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
@@ -1489,15 +1491,31 @@ static void gst_imx_vpu_dec_get_property(GObject *object, guint prop_id, GValue 
 
 static GstStateChangeReturn gst_imx_vpu_dec_change_state (GstElement *element, GstStateChange transition)
 {
-	GstVideoDecoder *decoder = GST_VIDEO_DECODER(element);
+	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(element);
 	GstStateChangeReturn result;
 
-	/* Handle downward change PAUSED -> READY */
 	switch (transition) 
 	{
-		case GST_STATE_CHANGE_PAUSED_TO_READY:
-			gst_imx_vpu_dec_flush(decoder);
+		case GST_STATE_CHANGE_READY_TO_PAUSED:
+			if (vpu_dec->current_framebuffers != NULL)
+			{
+				GST_INFO_OBJECT(element, "Clearing flushing flag of framebuffers object during PAUSED->READY state change");
+				GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
+				gst_imx_vpu_framebuffers_set_flushing(vpu_dec->current_framebuffers, FALSE);
+				GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
+			}
 			break;
+
+		case GST_STATE_CHANGE_PAUSED_TO_READY:
+			if (vpu_dec->current_framebuffers != NULL)
+			{
+				GST_INFO_OBJECT(element, "Setting flushing flag of framebuffers object during PAUSED->READY state change");
+				GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
+				gst_imx_vpu_framebuffers_set_flushing(vpu_dec->current_framebuffers, TRUE);
+				GST_IMX_VPU_FRAMEBUFFERS_UNLOCK(vpu_dec->current_framebuffers);
+			}
+			break;
+
 		default:
 			break;
 	}
