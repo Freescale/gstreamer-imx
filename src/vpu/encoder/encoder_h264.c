@@ -228,6 +228,7 @@ static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(G_GNUC_UNUSED GstImxVpuBase
 		"video/x-h264",
 		"stream-format", G_TYPE_STRING, "byte-stream",
 		"alignment", G_TYPE_STRING, enc->produce_access_units ? "au" : "nal",
+		"parsed", G_TYPE_BOOLEAN, TRUE,
 		NULL
 	);
 }
