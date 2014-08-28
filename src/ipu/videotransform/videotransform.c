@@ -97,6 +97,7 @@ static gboolean gst_imx_ipu_video_transform_decide_allocation(GstBaseTransform *
 static gboolean gst_imx_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info);
 static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTransform * trans, GstBuffer *input, GstBuffer **outbuf);
 static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out);
+static gboolean gst_imx_ipu_video_transform_copy_metadata(GstBaseTransform *trans, GstBuffer *input, GstBuffer *outbuf);
 
 
 
@@ -138,6 +139,7 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 	base_transform_class->propose_allocation    = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_propose_allocation);
 	base_transform_class->decide_allocation     = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_decide_allocation);
 	base_transform_class->prepare_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_prepare_output_buffer);
+	base_transform_class->copy_metadata         = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_copy_metadata);
 	video_filter_class->set_info                = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_info);
 	video_filter_class->transform_frame         = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_transform_frame);
 
@@ -1246,3 +1248,19 @@ static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstVideoFilter 
 	return ret ? GST_FLOW_OK : GST_FLOW_ERROR;
 }
 
+
+static gboolean gst_imx_ipu_video_transform_copy_metadata(G_GNUC_UNUSED GstBaseTransform *trans, GstBuffer *input, GstBuffer *outbuf)
+{
+	/* Only copy timestamps; the rest of the metadata must not be copied */
+	GST_BUFFER_DTS(outbuf) = GST_BUFFER_DTS(input);
+	GST_BUFFER_PTS(outbuf) = GST_BUFFER_PTS(input);
+
+	/* For GStreamer 1.3.1 and newer, make sure the GST_BUFFER_FLAG_TAG_MEMORY flag
+	 * isn't copied, otherwise the output buffer will be reallocated all the time */
+	GST_BUFFER_FLAGS(outbuf) = GST_BUFFER_FLAGS(input);
+#if GST_CHECK_VERSION(1, 3, 1)
+	GST_BUFFER_FLAG_UNSET(outbuf, GST_BUFFER_FLAG_TAG_MEMORY);
+#endif
+
+	return TRUE;
+}
