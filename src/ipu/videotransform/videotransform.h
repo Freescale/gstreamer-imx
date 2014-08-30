@@ -21,8 +21,8 @@
 #define GST_IMX_IPU_VIDEOTRANSFORM_H
 
 #include <gst/gst.h>
+#include <gst/base/gstbasetransform.h>
 #include <gst/video/video.h>
-#include <gst/video/gstvideofilter.h>
 
 
 G_BEGIN_DECLS
@@ -43,15 +43,16 @@ typedef struct _GstImxIpuVideoTransformPrivate GstImxIpuVideoTransformPrivate;
 
 struct _GstImxIpuVideoTransform
 {
-	GstVideoFilter parent;
+	GstBaseTransform parent;
 	GstImxIpuVideoTransformPrivate *priv;
-	gboolean inout_caps_equal;
+	gboolean inout_caps_equal, negotiated;
+	GstVideoInfo in_info, out_info;
 };
 
 
 struct _GstImxIpuVideoTransformClass
 {
-	GstVideoFilterClass parent_class;
+	GstBaseTransformClass parent_class;
 };
 
 

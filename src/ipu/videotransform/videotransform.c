@@ -34,6 +34,44 @@
 
 
 
+/* GstImxIpuVideoTransform is based on GstBaseTransform
+ * not on GstVideoFilter. This is because GstVideoFilter maps & unmaps
+ * in- and output buffers in its transform() function, which is not only
+ * unnecessary with IPU-based transforms, but also leads to problems.
+ * The reason for this is a second peculiarity: passthrough handling.
+ *
+ * GstImxIpuVideoTransform cannot make use of GstBaseTransform's
+ * passthrough mode. This is because in the IPU video transform element,
+ * whether or not to pass through an input buffer unchanged is evaluated
+ * on a per-buffer basis. gst_base_transform_set_passthrough() however is
+ * intended to be used when new caps are set, and *not* inside prepare_buffer().
+ * Doing so leads to strange behavior; for example, when using
+ * imxipuvideotransform with playbin, and a new URI starts playing,
+ * the IPU phys mem allocator is shut down, and a default heap allocator
+ * is used for output buffers instead. This causes an assertion, since
+ * the output buffer must be a physically contiguous buffer.
+ *
+ * Therefore, the GstBaseTransform passthrough flag is set to FALSE during
+ * initialization, and never set to TRUE again. Instead, in prepare_buffer(),
+ * it is analyzed whether or not the input buffer shall be passed through.
+ * If so, then the buffer is passed through right there: *outbuf = input
+ * In that case, gst_imx_ipu_video_transform_transform_frame() will not do
+ * anything.
+ *
+ * But since GstVideoFilter automatically maps/unmaps the buffers, it
+ * maps the output buffer with the write flag. In the passthrough case,
+ * input buffer == output buffer. Trying to map the input buffer with
+ * the write flag often fails.
+ *
+ * For this reason, GstVideoFilter is no longer used as the base class.
+ * Instead, GstBaseTransform is used directly, and the three functions for
+ * transform_size(), transform_meta(), and get_unit_size() are directly
+ * taken from GstVideoFilter.
+ */
+
+
+
+
 GST_DEBUG_CATEGORY_STATIC(imx_ipu_video_transform_debug);
 #define GST_CAT_DEFAULT imx_ipu_video_transform_debug
 
@@ -78,7 +116,7 @@ struct _GstImxIpuVideoTransformPrivate
 #define UNLOCK_BLITTER_MUTEX(obj) g_mutex_unlock(&(((GstImxIpuVideoTransform*)obj)->priv->mutex))
 
 
-G_DEFINE_TYPE(GstImxIpuVideoTransform, gst_imx_ipu_video_transform, GST_TYPE_VIDEO_FILTER)
+G_DEFINE_TYPE(GstImxIpuVideoTransform, gst_imx_ipu_video_transform, GST_TYPE_BASE_TRANSFORM)
 
 
 static GstStateChangeReturn gst_imx_ipu_video_transform_change_state(GstElement *element, GstStateChange transition);
@@ -94,9 +132,12 @@ static GstCaps* gst_imx_ipu_video_transform_fixate_size_caps(GstBaseTransform *t
 static void gst_imx_ipu_video_transform_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps);
 static gboolean gst_imx_ipu_video_transform_propose_allocation(GstBaseTransform *transform, GstQuery *decide_query, GstQuery *query);
 static gboolean gst_imx_ipu_video_transform_decide_allocation(GstBaseTransform *transform, GstQuery *query);
-static gboolean gst_imx_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info);
-static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTransform * trans, GstBuffer *input, GstBuffer **outbuf);
-static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out);
+static gboolean gst_imx_ipu_video_transform_set_caps(GstBaseTransform *transform, GstCaps *in, GstCaps *out);
+static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTransform *transform, GstBuffer *input, GstBuffer **outbuf);
+static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstBaseTransform *transform, GstBuffer *in, GstBuffer *out);
+static gboolean gst_imx_ipu_video_transform_transform_size(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, gsize size, GstCaps *othercaps, gsize *othersize);
+static gboolean gst_imx_ipu_video_transform_transform_meta(GstBaseTransform *trans, GstBuffer *inbuf, GstMeta *meta, GstBuffer *outbuf);
+static gboolean gst_imx_ipu_video_transform_get_unit_size(GstBaseTransform *transform, GstCaps *caps, gsize *size);
 static gboolean gst_imx_ipu_video_transform_copy_metadata(GstBaseTransform *trans, GstBuffer *input, GstBuffer *outbuf);
 
 
@@ -108,14 +149,12 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 {
 	GObjectClass *object_class;
 	GstBaseTransformClass *base_transform_class;
-	GstVideoFilterClass *video_filter_class;
 	GstElementClass *element_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_ipu_video_transform_debug, "imxipuvideotransform", 0, "Freescale i.MX IPU video transform");
 
 	object_class = G_OBJECT_CLASS(klass);
 	base_transform_class = GST_BASE_TRANSFORM_CLASS(klass);
-	video_filter_class = GST_VIDEO_FILTER_CLASS(klass);
 	element_class = GST_ELEMENT_CLASS(klass);
 
 	gst_element_class_set_static_metadata(
@@ -138,10 +177,13 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_fixate_caps);
 	base_transform_class->propose_allocation    = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_propose_allocation);
 	base_transform_class->decide_allocation     = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_decide_allocation);
+	base_transform_class->set_caps              = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_caps);
 	base_transform_class->prepare_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_prepare_output_buffer);
+	base_transform_class->transform             = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_transform_frame);
+	base_transform_class->transform_size        = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_transform_size);
+	base_transform_class->transform_meta        = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_transform_meta);
+	base_transform_class->get_unit_size         = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_get_unit_size);
 	base_transform_class->copy_metadata         = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_copy_metadata);
-	video_filter_class->set_info                = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_info);
-	video_filter_class->transform_frame         = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_transform_frame);
 
 	base_transform_class->passthrough_on_same_caps = FALSE;
 
@@ -191,6 +233,7 @@ void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transfo
 	ipu_video_transform->priv->blitter = NULL;
 	g_mutex_init(&(ipu_video_transform->priv->mutex));
 	ipu_video_transform->inout_caps_equal = FALSE;
+	ipu_video_transform->negotiated = FALSE;
 
 	ipu_video_transform->priv->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
 	ipu_video_transform->priv->input_crop = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
@@ -199,6 +242,8 @@ void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transfo
 	/* Set passthrough initially to FALSE ; passthrough will later be
 	 * enabled/disabled on a per-frame basis */
 	gst_base_transform_set_passthrough(base_transform, FALSE);
+	gst_base_transform_set_qos_enabled(base_transform, TRUE);
+	gst_base_transform_set_in_place(base_transform, FALSE);
 }
 
 
@@ -367,14 +412,19 @@ static gboolean gst_imx_ipu_video_transform_src_event(GstBaseTransform *transfor
 {
 	gdouble a;
 	GstStructure *structure;
-	GstVideoFilter *filter = GST_VIDEO_FILTER_CAST(transform);
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(transform);
 
 	GST_DEBUG_OBJECT(transform, "handling %s event", GST_EVENT_TYPE_NAME(event));
 
 	switch (GST_EVENT_TYPE(event))
 	{
 		case GST_EVENT_NAVIGATION:
-			if ((filter->in_info.width != filter->out_info.width) || (filter->in_info.height != filter->out_info.height))
+		{
+			gint in_w = GST_VIDEO_INFO_WIDTH(&(ipu_video_transform->in_info));
+			gint in_h = GST_VIDEO_INFO_HEIGHT(&(ipu_video_transform->in_info));
+			gint out_w = GST_VIDEO_INFO_WIDTH(&(ipu_video_transform->out_info));
+			gint out_h = GST_VIDEO_INFO_HEIGHT(&(ipu_video_transform->out_info));
+			if ((in_w != out_w) || (in_h != out_h))
 			{
 				event = GST_EVENT(gst_mini_object_make_writable(GST_MINI_OBJECT(event)));
 
@@ -385,7 +435,7 @@ static gboolean gst_imx_ipu_video_transform_src_event(GstBaseTransform *transfor
 						structure,
 						"pointer_x",
 						G_TYPE_DOUBLE,
-						a * filter->in_info.width / filter->out_info.width,
+						a * in_w / out_w,
 						NULL
 					);
 				}
@@ -395,12 +445,14 @@ static gboolean gst_imx_ipu_video_transform_src_event(GstBaseTransform *transfor
 						structure,
 						"pointer_y",
 						G_TYPE_DOUBLE,
-						a * filter->in_info.height / filter->out_info.height,
+						a * in_h / out_h,
 						NULL
 					);
 				}
 			}
 			break;
+		}
+
 		default:
 			break;
 	}
@@ -1109,23 +1161,36 @@ static gboolean gst_imx_ipu_video_transform_decide_allocation(GstBaseTransform *
 }
 
 
-static gboolean gst_imx_ipu_video_transform_set_info(GstVideoFilter *filter, GstCaps *in, GstVideoInfo *in_info, GstCaps *out, GstVideoInfo *out_info)
+static gboolean gst_imx_ipu_video_transform_set_caps(GstBaseTransform *transform, GstCaps *in, GstCaps *out)
 {
-	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(filter);
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(transform);
+	GstVideoInfo in_info, out_info;
+
+	if (!gst_video_info_from_caps(&in_info, in) || !gst_video_info_from_caps(&out_info, out))
+	{
+		GST_ERROR_OBJECT(transform, "caps are invalid");
+		ipu_video_transform->negotiated = FALSE;
+		return FALSE;
+	}
+
+	ipu_video_transform->in_info = in_info;
+	ipu_video_transform->out_info = out_info;
 
 	/* For IPU blitting operations, equality is limited to width, height, pixelformat */
 	ipu_video_transform->inout_caps_equal =
-		(in_info->width == out_info->width) &&
-		(in_info->height == out_info->height) &&
-		(in_info->finfo->format == out_info->finfo->format)
+		(GST_VIDEO_INFO_WIDTH(&in_info) == GST_VIDEO_INFO_WIDTH(&out_info)) &&
+		(GST_VIDEO_INFO_HEIGHT(&in_info) == GST_VIDEO_INFO_HEIGHT(&out_info)) &&
+		(GST_VIDEO_INFO_FORMAT(&in_info) == GST_VIDEO_INFO_FORMAT(&out_info))
 		;
 
 	if (ipu_video_transform->inout_caps_equal)
-		GST_DEBUG_OBJECT(filter, "input and output caps are equal");
+		GST_DEBUG_OBJECT(transform, "input and output caps are equal");
 	else
-		GST_DEBUG_OBJECT(filter, "input and output caps are not equal:  input: %" GST_PTR_FORMAT "  output: %" GST_PTR_FORMAT, (gpointer)in, (gpointer)out);
+		GST_DEBUG_OBJECT(transform, "input and output caps are not equal:  input: %" GST_PTR_FORMAT "  output: %" GST_PTR_FORMAT, (gpointer)in, (gpointer)out);
 
-	gst_imx_ipu_blitter_set_input_info(ipu_video_transform->priv->blitter, in_info);
+	gst_imx_ipu_blitter_set_input_info(ipu_video_transform->priv->blitter, &in_info);
+
+	ipu_video_transform->negotiated = TRUE;
 
 	return TRUE;
 }
@@ -1224,28 +1289,96 @@ static GstFlowReturn gst_imx_ipu_video_transform_prepare_output_buffer(GstBaseTr
 	UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 
 	GST_LOG_OBJECT(trans, "passthrough: %s", passthrough ? "yes" : "no");
-	gst_base_transform_set_passthrough(trans, passthrough);
 
-	return GST_BASE_TRANSFORM_CLASS(gst_imx_ipu_video_transform_parent_class)->prepare_output_buffer(trans, input, outbuf);
+	if (passthrough)
+	{
+		*outbuf = input;
+		return GST_FLOW_OK;
+	}
+	else
+		return GST_BASE_TRANSFORM_CLASS(gst_imx_ipu_video_transform_parent_class)->prepare_output_buffer(trans, input, outbuf);
 }
 
 
-static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstVideoFilter *filter, GstVideoFrame *in, GstVideoFrame *out)
+static GstFlowReturn gst_imx_ipu_video_transform_transform_frame(GstBaseTransform * trans, GstBuffer *in, GstBuffer *out)
 {
 	gboolean ret;
-	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(filter);
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(trans);
+
+	if (!ipu_video_transform->negotiated)
+	{
+		GST_ELEMENT_ERROR(trans, CORE, NOT_IMPLEMENTED, (NULL), ("unknown format"));
+		return GST_FLOW_NOT_NEGOTIATED;
+	}
+
+	if (in == out)
+	{
+		GST_LOG_OBJECT(trans, "passing buffer through");
+		return GST_FLOW_OK;
+	}
 
 	LOCK_BLITTER_MUTEX(ipu_video_transform);
 
 	/* using early exit optimization here to avoid calls if necessary */
 	ret = TRUE;
-	ret = ret && gst_imx_ipu_blitter_set_input_buffer(ipu_video_transform->priv->blitter, in->buffer);
-	ret = ret && gst_imx_ipu_blitter_set_output_buffer(ipu_video_transform->priv->blitter, out->buffer);
+	ret = ret && gst_imx_ipu_blitter_set_input_buffer(ipu_video_transform->priv->blitter, in);
+	ret = ret && gst_imx_ipu_blitter_set_output_buffer(ipu_video_transform->priv->blitter, out);
 	ret = ret && gst_imx_ipu_blitter_blit(ipu_video_transform->priv->blitter);
 
 	UNLOCK_BLITTER_MUTEX(ipu_video_transform);
 
 	return ret ? GST_FLOW_OK : GST_FLOW_ERROR;
+}
+
+
+static gboolean gst_imx_ipu_video_transform_transform_size(G_GNUC_UNUSED GstBaseTransform *transform, G_GNUC_UNUSED GstPadDirection direction, G_GNUC_UNUSED GstCaps *caps, gsize size, GstCaps *othercaps, gsize *othersize)
+{
+	gboolean ret = TRUE;
+	GstVideoInfo info;
+
+	g_assert(size != 0);
+
+	ret = gst_video_info_from_caps(&info, othercaps);
+	if (ret)
+		*othersize = info.size;
+
+	return ret;
+}
+
+
+static gboolean gst_imx_ipu_video_transform_transform_meta(GstBaseTransform *trans, GstBuffer *inbuf, GstMeta *meta, GstBuffer *outbuf)
+{
+	GstMetaInfo const *info = meta->info;
+	gchar const * const *tags;
+
+	tags = gst_meta_api_type_get_tags(info->api);
+
+	if (
+		(tags != NULL) &&
+		(g_strv_length((gchar **)tags) == 1) &&
+		gst_meta_api_type_has_tag(info->api, g_quark_from_string(GST_META_TAG_VIDEO_STR))
+	)
+		return TRUE;
+
+	return GST_BASE_TRANSFORM_CLASS(gst_imx_ipu_video_transform_parent_class)->transform_meta(trans, inbuf, meta, outbuf);
+}
+
+
+static gboolean gst_imx_ipu_video_transform_get_unit_size (GstBaseTransform *transform, GstCaps *caps, gsize *size)
+{
+	GstVideoInfo info;
+
+	if (!gst_video_info_from_caps(&info, caps))
+	{
+		GST_WARNING_OBJECT(transform, "Failed to parse caps %" GST_PTR_FORMAT, caps);
+		return FALSE;
+	}
+
+	*size = info.size;
+
+	GST_DEBUG_OBJECT(transform, "Returning size %" G_GSIZE_FORMAT " bytes for caps %" GST_PTR_FORMAT, *size, caps);
+
+	return TRUE;
 }
 
 
