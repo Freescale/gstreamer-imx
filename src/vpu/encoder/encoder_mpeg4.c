@@ -156,6 +156,7 @@ static GstCaps* gst_imx_vpu_mpeg4_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base
 		"width", G_TYPE_INT, (gint)(vpu_base_enc->open_param.nPicWidth),
 		"height", G_TYPE_INT, (gint)(vpu_base_enc->open_param.nPicHeight),
 		"framerate", GST_TYPE_FRACTION, fps_n, fps_d,
+		"parsed", G_TYPE_BOOLEAN, TRUE,
 		NULL
 	);
 }

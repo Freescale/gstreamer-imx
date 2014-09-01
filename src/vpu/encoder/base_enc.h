@@ -71,6 +71,8 @@ struct _GstImxVpuBaseEnc
 
 	guint gop_size;
 	guint bitrate;
+	gint slice_size;
+	guint intra_refresh;
 };
 
 

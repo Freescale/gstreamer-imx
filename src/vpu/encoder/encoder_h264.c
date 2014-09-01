@@ -29,11 +29,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_h264_enc_debug);
 enum
 {
 	PROP_0,
-	PROP_QUANT_PARAM
+	PROP_QUANT_PARAM,
+	PROP_IDR_INTERVAL
 };
 
 
 #define DEFAULT_QUANT_PARAM     0
+#define DEFAULT_IDR_INTERVAL    0
 
 
 #define NALU_TYPE_IDR 0x05
@@ -123,12 +125,25 @@ void gst_imx_vpu_h264_enc_class_init(GstImxVpuH264EncClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
+	g_object_class_install_property(
+		object_class,
+		PROP_IDR_INTERVAL,
+		g_param_spec_uint(
+			"idr-interval",
+			"IDR interval",
+			"Interval between IDR frames",
+			0, G_MAXUINT,
+			DEFAULT_IDR_INTERVAL,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
 void gst_imx_vpu_h264_enc_init(GstImxVpuH264Enc *enc)
 {
 	enc->quant_param = DEFAULT_QUANT_PARAM;
+	enc->idr_interval = DEFAULT_IDR_INTERVAL;
 	enc->produce_access_units = FALSE;
 }
 
@@ -193,6 +208,7 @@ static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_
 		gst_caps_unref(allowed_caps);
 	}
 
+	enc->frame_cnt = 0;
 	if (enc->produce_access_units)
 		open_param->VpuEncStdParam.avcParam.avc_audEnable = 1;
 
@@ -212,6 +228,7 @@ static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(G_GNUC_UNUSED GstImxVpuBase
 		"video/x-h264",
 		"stream-format", G_TYPE_STRING, "byte-stream",
 		"alignment", G_TYPE_STRING, enc->produce_access_units ? "au" : "nal",
+		"parsed", G_TYPE_BOOLEAN, TRUE,
 		NULL
 	);
 }
@@ -223,6 +240,9 @@ static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_
 
 	enc_enc_param->eFormat = VPU_V_AVC;
 	enc_enc_param->nQuantParam = enc->quant_param;
+	if (enc->idr_interval)
+		enc_enc_param->nForceIPicture = !(enc->frame_cnt % enc->idr_interval);
+	enc->frame_cnt++;
 
 	return TRUE;
 }
@@ -265,6 +285,9 @@ static void gst_imx_vpu_h264_enc_set_property(GObject *object, guint prop_id, GV
 		case PROP_QUANT_PARAM:
 			enc->quant_param = g_value_get_uint(value);
 			break;
+		case PROP_IDR_INTERVAL:
+			enc->idr_interval = g_value_get_uint(value);
+			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -280,6 +303,9 @@ static void gst_imx_vpu_h264_enc_get_property(GObject *object, guint prop_id, GV
 	{
 		case PROP_QUANT_PARAM:
 			g_value_set_uint(value, enc->quant_param);
+			break;
+		case PROP_IDR_INTERVAL:
+			g_value_set_uint(value, enc->idr_interval);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);

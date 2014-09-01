@@ -35,12 +35,16 @@ enum
 {
 	PROP_0,
 	PROP_GOP_SIZE,
-	PROP_BITRATE
+	PROP_BITRATE,
+	PROP_SLICE_SIZE,
+	PROP_INTRA_REFRESH
 };
 
 
 #define DEFAULT_GOP_SIZE          16
 #define DEFAULT_BITRATE           0
+#define DEFAULT_SLICE_SIZE        0
+#define DEFAULT_INTRA_REFRESH     0
 
 
 #define ALIGN_VAL_TO(LENGTH, ALIGN_SIZE)  ( ((guintptr)((LENGTH) + (ALIGN_SIZE) - 1) / (ALIGN_SIZE)) * (ALIGN_SIZE) )
@@ -130,6 +134,30 @@ void gst_imx_vpu_base_enc_class_init(GstImxVpuBaseEncClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
+	g_object_class_install_property(
+		object_class,
+		PROP_SLICE_SIZE,
+		g_param_spec_int(
+			"slice-size",
+			"Slice size",
+			"Maximum slice size (0 = unlimited, <0 in MB, >0 in bits)",
+			G_MININT, G_MAXINT,
+			DEFAULT_SLICE_SIZE,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_INTRA_REFRESH,
+		g_param_spec_uint(
+			"intra-refresh",
+			"Intra Refresh",
+			"Minimum number of MBs to encode as intra MB",
+			0, G_MAXUINT,
+			DEFAULT_INTRA_REFRESH,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -148,6 +176,8 @@ void gst_imx_vpu_base_enc_init(GstImxVpuBaseEnc *vpu_base_enc)
 
 	vpu_base_enc->gop_size         = DEFAULT_GOP_SIZE;
 	vpu_base_enc->bitrate          = DEFAULT_BITRATE;
+	vpu_base_enc->slice_size       = DEFAULT_SLICE_SIZE;
+	vpu_base_enc->intra_refresh    = DEFAULT_INTRA_REFRESH;
 }
 
 
@@ -252,6 +282,12 @@ static void gst_imx_vpu_base_enc_set_property(GObject *object, guint prop_id, GV
 		case PROP_BITRATE:
 			vpu_base_enc->bitrate = g_value_get_uint(value);
 			break;
+		case PROP_SLICE_SIZE:
+			vpu_base_enc->slice_size = g_value_get_int(value);
+			break;
+		case PROP_INTRA_REFRESH:
+			vpu_base_enc->intra_refresh = g_value_get_uint(value);
+			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -269,6 +305,12 @@ static void gst_imx_vpu_base_enc_get_property(GObject *object, guint prop_id, GV
 			g_value_set_uint(value, vpu_base_enc->gop_size);
 			break;
 		case PROP_BITRATE:
+			g_value_set_uint(value, vpu_base_enc->bitrate);
+			break;
+		case PROP_SLICE_SIZE:
+			g_value_set_int(value, vpu_base_enc->bitrate);
+			break;
+		case PROP_INTRA_REFRESH:
 			g_value_set_uint(value, vpu_base_enc->bitrate);
 			break;
 		default:
@@ -445,6 +487,19 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	vpu_base_enc->open_param.sliceMode.sliceSize = 4000;
 	vpu_base_enc->open_param.nRcIntraQp = -1;
 	vpu_base_enc->open_param.nUserGamma = 0.75 * 32768;
+
+	if (vpu_base_enc->slice_size) {
+		vpu_base_enc->open_param.sliceMode.sliceMode = 1;	/* 0: 1 slice per picture; 1: Multiple slices per picture */
+		if (vpu_base_enc->slice_size < 0) {
+			vpu_base_enc->open_param.sliceMode.sliceSizeMode = 1; /* 1: sliceSize defined by MB number*/
+			vpu_base_enc->open_param.sliceMode.sliceSize = -vpu_base_enc->slice_size;  /* Size of a slice in MB numbers */
+		} else {
+			vpu_base_enc->open_param.sliceMode.sliceSizeMode = 0; /* 1: sliceSize defined by bits */
+			vpu_base_enc->open_param.sliceMode.sliceSize = vpu_base_enc->slice_size;  /* Size of a slice in bits */
+		}
+	}
+
+	vpu_base_enc->open_param.nIntraRefresh = vpu_base_enc->intra_refresh;
 
 	/* Give the derived class a chance to set params */
 	if (!klass->set_open_params(vpu_base_enc, &(vpu_base_enc->open_param)))
