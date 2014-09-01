@@ -39,11 +39,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_ipu_sink_debug);
 enum
 {
 	PROP_0,
+	PROP_FB_NUM,
 	PROP_OUTPUT_ROTATION,
 	PROP_INPUT_CROP,
 	PROP_DEINTERLACE_MODE
 };
 
+#define DEFAULT_FB_NUM      0
 
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	"sink",
@@ -55,6 +57,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 
 struct _GstImxIpuSinkPrivate
 {
+	guint fb_num;
 	int framebuffer_fd;
 	GstBuffer *fb_buffer;
 	GstImxIpuBlitter *blitter;
@@ -122,6 +125,18 @@ void gst_imx_ipu_sink_class_init(GstImxIpuSinkClass *klass)
 
 	g_object_class_install_property(
 		object_class,
+		PROP_FB_NUM,
+		g_param_spec_uint(
+			"fb-num",
+			"framebuffer number",
+			"Framebuffer to use",
+			0, G_MAXUINT,
+			DEFAULT_FB_NUM,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
 		PROP_OUTPUT_ROTATION,
 		g_param_spec_enum(
 			"output-rotation",
@@ -165,6 +180,7 @@ void gst_imx_ipu_sink_init(GstImxIpuSink *ipu_sink)
 	ipu_sink->priv->blitter = NULL;
 	g_mutex_init(&(ipu_sink->priv->mutex));
 
+	ipu_sink->priv->fb_num = DEFAULT_FB_NUM;
 	ipu_sink->priv->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
 	ipu_sink->priv->input_crop = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
 	ipu_sink->priv->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
@@ -219,15 +235,20 @@ static GstStateChangeReturn gst_imx_ipu_sink_change_state(GstElement *element, G
 static gboolean gst_imx_ipu_sink_init_device(GstImxIpuSink *ipu_sink)
 {
 	/* must be called with lock */
+	gchar *fb_device;
 
 	g_assert(ipu_sink->priv != NULL);
 
-	ipu_sink->priv->framebuffer_fd = open("/dev/fb0", O_RDWR, 0);
+	fb_device = g_strdup_printf("/dev/fb%d", ipu_sink->priv->fb_num);
+	ipu_sink->priv->framebuffer_fd = open(fb_device, O_RDWR, 0);
 	if (ipu_sink->priv->framebuffer_fd < 0)
 	{
-		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("could not open /dev/fb0: %s", strerror(errno)), (NULL));
+		GST_ELEMENT_ERROR(ipu_sink, RESOURCE, OPEN_READ_WRITE, ("could not open %s: %s", fb_device, strerror(errno)), (NULL));
+		g_free(fb_device);
 		return FALSE;
 	}
+	g_free(fb_device);
+	fb_device = NULL;
 
 	ipu_sink->priv->blitter = g_object_new(gst_imx_ipu_blitter_get_type(), NULL);
 
@@ -298,6 +319,10 @@ static void gst_imx_ipu_sink_set_property(GObject *object, guint prop_id, GValue
 
 	switch (prop_id)
 	{
+		case PROP_FB_NUM:
+			ipu_sink->priv->fb_num = g_value_get_uint(value);
+			break;
+
 		case PROP_OUTPUT_ROTATION:
 			LOCK_BLITTER_MUTEX(ipu_sink);
 			ipu_sink->priv->output_rotation = g_value_get_enum(value);
@@ -335,6 +360,10 @@ static void gst_imx_ipu_sink_get_property(GObject *object, guint prop_id, GValue
 
 	switch (prop_id)
 	{
+		case PROP_FB_NUM:
+			g_value_set_uint(value, ipu_sink->priv->fb_num);
+			break;
+
 		case PROP_OUTPUT_ROTATION:
 			LOCK_BLITTER_MUTEX(ipu_sink);
 			g_value_set_enum(value, ipu_sink->priv->output_rotation);
