@@ -743,12 +743,20 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	GstBuffer *codec_data = NULL;
 	GstImxVpuDec *vpu_dec = GST_IMX_VPU_DEC(decoder);
 
+	GST_INFO_OBJECT(decoder, "setting decoder format");
+
+	/* Output frames that are already decoded but not yet displayed */
+	GST_INFO_OBJECT(decoder, "draining remaining frames from decoder");
+	gst_imx_vpu_dec_finish(decoder);
+
 	/* Clean up existing framebuffers structure;
 	 * if some previous and still existing buffer pools depend on this framebuffers
 	 * structure, they will extend its lifetime, since they ref'd it
 	 */
 	if (vpu_dec->current_framebuffers != NULL)
 	{
+		GST_INFO_OBJECT(decoder, "cleaning up existing framebuffers structure");
+
 		/* Using mutexes here to prevent race conditions when decoder_open is set to
 		 * FALSE at the same time as it is checked in the buffer pool release() function */
 		GST_IMX_VPU_FRAMEBUFFERS_LOCK(vpu_dec->current_framebuffers);
@@ -763,6 +771,8 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	/* Clean up old codec data copy */
 	if (vpu_dec->codec_data != NULL)
 	{
+		GST_INFO_OBJECT(decoder, "cleaning up existing codec data");
+
 		gst_buffer_unref(vpu_dec->codec_data);
 		vpu_dec->codec_data = NULL;
 	}
@@ -770,6 +780,8 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	/* Clean up old output state */
 	if (vpu_dec->current_output_state != NULL)
 	{
+		GST_INFO_OBJECT(decoder, "cleaning up existing output state");
+
 		gst_video_codec_state_unref(vpu_dec->current_output_state);
 		vpu_dec->current_output_state = NULL;
 	}
@@ -831,6 +843,8 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	/* Copy the buffer, to make sure the codec_data lifetime does not depend on the caps */
 	if (codec_data != NULL)
 		vpu_dec->codec_data = gst_buffer_copy(codec_data);
+
+	GST_INFO_OBJECT(decoder, "setting format finished");
 
 	return TRUE;
 }
