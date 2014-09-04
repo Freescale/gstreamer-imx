@@ -45,6 +45,7 @@ struct _GstImxPhysMemMeta
 
 	guintptr phys_addr;
 	gsize x_padding, y_padding, padding; /* TODO: remove padding member (obsolete) */
+	GstBuffer *parent;
 };
 
 

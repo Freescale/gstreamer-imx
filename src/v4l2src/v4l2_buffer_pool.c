@@ -238,7 +238,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_acquire_buffer(GstBufferPool *bpoo
 
 	gst_buffer_remove_all_memory(buf);
 	gst_buffer_append_memory(buf,
-			gst_memory_new_wrapped(GST_MEMORY_FLAG_NO_SHARE,
+			gst_memory_new_wrapped(0,
 				meta->mem, meta->vbuffer.length, 0,
 				vbuffer.bytesused, NULL, NULL));
 

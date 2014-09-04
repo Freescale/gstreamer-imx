@@ -235,11 +235,15 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 
 	size = fmt.fmt.pix.sizeimage;
 
-	pool = gst_imx_v4l2_buffer_pool_new(v4l2src->fd_v4l);
-	config = gst_buffer_pool_get_config(pool);
-	gst_buffer_pool_config_set_params(config, caps, size, min, max);
-	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-	gst_buffer_pool_set_config(pool, config);
+	/* no repooling; leads to stream off situation due to pool start/stop */
+	pool = gst_base_src_get_buffer_pool(bsrc);
+	if (!pool) {
+		pool = gst_imx_v4l2_buffer_pool_new(v4l2src->fd_v4l);
+		config = gst_buffer_pool_get_config(pool);
+		gst_buffer_pool_config_set_params(config, caps, size, min, max);
+		gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+		gst_buffer_pool_set_config(pool, config);
+	}
 
 	if (update)
 		gst_query_set_nth_allocation_pool(query, 0, pool, size, min, max);
