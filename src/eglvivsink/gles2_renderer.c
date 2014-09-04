@@ -23,6 +23,9 @@ struct _GstImxEglVivSinkGLES2Renderer
 	gint manual_x_coord, manual_y_coord, manual_width, manual_height;
 	gboolean borderless;
 
+	gboolean display_scale_needs_update;
+	float display_scale_w, display_scale_h;
+
 	GstBuffer *current_frame;
 
 	GstImxEglVivSinkEGLPlatform *egl_platform;
@@ -793,6 +796,15 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 
 	if (renderer->current_frame != NULL)
 	{
+		if (renderer->display_scale_needs_update)
+		{
+			GST_LOG("new display scale: %f/%f", renderer->display_scale_w, renderer->display_scale_h);
+
+			g_assert(renderer->frame_rect_uloc != -1);
+			glUniform2f(renderer->frame_rect_uloc, renderer->display_scale_w, renderer->display_scale_h);
+			renderer->display_scale_needs_update = FALSE;
+		}
+
 		if (!gst_imx_egl_viv_sink_gles2_renderer_fill_texture(renderer, renderer->current_frame))
 			return FALSE;
 
@@ -859,6 +871,10 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char c
 	renderer->borderless = FALSE;
 
 	renderer->current_frame = NULL;
+
+	renderer->display_scale_needs_update = TRUE;
+	renderer->display_scale_w = 1;
+	renderer->display_scale_h = 1;
 
 	renderer->egl_platform = gst_imx_egl_viv_sink_egl_platform_create(
 		native_display_name,
@@ -1017,8 +1033,6 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxE
 {
 	/* must be called with lock */
 
-	float display_scale_w, display_scale_h;
-
 	if (renderer->force_aspect_ratio && (renderer->window_width != 0) && (renderer->window_height != 0))
 	{
 		gint video_par_n, video_par_d, window_par_n, window_par_d;
@@ -1051,31 +1065,24 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_update_display_ratio(GstImxE
 
 		if (norm_ratio >= 1.0f)
 		{
-			display_scale_w = 1.0f;
-			display_scale_h = 1.0f / norm_ratio;
+			renderer->display_scale_w = 1.0f;
+			renderer->display_scale_h = 1.0f / norm_ratio;
 		}
 		else
 		{
-			display_scale_w = norm_ratio;
-			display_scale_h = 1.0f;
+			renderer->display_scale_w = norm_ratio;
+			renderer->display_scale_h = 1.0f;
 		}
 	}
 	else
 	{
 		renderer->display_ratio_n = 1;
 		renderer->display_ratio_d = 1;
-		display_scale_w = 1.0f;
-		display_scale_h = 1.0f;
+		renderer->display_scale_w = 1.0f;
+		renderer->display_scale_h = 1.0f;
 	}
 
-	if (renderer->frame_rect_uloc != -1)
-	{
-		GST_LOG(
-			"display scale: %f/%f",
-			display_scale_w, display_scale_h
-		);
-		glUniform2f(renderer->frame_rect_uloc, display_scale_w, display_scale_h);
-	}
+	renderer->display_scale_needs_update = TRUE;
 
 	return TRUE;
 }
