@@ -1182,6 +1182,16 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			return GST_FLOW_ERROR;
 		}
 
+		/* The GST_BUFFER_FLAG_TAG_MEMORY flag will be set, because the
+		 * buffer's memory was added after the buffer was acquired from
+		 * the pool. (The fbbufferpool produces empty buffers.)
+		 * However, at this point, the buffer is ready for use,
+		 * so just remove that flag to prevent unnecessary copies.
+		 * (new in GStreamer >= 1.3.1 */
+#if GST_CHECK_VERSION(1, 3, 1)
+		GST_BUFFER_FLAG_UNSET(buffer, GST_BUFFER_FLAG_TAG_MEMORY);
+#endif
+
 		if (sys_frame_nr_valid)
 		{
 			GST_LOG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %p  system frame number: %u  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gpointer)(out_frame_info.pDisplayFrameBuf->pbufY), out_system_frame_number, (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
