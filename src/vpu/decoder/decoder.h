@@ -86,11 +86,13 @@ struct _GstImxVpuDec
 struct _GstImxVpuDecClass
 {
 	GstVideoDecoderClass parent_class;
-	gint inst_counter;
 };
 
 
 GType gst_imx_vpu_dec_get_type(void);
+
+gboolean gst_imx_vpu_dec_load(void);
+void gst_imx_vpu_dec_unload(void);
 
 
 G_END_DECLS

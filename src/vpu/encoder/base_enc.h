@@ -79,7 +79,6 @@ struct _GstImxVpuBaseEnc
 struct _GstImxVpuBaseEncClass
 {
 	GstVideoEncoderClass parent_class;
-	gint inst_counter;
 
 	gboolean (*set_open_params)(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
 	GstCaps* (*get_output_caps)(GstImxVpuBaseEnc *vpu_base_enc);
@@ -90,6 +89,9 @@ struct _GstImxVpuBaseEncClass
 
 
 GType gst_imx_vpu_base_enc_get_type(void);
+
+gboolean gst_imx_vpu_base_enc_load(void);
+void gst_imx_vpu_base_enc_unload(void);
 
 
 G_END_DECLS

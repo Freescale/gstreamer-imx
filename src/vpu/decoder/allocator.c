@@ -19,6 +19,7 @@
 #include <string.h>
 #include <vpu_wrapper.h>
 #include "allocator.h"
+#include "decoder.h"
 
 
 GST_DEBUG_CATEGORY_STATIC(imx_vpu_dec_allocator_debug);
@@ -66,6 +67,9 @@ static gboolean gst_imx_vpu_dec_alloc_phys_mem(G_GNUC_UNUSED GstImxPhysMemAlloca
 	VpuDecRetCode ret;
 	VpuMemDesc mem_desc;
 
+	if (!gst_imx_vpu_dec_load())
+		return FALSE;
+
 	memset(&mem_desc, 0, sizeof(VpuMemDesc));
 	mem_desc.nSize = size;
 	ret = VPU_DecGetMem(&mem_desc);
@@ -95,6 +99,8 @@ static gboolean gst_imx_vpu_dec_free_phys_mem(G_GNUC_UNUSED GstImxPhysMemAllocat
 	mem_desc.nCpuAddr  = (unsigned long)(memory->cpu_addr);
 
 	ret = VPU_DecFreeMem(&mem_desc);
+
+	gst_imx_vpu_dec_unload();
 
 	return (ret == VPU_DEC_RET_SUCCESS);
 }

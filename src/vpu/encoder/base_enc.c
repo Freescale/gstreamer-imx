@@ -51,6 +51,7 @@ enum
 
 
 static GMutex inst_counter_mutex;
+static int inst_counter = 0;
 
 
 G_DEFINE_ABSTRACT_TYPE(GstImxVpuBaseEnc, gst_imx_vpu_base_enc, GST_TYPE_VIDEO_ENCODER)
@@ -102,8 +103,6 @@ void gst_imx_vpu_base_enc_class_init(GstImxVpuBaseEncClass *klass)
 	 * (This also affects the IPU elements.)
 	 */
 	/*base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_propose_allocation);*/
-	
-	klass->inst_counter = 0;
 
 	klass->set_open_params = NULL;
 	klass->get_output_caps = NULL;
@@ -185,6 +184,74 @@ void gst_imx_vpu_base_enc_init(GstImxVpuBaseEnc *vpu_base_enc)
 
 /***************************/
 /* miscellaneous functions */
+
+gboolean gst_imx_vpu_base_enc_load(void)
+{
+	VpuEncRetCode ret;
+
+#define VPUINIT_ERR(RET, DESC, UNLOAD) \
+	if ((RET) != VPU_ENC_RET_SUCCESS) \
+	{ \
+		g_mutex_unlock(&inst_counter_mutex); \
+		GST_ERROR("%s: %s", (DESC), gst_imx_vpu_strerror(RET)); \
+		if (UNLOAD) \
+			VPU_EncUnLoad(); \
+		return FALSE; \
+	}
+
+	g_mutex_lock(&inst_counter_mutex);
+	if (inst_counter == 0)
+	{
+		ret = VPU_EncLoad();
+		VPUINIT_ERR(ret, "loading VPU encoder failed", FALSE);
+
+		{
+			VpuVersionInfo version;
+			VpuWrapperVersionInfo wrapper_version;
+
+			ret = VPU_EncGetVersionInfo(&version);
+			VPUINIT_ERR(ret, "getting version info failed", TRUE);
+
+			ret = VPU_EncGetWrapperVersionInfo(&wrapper_version);
+			VPUINIT_ERR(ret, "getting wrapper version info failed", TRUE);
+
+			GST_INFO("VPU encoder loaded");
+			GST_INFO("VPU firmware version %d.%d.%d_r%d", version.nFwMajor, version.nFwMinor, version.nFwRelease, version.nFwCode);
+			GST_INFO("VPU library version %d.%d.%d", version.nLibMajor, version.nLibMinor, version.nLibRelease);
+			GST_INFO("VPU wrapper version %d.%d.%d %s", wrapper_version.nMajor, wrapper_version.nMinor, wrapper_version.nRelease, wrapper_version.pBinary);
+		}
+	}
+	++inst_counter;
+	g_mutex_unlock(&inst_counter_mutex);
+
+#undef VPUINIT_ERR
+
+	return TRUE;
+}
+
+
+void gst_imx_vpu_base_enc_unload(void)
+{
+	VpuEncRetCode ret;
+
+	g_mutex_lock(&inst_counter_mutex);
+	if (inst_counter > 0)
+	{
+		--inst_counter;
+		if (inst_counter == 0)
+		{
+			ret = VPU_EncUnLoad();
+			if (ret != VPU_ENC_RET_SUCCESS)
+			{
+				GST_ERROR("unloading VPU encoder failed: %s", gst_imx_vpu_strerror(ret));
+			}
+			else
+				GST_INFO("VPU encoder unloaded");
+		}
+	}
+	g_mutex_unlock(&inst_counter_mutex);
+}
+
 
 static gboolean gst_imx_vpu_base_enc_alloc_enc_mem_blocks(GstImxVpuBaseEnc *vpu_base_enc)
 {
@@ -324,45 +391,11 @@ static gboolean gst_imx_vpu_base_enc_start(GstVideoEncoder *encoder)
 {
 	VpuEncRetCode ret;
 	GstImxVpuBaseEnc *vpu_base_enc;
-	GstImxVpuBaseEncClass *klass;
 
 	vpu_base_enc = GST_IMX_VPU_BASE_ENC(encoder);
-	klass = GST_IMX_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
 
-#define VPUINIT_ERR(RET, DESC, UNLOAD) \
-	if ((RET) != VPU_ENC_RET_SUCCESS) \
-	{ \
-		g_mutex_unlock(&inst_counter_mutex); \
-		GST_ELEMENT_ERROR(vpu_base_enc, LIBRARY, INIT, ("%s: %s", (DESC), gst_imx_vpu_strerror(RET)), (NULL)); \
-		if (UNLOAD) \
-			VPU_EncUnLoad(); \
-		return FALSE; \
-	}
-
-	g_mutex_lock(&inst_counter_mutex);
-	if (klass->inst_counter == 0)
-	{
-		ret = VPU_EncLoad();
-		VPUINIT_ERR(ret, "loading VPU encoder failed", FALSE);
-
-		{
-			VpuVersionInfo version;
-			VpuWrapperVersionInfo wrapper_version;
-
-			ret = VPU_EncGetVersionInfo(&version);
-			VPUINIT_ERR(ret, "getting version info failed", TRUE);
-
-			ret = VPU_EncGetWrapperVersionInfo(&wrapper_version);
-			VPUINIT_ERR(ret, "getting wrapper version info failed", TRUE);
-
-			GST_INFO_OBJECT(vpu_base_enc, "VPU encoder loaded");
-			GST_INFO_OBJECT(vpu_base_enc, "VPU firmware version %d.%d.%d_r%d", version.nFwMajor, version.nFwMinor, version.nFwRelease, version.nFwCode);
-			GST_INFO_OBJECT(vpu_base_enc, "VPU library version %d.%d.%d", version.nLibMajor, version.nLibMinor, version.nLibRelease);
-			GST_INFO_OBJECT(vpu_base_enc, "VPU wrapper version %d.%d.%d %s", wrapper_version.nMajor, wrapper_version.nMinor, wrapper_version.nRelease, wrapper_version.pBinary);
-		}
-	}
-	++klass->inst_counter;
-	g_mutex_unlock(&inst_counter_mutex);
+	if (!gst_imx_vpu_base_enc_load())
+		return FALSE;
 
 	/* mem_info contains information about how to set up memory blocks
 	 * the VPU uses as temporary storage (they are "work buffers") */
@@ -381,8 +414,6 @@ static gboolean gst_imx_vpu_base_enc_start(GstVideoEncoder *encoder)
 	if (!gst_imx_vpu_base_enc_alloc_enc_mem_blocks(vpu_base_enc))
 		return FALSE;
 
-#undef VPUINIT_ERR
-
 	/* The encoder is initialized in set_format, not here, since only then the input bitstream
 	 * format is known (and this information is necessary for initialization). */
 
@@ -393,14 +424,11 @@ static gboolean gst_imx_vpu_base_enc_start(GstVideoEncoder *encoder)
 static gboolean gst_imx_vpu_base_enc_stop(GstVideoEncoder *encoder)
 {
 	gboolean ret;
-	VpuEncRetCode enc_ret;
 	GstImxVpuBaseEnc *vpu_base_enc;
-	GstImxVpuBaseEncClass *klass;
 
 	ret = TRUE;
 
 	vpu_base_enc = GST_IMX_VPU_BASE_ENC(encoder);
-	klass = GST_IMX_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
 
 	if (vpu_base_enc->framebuffers != NULL)
 	{
@@ -416,22 +444,7 @@ static gboolean gst_imx_vpu_base_enc_stop(GstVideoEncoder *encoder)
 	gst_imx_vpu_base_enc_close_encoder(vpu_base_enc);
 	gst_imx_vpu_base_enc_free_enc_mem_blocks(vpu_base_enc);
 
-	g_mutex_lock(&inst_counter_mutex);
-	if (klass->inst_counter > 0)
-	{
-		--klass->inst_counter;
-		if (klass->inst_counter == 0)
-		{
-			enc_ret = VPU_EncUnLoad();
-			if (enc_ret != VPU_ENC_RET_SUCCESS)
-			{
-				GST_ERROR_OBJECT(vpu_base_enc, "unloading VPU encoder failed: %s", gst_imx_vpu_strerror(enc_ret));
-			}
-			else
-				GST_INFO_OBJECT(vpu_base_enc, "VPU encoder unloaded");
-		}
-	}
-	g_mutex_unlock(&inst_counter_mutex);
+	gst_imx_vpu_base_enc_unload();
 
 	return ret;
 }
