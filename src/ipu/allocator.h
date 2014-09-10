@@ -44,7 +44,6 @@ typedef struct _GstImxIpuMemory GstImxIpuMemory;
 struct _GstImxIpuAllocator
 {
 	GstImxPhysMemAllocator parent;
-	int fd;
 };
 
 
@@ -55,7 +54,7 @@ struct _GstImxIpuAllocatorClass
 
 
 GType gst_imx_ipu_allocator_get_type(void);
-GstAllocator* gst_imx_ipu_allocator_new(int ipu_fd);
+GstAllocator* gst_imx_ipu_allocator_new(void);
 
 
 G_END_DECLS

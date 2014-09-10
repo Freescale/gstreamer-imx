@@ -32,6 +32,8 @@
 #include "../common/phys_mem_meta.h"
 #include "../common/phys_mem_buffer_pool.h"
 #include "allocator.h"
+#include "blitter.h"
+#include "device.h"
 
 
 
@@ -86,7 +88,6 @@ G_DEFINE_TYPE(GstImxIpuBlitter, gst_imx_ipu_blitter, GST_TYPE_OBJECT)
 /* Private structure storing IPU specific data */
 struct _GstImxIpuBlitterPrivate
 {
-	int ipu_fd;
 	struct ipu_task task;
 };
 
@@ -182,8 +183,6 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 {
 	ipu_blitter->priv = g_slice_alloc(sizeof(GstImxIpuBlitterPrivate));
 
-	ipu_blitter->priv->ipu_fd = -1;
-
 	ipu_blitter->internal_bufferpool = NULL;
 	ipu_blitter->actual_input_buffer = NULL;
 	ipu_blitter->previous_input_buffer = NULL;
@@ -196,15 +195,9 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 
 gboolean gst_imx_ipu_blitter_open_device(GstImxIpuBlitter *ipu_blitter)
 {
-	/* Don't do anything if there is already a FD */
-	if (ipu_blitter->priv->ipu_fd != -1)
-		return TRUE;
-
-	/* This FD is necessary for using the IPU ioctls */
-	ipu_blitter->priv->ipu_fd = open("/dev/mxc_ipu", O_RDWR, 0);
-	if (ipu_blitter->priv->ipu_fd < 0)
+	if (!gst_imx_ipu_open())
 	{
-		GST_ERROR_OBJECT(ipu_blitter, "could not open /dev/mxc_ipu: %s", strerror(errno));
+		GST_ERROR_OBJECT(ipu_blitter, "could not open IPU device");
 		return FALSE;
 	}
 
@@ -225,8 +218,7 @@ static void gst_imx_ipu_blitter_finalize(GObject *object)
 
 	if (ipu_blitter->priv != NULL)
 	{
-		if (ipu_blitter->priv->ipu_fd >= 0)
-			close(ipu_blitter->priv->ipu_fd);
+		gst_imx_ipu_close();
 		g_slice_free1(sizeof(GstImxIpuBlitterPrivate), ipu_blitter->priv);
 	}
 
@@ -762,7 +754,7 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 	/* The actual blit operation
 	 * Input and output frame are assumed to be set up properly at this point
 	 */
-	ret = ioctl(ipu_blitter->priv->ipu_fd, IPU_QUEUE_TASK, &(ipu_blitter->priv->task));
+	ret = ioctl(gst_imx_ipu_get_fd(), IPU_QUEUE_TASK, &(ipu_blitter->priv->task));
 
 	if (ipu_blitter->priv->task.input.deinterlace.enable && (ipu_blitter->deinterlace_mode == GST_IMX_IPU_BLITTER_DEINTERLACE_SLOW_MOTION))
 	{
@@ -787,7 +779,7 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 }
 
 
-GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(GstImxIpuBlitter *ipu_blitter, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params)
+GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(G_GNUC_UNUSED GstImxIpuBlitter *ipu_blitter, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params)
 {
 	GstBufferPool *pool;
 	GstStructure *config;
@@ -799,7 +791,7 @@ GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(GstImxIpuBlitter *ipu_blitt
 	/* If the allocator value is NULL, create an allocator */
 	if (allocator == NULL)
 	{
-		allocator = gst_imx_ipu_allocator_new(ipu_blitter->priv->ipu_fd);
+		allocator = gst_imx_ipu_allocator_new();
 		gst_buffer_pool_config_set_allocator(config, allocator, alloc_params);
 	}
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM);

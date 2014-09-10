@@ -23,6 +23,7 @@
 #include <sys/mman.h>
 #include <linux/ipu.h>
 #include "../common/phys_mem_meta.h"
+#include "device.h"
 
 
 GST_DEBUG_CATEGORY_STATIC(imx_ipu_allocator_debug);
@@ -43,12 +44,10 @@ G_DEFINE_TYPE(GstImxIpuAllocator, gst_imx_ipu_allocator, GST_TYPE_IMX_PHYS_MEM_A
 
 
 
-GstAllocator* gst_imx_ipu_allocator_new(int ipu_fd)
+GstAllocator* gst_imx_ipu_allocator_new(void)
 {
 	GstAllocator *allocator;
 	allocator = g_object_new(gst_imx_ipu_allocator_get_type(), NULL);
-
-	GST_IMX_IPU_ALLOCATOR(allocator)->fd = ipu_fd;
 
 	return allocator;
 }
@@ -58,20 +57,19 @@ static gboolean gst_imx_ipu_alloc_phys_mem(GstImxPhysMemAllocator *allocator, Gs
 {
 	dma_addr_t m;
 	int ret;
-	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
 	m = (dma_addr_t)size;
-	ret = ioctl(ipu_allocator->fd, IPU_ALLOC, &m);
+	ret = ioctl(gst_imx_ipu_get_fd(), IPU_ALLOC, &m);
 	memory->cpu_addr = 0;
 	if (ret < 0)
 	{
-		GST_ERROR("could not allocate %u bytes of physical memory: %s", size, strerror(errno));
+		GST_ERROR_OBJECT(allocator, "could not allocate %u bytes of physical memory: %s", size, strerror(errno));
 		memory->phys_addr = 0;
 		return FALSE;
 	}
 	else
 	{
-		GST_DEBUG("allocated %u bytes of physical memory at address 0x%x", size, m);
+		GST_DEBUG_OBJECT(allocator, "allocated %u bytes of physical memory at address 0x%x", size, m);
 		memory->phys_addr = m;
 		return TRUE;
 	}
@@ -82,10 +80,9 @@ static gboolean gst_imx_ipu_free_phys_mem(GstImxPhysMemAllocator *allocator, Gst
 {
 	dma_addr_t m;
 	int ret;
-	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
 	m = (dma_addr_t)(memory->phys_addr);
-	ret = ioctl(ipu_allocator->fd, IPU_FREE, &m);
+	ret = ioctl(gst_imx_ipu_get_fd(), IPU_FREE, &m);
 	if (ret < 0)
 	{
 		GST_ERROR_OBJECT(allocator, "could not free physical memory at address 0x%x: %s", m, strerror(errno));
@@ -114,7 +111,7 @@ static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstI
 	if (flags & GST_MAP_WRITE)
 		prot |= PROT_WRITE;
 
-	phys_mem->mapped_virt_addr = mmap(0, size, prot, MAP_SHARED, ipu_allocator->fd, (dma_addr_t)(phys_mem->phys_addr));
+	phys_mem->mapped_virt_addr = mmap(0, size, prot, MAP_SHARED, gst_imx_ipu_get_fd(), (dma_addr_t)(phys_mem->phys_addr));
 	if (phys_mem->mapped_virt_addr == MAP_FAILED)
 	{
 		phys_mem->mapped_virt_addr = NULL;
@@ -158,12 +155,21 @@ static void gst_imx_ipu_allocator_init(GstImxIpuAllocator *allocator)
 {
 	GstAllocator *base = GST_ALLOCATOR(allocator);
 	base->mem_type = GST_IMX_IPU_ALLOCATOR_MEM_TYPE;
+
+	if (!gst_imx_ipu_open())
+	{
+		GST_ERROR("could not open IPU device");
+		return;
+	}
 }
 
 
 static void gst_imx_ipu_allocator_finalize(GObject *object)
 {
 	GST_DEBUG_OBJECT(object, "shutting down IMX IPU allocator");
+
+	gst_imx_ipu_close();
+
 	G_OBJECT_CLASS(gst_imx_ipu_allocator_parent_class)->finalize(object);
 }
 

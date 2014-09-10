@@ -23,12 +23,19 @@
 #include "videotransform/videotransform.h"
 
 
+GST_DEBUG_CATEGORY(imx_ipu_device_debug);
+
+
 
 static gboolean plugin_init(GstPlugin *plugin)
 {
 	gboolean ret = TRUE;
+
+	GST_DEBUG_CATEGORY_INIT(imx_ipu_device_debug, "imxipudevice", 0, "Freescale i.MX IPU device");
+
 	ret = ret && gst_element_register(plugin, "imxipuvideotransform", GST_RANK_NONE, gst_imx_ipu_video_transform_get_type());
 	ret = ret && gst_element_register(plugin, "imxipusink", GST_RANK_PRIMARY + 1, gst_imx_ipu_sink_get_type());
+
 	return ret;
 }
 
