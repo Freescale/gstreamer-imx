@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <errno.h>
 #include <linux/videodev2.h>
 
 #include <config.h>
@@ -99,7 +100,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 #endif
 
 	if (ioctl (fd_v4l, VIDIOC_G_STD, &id) < 0) {
-		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed");
+		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed: %s", strerror(errno));
 	} else {
 		if (ioctl (fd_v4l, VIDIOC_S_STD, &id) < 0) {
 			GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_STD failed");
@@ -111,7 +112,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 	fszenum.index = v4l2src->capture_mode;
 	fszenum.pixel_format = V4L2_PIX_FMT_YUV420;
 	if (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &fszenum) < 0) {
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_ENUM_FRAMESIZES failed");
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_ENUM_FRAMESIZES failed: %s", strerror(errno));
 		close(fd_v4l);
 		return -1;
 	}
@@ -123,7 +124,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 
 	input = v4l2src->input;
 	if (ioctl(fd_v4l, VIDIOC_S_INPUT, &input) < 0) {
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_INPUT failed");
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_INPUT failed: %s", strerror(errno));
 		close(fd_v4l);
 		return -1;
 	}
@@ -133,7 +134,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 	parm.parm.capture.timeperframe.denominator = v4l2src->fps_n;
 	parm.parm.capture.capturemode = v4l2src->capture_mode;
 	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0) {
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_PARM failed");
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_PARM failed: %s", strerror(errno));
 		close(fd_v4l);
 		return -1;
 	}
@@ -144,7 +145,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 	fmt.fmt.pix.priv = 0;
 	fmt.fmt.pix.sizeimage = 0;
 	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_FMT failed");
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_FMT failed: %s", strerror(errno));
 		close(fd_v4l);
 		return -1;
 	}
