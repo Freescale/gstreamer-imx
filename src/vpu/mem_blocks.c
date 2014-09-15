@@ -110,7 +110,7 @@ gboolean gst_imx_vpu_free_phys_mem_blocks(GstImxPhysMemAllocator *phys_mem_alloc
 	{
 		GstMemory *memory = (GstMemory *)(mem_block_node->data);
 		gst_allocator_free((GstAllocator *)phys_mem_allocator, memory);
-		GST_INFO("freed phys memory block with %u bytes at phys addr 0x%x", memory->size, ((GstImxPhysMemory *)memory)->phys_addr);
+		GST_INFO("freed phys memory block with %u bytes at phys addr %" GST_IMX_PHYS_ADDR_FORMAT, memory->size, ((GstImxPhysMemory *)memory)->phys_addr);
 	}
 
 	g_slist_free(*phys_mem_blocks);
@@ -118,4 +118,3 @@ gboolean gst_imx_vpu_free_phys_mem_blocks(GstImxPhysMemAllocator *phys_mem_alloc
 
 	return TRUE;
 }
-

@@ -316,7 +316,7 @@ gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffer
 		phys_mem_meta->x_padding = x_padding;
 		phys_mem_meta->y_padding = y_padding;
 
-		GST_LOG("setting phys mem meta for buffer with pointer %p: phys addr 0x%x x/y padding %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT, (gpointer)buffer, phys_mem_meta->phys_addr, phys_mem_meta->x_padding, phys_mem_meta->y_padding);
+		GST_LOG("setting phys mem meta for buffer with pointer %p: phys addr %" GST_IMX_PHYS_ADDR_FORMAT " x/y padding %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT, (gpointer)buffer, phys_mem_meta->phys_addr, phys_mem_meta->x_padding, phys_mem_meta->y_padding);
 
 		memory = gst_memory_new_wrapped(
 			GST_MEMORY_FLAG_NO_SHARE,

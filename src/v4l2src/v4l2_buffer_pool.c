@@ -168,6 +168,9 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_ADD(buf);
 	phys_mem_meta->phys_addr = meta->vbuffer.m.offset;
 
+	/* Safeguard to catch data loss if in any future i.MX version the types do not match */
+	g_assert(meta->vbuffer.m.offset == (__u32)(phys_mem_meta->phys_addr));
+
 	if (pool->add_videometa)
 	{
 		info = &pool->video_info;

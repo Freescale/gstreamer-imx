@@ -148,7 +148,7 @@ static GstMemory* gst_imx_phys_mem_allocator_alloc(GstAllocator *allocator, gsiz
 	phys_mem = gst_imx_phys_mem_allocator_alloc_internal(allocator, NULL, maxsize, params->flags, params->align, params->prefix, size);
 
 	if (phys_mem != NULL)
-		GST_INFO_OBJECT(allocator, "allocated memory block %p at phys addr 0x%x with %u bytes", (gpointer)phys_mem, phys_mem->phys_addr, size);
+		GST_INFO_OBJECT(allocator, "allocated memory block %p at phys addr %" GST_IMX_PHYS_ADDR_FORMAT " with %u bytes", (gpointer)phys_mem, phys_mem->phys_addr, size);
 	else
 		GST_WARNING_OBJECT(allocator, "could not allocate memory block with %u bytes", size);
 
@@ -164,7 +164,7 @@ static void gst_imx_phys_mem_allocator_free(GstAllocator *allocator, GstMemory *
 
 	klass->free_phys_mem(phys_mem_alloc, phys_mem);
 
-	GST_INFO_OBJECT(allocator, "freed block %p at phys addr 0x%x with size: %u", (gpointer)memory, phys_mem->phys_addr, memory->size);
+	GST_INFO_OBJECT(allocator, "freed block %p at phys addr %" GST_IMX_PHYS_ADDR_FORMAT " with size: %u", (gpointer)memory, phys_mem->phys_addr, memory->size);
 }
 
 
@@ -174,7 +174,7 @@ static gpointer gst_imx_phys_mem_allocator_map(GstMemory *mem, gsize maxsize, Gs
 	GstImxPhysMemAllocator *phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
-	GST_LOG_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p (phys addr %p)", maxsize, (gpointer)mem, (gpointer)(phys_mem->phys_addr));
+	GST_LOG_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p (phys addr %" GST_IMX_PHYS_ADDR_FORMAT ")", maxsize, (gpointer)mem, phys_mem->phys_addr);
 
 	return klass->map_phys_mem(phys_mem_alloc, phys_mem, maxsize, flags);
 }
@@ -186,7 +186,7 @@ static void gst_imx_phys_mem_allocator_unmap(GstMemory *mem)
 	GstImxPhysMemAllocator *phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
-	GST_LOG_OBJECT(phys_mem_alloc, "unmapping memory block %p (phys addr %p)", (gpointer)mem, (gpointer)(phys_mem->phys_addr));
+	GST_LOG_OBJECT(phys_mem_alloc, "unmapping memory block %p (phys addr %" GST_IMX_PHYS_ADDR_FORMAT ")", (gpointer)mem, phys_mem->phys_addr);
 
 	klass->unmap_phys_mem(phys_mem_alloc, phys_mem);
 }

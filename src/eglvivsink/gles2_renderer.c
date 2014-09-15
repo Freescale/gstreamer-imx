@@ -712,7 +712,10 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 
 			phys_addr = (GLuint)(phys_mem_meta->phys_addr);
 
-			GST_LOG("mapping physical address 0x%x of video frame in buffer %p into VIV texture", phys_addr, (gpointer)buffer);
+			/* Safeguard to catch data loss if in any future i.MX version the types do not match */
+			g_assert(((gst_imx_phys_addr_t)(phys_addr)) == phys_mem_meta->phys_addr);
+
+			GST_LOG("mapping physical address %" GST_IMX_PHYS_ADDR_FORMAT " of video frame in buffer %p into VIV texture", phys_mem_meta->phys_addr, (gpointer)buffer);
 
 			gst_buffer_map(buffer, &map_info, GST_MAP_READ);
 			virt_addr = map_info.data;
@@ -728,7 +731,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 			);
 
 			gst_buffer_unmap(buffer, &map_info);
-			GST_LOG("done showing frame in buffer %p with virtual address %p physical address 0x%x", (gpointer)buffer, virt_addr, phys_addr);
+			GST_LOG("done showing frame in buffer %p with virtual address %p physical address %" GST_IMX_PHYS_ADDR_FORMAT, (gpointer)buffer, virt_addr, phys_mem_meta->phys_addr);
 
 			if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glTexDirectVIVMap"))
 				return FALSE;

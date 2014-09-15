@@ -762,20 +762,20 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 
 	GST_LOG_OBJECT(
 		ipu_blitter,
-		"task input:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  paddr 0x%x  deinterlace enable %u motion 0x%x",
+		"task input:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  phys addr %" GST_IMX_PHYS_ADDR_FORMAT "  deinterlace enable %u motion 0x%x",
 		ipu_blitter->priv->task.input.width, ipu_blitter->priv->task.input.height,
 		ipu_blitter->priv->task.input.format,
 		ipu_blitter->priv->task.input.crop.pos.x, ipu_blitter->priv->task.input.crop.pos.y, ipu_blitter->priv->task.input.crop.w, ipu_blitter->priv->task.input.crop.h,
-		ipu_blitter->priv->task.input.paddr,
+		(gst_imx_phys_addr_t)(ipu_blitter->priv->task.input.paddr),
 		ipu_blitter->priv->task.input.deinterlace.enable, ipu_blitter->priv->task.input.deinterlace.motion
 	);
 	GST_LOG_OBJECT(
 		ipu_blitter,
-		"task output:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  paddr 0x%x  rotate: %u",
+		"task output:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  paddr %" GST_IMX_PHYS_ADDR_FORMAT "  rotate: %u",
 		ipu_blitter->priv->task.output.width, ipu_blitter->priv->task.output.height,
 		ipu_blitter->priv->task.output.format,
 		ipu_blitter->priv->task.output.crop.pos.x, ipu_blitter->priv->task.output.crop.pos.y, ipu_blitter->priv->task.output.crop.w, ipu_blitter->priv->task.output.crop.h,
-		ipu_blitter->priv->task.output.paddr,
+		(gst_imx_phys_addr_t)(ipu_blitter->priv->task.output.paddr),
 		ipu_blitter->priv->task.output.rotate
 	);
 

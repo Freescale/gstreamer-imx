@@ -24,6 +24,8 @@
 #include <gst/video/video.h>
 #include <gst/video/gstvideometa.h>
 
+#include "phys_mem_addr.h"
+
 
 G_BEGIN_DECLS
 
@@ -43,7 +45,7 @@ struct _GstImxPhysMemMeta
 {
 	GstMeta meta;
 
-	guintptr phys_addr;
+	gst_imx_phys_addr_t phys_addr;
 	gsize x_padding, y_padding;
 	GstBuffer *parent;
 };

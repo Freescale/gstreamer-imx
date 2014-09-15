@@ -69,8 +69,8 @@ static gboolean gst_imx_ipu_alloc_phys_mem(GstImxPhysMemAllocator *allocator, Gs
 	}
 	else
 	{
-		GST_DEBUG_OBJECT(allocator, "allocated %u bytes of physical memory at address 0x%x", size, m);
 		memory->phys_addr = m;
+		GST_DEBUG_OBJECT(allocator, "allocated %u bytes of physical memory at address %" GST_IMX_PHYS_ADDR_FORMAT, size, memory->phys_addr);
 		return TRUE;
 	}
 }
@@ -85,12 +85,12 @@ static gboolean gst_imx_ipu_free_phys_mem(GstImxPhysMemAllocator *allocator, Gst
 	ret = ioctl(gst_imx_ipu_get_fd(), IPU_FREE, &m);
 	if (ret < 0)
 	{
-		GST_ERROR_OBJECT(allocator, "could not free physical memory at address 0x%x: %s", m, strerror(errno));
+		GST_ERROR_OBJECT(allocator, "could not free physical memory at address %" GST_IMX_PHYS_ADDR_FORMAT ": %s", memory->phys_addr, strerror(errno));
 		return FALSE;
 	}
 	else
 	{
-		GST_DEBUG_OBJECT(allocator, "freed physical memory at address 0x%x", m);
+		GST_DEBUG_OBJECT(allocator, "freed physical memory at address %" GST_IMX_PHYS_ADDR_FORMAT, memory->phys_addr);
 		return TRUE;
 	}
 }
@@ -119,7 +119,7 @@ static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstI
 		return NULL;
 	}
 
-	GST_LOG_OBJECT(ipu_allocator, "mapped IPU physmem memory:  virt addr %p  phys addr 0x%x", phys_mem->mapped_virt_addr, (dma_addr_t)(phys_mem->phys_addr));
+	GST_LOG_OBJECT(ipu_allocator, "mapped IPU physmem memory:  virt addr %p  phys addr %" GST_IMX_PHYS_ADDR_FORMAT, phys_mem->mapped_virt_addr, phys_mem->phys_addr);
 
 	return phys_mem->mapped_virt_addr;
 }
@@ -131,7 +131,7 @@ static void gst_imx_ipu_unmap_phys_mem(GstImxPhysMemAllocator *allocator, GstImx
 	{
 		if (munmap(memory->mapped_virt_addr, memory->mem.maxsize) == -1)
 			GST_ERROR_OBJECT(allocator, "unmapping memory-mapped IPU framebuffer failed: %s", strerror(errno));
-		GST_LOG_OBJECT(allocator, "unmapped IPU physmem memory:  virt addr %p  phys addr 0x%x", memory->mapped_virt_addr, (dma_addr_t)(memory->phys_addr));
+		GST_LOG_OBJECT(allocator, "unmapped IPU physmem memory:  virt addr %p  phys addr %" GST_IMX_PHYS_ADDR_FORMAT, memory->mapped_virt_addr, memory->phys_addr);
 		memory->mapped_virt_addr = NULL;
 	}
 }

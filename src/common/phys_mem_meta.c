@@ -124,7 +124,7 @@ static gboolean gst_imx_phys_meta_transform(GstBuffer *dest, GstMeta *meta, GstB
 static void gst_imx_phys_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
 {
 	GstImxPhysMemMeta *smeta = (GstImxPhysMemMeta *)meta;
-	GST_TRACE("freeing physmem metadata");
+	GST_TRACE("freeing physmem metadata with phys addr %" GST_IMX_PHYS_ADDR_FORMAT, smeta->phys_addr);
 	gst_buffer_replace(&smeta->parent, NULL);
 }
 

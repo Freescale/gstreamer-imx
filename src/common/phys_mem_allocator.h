@@ -23,6 +23,8 @@
 #include <gst/gst.h>
 #include <gst/gstallocator.h>
 
+#include "phys_mem_addr.h"
+
 
 G_BEGIN_DECLS
 
@@ -61,7 +63,7 @@ struct _GstImxPhysMemory
 	GstMemory mem;
 
 	gpointer mapped_virt_addr;
-	guintptr phys_addr;
+	gst_imx_phys_addr_t phys_addr;
 	guintptr cpu_addr;
 
 	/* pointer for any additional internal data an allocator may define

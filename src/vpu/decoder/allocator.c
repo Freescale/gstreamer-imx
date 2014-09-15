@@ -78,7 +78,7 @@ static gboolean gst_imx_vpu_dec_alloc_phys_mem(G_GNUC_UNUSED GstImxPhysMemAlloca
 	{
 		memory->mem.size         = mem_desc.nSize;
 		memory->mapped_virt_addr = (gpointer)(mem_desc.nVirtAddr);
-		memory->phys_addr        = (guintptr)(mem_desc.nPhyAddr);
+		memory->phys_addr        = (gst_imx_phys_addr_t)(mem_desc.nPhyAddr);
 		memory->cpu_addr         = (guintptr)(mem_desc.nCpuAddr);
 		return TRUE;
 	}
