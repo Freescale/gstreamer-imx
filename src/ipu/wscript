@@ -10,6 +10,11 @@ def configure(conf):
 	from waflib.Build import Logs
 	incpaths = []
 	notfound = None
+	if conf.options.kernel_headers:
+		kernel_headers_fullpath = os.path.abspath(os.path.expanduser(conf.options.kernel_headers))
+		incpaths += [kernel_headers_fullpath]
+	# for the test, make sure the right version.h is used by adding an include path to
+	# <kernel_headers_fullpath>/../usr/include
 	with_uapi = conf.check_cc(fragment = '''
 		#include <linux/version.h>
 		int main() {
@@ -20,15 +25,14 @@ def configure(conf):
 		#endif
 		}
 		''',
+		includes = incpaths + [os.path.abspath(os.path.expanduser(os.path.join(kernel_headers_fullpath, '..', 'usr', 'include')))],
 		mandatory = False,
 		execute = False,
 		msg = 'checking whether or not the kernel version is greater than 3.5.0'
 	)
 	if conf.options.kernel_headers:
-		kernel_headers_fullpath = os.path.abspath(os.path.expanduser(conf.options.kernel_headers))
 		if with_uapi:
-			incpaths += [os.path.join(kernel_headers_fullpath, 'uapi')]
-		incpaths += [kernel_headers_fullpath]
+			incpaths = [os.path.join(kernel_headers_fullpath, 'uapi')] + incpaths
 	if conf.check_cc(fragment = '''
 		#include <sys/types.h>
 		#include <linux/fb.h>
