@@ -63,6 +63,10 @@ struct _GstImxPhysMemory
 	gpointer mapped_virt_addr;
 	guintptr phys_addr;
 	guintptr cpu_addr;
+
+	/* pointer for any additional internal data an allocator may define
+	 * not for outside use; allocators do not have to use it */
+	gpointer internal;
 };
 
 
