@@ -119,6 +119,8 @@ static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstI
 		return NULL;
 	}
 
+	GST_LOG_OBJECT(ipu_allocator, "mapped IPU physmem memory:  virt addr %p  phys addr 0x%x", phys_mem->mapped_virt_addr, (dma_addr_t)(phys_mem->phys_addr));
+
 	return phys_mem->mapped_virt_addr;
 }
 
@@ -129,6 +131,7 @@ static void gst_imx_ipu_unmap_phys_mem(GstImxPhysMemAllocator *allocator, GstImx
 	{
 		if (munmap(memory->mapped_virt_addr, memory->mem.maxsize) == -1)
 			GST_ERROR_OBJECT(allocator, "unmapping memory-mapped IPU framebuffer failed: %s", strerror(errno));
+		GST_LOG_OBJECT(allocator, "unmapped IPU physmem memory:  virt addr %p  phys addr 0x%x", memory->mapped_virt_addr, (dma_addr_t)(memory->phys_addr));
 		memory->mapped_virt_addr = NULL;
 	}
 }
@@ -158,15 +161,17 @@ static void gst_imx_ipu_allocator_init(GstImxIpuAllocator *allocator)
 
 	if (!gst_imx_ipu_open())
 	{
-		GST_ERROR("could not open IPU device");
+		GST_ERROR_OBJECT(allocator, "could not open IPU device");
 		return;
 	}
+
+	GST_INFO_OBJECT(allocator, "initialized IPU allocator");
 }
 
 
 static void gst_imx_ipu_allocator_finalize(GObject *object)
 {
-	GST_DEBUG_OBJECT(object, "shutting down IMX IPU allocator");
+	GST_INFO_OBJECT(object, "shutting down IPU allocator");
 
 	gst_imx_ipu_close();
 

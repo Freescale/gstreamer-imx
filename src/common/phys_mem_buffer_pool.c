@@ -23,7 +23,7 @@
 #include "phys_mem_allocator.h"
 
 
-GST_DEBUG_CATEGORY (imx_phys_mem_bufferpool_debug);
+GST_DEBUG_CATEGORY_STATIC(imx_phys_mem_bufferpool_debug);
 #define GST_CAT_DEFAULT imx_phys_mem_bufferpool_debug
 
 
@@ -54,6 +54,7 @@ static const gchar ** gst_imx_phys_mem_buffer_pool_get_options(G_GNUC_UNUSED Gst
 static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config)
 {
 	GstImxPhysMemBufferPool *imx_phys_mem_pool;
+	guint unaligned_width, unaligned_height;
 	GstVideoInfo info;
 	GstVideoAlignment align;
 	GstCaps *caps;
@@ -98,13 +99,25 @@ static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, Gst
 		return FALSE;
 	}
 
+	GST_INFO_OBJECT(pool, "caps used for config: %" GST_PTR_FORMAT, (gpointer)caps);
+
 	imx_phys_mem_pool->video_info = info;
 	GST_VIDEO_INFO_SIZE(&(imx_phys_mem_pool->video_info)) = size;
 
 	gst_video_alignment_reset(&align);
-	align.padding_right = (8 - (GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info)) & 7)) & 7;
-	align.padding_bottom = (8 - (GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info)) & 7)) & 7;
+	unaligned_width = GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info));
+	unaligned_height = GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info));
+	align.padding_right = (8 - (unaligned_width & 7)) & 7;
+	align.padding_bottom = (8 - (unaligned_height & 7)) & 7;
 	gst_video_info_align(&(imx_phys_mem_pool->video_info), &align);
+
+	GST_INFO_OBJECT(
+		pool,
+		"aligned video info:  unaligned width/height: %u/%u  aligned width/height: %u/%u  padding values right/bottom %u %u",
+		unaligned_width, unaligned_height,
+		GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info)), GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info)),
+		align.padding_right, align.padding_bottom
+	);
 
 	imx_phys_mem_pool->add_video_meta = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
@@ -141,9 +154,11 @@ static GstFlowReturn gst_imx_phys_mem_buffer_pool_alloc_buffer(GstBufferPool *po
 	if (mem == NULL)
 	{
 		gst_buffer_unref(buf);
-		GST_ERROR_OBJECT(pool, "could not allocate %u byte for new buffer", info->size);
+		GST_ERROR_OBJECT(pool, "could not allocate %u bytes for new buffer", info->size);
 		return GST_FLOW_ERROR;
 	}
+
+	GST_DEBUG_OBJECT(pool, "allocated %u bytes for new buffer", info->size);
 
 	gst_buffer_append_memory(buf, mem);
 
@@ -165,7 +180,11 @@ static GstFlowReturn gst_imx_phys_mem_buffer_pool_alloc_buffer(GstBufferPool *po
 		video_crop_meta->y = 0;
 		video_crop_meta->width = GST_VIDEO_INFO_WIDTH(info);
 		video_crop_meta->height = GST_VIDEO_INFO_HEIGHT(info);
+
+		GST_DEBUG_OBJECT(pool, "added video meta with width/height %u/%u", video_crop_meta->width, video_crop_meta->height);
 	}
+	else
+		GST_DEBUG_OBJECT(pool, "video meta not requested");
 
 	{
 		GstImxPhysMemory *imx_phys_mem_mem = (GstImxPhysMemory *)mem;
@@ -175,6 +194,8 @@ static GstFlowReturn gst_imx_phys_mem_buffer_pool_alloc_buffer(GstBufferPool *po
 
 		phys_mem_meta->x_padding = (8 - (GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info)) & 7)) & 7;
 		phys_mem_meta->y_padding = (8 - (GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info)) & 7)) & 7;
+
+		GST_DEBUG_OBJECT(pool, "phys mem meta padding: x/y %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT, phys_mem_meta->x_padding, phys_mem_meta->y_padding);
 
 		phys_mem_meta->padding = imx_phys_mem_pool->video_info.stride[0] * phys_mem_meta->y_padding;
 	}

@@ -189,6 +189,8 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 	ipu_blitter->apply_crop_metadata = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
 	ipu_blitter->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 
+	GST_INFO_OBJECT(ipu_blitter, "initialized IPU blitter");
+
 	memset(&(ipu_blitter->priv->task), 0, sizeof(struct ipu_task));
 }
 
@@ -200,6 +202,8 @@ gboolean gst_imx_ipu_blitter_open_device(GstImxIpuBlitter *ipu_blitter)
 		GST_ERROR_OBJECT(ipu_blitter, "could not open IPU device");
 		return FALSE;
 	}
+
+	GST_INFO_OBJECT(ipu_blitter, "opened IPU device");
 
 	return TRUE;
 }
@@ -222,12 +226,15 @@ static void gst_imx_ipu_blitter_finalize(GObject *object)
 		g_slice_free1(sizeof(GstImxIpuBlitterPrivate), ipu_blitter->priv);
 	}
 
+	GST_INFO_OBJECT(object, "shut down IPU blitter");
+
 	G_OBJECT_CLASS(gst_imx_ipu_blitter_parent_class)->finalize(object);
 }
 
 
 void gst_imx_ipu_blitter_enable_crop(GstImxIpuBlitter *ipu_blitter, gboolean crop)
 {
+	GST_TRACE_OBJECT(ipu_blitter, "set crop to %d", crop);
 	ipu_blitter->apply_crop_metadata = crop;
 }
 
@@ -275,10 +282,24 @@ void gst_imx_ipu_blitter_set_deinterlace_mode(GstImxIpuBlitter *ipu_blitter, Gst
 {
 	if (ipu_blitter->previous_input_buffer != NULL)
 	{
+		GST_DEBUG_OBJECT(ipu_blitter, "unref'ing input buffer for previous frame");
 		gst_buffer_unref(ipu_blitter->previous_input_buffer);
 		ipu_blitter->previous_input_buffer = NULL;
 	}
 	ipu_blitter->priv->task.input.paddr_n = 0;
+
+	switch (deinterlace_mode)
+	{
+		case GST_IMX_IPU_BLITTER_DEINTERLACE_NONE:
+			GST_DEBUG_OBJECT(ipu_blitter, "set deinterlace mode to none");
+			break;
+		case GST_IMX_IPU_BLITTER_DEINTERLACE_SLOW_MOTION:
+			GST_DEBUG_OBJECT(ipu_blitter, "set deinterlace mode to slow mode");
+			break;
+		case GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION:
+			GST_DEBUG_OBJECT(ipu_blitter, "set deinterlace mode to fast mode");
+			break;
+	}
 
 	ipu_blitter->deinterlace_mode = deinterlace_mode;
 }
@@ -546,7 +567,7 @@ gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, Gst
 		/* DMA memory present - the input buffer can be used as an actual input buffer */
 		gst_imx_ipu_blitter_set_actual_input_buffer(ipu_blitter, gst_buffer_ref(input_buffer));
 
-		GST_TRACE_OBJECT(ipu_blitter, "input buffer uses DMA memory - setting it as actual input buffer");
+		GST_LOG_OBJECT(ipu_blitter, "input buffer uses DMA memory - setting it as actual input buffer");
 	}
 	else
 	{
@@ -556,7 +577,7 @@ gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, Gst
 		GstBuffer *temp_input_buffer;
 		GstFlowReturn flow_ret;
 
-		GST_TRACE_OBJECT(ipu_blitter, "input buffer does not use DMA memory - need to copy it to an internal input DMA buffer");
+		GST_LOG_OBJECT(ipu_blitter, "input buffer does not use DMA memory - need to copy it to an internal input DMA buffer");
 
 		{
 			/* The internal input buffer is the temp input frame's DMA memory.
@@ -586,6 +607,8 @@ gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, Gst
 					GST_ERROR_OBJECT(ipu_blitter, "failed to create internal bufferpool");
 					return FALSE;
 				}
+
+				GST_DEBUG_OBJECT(ipu_blitter, "created internal bufferpool");
 			}
 
 			/* Future versions of this code may propose the internal bufferpool upstream;
@@ -628,39 +651,41 @@ gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, Gst
 		switch (ipu_blitter->input_video_info.interlace_mode)
 		{
 			case GST_VIDEO_INTERLACE_MODE_INTERLEAVED:
-				GST_TRACE_OBJECT(ipu_blitter, "input stream uses interlacing -> deinterlacing enabled");
+				GST_LOG_OBJECT(ipu_blitter, "input stream uses interlacing -> deinterlacing enabled");
 				ipu_blitter->priv->task.input.deinterlace.enable = 1;
 				break;
+
 			case GST_VIDEO_INTERLACE_MODE_MIXED:
 			{
 				GstVideoMeta *video_meta;
 
-				GST_TRACE_OBJECT(ipu_blitter, "input stream uses mixed interlacing -> need to check video metadata deinterlacing flag");
+				GST_LOG_OBJECT(ipu_blitter, "input stream uses mixed interlacing -> need to check video metadata deinterlacing flag");
 
 				video_meta = gst_buffer_get_video_meta(input_buffer);
 				if (video_meta != NULL)
 				{
 					if (video_meta->flags & GST_VIDEO_FRAME_FLAG_INTERLACED)
 					{
-						GST_TRACE_OBJECT(ipu_blitter, "frame has video metadata and deinterlacing flag");
+						GST_LOG_OBJECT(ipu_blitter, "frame has video metadata and deinterlacing flag");
 						ipu_blitter->priv->task.input.deinterlace.enable = 1;
 					}
 					else
-						GST_TRACE_OBJECT(ipu_blitter, "frame has video metadata but no deinterlacing flag");
+						GST_LOG_OBJECT(ipu_blitter, "frame has video metadata but no deinterlacing flag");
 				}
 				else
 					GST_TRACE_OBJECT(ipu_blitter, "frame has no video metadata -> no deinterlacing done");
 
 				break;
 			}
+
 			case GST_VIDEO_INTERLACE_MODE_PROGRESSIVE:
-			{
-				GST_TRACE_OBJECT(ipu_blitter, "input stream is progressive -> no deinterlacing necessary");
+				GST_LOG_OBJECT(ipu_blitter, "input stream is progressive -> no deinterlacing necessary");
 				break;
-			}
+
 			case GST_VIDEO_INTERLACE_MODE_FIELDS:
 				GST_FIXME_OBJECT(ipu_blitter, "2-fields deinterlacing not supported (yet)");
 				break;
+
 			default:
 				break;
 		}
@@ -682,6 +707,7 @@ void gst_imx_ipu_blitter_set_input_info(GstImxIpuBlitter *ipu_blitter, GstVideoI
 	{
 		gst_object_unref(ipu_blitter->internal_bufferpool);
 		ipu_blitter->internal_bufferpool = NULL;
+		GST_DEBUG_OBJECT(ipu_blitter, "unref'ing old bufferpool");
 	}
 }
 
@@ -702,6 +728,7 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 			case GST_IMX_IPU_BLITTER_DEINTERLACE_NONE:
 				ipu_blitter->priv->task.input.deinterlace.motion = MED_MOTION;
 				break;
+
 			case GST_IMX_IPU_BLITTER_DEINTERLACE_SLOW_MOTION:
 			{
 				GstImxPhysMemMeta *phys_mem_meta;
@@ -724,6 +751,7 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 				}
 				break;
 			}
+
 			case GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION:
 				ipu_blitter->priv->task.input.deinterlace.motion = HIGH_MOTION;
 				break;
@@ -779,7 +807,7 @@ gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter)
 }
 
 
-GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(G_GNUC_UNUSED GstImxIpuBlitter *ipu_blitter, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params)
+GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(GstImxIpuBlitter *ipu_blitter, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params)
 {
 	GstBufferPool *pool;
 	GstStructure *config;
@@ -797,6 +825,8 @@ GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(G_GNUC_UNUSED GstImxIpuBlit
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM);
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 	gst_buffer_pool_set_config(pool, config);
+
+	GST_INFO_OBJECT(ipu_blitter, "created IPU blitter bufferpool with caps %" GST_PTR_FORMAT " min/max buffers %u/%u", (gpointer)caps, min_buffers, max_buffers);
 
 	return pool;
 }

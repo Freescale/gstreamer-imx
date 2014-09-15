@@ -20,6 +20,10 @@
 #include "phys_mem_meta.h"
 
 
+GST_DEBUG_CATEGORY_STATIC(imx_phys_mem_meta_debug);
+#define GST_CAT_DEFAULT imx_phys_mem_meta_debug
+
+
 static gboolean gst_imx_phys_mem_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
 {
 	GstImxPhysMemMeta *imx_phys_mem_meta = (GstImxPhysMemMeta *)meta;
@@ -39,6 +43,8 @@ GType gst_imx_phys_mem_meta_api_get_type(void)
 	{
 		GType _type = gst_meta_api_type_register("GstImxPhysMemMetaAPI", tags);
 		g_once_init_leave(&type, _type);
+
+		GST_DEBUG_CATEGORY_INIT(imx_phys_mem_meta_debug, "imxphysmemmeta", 0, "Physical memory metadata");
 	}
 
 	return type;
@@ -55,28 +61,51 @@ static gboolean gst_imx_phys_meta_transform(GstBuffer *dest, GstMeta *meta, GstB
 		GstMetaTransformCopy *copy = data;
 		gboolean do_copy = FALSE;
 
-		/* only copy if both buffers have 1 identical memory */
-		if ((gst_buffer_n_memory(dest) == gst_buffer_n_memory(buffer)) && (gst_buffer_n_memory(dest) == 1))
+		if (!(copy->region))
 		{
-			GstMemory *mem1, *mem2;
+			GST_LOG("not copying metadata: only a region is being copied (not the entire block)");
+		}
+		else
+		{
+			guint n_mem_buffer, n_mem_dest;
 
-			mem1 = gst_buffer_get_memory(dest, 0);
-			mem2 = gst_buffer_get_memory(buffer, 0);
-			if (mem1 == mem2)
-				do_copy = TRUE;
-			gst_memory_unref(mem1);
-			gst_memory_unref(mem2);
+			n_mem_buffer = gst_buffer_n_memory(buffer);
+			n_mem_dest = gst_buffer_n_memory(dest);
+
+			/* only copy if both buffers have 1 identical memory */
+			if ((n_mem_buffer == n_mem_dest) && (n_mem_dest == 1))
+			{
+				GstMemory *mem1, *mem2;
+
+				mem1 = gst_buffer_get_memory(dest, 0);
+				mem2 = gst_buffer_get_memory(buffer, 0);
+
+				if (mem1 == mem2)
+				{
+					GST_LOG("copying physmem metadata: memory blocks identical");
+					do_copy = TRUE;
+				}
+				else
+					GST_LOG("not copying physmem metadata: memory blocks not identical");
+
+				gst_memory_unref(mem1);
+				gst_memory_unref(mem2);
+			}
+			else
+				GST_LOG("not copying physmem metadata: num memory blocks in source/dest: %u/%u", n_mem_buffer, n_mem_dest);
 		}
 
-		if (!copy->region && do_copy)
+		if (do_copy)
 		{
 			/* only copy if the complete data is copied as well */
 			dmeta = (GstImxPhysMemMeta *)gst_buffer_add_meta(dest, gst_imx_phys_mem_meta_get_info(), NULL);
 
 			if (!dmeta)
+			{
+				GST_ERROR("could not add physmem metadata to the dest buffer");
 				return FALSE;
+			}
 
-			GST_DEBUG("copy phys metadata");
 			dmeta->phys_addr = smeta->phys_addr;
 			dmeta->padding = smeta->padding;
 			dmeta->x_padding = smeta->x_padding;
@@ -95,6 +124,7 @@ static gboolean gst_imx_phys_meta_transform(GstBuffer *dest, GstMeta *meta, GstB
 static void gst_imx_phys_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
 {
 	GstImxPhysMemMeta *smeta = (GstImxPhysMemMeta *)meta;
+	GST_TRACE("freeing physmem metadata");
 	gst_buffer_replace(&smeta->parent, NULL);
 }
 

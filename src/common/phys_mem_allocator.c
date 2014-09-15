@@ -59,6 +59,7 @@ void gst_imx_phys_mem_allocator_init(GstImxPhysMemAllocator *allocator)
 {
 	GstAllocator *parent = GST_ALLOCATOR(allocator);
 
+	GST_INFO_OBJECT(allocator, "initializing physical memory allocator");
 
 	parent->mem_type    = NULL;
 	parent->mem_map     = GST_DEBUG_FUNCPTR(gst_imx_phys_mem_allocator_map);
@@ -105,7 +106,7 @@ static GstImxPhysMemory* gst_imx_phys_mem_allocator_alloc_internal(GstAllocator 
 	phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(allocator);
 	klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(allocator));
 
-	GST_INFO_OBJECT(
+	GST_DEBUG_OBJECT(
 		allocator,
 		"alloc_internal called: maxsize: %u, align: %u, offset: %u, size: %u",
 		maxsize,
@@ -173,7 +174,7 @@ static gpointer gst_imx_phys_mem_allocator_map(GstMemory *mem, gsize maxsize, Gs
 	GstImxPhysMemAllocator *phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
-	GST_TRACE_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p (phys addr %p)", maxsize, (gpointer)mem, (gpointer)(phys_mem->phys_addr));
+	GST_LOG_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p (phys addr %p)", maxsize, (gpointer)mem, (gpointer)(phys_mem->phys_addr));
 
 	return klass->map_phys_mem(phys_mem_alloc, phys_mem, maxsize, flags);
 }
@@ -185,7 +186,7 @@ static void gst_imx_phys_mem_allocator_unmap(GstMemory *mem)
 	GstImxPhysMemAllocator *phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
-	GST_TRACE_OBJECT(phys_mem_alloc, "unmapping memory block %p (phys addr %p)", (gpointer)mem, (gpointer)(phys_mem->phys_addr));
+	GST_LOG_OBJECT(phys_mem_alloc, "unmapping memory block %p (phys addr %p)", (gpointer)mem, (gpointer)(phys_mem->phys_addr));
 
 	klass->unmap_phys_mem(phys_mem_alloc, phys_mem);
 }
@@ -202,7 +203,7 @@ static GstMemory* gst_imx_phys_mem_allocator_copy(GstMemory *mem, gssize offset,
 	copy = gst_imx_phys_mem_allocator_alloc_internal(mem->allocator, NULL, mem->maxsize, 0, mem->align, mem->offset + offset, size);
 	if (copy == NULL)
 	{
-		GST_WARNING_OBJECT(phys_mem_alloc, "could not copy memory block - allocation failed");
+		GST_ERROR_OBJECT(phys_mem_alloc, "could not copy memory block - allocation failed");
 		return NULL;
 	}
 
@@ -260,7 +261,7 @@ static GstMemory* gst_imx_phys_mem_allocator_share(GstMemory *mem, gssize offset
 	);
 	if (sub == NULL)
 	{
-		GST_WARNING_OBJECT(mem->allocator, "could not create new physmem substructure");
+		GST_ERROR_OBJECT(mem->allocator, "could not create new physmem substructure");
 		return NULL;
 	}
 
