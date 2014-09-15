@@ -28,7 +28,8 @@ static gboolean gst_imx_phys_mem_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer
 {
 	GstImxPhysMemMeta *imx_phys_mem_meta = (GstImxPhysMemMeta *)meta;
 	imx_phys_mem_meta->phys_addr = 0;
-	imx_phys_mem_meta->padding = 0;
+	imx_phys_mem_meta->x_padding = 0;
+	imx_phys_mem_meta->y_padding = 0;
 	imx_phys_mem_meta->parent = NULL;
 	return TRUE;
 }
@@ -107,7 +108,6 @@ static gboolean gst_imx_phys_meta_transform(GstBuffer *dest, GstMeta *meta, GstB
 			}
 
 			dmeta->phys_addr = smeta->phys_addr;
-			dmeta->padding = smeta->padding;
 			dmeta->x_padding = smeta->x_padding;
 			dmeta->y_padding = smeta->y_padding;
 			if (smeta->parent)

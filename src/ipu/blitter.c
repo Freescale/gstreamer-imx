@@ -505,7 +505,7 @@ do { \
  \
 	g_assert((video_meta != NULL) && (phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0)); \
  \
-	num_extra_lines = phys_mem_meta->padding / video_meta->stride[0]; \
+	num_extra_lines = phys_mem_meta->y_padding; \
 	(taskio).width = video_meta->stride[0] / gst_imx_ipu_video_bpp(video_meta->format); \
 	(taskio).height = video_meta->height + num_extra_lines; \
  \

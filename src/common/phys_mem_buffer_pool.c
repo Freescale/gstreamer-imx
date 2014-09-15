@@ -196,8 +196,6 @@ static GstFlowReturn gst_imx_phys_mem_buffer_pool_alloc_buffer(GstBufferPool *po
 		phys_mem_meta->y_padding = (8 - (GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info)) & 7)) & 7;
 
 		GST_DEBUG_OBJECT(pool, "phys mem meta padding: x/y %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT, phys_mem_meta->x_padding, phys_mem_meta->y_padding);
-
-		phys_mem_meta->padding = imx_phys_mem_pool->video_info.stride[0] * phys_mem_meta->y_padding;
 	}
 
 	*buffer = buf;

@@ -303,15 +303,20 @@ gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffer
 	}
 
 	{
-		gint y_padding = 0;
+		gsize x_padding = 0, y_padding = 0;
 
+		if (framebuffers->pic_width > video_meta->width)
+			x_padding = framebuffers->pic_width - video_meta->width;
 		if (framebuffers->pic_height > video_meta->height)
 			y_padding = framebuffers->pic_height - video_meta->height;
 
 		vpu_meta->framebuffer = framebuffer;
 
 		phys_mem_meta->phys_addr = (guintptr)(framebuffer->pbufY);
-		phys_mem_meta->padding = framebuffers->y_stride * y_padding;
+		phys_mem_meta->x_padding = x_padding;
+		phys_mem_meta->y_padding = y_padding;
+
+		GST_LOG("setting phys mem meta for buffer with pointer %p: phys addr 0x%x x/y padding %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT, (gpointer)buffer, phys_mem_meta->phys_addr, phys_mem_meta->x_padding, phys_mem_meta->y_padding);
 
 		memory = gst_memory_new_wrapped(
 			GST_MEMORY_FLAG_NO_SHARE,

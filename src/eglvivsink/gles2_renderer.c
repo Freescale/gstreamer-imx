@@ -120,7 +120,7 @@ static void init_debug_category(void)
 	static gboolean initialized = FALSE;
 	if (!initialized)
 	{
-		GST_DEBUG_CATEGORY_INIT(imx_gles2renderer_debug, "imx_gles2_renderer", 0, "imxeglvivsink OpenGL ES 2 renderer");
+		GST_DEBUG_CATEGORY_INIT(imx_gles2renderer_debug, "imxgles2renderer", 0, "imxeglvivsink OpenGL ES 2 renderer");
 		initialized = TRUE;
 	}
 }
@@ -690,13 +690,13 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_fill_texture(GstImxEglVivSin
 		}
 	}
 
-	num_extra_lines = is_phys_buf ? (phys_mem_meta->padding / stride[0]) : 0;
+	num_extra_lines = is_phys_buf ? phys_mem_meta->y_padding : 0;
 
 	/* stride is in bytes, we need pixels */
 	total_w = stride[0] / gst_imx_egl_viv_sink_gles2_renderer_bpp(fmt);
 	total_h = h + num_extra_lines;
 
-	GST_LOG("w/h: %d/%d total_w/h: %d/%d", w, h, total_w, total_h);
+	GST_LOG("w/h: %u/%u total_w/h: %u/%u num extra lines: %u", w, h, total_w, total_h, num_extra_lines);
 
 	glUniform2f(renderer->uv_scale_uloc, (float)w / (float)total_w, (float)h / (float)total_h);
 
