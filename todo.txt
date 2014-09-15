@@ -1,2 +1,0 @@
-1. Wayland support in eglvivsink
-2. eglvivsink+ipuvideotransform (with deinterlacing)+playbin sometimes cause the IPU to report errors; cause is unknown
