@@ -54,6 +54,8 @@ struct _GstImxIpuAllocatorClass
 
 
 GType gst_imx_ipu_allocator_get_type(void);
+
+/* Note that this function returns a floating reference. See gst_object_ref_sink() for details. */
 GstAllocator* gst_imx_ipu_allocator_new(void);
 
 

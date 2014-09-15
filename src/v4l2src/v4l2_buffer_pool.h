@@ -54,6 +54,7 @@ struct _GstImxV4l2BufferPoolClass
 
 GType gst_imx_v4l2_buffer_pool_get_type(void);
 
+/* Note that this function returns a floating reference. See gst_object_ref_sink() for details. */
 GstBufferPool *gst_imx_v4l2_buffer_pool_new(int fd);
 
 struct _GstImxV4l2Meta {

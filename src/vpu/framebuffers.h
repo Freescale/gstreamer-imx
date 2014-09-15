@@ -117,6 +117,7 @@ GstImxVpuFramebufferParams;
 
 GType gst_imx_vpu_framebuffers_get_type(void);
 
+/* Note that this function returns a floating reference. See gst_object_ref_sink() for details. */
 GstImxVpuFramebuffers * gst_imx_vpu_framebuffers_new(GstImxVpuFramebufferParams *params, GstAllocator *allocator);
 
 gboolean gst_imx_vpu_framebuffers_register_with_decoder(GstImxVpuFramebuffers *framebuffers, VpuDecHandle handle);

@@ -57,6 +57,8 @@ struct _GstImxPhysMemBufferPoolClass
 
 
 GType gst_imx_phys_mem_buffer_pool_get_type(void);
+
+/* Note that this function returns a floating reference. See gst_object_ref_sink() for details. */
 GstBufferPool *gst_imx_phys_mem_buffer_pool_new(gboolean read_only);
 
 

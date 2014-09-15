@@ -63,7 +63,9 @@ G_END_DECLS
 
 GType gst_imx_vpu_fb_buffer_pool_get_type(void);
 
+/* Note that this function returns a floating reference. See gst_object_ref_sink() for details. */
 GstBufferPool *gst_imx_vpu_fb_buffer_pool_new(GstImxVpuFramebuffers *framebuffers);
+
 void gst_imx_vpu_fb_buffer_pool_set_framebuffers(GstBufferPool *pool, GstImxVpuFramebuffers *framebuffers);
 
 gboolean gst_imx_vpu_set_buffer_contents(GstBuffer *buffer, GstImxVpuFramebuffers *framebuffers, VpuFrameBuffer *framebuffer);
