@@ -788,12 +788,12 @@ GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(G_GNUC_UNUSED GstImxIpuBlit
 
 	config = gst_buffer_pool_get_config(pool);
 	gst_buffer_pool_config_set_params(config, caps, size, min_buffers, max_buffers);
+
 	/* If the allocator value is NULL, create an allocator */
 	if (allocator == NULL)
-	{
 		allocator = gst_imx_ipu_allocator_new();
-		gst_buffer_pool_config_set_allocator(config, allocator, alloc_params);
-	}
+	gst_buffer_pool_config_set_allocator(config, allocator, alloc_params);
+
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM);
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 	gst_buffer_pool_set_config(pool, config);
