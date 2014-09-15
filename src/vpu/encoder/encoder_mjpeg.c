@@ -195,4 +195,3 @@ static void gst_imx_vpu_mjpeg_get_property(GObject *object, guint prop_id, GValu
 			break;
 	}
 }
-

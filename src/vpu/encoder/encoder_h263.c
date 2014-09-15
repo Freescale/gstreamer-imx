@@ -198,4 +198,3 @@ static void gst_imx_vpu_h263_get_property(GObject *object, guint prop_id, GValue
 			break;
 	}
 }
-

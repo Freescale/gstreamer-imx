@@ -595,7 +595,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 
 		GstVideoFrame temp_input_video_frame, temp_incoming_video_frame;
 
-		GST_TRACE_OBJECT(vpu_base_enc, "input buffer not physicall contiguous - frame copy is necessary");
+		GST_LOG_OBJECT(vpu_base_enc, "input buffer not physically contiguous - frame copy is necessary");
 
 		if (vpu_base_enc->internal_input_buffer == NULL)
 		{
@@ -614,7 +614,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 				GstCaps *caps;
 				GstAllocator *allocator;
 
-				GST_TRACE_OBJECT(vpu_base_enc, "creating internal bufferpool");
+				GST_DEBUG_OBJECT(vpu_base_enc, "creating internal bufferpool");
 
 				caps = gst_video_info_to_caps(&(vpu_base_enc->video_info));
 				vpu_base_enc->internal_bufferpool = gst_imx_phys_mem_buffer_pool_new(FALSE);

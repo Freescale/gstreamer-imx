@@ -203,4 +203,3 @@ static void gst_imx_vpu_mpeg4_get_property(GObject *object, guint prop_id, GValu
 			break;
 	}
 }
-

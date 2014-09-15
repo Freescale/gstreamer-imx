@@ -312,4 +312,3 @@ static void gst_imx_vpu_h264_enc_get_property(GObject *object, guint prop_id, GV
 			break;
 	}
 }
-

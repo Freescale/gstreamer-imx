@@ -886,4 +886,3 @@ GstBuffer* gst_imx_ipu_blitter_wrap_framebuffer(GstImxIpuBlitter *ipu_blitter, i
 
 	return buffer;
 }
-

@@ -1220,4 +1220,3 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_expose(GstImxEglVivSinkGLES2Rendere
 {
 	return gst_imx_egl_viv_sink_egl_platform_expose(renderer->egl_platform);
 }
-
