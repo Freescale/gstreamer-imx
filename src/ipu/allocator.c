@@ -60,7 +60,7 @@ static gboolean gst_imx_ipu_alloc_phys_mem(GstImxPhysMemAllocator *allocator, Gs
 
 	m = (dma_addr_t)size;
 	ret = ioctl(gst_imx_ipu_get_fd(), IPU_ALLOC, &m);
-	memory->cpu_addr = 0;
+	memory->internal = NULL;
 	if (ret < 0)
 	{
 		GST_ERROR_OBJECT(allocator, "could not allocate %u bytes of physical memory: %s", size, strerror(errno));

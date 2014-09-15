@@ -89,7 +89,6 @@ static GstImxPhysMemory* gst_imx_phys_mem_new_internal(GstImxPhysMemAllocator *p
 
 	phys_mem->mapped_virt_addr = NULL;
 	phys_mem->phys_addr = 0;
-	phys_mem->cpu_addr = 0;
 	phys_mem->mapping_refcount = 0;
 	phys_mem->internal = NULL;
 
@@ -280,7 +279,7 @@ static GstMemory* gst_imx_phys_mem_allocator_share(GstMemory *mem, gssize offset
 	/* not copying mapped virt addr or mapping ref count, since
 	 * mapping is individual to all buffers */
 	sub->phys_addr = phys_mem->phys_addr;
-	sub->cpu_addr = phys_mem->cpu_addr;
+	sub->internal = phys_mem->internal;
 
 	GST_INFO_OBJECT(
 		mem->allocator,
@@ -307,12 +306,6 @@ static gboolean gst_imx_phys_mem_allocator_is_span(G_GNUC_UNUSED GstMemory *mem1
 guintptr gst_imx_phys_memory_get_phys_addr(GstMemory *mem)
 {
 	return ((GstImxPhysMemory *)mem)->phys_addr;
-}
-
-
-guintptr gst_imx_phys_memory_get_cpu_addr(GstMemory *mem)
-{
-	return ((GstImxPhysMemory *)mem)->cpu_addr;
 }
 
 

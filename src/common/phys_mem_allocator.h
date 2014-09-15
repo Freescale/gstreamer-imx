@@ -64,7 +64,6 @@ struct _GstImxPhysMemory
 
 	gpointer mapped_virt_addr;
 	gst_imx_phys_addr_t phys_addr;
-	guintptr cpu_addr;
 
 	/* Counter to ensure the memory block isn't (un)mapped
 	 * more often than necessary */
@@ -79,7 +78,6 @@ struct _GstImxPhysMemory
 GType gst_imx_phys_mem_allocator_get_type(void);
 
 guintptr gst_imx_phys_memory_get_phys_addr(GstMemory *mem);
-guintptr gst_imx_phys_memory_get_cpu_addr(GstMemory *mem);
 gboolean gst_imx_is_phys_memory(GstMemory *mem);
 
 

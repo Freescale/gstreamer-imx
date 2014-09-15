@@ -62,7 +62,7 @@ GstAllocator* gst_imx_vpu_enc_allocator_obtain(void)
 }
 
 
-static gboolean gst_imx_vpu_enc_alloc_phys_mem(G_GNUC_UNUSED GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size)
+static gboolean gst_imx_vpu_enc_alloc_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size)
 {
 	VpuEncRetCode ret;
 	VpuMemDesc mem_desc;
@@ -79,7 +79,10 @@ static gboolean gst_imx_vpu_enc_alloc_phys_mem(G_GNUC_UNUSED GstImxPhysMemAlloca
 		memory->mem.size         = mem_desc.nSize;
 		memory->mapped_virt_addr = (gpointer)(mem_desc.nVirtAddr);
 		memory->phys_addr        = (gst_imx_phys_addr_t)(mem_desc.nPhyAddr);
-		memory->cpu_addr         = (guintptr)(mem_desc.nCpuAddr);
+		memory->internal         = (gpointer)(mem_desc.nCpuAddr);
+
+		GST_DEBUG_OBJECT(allocator, "addresses: virt: %p phys: %" GST_IMX_PHYS_ADDR_FORMAT " cpu: %p", memory->mapped_virt_addr, memory->phys_addr, memory->internal);
+
 		return TRUE;
 	}
 	else
@@ -87,7 +90,7 @@ static gboolean gst_imx_vpu_enc_alloc_phys_mem(G_GNUC_UNUSED GstImxPhysMemAlloca
 }
 
 
-static gboolean gst_imx_vpu_enc_free_phys_mem(G_GNUC_UNUSED GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory)
+static gboolean gst_imx_vpu_enc_free_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory)
 {
         VpuEncRetCode ret;
         VpuMemDesc mem_desc;
@@ -96,7 +99,9 @@ static gboolean gst_imx_vpu_enc_free_phys_mem(G_GNUC_UNUSED GstImxPhysMemAllocat
 	mem_desc.nSize     = memory->mem.size;
 	mem_desc.nVirtAddr = (unsigned long)(memory->mapped_virt_addr);
 	mem_desc.nPhyAddr  = (unsigned long)(memory->phys_addr);
-	mem_desc.nCpuAddr  = (unsigned long)(memory->cpu_addr);
+	mem_desc.nCpuAddr  = (unsigned long)(memory->internal);
+
+	GST_DEBUG_OBJECT(allocator, "addresses: virt: %p phys: %" GST_IMX_PHYS_ADDR_FORMAT " cpu: %p", memory->mapped_virt_addr, memory->phys_addr, memory->internal);
 
 	ret = VPU_EncFreeMem(&mem_desc);
 
