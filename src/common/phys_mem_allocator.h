@@ -66,6 +66,10 @@ struct _GstImxPhysMemory
 	gst_imx_phys_addr_t phys_addr;
 	guintptr cpu_addr;
 
+	/* Counter to ensure the memory block isn't (un)mapped
+	 * more often than necessary */
+	long mapping_refcount;
+
 	/* pointer for any additional internal data an allocator may define
 	 * not for outside use; allocators do not have to use it */
 	gpointer internal;

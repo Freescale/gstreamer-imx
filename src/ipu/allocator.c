@@ -96,22 +96,16 @@ static gboolean gst_imx_ipu_free_phys_mem(GstImxPhysMemAllocator *allocator, Gst
 }
 
 
-static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size, GstMapFlags flags)
+static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size, G_GNUC_UNUSED GstMapFlags flags)
 {
-	int prot = 0;
 	GstImxPhysMemory *phys_mem = (GstImxPhysMemory *)memory;
 	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
-	// TODO: refcount for mapping
-	if (phys_mem->mapped_virt_addr != NULL)
-		return phys_mem->mapped_virt_addr;
+	g_assert(phys_mem->mapped_virt_addr == NULL);
 
-	if (flags & GST_MAP_READ)
-		prot |= PROT_READ;
-	if (flags & GST_MAP_WRITE)
-		prot |= PROT_WRITE;
-
-	phys_mem->mapped_virt_addr = mmap(0, size, prot, MAP_SHARED, gst_imx_ipu_get_fd(), (dma_addr_t)(phys_mem->phys_addr));
+	/* Mapping with both read and write flags, since mapping is refcounted,
+	 * and it is possible multiple mappings might select either read or write */
+	phys_mem->mapped_virt_addr = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, gst_imx_ipu_get_fd(), (dma_addr_t)(phys_mem->phys_addr));
 	if (phys_mem->mapped_virt_addr == MAP_FAILED)
 	{
 		phys_mem->mapped_virt_addr = NULL;

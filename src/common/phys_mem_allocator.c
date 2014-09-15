@@ -90,6 +90,8 @@ static GstImxPhysMemory* gst_imx_phys_mem_new_internal(GstImxPhysMemAllocator *p
 	phys_mem->mapped_virt_addr = NULL;
 	phys_mem->phys_addr = 0;
 	phys_mem->cpu_addr = 0;
+	phys_mem->mapping_refcount = 0;
+	phys_mem->internal = NULL;
 
 	gst_memory_init(GST_MEMORY_CAST(phys_mem), flags, GST_ALLOCATOR_CAST(phys_mem_alloc), parent, maxsize, align, offset, size);
 
@@ -174,9 +176,14 @@ static gpointer gst_imx_phys_mem_allocator_map(GstMemory *mem, gsize maxsize, Gs
 	GstImxPhysMemAllocator *phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
-	GST_LOG_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p (phys addr %" GST_IMX_PHYS_ADDR_FORMAT ")", maxsize, (gpointer)mem, phys_mem->phys_addr);
+	GST_LOG_OBJECT(phys_mem_alloc, "mapping %u bytes from memory block %p (phys addr %" GST_IMX_PHYS_ADDR_FORMAT "), current mapping refcount = %ld -> %ld", maxsize, (gpointer)mem, phys_mem->phys_addr, phys_mem->mapping_refcount, phys_mem->mapping_refcount + 1);
 
-	return klass->map_phys_mem(phys_mem_alloc, phys_mem, maxsize, flags);
+	phys_mem->mapping_refcount++;
+
+	if (phys_mem->mapping_refcount == 1)
+		return klass->map_phys_mem(phys_mem_alloc, phys_mem, maxsize, flags);
+	else
+		return phys_mem->mapped_virt_addr;
 }
 
 
@@ -186,9 +193,14 @@ static void gst_imx_phys_mem_allocator_unmap(GstMemory *mem)
 	GstImxPhysMemAllocator *phys_mem_alloc = GST_IMX_PHYS_MEM_ALLOCATOR(mem->allocator);
 	GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
-	GST_LOG_OBJECT(phys_mem_alloc, "unmapping memory block %p (phys addr %" GST_IMX_PHYS_ADDR_FORMAT ")", (gpointer)mem, phys_mem->phys_addr);
+	GST_LOG_OBJECT(phys_mem_alloc, "unmapping memory block %p (phys addr %" GST_IMX_PHYS_ADDR_FORMAT "), current mapping refcount = %ld -> %ld", (gpointer)mem, phys_mem->phys_addr, phys_mem->mapping_refcount, (phys_mem->mapping_refcount > 0) ? (phys_mem->mapping_refcount - 1) : 0);
 
-	klass->unmap_phys_mem(phys_mem_alloc, phys_mem);
+	if (phys_mem->mapping_refcount > 0)
+	{
+		phys_mem->mapping_refcount--;
+		if (phys_mem->mapping_refcount == 0)
+			klass->unmap_phys_mem(phys_mem_alloc, phys_mem);
+	}
 }
 
 
@@ -265,6 +277,8 @@ static GstMemory* gst_imx_phys_mem_allocator_share(GstMemory *mem, gssize offset
 		return NULL;
 	}
 
+	/* not copying mapped virt addr or mapping ref count, since
+	 * mapping is individual to all buffers */
 	sub->phys_addr = phys_mem->phys_addr;
 	sub->cpu_addr = phys_mem->cpu_addr;
 
