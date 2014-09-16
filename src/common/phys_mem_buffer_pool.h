@@ -47,6 +47,7 @@ struct _GstImxPhysMemBufferPool
 	GstVideoInfo video_info;
 	gboolean add_video_meta;
 	gboolean read_only;
+	guint horiz_alignment, vert_alignment;
 };
 
 
@@ -57,6 +58,9 @@ struct _GstImxPhysMemBufferPoolClass
 
 
 GType gst_imx_phys_mem_buffer_pool_get_type(void);
+
+void gst_imx_phys_mem_buffer_pool_config_set_alignment(GstStructure *config, guint horiz_alignment, guint vert_alignment);
+void gst_imx_phys_mem_buffer_pool_config_get_alignment(GstStructure *config, guint *horiz_alignment, guint *vert_alignment);
 
 /* Note that this function returns a floating reference. See gst_object_ref_sink() for details. */
 GstBufferPool *gst_imx_phys_mem_buffer_pool_new(gboolean read_only);

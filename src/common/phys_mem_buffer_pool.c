@@ -27,6 +27,10 @@ GST_DEBUG_CATEGORY_STATIC(imx_phys_mem_bufferpool_debug);
 #define GST_CAT_DEFAULT imx_phys_mem_bufferpool_debug
 
 
+#define DEFAULT_HORIZ_ALIGNMENT 8
+#define DEFAULT_VERT_ALIGNMENT 8
+
+
 static const gchar ** gst_imx_phys_mem_buffer_pool_get_options(GstBufferPool *pool);
 static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config);
 static GstFlowReturn gst_imx_phys_mem_buffer_pool_alloc_buffer(GstBufferPool *pool, GstBuffer **buffer, GstBufferPoolAcquireParams *params);
@@ -35,6 +39,39 @@ static void gst_imx_phys_mem_buffer_pool_finalize(GObject *object);
 
 G_DEFINE_TYPE(GstImxPhysMemBufferPool, gst_imx_phys_mem_buffer_pool, GST_TYPE_BUFFER_POOL)
 
+
+
+/* Note that the GstImxPhysMemBufferPool is a pool for video frame buffers,
+ * but does not inherit from GstVideoBufferPool. This is because it would
+ * reuse little of GstVideoBufferPool, and in fact do many parts slightly
+ * differently.
+ */
+
+
+
+void gst_imx_phys_mem_buffer_pool_config_set_alignment(GstStructure *config, guint horiz_alignment, guint vert_alignment)
+{
+	g_return_if_fail(config != NULL);
+	g_return_if_fail(horiz_alignment > 0);
+	g_return_if_fail(vert_alignment > 0);
+
+	gst_structure_set(config,
+		"horiz-alignment", G_TYPE_UINT, horiz_alignment,
+		"vert-alignment", G_TYPE_UINT, vert_alignment,
+		NULL
+	);
+}
+
+
+void gst_imx_phys_mem_buffer_pool_config_get_alignment(GstStructure *config, guint *horiz_alignment, guint *vert_alignment)
+{
+	g_return_if_fail(config != NULL);
+
+	if (horiz_alignment != NULL)
+		gst_structure_get_uint(config, "horiz-alignment", horiz_alignment);
+	if (vert_alignment != NULL)
+		gst_structure_get_uint(config, "vert-alignment", vert_alignment);
+}
 
 
 
@@ -59,6 +96,7 @@ static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, Gst
 	GstVideoAlignment align;
 	GstCaps *caps;
 	gsize size;
+	guint horiz_alignment, vert_alignment;
 	GstAllocator *allocator;
 
 	{
@@ -104,11 +142,18 @@ static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, Gst
 	imx_phys_mem_pool->video_info = info;
 	GST_VIDEO_INFO_SIZE(&(imx_phys_mem_pool->video_info)) = size;
 
+	horiz_alignment = DEFAULT_HORIZ_ALIGNMENT;
+	vert_alignment = DEFAULT_VERT_ALIGNMENT;
+	gst_imx_phys_mem_buffer_pool_config_get_alignment(config, &horiz_alignment, &vert_alignment);
+	imx_phys_mem_pool->horiz_alignment = horiz_alignment;
+	imx_phys_mem_pool->vert_alignment = vert_alignment;
+	GST_INFO_OBJECT(pool, "using horiz/vert alignment: %u/%u", horiz_alignment, vert_alignment);
+
 	gst_video_alignment_reset(&align);
 	unaligned_width = GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info));
 	unaligned_height = GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info));
-	align.padding_right = (8 - (unaligned_width & 7)) & 7;
-	align.padding_bottom = (8 - (unaligned_height & 7)) & 7;
+	align.padding_right = (horiz_alignment - (unaligned_width & (horiz_alignment - 1))) & (horiz_alignment - 1);
+	align.padding_bottom = (vert_alignment - (unaligned_height & (vert_alignment - 1))) & (vert_alignment - 1);
 	gst_video_info_align(&(imx_phys_mem_pool->video_info), &align);
 
 	GST_INFO_OBJECT(
@@ -189,13 +234,15 @@ static GstFlowReturn gst_imx_phys_mem_buffer_pool_alloc_buffer(GstBufferPool *po
 	{
 		GstImxPhysMemory *imx_phys_mem_mem = (GstImxPhysMemory *)mem;
 		GstImxPhysMemMeta *phys_mem_meta = (GstImxPhysMemMeta *)GST_IMX_PHYS_MEM_META_ADD(buf);
+		guint horiz_alignment = imx_phys_mem_pool->horiz_alignment;
+		guint vert_alignment = imx_phys_mem_pool->vert_alignment;
 
 		phys_mem_meta->phys_addr = imx_phys_mem_mem->phys_addr;
 
-		phys_mem_meta->x_padding = (8 - (GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info)) & 7)) & 7;
-		phys_mem_meta->y_padding = (8 - (GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info)) & 7)) & 7;
+		phys_mem_meta->x_padding = (horiz_alignment - (GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info)) & (horiz_alignment - 1))) & (horiz_alignment - 1);
+		phys_mem_meta->y_padding = (vert_alignment - (GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info)) & (vert_alignment - 1))) & (vert_alignment - 1);
 
-		GST_DEBUG_OBJECT(pool, "phys mem meta padding: x/y %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT, phys_mem_meta->x_padding, phys_mem_meta->y_padding);
+		GST_DEBUG_OBJECT(pool, "phys mem meta padding: x/y %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT " using horiz/vert alignment: %u/%u", phys_mem_meta->x_padding, phys_mem_meta->y_padding, horiz_alignment, vert_alignment);
 	}
 
 	*buffer = buf;
