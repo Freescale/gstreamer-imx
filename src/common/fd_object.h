@@ -16,6 +16,8 @@ typedef struct _GstImxFDObject GstImxFDObject;
 #define GST_IMX_FD_OBJECT_CAST(obj)                   ((GstImxFDObject *)(obj))
 #define GST_IMX_FD_OBJECT(obj)                        (GST_IMX_FD_OBJECT_CAST(obj))
 
+#define GST_IMX_FD_OBJECT_GET_FD(obj)                 (GST_IMX_FD_OBJECT_CAST(obj)->fd)
+
 
 /* This is a miniobject that handles the lifetime of a file descriptor
  * with refcounting. Once the refcount reaches zero, the specified file
