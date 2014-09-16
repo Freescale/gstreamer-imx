@@ -157,17 +157,20 @@ static gboolean gst_imx_v4l2src_start(GstBaseSrc *src)
 {
 	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
 	struct v4l2_format fmt;
+	int fd_v4l;
 
 	GST_LOG_OBJECT(v4l2src, "start");
 
-	v4l2src->fd_v4l = gst_imx_v4l2src_capture_setup(v4l2src);
-	if (v4l2src->fd_v4l < 0) {
+	fd_v4l = gst_imx_v4l2src_capture_setup(v4l2src);
+	if (fd_v4l < 0) {
 		GST_ERROR_OBJECT(v4l2src, "capture_setup failed");
 		return FALSE;
 	}
 
+	v4l2src->fd_obj_v4l = gst_fd_object_new(fd_v4l);
+
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(v4l2src->fd_v4l, VIDIOC_G_FMT, &fmt) < 0) {
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0) {
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
 		return FALSE;
 	}
@@ -190,8 +193,8 @@ static gboolean gst_imx_v4l2src_stop(GstBaseSrc *src)
 
 	GST_LOG_OBJECT(v4l2src, "stop");
 
-	close(v4l2src->fd_v4l);
-	v4l2src->fd_v4l = -1;
+	gst_imx_fd_object_unref(v4l2src->fd_obj_v4l);
+
 	return TRUE;
 }
 
@@ -229,7 +232,7 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 		min = v4l2src->queue_size;
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(v4l2src->fd_v4l, VIDIOC_G_FMT, &fmt) < 0) {
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0) {
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
 		return FALSE;
 	}
@@ -239,7 +242,7 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 	/* no repooling; leads to stream off situation due to pool start/stop */
 	pool = gst_base_src_get_buffer_pool(bsrc);
 	if (!pool) {
-		pool = gst_imx_v4l2_buffer_pool_new(v4l2src->fd_v4l);
+		pool = gst_imx_v4l2_buffer_pool_new(v4l2src->fd_obj_v4l);
 		config = gst_buffer_pool_get_config(pool);
 		gst_buffer_pool_config_set_params(config, caps, size, min, max);
 		gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);

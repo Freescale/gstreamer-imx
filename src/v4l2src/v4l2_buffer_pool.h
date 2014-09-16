@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2013-2014, Black Moth Technologies
- *   Author: Philip Craig <phil@blackmoth.com.au>
+ * Copyright (c) 2013-2014, Black Moth Technologies, Philip Craig <phil@blackmoth.com.au>
+ * Copyright (c) 2014, Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -24,6 +24,7 @@
 #include <gst/video/video.h>
 #include <gst/video/gstvideometa.h>
 #include <gst/video/gstvideopool.h>
+#include "../common/fd_object.h"
 
 G_BEGIN_DECLS
 
@@ -39,7 +40,7 @@ struct _GstImxV4l2BufferPool
 {
 	GstBufferPool bufferpool;
 
-	int fd;
+	GstImxFDObject *fd_obj_v4l;
 	GstBuffer **buffers;
 	guint num_buffers;
 	guint num_allocated;
@@ -56,7 +57,7 @@ struct _GstImxV4l2BufferPoolClass
 GType gst_imx_v4l2_buffer_pool_get_type(void);
 
 /* Note that this function returns a floating reference. See gst_object_ref_sink() for details. */
-GstBufferPool *gst_imx_v4l2_buffer_pool_new(int fd);
+GstBufferPool *gst_imx_v4l2_buffer_pool_new(GstImxFDObject *fd_obj_v4l);
 
 struct _GstImxV4l2Meta {
   GstMeta meta;

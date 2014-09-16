@@ -20,6 +20,8 @@
 #ifndef GST_IMX_V4L2SRC_H
 #define GST_IMX_V4L2SRC_H
 
+#include "../common/fd_object.h"
+
 G_BEGIN_DECLS
 
 typedef struct _GstImxV4l2Src GstImxV4l2Src;
@@ -42,7 +44,8 @@ struct _GstImxV4l2Src
 {
 	GstPushSrc parent;
 
-	gint fd_v4l;
+	GstImxFDObject *fd_obj_v4l;
+
 	gint capture_width;
 	gint capture_height;
 	guint32 count;

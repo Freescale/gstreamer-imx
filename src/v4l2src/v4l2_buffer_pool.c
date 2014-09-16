@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2013-2014, Black Moth Technologies
- *   Author: Philip Craig <phil@blackmoth.com.au>
+ * Copyright (c) 2013-2014, Black Moth Technologies, Philip Craig <phil@blackmoth.com.au>
+ * Copyright (c) 2014, Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -111,7 +111,7 @@ static gboolean gst_imx_v4l2_buffer_pool_set_config(GstBufferPool *bpool, GstStr
 	req.count = min;
 	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	req.memory = V4L2_MEMORY_MMAP;
-	if (ioctl(pool->fd, VIDIOC_REQBUFS, &req) < 0)
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_REQBUFS, &req) < 0)
 	{
 		GST_ERROR_OBJECT(pool, "VIDIOC_REQBUFS failed: %s",
 				g_strerror(errno));
@@ -155,7 +155,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	meta->vbuffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	meta->vbuffer.memory = V4L2_MEMORY_MMAP;
 
-	if (ioctl(pool->fd, VIDIOC_QUERYBUF, &meta->vbuffer) < 0)
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QUERYBUF, &meta->vbuffer) < 0)
 	{
 		GST_ERROR_OBJECT(pool, "VIDIOC_QUERYBUF error: %s",
 				g_strerror(errno));
@@ -164,7 +164,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	}
 
 	meta->mem = mmap(NULL, meta->vbuffer.length,
-			PROT_READ | PROT_WRITE, MAP_SHARED, pool->fd,
+			PROT_READ | PROT_WRITE, MAP_SHARED, GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l),
 			meta->vbuffer.m.offset);
 	g_assert(meta->mem);
 
@@ -231,7 +231,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_acquire_buffer(GstBufferPool *bpoo
 
 	LOCK_MUTEX(pool);
 
-	if (ioctl(pool->fd, VIDIOC_DQBUF, &vbuffer) < 0)
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_DQBUF, &vbuffer) < 0)
 	{
 		GST_ERROR_OBJECT(pool, "VIDIOC_DQBUF failed: %s", g_strerror(errno));
 		UNLOCK_MUTEX(pool);
@@ -278,7 +278,7 @@ static void gst_imx_v4l2_buffer_pool_release_buffer(GstBufferPool *bpool, GstBuf
 
 	LOCK_MUTEX(pool);
 
-	if (ioctl(pool->fd, VIDIOC_QBUF, &meta->vbuffer) < 0)
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QBUF, &meta->vbuffer) < 0)
 	{
 		GST_ERROR("VIDIOC_QBUF error: %s",
 				g_strerror(errno));
@@ -307,7 +307,7 @@ static gboolean gst_imx_v4l2_buffer_pool_start(GstBufferPool *bpool)
 	}
 
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(pool->fd, VIDIOC_STREAMON, &type) < 0)
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_STREAMON, &type) < 0)
 	{
 		GST_ERROR_OBJECT(pool, "VIDIOC_STREAMON error: %s",
 				g_strerror(errno));
@@ -327,7 +327,7 @@ static gboolean gst_imx_v4l2_buffer_pool_stop(GstBufferPool *bpool)
 	GST_DEBUG_OBJECT(pool, "stop");
 
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(pool->fd, VIDIOC_STREAMOFF, &type) < 0)
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_STREAMOFF, &type) < 0)
 	{
 		GST_ERROR_OBJECT(pool, "VIDIOC_STREAMOFF error: %s",
 				g_strerror(errno));
@@ -348,6 +348,7 @@ static gboolean gst_imx_v4l2_buffer_pool_stop(GstBufferPool *bpool)
 static void gst_imx_v4l2_buffer_pool_init(GstImxV4l2BufferPool *pool)
 {
 	GST_DEBUG_OBJECT(pool, "initializing V4L2 buffer pool");
+	pool->fd_obj_v4l = NULL;
 	g_mutex_init(&(pool->mutex));
 }
 
@@ -358,6 +359,7 @@ static void gst_imx_v4l2_buffer_pool_finalize(GObject *object)
 	GST_TRACE_OBJECT(pool, "shutting down buffer pool");
 
 	g_free(pool->buffers);
+	gst_imx_fd_object_unref(pool->fd_obj_v4l);
 	g_mutex_clear(&(pool->mutex));
 
 	G_OBJECT_CLASS(gst_imx_v4l2_buffer_pool_parent_class)->finalize(object);
@@ -384,12 +386,12 @@ static void gst_imx_v4l2_buffer_pool_class_init(GstImxV4l2BufferPoolClass *klass
 	parent_class->release_buffer = GST_DEBUG_FUNCPTR(gst_imx_v4l2_buffer_pool_release_buffer);
 }
 
-GstBufferPool *gst_imx_v4l2_buffer_pool_new(int fd)
+GstBufferPool *gst_imx_v4l2_buffer_pool_new(GstImxFDObject *fd_obj_v4l)
 {
 	GstImxV4l2BufferPool *pool;
 
 	pool = g_object_new(gst_imx_v4l2_buffer_pool_get_type(), NULL);
-	pool->fd = fd;
+	pool->fd_obj_v4l = gst_imx_fd_object_ref(fd_obj_v4l);
 
 	return GST_BUFFER_POOL_CAST(pool);
 }
