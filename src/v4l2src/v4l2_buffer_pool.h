@@ -46,7 +46,6 @@ struct _GstImxV4l2BufferPool
 	guint num_allocated;
 	GstVideoInfo video_info;
 	gboolean add_videometa;
-	GMutex mutex;
 };
 
 struct _GstImxV4l2BufferPoolClass

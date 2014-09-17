@@ -27,9 +27,6 @@
 GST_DEBUG_CATEGORY_STATIC(imx_v4l2_buffer_pool_debug);
 #define GST_CAT_DEFAULT imx_v4l2_buffer_pool_debug
 
-#define LOCK_MUTEX(obj) g_mutex_lock(&(((GstImxV4l2BufferPool*)(obj))->mutex))
-#define UNLOCK_MUTEX(obj) g_mutex_unlock(&(((GstImxV4l2BufferPool*)(obj))->mutex))
-
 GType gst_imx_v4l2_meta_api_get_type(void)
 {
 	static volatile GType type;
@@ -208,9 +205,7 @@ static void gst_imx_v4l2_buffer_pool_free_buffer(GstBufferPool *bpool, GstBuffer
 	GST_DEBUG_OBJECT(pool, "free %u %p", meta->vbuffer.index, (gpointer)buf);
 
 	munmap(meta->mem, meta->vbuffer.length);
-	LOCK_MUTEX(pool);
 	pool->buffers[meta->vbuffer.index] = NULL;
-	UNLOCK_MUTEX(pool);
 
 	gst_buffer_unref(buf);
 }
@@ -229,19 +224,14 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_acquire_buffer(GstBufferPool *bpoo
 	vbuffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	vbuffer.memory = V4L2_MEMORY_MMAP;
 
-	LOCK_MUTEX(pool);
-
 	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_DQBUF, &vbuffer) < 0)
 	{
 		GST_ERROR_OBJECT(pool, "VIDIOC_DQBUF failed: %s", g_strerror(errno));
-		UNLOCK_MUTEX(pool);
 		return GST_FLOW_ERROR;
 	}
 	buf = pool->buffers[vbuffer.index];
 	GST_DEBUG_OBJECT(pool, "dqbuf %u %p", vbuffer.index, (gpointer)buf);
 	pool->buffers[vbuffer.index] = NULL;
-
-	UNLOCK_MUTEX(pool);
 
 	g_assert(buf);
 
@@ -276,18 +266,13 @@ static void gst_imx_v4l2_buffer_pool_release_buffer(GstBufferPool *bpool, GstBuf
 
 	GST_DEBUG_OBJECT(pool, "qbuf %u %p", meta->vbuffer.index, (gpointer)buf);
 
-	LOCK_MUTEX(pool);
-
 	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QBUF, &meta->vbuffer) < 0)
 	{
 		GST_ERROR("VIDIOC_QBUF error: %s",
 				g_strerror(errno));
-		UNLOCK_MUTEX(pool);
 		return;
 	}
 	pool->buffers[meta->vbuffer.index] = buf;
-
-	UNLOCK_MUTEX(pool);
 }
 
 static gboolean gst_imx_v4l2_buffer_pool_start(GstBufferPool *bpool)
@@ -349,7 +334,6 @@ static void gst_imx_v4l2_buffer_pool_init(GstImxV4l2BufferPool *pool)
 {
 	GST_DEBUG_OBJECT(pool, "initializing V4L2 buffer pool");
 	pool->fd_obj_v4l = NULL;
-	g_mutex_init(&(pool->mutex));
 }
 
 static void gst_imx_v4l2_buffer_pool_finalize(GObject *object)
@@ -360,7 +344,6 @@ static void gst_imx_v4l2_buffer_pool_finalize(GObject *object)
 
 	g_free(pool->buffers);
 	gst_imx_fd_object_unref(pool->fd_obj_v4l);
-	g_mutex_clear(&(pool->mutex));
 
 	G_OBJECT_CLASS(gst_imx_v4l2_buffer_pool_parent_class)->finalize(object);
 }
