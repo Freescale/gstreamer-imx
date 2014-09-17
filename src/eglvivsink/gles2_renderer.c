@@ -472,7 +472,6 @@ static GLenum gst_imx_egl_viv_sink_gles2_renderer_get_viv_format(GstVideoFormat 
 		case GST_VIDEO_FORMAT_UYVY:  return GL_VIV_UYVY;
 #endif
 		case GST_VIDEO_FORMAT_RGB16: return GL_RGB565;
-		case GST_VIDEO_FORMAT_RGB:   return GL_RGB;
 		case GST_VIDEO_FORMAT_RGBA:  return GL_RGBA;
 		case GST_VIDEO_FORMAT_BGRA:  return GL_BGRA_EXT;
 		case GST_VIDEO_FORMAT_RGBx:  return GL_RGBA;

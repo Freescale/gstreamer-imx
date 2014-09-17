@@ -108,7 +108,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 		CAPS_VIV_NV12
 		CAPS_VIV_NV21
 		CAPS_VIV_UYVY
-		"RGB16, RGB, RGBA, BGRA, RGBx, BGRx, BGR, ARGB, ABGR, xRGB, xBGR"
+		"RGB16, RGBA, BGRA, RGBx, BGRx, BGR, ARGB, ABGR, xRGB, xBGR"
 	" }"))
 );
 
