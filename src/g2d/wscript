@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+
+
+def configure(conf):
+	from waflib.Build import Logs
+	if conf.check_cc(mandatory = 0, lib = 'g2d', uselib_store = 'IMXG2D') and \
+	   conf.check_cc(mandatory = 0, header_name = 'g2d.h', uselib_store = 'IMXG2D'):
+		Logs.pprint('GREEN', 'G2D elements will be built')
+		conf.env['G2D_ELEMENTS_ENABLED'] = 1
+	else:
+		Logs.pprint('RED', 'G2D elements will not be built - headers and/or libraries not found')
+
+
+def build(bld):
+	if bld.env['G2D_ELEMENTS_ENABLED']:
+		bld(
+			features = ['c', 'cshlib'],
+			includes = ['.', '../..'],
+			uselib = bld.env['COMMON_USELIB'] + ['IMXG2D'],
+			use = 'gstimxcommon',
+			target = 'gstimxg2d',
+			source = bld.path.ant_glob('*.c'),
+			install_path = bld.env['PLUGIN_INSTALL_PATH']
+		)

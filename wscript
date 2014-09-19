@@ -108,6 +108,7 @@ def configure(conf):
 
 
 	conf.recurse('src/common')
+	conf.recurse('src/g2d')
 	conf.recurse('src/ipu')
 	conf.recurse('src/vpu')
 	conf.recurse('src/eglvivsink')
@@ -120,6 +121,7 @@ def configure(conf):
 
 def build(bld):
 	bld.recurse('src/common')
+	bld.recurse('src/g2d')
 	bld.recurse('src/ipu')
 	bld.recurse('src/vpu')
 	bld.recurse('src/eglvivsink')
