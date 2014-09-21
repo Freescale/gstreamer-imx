@@ -1,0 +1,45 @@
+==== version 0.9.9 (2014-09-21) ====
+
+* ipu, vpu, v4l2src: Use reference counting for resources
+  This ensures that resources are freed only after when every entity
+  that uses them has been shut down
+
+  ipu: use a global FD and increase/decrease refcount for each blitter
+       instance and for every (de)allocation
+
+  vpu: increment/decrement refcount not only when creating/shutting down
+       decoder instances, but also for every (de)allocation
+
+  v4l2src: instead of using a raw FD, use a reference-counted FD object
+
+* ipu: use a global FD instead of per-blitter FDs
+  this circumvents bugs in the IPU kernel driver which are triggered
+  when multiple IPU FDs are open at the same time
+
+* introduce a proper physical address type and a printf conversion specifier
+
+* remove cpu address from GstImxPhysMemory and add an "internal" pointer
+  as an optional, internal, allocator-specific extra parameter
+  (for example, a handle to an internal DMA buffer object)
+
+* rplace obsolete "padding" member in phys mem meta with better defined
+  x_padding/y_padding ones
+  this avoids having to do calculations like "padding / stride" to get to
+  the number of additional rows, for example
+
+* use a reference counter for mapping physical memory
+  necessary because the same physical memory might get mapped multiple times
+  (commonly done by gst_video_frame_map() and multi-planar formats like I420)
+  until now, it was mapped the first time, and subsequent mapping calls were
+  just ignored, but a reference counter is much cleaner and safer
+
+* ipu: fix kernel version detection and include paths in wscript
+  now, the <3.5.0 kernel version check works properly
+
+* eglvivsink: remove RGB from the list of supported formats
+  Vivante direct textures support various RGBA/RGBx formats, but not RGB
+
+* Miscelleanous:
+  * Logging improvements
+  * Added notes to functions that return floating references
+  * Removed obsolete todo file
