@@ -98,14 +98,22 @@ static gboolean gst_imx_ipu_free_phys_mem(GstImxPhysMemAllocator *allocator, Gst
 
 static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size, G_GNUC_UNUSED GstMapFlags flags)
 {
+	int prot = 0;
 	GstImxPhysMemory *phys_mem = (GstImxPhysMemory *)memory;
 	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
 	g_assert(phys_mem->mapped_virt_addr == NULL);
 
-	/* Mapping with both read and write flags, since mapping is refcounted,
-	 * and it is possible multiple mappings might select either read or write */
-	phys_mem->mapped_virt_addr = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, gst_imx_ipu_get_fd(), (dma_addr_t)(phys_mem->phys_addr));
+	/* As explained in gst_imx_phys_mem_allocator_map(), the flags are guaranteed to
+	 * be the same when a memory block is mapped multiple times, so the value of
+	 * "flags" will be identical if map() is called two times, for example. */
+
+	if (flags & GST_MAP_READ)
+		prot |= PROT_READ;
+	if (flags & GST_MAP_WRITE)
+		prot |= PROT_WRITE;
+
+	phys_mem->mapped_virt_addr = mmap(0, size, prot, MAP_SHARED, gst_imx_ipu_get_fd(), (dma_addr_t)(phys_mem->phys_addr));
 	if (phys_mem->mapped_virt_addr == MAP_FAILED)
 	{
 		phys_mem->mapped_virt_addr = NULL;
