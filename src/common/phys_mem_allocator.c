@@ -179,10 +179,20 @@ static gpointer gst_imx_phys_mem_allocator_map(GstMemory *mem, gsize maxsize, Gs
 
 	phys_mem->mapping_refcount++;
 
+	/* In GStreamer, it is not possible to map the same buffer several times
+	 * with different flags. Therefore, it is safe to use refcounting here,
+	 * since the value of "flags" will be the same with multiple map calls. */
+
 	if (phys_mem->mapping_refcount == 1)
+	{
+		phys_mem->mapping_flags = flags;
 		return klass->map_phys_mem(phys_mem_alloc, phys_mem, maxsize, flags);
+	}
 	else
+	{
+		g_assert(phys_mem->mapping_flags == flags);
 		return phys_mem->mapped_virt_addr;
+	}
 }
 
 

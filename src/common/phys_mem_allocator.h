@@ -65,6 +65,8 @@ struct _GstImxPhysMemory
 	gpointer mapped_virt_addr;
 	gst_imx_phys_addr_t phys_addr;
 
+	GstMapFlags mapping_flags;
+
 	/* Counter to ensure the memory block isn't (un)mapped
 	 * more often than necessary */
 	long mapping_refcount;
