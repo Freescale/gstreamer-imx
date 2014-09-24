@@ -50,9 +50,8 @@ GstAllocator* gst_imx_g2d_allocator_new(void)
 
 static gboolean gst_imx_g2d_alloc_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size)
 {
-	// TODO: make it possible to choose between cacheable and non-cacheable memory
-	// (for cacheable, also allow for explicit flushing)
-	struct g2d_buf *buf = g2d_alloc(size, 0);
+	/* allocate cacheable physically contiguous memory block */
+	struct g2d_buf *buf = g2d_alloc(size, 1);
 
 	if (buf == NULL)
 	{
@@ -93,14 +92,46 @@ static gboolean gst_imx_g2d_free_phys_mem(GstImxPhysMemAllocator *allocator, Gst
 }
 
 
-static gpointer gst_imx_g2d_map_phys_mem(G_GNUC_UNUSED GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, G_GNUC_UNUSED gssize size, G_GNUC_UNUSED GstMapFlags flags)
+static gpointer gst_imx_g2d_map_phys_mem(G_GNUC_UNUSED GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, G_GNUC_UNUSED gssize size, GstMapFlags flags)
 {
+	struct g2d_buf *buf = (struct g2d_buf *)(memory->internal);
+
+	/* invalidate cache in map() if the MAP_READ flag is set
+	 * to ensure any data that is read from the mapped memory
+	 * is up to date */
+	if (flags & GST_MAP_READ)
+	{
+		if (g2d_cache_op(buf, G2D_CACHE_INVALIDATE) == 0)
+		{
+			GST_LOG_OBJECT(allocator, "invalidating cacheable memory, vaddr %p paddr %" GST_IMX_PHYS_ADDR_FORMAT, memory->mapped_virt_addr, memory->phys_addr);
+		}
+		else
+		{
+			GST_ERROR_OBJECT(allocator, "invalidating cacheable memory failed, vaddr %p paddr %" GST_IMX_PHYS_ADDR_FORMAT, memory->mapped_virt_addr, memory->phys_addr);
+		}
+	}
+
 	return memory->mapped_virt_addr;
 }
 
 
-static void gst_imx_g2d_unmap_phys_mem(G_GNUC_UNUSED GstImxPhysMemAllocator *allocator, G_GNUC_UNUSED GstImxPhysMemory *memory)
+static void gst_imx_g2d_unmap_phys_mem(G_GNUC_UNUSED GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory)
 {
+	struct g2d_buf *buf = (struct g2d_buf *)(memory->internal);
+
+	/* clean cache in map() if the MAP_WRITE flag is set
+	 * to ensure the cache gets filled with up to date data */
+	if (memory->mapping_flags & GST_MAP_WRITE)
+	{
+		if (g2d_cache_op(buf, G2D_CACHE_CLEAN) == 0)
+		{
+			GST_LOG_OBJECT(allocator, "cleaned cacheable memory, vaddr %p paddr %" GST_IMX_PHYS_ADDR_FORMAT, memory->mapped_virt_addr, memory->phys_addr);
+		}
+		else
+		{
+			GST_ERROR_OBJECT(allocator, "cleaning cacheable memory failed, vaddr %p paddr %" GST_IMX_PHYS_ADDR_FORMAT, memory->mapped_virt_addr, memory->phys_addr);
+		}
+	}
 }
 
 
