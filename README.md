@@ -28,6 +28,8 @@ Available plugins
 * `imxvpuenc_mjpeg` : Motion JPEG encoder
 * `imxipusink` : video sink using the IPU to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxipuvideotransform` : video transform element using the IPU, capable of scaling, deinterlacing, rotating (in 90 degree steps), flipping frames, and converting between color spaces
+* `imxg2dvideosink` : video sink using the GPU's 2D core (through the G2D API) to output to Framebuffer (may not work well if X11 or Wayland are running)
+* `imxg2dvideotransform` : video transform element using the GPU's 2D core (through the G2D API), capable of scaling, rotating (in 90 degree steps), flipping frames, and converting between color spaces
 * `imxeglvivsink` : custom OpenGL ES 2.x based video sink; using the Vivante direct textures, which allow for smooth playback
 * `imxv4l2src` : customized Video4Linux source with i.MX specific tweaks
 
