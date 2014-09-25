@@ -1,5 +1,5 @@
-/* Video transform element using the Freescale IPU
- * Copyright (C) 2013  Carlos Rafael Giani
+/* IPU-based i.MX video transform class
+ * Copyright (C) 2014  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -20,9 +20,10 @@
 #ifndef GST_IMX_IPU_VIDEOTRANSFORM_H
 #define GST_IMX_IPU_VIDEOTRANSFORM_H
 
+
 #include <gst/gst.h>
-#include <gst/base/gstbasetransform.h>
-#include <gst/video/video.h>
+#include "../common/blitter_video_transform.h"
+#include "blitter.h"
 
 
 G_BEGIN_DECLS
@@ -38,21 +39,21 @@ typedef struct _GstImxIpuVideoTransformPrivate GstImxIpuVideoTransformPrivate;
 #define GST_IMX_IPU_VIDEO_TRANSFORM_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_IPU_VIDEO_TRANSFORM, GstImxIpuVideoTransformClass))
 #define GST_IS_IMX_IPU_VIDEO_TRANSFORM(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_IPU_VIDEO_TRANSFORM))
 #define GST_IS_IMX_IPU_VIDEO_TRANSFORM_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_IPU_VIDEO_TRANSFORM))
-#define GST_IMX_IPU_VIDEO_TRANSFORM_CAST(obj)        ((GstImxIpuVideoTransform*)(obj))
 
 
 struct _GstImxIpuVideoTransform
 {
-	GstBaseTransform parent;
-	GstImxIpuVideoTransformPrivate *priv;
-	gboolean inout_caps_equal, negotiated;
-	GstVideoInfo in_info, out_info;
+	GstImxBlitterVideoTransform parent;
+	GstImxIpuBlitter *blitter;
+	GstImxIpuBlitterRotationMode output_rotation;
+	gboolean input_crop;
+	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 };
 
 
 struct _GstImxIpuVideoTransformClass
 {
-	GstBaseTransformClass parent_class;
+	GstImxBlitterVideoTransformClass parent_class;
 };
 
 

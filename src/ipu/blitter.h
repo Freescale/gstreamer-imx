@@ -1,5 +1,5 @@
 /* Common Freescale IPU blitter code for GStreamer
- * Copyright (C) 2013  Carlos Rafael Giani
+ * Copyright (C) 2014  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -22,6 +22,7 @@
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
+#include "../common/base_blitter.h"
 
 
 G_BEGIN_DECLS
@@ -59,7 +60,7 @@ typedef struct _GstImxIpuBlitterPrivate GstImxIpuBlitterPrivate;
 	" , Y444 " \
 	" } "
 
-#define GST_IMX_IPU_BLITTER_CAPS \
+#define GST_IMX_IPU_BLITTER_SINK_CAPS \
 	GST_STATIC_CAPS( \
 		"video/x-raw, " \
 		"format = (string) " GST_IMX_IPU_VIDEO_FORMATS ", " \
@@ -67,6 +68,8 @@ typedef struct _GstImxIpuBlitterPrivate GstImxIpuBlitterPrivate;
 		"height = (int) [ 64, MAX ], " \
 		"framerate = (fraction) [ 0, MAX ]; " \
 	)
+
+#define GST_IMX_IPU_BLITTER_SRC_CAPS GST_IMX_IPU_BLITTER_SINK_CAPS
 
 
 typedef enum
@@ -99,12 +102,11 @@ GstImxIpuBlitterDeinterlaceMode;
 
 struct _GstImxIpuBlitter
 {
-	GstObject parent;
+	GstImxBaseBlitter parent;
 	GstImxIpuBlitterPrivate *priv;
 
-	GstBufferPool *internal_bufferpool;
-	GstBuffer *actual_input_buffer, *previous_input_buffer;
 	GstVideoInfo input_video_info;
+
 	gboolean apply_crop_metadata;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 };
@@ -112,7 +114,7 @@ struct _GstImxIpuBlitter
 
 struct _GstImxIpuBlitterClass
 {
-	GstObjectClass parent_class;
+	GstImxBaseBlitterClass parent_class;
 };
 
 
@@ -122,7 +124,8 @@ GType gst_imx_ipu_blitter_deinterlace_mode_get_type(void);
 
 GType gst_imx_ipu_blitter_get_type(void);
 
-gboolean gst_imx_ipu_blitter_open_device(GstImxIpuBlitter *ipu_blitter);
+
+GstImxIpuBlitter* gst_imx_ipu_blitter_new(void);
 
 void gst_imx_ipu_blitter_enable_crop(GstImxIpuBlitter *ipu_blitter, gboolean crop);
 gboolean gst_imx_ipu_blitter_is_crop_enabled(GstImxIpuBlitter *ipu_blitter);
@@ -133,23 +136,8 @@ GstImxIpuBlitterRotationMode gst_imx_ipu_blitter_get_output_rotation_mode(GstImx
 void gst_imx_ipu_blitter_set_deinterlace_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterDeinterlaceMode deinterlace_mode);
 GstImxIpuBlitterDeinterlaceMode gst_imx_ipu_blitter_get_deinterlace_mode(GstImxIpuBlitter *ipu_blitter);
 
-gboolean gst_imx_ipu_blitter_are_transforms_enabled(GstImxIpuBlitter *ipu_blitter);
-
-gboolean gst_imx_ipu_blitter_set_input_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *input_buffer);
-gboolean gst_imx_ipu_blitter_set_output_buffer(GstImxIpuBlitter *ipu_blitter, GstBuffer *output_buffer);
-
-void gst_imx_ipu_blitter_set_input_info(GstImxIpuBlitter *ipu_blitter, GstVideoInfo *info);
-
-gboolean gst_imx_ipu_blitter_blit(GstImxIpuBlitter *ipu_blitter);
-
-GstBufferPool* gst_imx_ipu_blitter_create_bufferpool(GstImxIpuBlitter *ipu_blitter, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params);
-GstBufferPool* gst_imx_ipu_blitter_get_internal_bufferpool(GstImxIpuBlitter *ipu_blitter);
-
-GstBuffer* gst_imx_ipu_blitter_wrap_framebuffer(GstImxIpuBlitter *ipu_blitter, int framebuffer_fd, guint x, guint y, guint width, guint height);
-
 
 G_END_DECLS
 
 
 #endif
-
