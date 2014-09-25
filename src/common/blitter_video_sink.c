@@ -58,7 +58,7 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *element, GstStateChange transition);
 static gboolean gst_imx_blitter_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
-static gboolean gst_imx_blitter_video_propose_allocation(GstBaseSink *sink, GstQuery *query);
+static gboolean gst_imx_blitter_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query);
 static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 
 static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitterVideoSink *blitter_video_sink, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
@@ -92,7 +92,7 @@ void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *klass)
 	object_class->get_property     = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_get_property);
 	element_class->change_state    = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_change_state);
 	base_class->set_caps           = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_set_caps);
-	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_propose_allocation);
+	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_propose_allocation);
 	parent_class->show_frame       = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_show_frame);
 
 	klass->start      = NULL;
@@ -355,7 +355,7 @@ static gboolean gst_imx_blitter_video_sink_set_caps(GstBaseSink *sink, GstCaps *
 }
 
 
-static gboolean gst_imx_blitter_video_propose_allocation(GstBaseSink *sink, GstQuery *query)
+static gboolean gst_imx_blitter_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query)
 {
 	GstCaps *caps;
 	GstVideoInfo info;
