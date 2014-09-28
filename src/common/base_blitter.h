@@ -131,6 +131,9 @@ struct _GstImxBaseBlitter
  *                          function must ensure the pixels outside of the video- but inside of
  *                          the output region are set to black.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
+ * @flush:                  Optional.
+ *                          Flushes any internal cached or temporary states, buffers etc.
+ *                          Returns TRUE if it successfully completed, FALSE otherwise.
  */
 struct _GstImxBaseBlitterClass
 {
@@ -142,6 +145,7 @@ struct _GstImxBaseBlitterClass
 	gboolean (*set_regions)(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 	GstAllocator* (*get_phys_mem_allocator)(GstImxBaseBlitter *base_blitter);
 	gboolean (*blit_frame)(GstImxBaseBlitter *base_blitter);
+	gboolean (*flush)(GstImxBaseBlitter *base_blitter);
 };
 
 
@@ -202,6 +206,12 @@ gboolean gst_imx_base_blitter_set_input_video_info(GstImxBaseBlitter *base_blitt
  * Internally, this calls @blit_frame, returning its return value.
  */
 gboolean gst_imx_base_blitter_blit(GstImxBaseBlitter *base_blitter);
+
+/* Flush any temporary and/or cached data in the blitter.
+ *
+ * Return TRUE is @flush completed successfully (or if @flush is NULL), FALSE otherwise.
+ */
+gboolean gst_imx_base_blitter_flush(GstImxBaseBlitter *base_blitter);
 
 /* Creates a buffer pool for physically contiguous buffers.
  *

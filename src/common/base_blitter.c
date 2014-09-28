@@ -50,6 +50,7 @@ void gst_imx_base_blitter_class_init(GstImxBaseBlitterClass *klass)
 	klass->set_regions            = NULL;
 	klass->get_phys_mem_allocator = NULL;
 	klass->blit_frame             = NULL;
+	klass->flush                  = NULL;
 
 	GST_DEBUG_CATEGORY_INIT(imx_base_blitter_debug, "imxbaseblitter", 0, "Freescale i.MX base blitter class");
 }
@@ -272,6 +273,17 @@ gboolean gst_imx_base_blitter_blit(GstImxBaseBlitter *base_blitter)
 	g_assert(klass->blit_frame != NULL);
 
 	return klass->blit_frame(base_blitter);
+}
+
+
+gboolean gst_imx_base_blitter_flush(GstImxBaseBlitter *base_blitter)
+{
+	GstImxBaseBlitterClass *klass;
+
+	g_assert(base_blitter != NULL);
+	klass = GST_IMX_BASE_BLITTER_CLASS(G_OBJECT_GET_CLASS(base_blitter));
+
+	return (klass->flush != NULL) ? klass->flush(base_blitter) : TRUE;
 }
 
 

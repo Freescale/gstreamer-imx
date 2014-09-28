@@ -58,6 +58,7 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *element, GstStateChange transition);
 static gboolean gst_imx_blitter_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
+static gboolean gst_imx_blitter_video_sink_event(GstBaseSink *sink, GstEvent *event);
 static gboolean gst_imx_blitter_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query);
 static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 
@@ -92,6 +93,7 @@ void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *klass)
 	object_class->get_property     = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_get_property);
 	element_class->change_state    = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_change_state);
 	base_class->set_caps           = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_set_caps);
+	base_class->event              = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_event);
 	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_propose_allocation);
 	parent_class->show_frame       = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_show_frame);
 
@@ -352,6 +354,33 @@ static gboolean gst_imx_blitter_video_sink_set_caps(GstBaseSink *sink, GstCaps *
 	gst_imx_blitter_video_sink_update_regions(blitter_video_sink);
 
 	return gst_imx_base_blitter_set_input_video_info(blitter_video_sink->blitter, &video_info);
+}
+
+
+static gboolean gst_imx_blitter_video_sink_event(GstBaseSink *sink, GstEvent *event)
+{
+	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK(sink);
+
+	switch (GST_EVENT_TYPE(event))
+	{
+		case GST_EVENT_FLUSH_STOP:
+		{
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			if (blitter_video_sink->blitter != NULL)
+			{
+				if (!gst_imx_base_blitter_flush(blitter_video_sink->blitter))
+					GST_WARNING_OBJECT(sink, "could not flush blitter");
+			}
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
+
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return GST_BASE_SINK_CLASS(gst_imx_blitter_video_sink_parent_class)->event(sink, event);
 }
 
 

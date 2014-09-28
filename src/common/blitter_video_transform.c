@@ -34,6 +34,7 @@ G_DEFINE_ABSTRACT_TYPE(GstImxBlitterVideoTransform, gst_imx_blitter_video_transf
 /* general element operations */
 static void gst_imx_blitter_video_transform_finalize(GObject *object);
 static GstStateChangeReturn gst_imx_blitter_video_transform_change_state(GstElement *element, GstStateChange transition);
+static gboolean gst_imx_blitter_video_transform_sink_event(GstBaseTransform *transform, GstEvent *event);
 static gboolean gst_imx_blitter_video_transform_src_event(GstBaseTransform *transform, GstEvent *event);
 
 /* caps handling */
@@ -76,6 +77,7 @@ void gst_imx_blitter_video_transform_class_init(GstImxBlitterVideoTransformClass
 
 	element_class->change_state                 = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_change_state);
 	object_class->finalize                      = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_finalize);
+	base_transform_class->sink_event            = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_sink_event);
 	base_transform_class->src_event             = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_src_event);
 	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_transform_caps);
 	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_fixate_caps);
@@ -206,6 +208,33 @@ static GstStateChangeReturn gst_imx_blitter_video_transform_change_state(GstElem
 	}
 
 	return ret;
+}
+
+
+static gboolean gst_imx_blitter_video_transform_sink_event(GstBaseTransform *transform, GstEvent *event)
+{
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
+
+	switch (GST_EVENT_TYPE(event))
+	{
+		case GST_EVENT_FLUSH_STOP:
+		{
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
+			if (blitter_video_transform->blitter != NULL)
+			{
+				if (!gst_imx_base_blitter_flush(blitter_video_transform->blitter))
+					GST_WARNING_OBJECT(transform, "could not flush blitter");
+			}
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
+
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_parent_class)->sink_event(transform, event);
 }
 
 
