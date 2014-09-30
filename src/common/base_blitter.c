@@ -99,6 +99,15 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 	g_assert(input_buffer != NULL);
 	g_assert(klass->set_input_frame != NULL);
 
+	/* Clean up any previously used internal input frame
+	 * Do this here in case deinterlacing was disabled, so the frame
+	 * is cleaned up in either case */
+	if (base_blitter->internal_input_frame != NULL)
+	{
+		gst_buffer_unref(base_blitter->internal_input_frame);
+		base_blitter->internal_input_frame = NULL;
+	}
+
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(input_buffer);
 
 	/* Test if the input buffer uses DMA memory */
@@ -128,16 +137,6 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 				/* Internal bufferpool does not exist yet - create it now,
 				 * so that it can in turn create the internal input buffer */
 
-				/* But first, clean up any existing input frame from a
-				 * previous pool */
-				if (base_blitter->internal_input_frame != NULL)
-				{
-					gst_buffer_unref(base_blitter->internal_input_frame);
-					base_blitter->internal_input_frame = NULL;
-				}
-
-				/* Now create new pool */
-
 				GstCaps *caps = gst_video_info_to_caps(&(base_blitter->input_video_info));
 
 				base_blitter->internal_bufferpool = gst_imx_base_blitter_create_bufferpool(
@@ -164,25 +163,22 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 				gst_buffer_pool_set_active(base_blitter->internal_bufferpool, TRUE);
 		}
 
-		if (base_blitter->internal_input_frame == NULL)
+		/* Create new temporary internal input frame */
+		flow_ret = gst_buffer_pool_acquire_buffer(base_blitter->internal_bufferpool, &(base_blitter->internal_input_frame), NULL);
+		if (flow_ret != GST_FLOW_OK)
 		{
-			flow_ret = gst_buffer_pool_acquire_buffer(base_blitter->internal_bufferpool, &(base_blitter->internal_input_frame), NULL);
-			if (flow_ret != GST_FLOW_OK)
-			{
-				GST_ERROR_OBJECT(base_blitter, "error acquiring input frame buffer: %s", gst_pad_mode_get_name(flow_ret));
-				return FALSE;
-			}
+			GST_ERROR_OBJECT(base_blitter, "error acquiring input frame buffer: %s", gst_pad_mode_get_name(flow_ret));
+			return FALSE;
 		}
 
+		/* Copy the input buffer's pixels to the temp input frame */
 		{
 			GstVideoFrame input_frame, temp_input_frame;
 
 			gst_video_frame_map(&input_frame, &(base_blitter->input_video_info), input_buffer, GST_MAP_READ);
 			gst_video_frame_map(&temp_input_frame, &(base_blitter->input_video_info), base_blitter->internal_input_frame, GST_MAP_WRITE);
 
-			/* Copy the input buffer's pixels to the temp input frame
-			 * The gst_video_frame_copy() makes sure stride and plane offset values from both
-			 * frames are respected */
+			/* gst_video_frame_copy() makes sure stride and plane offset values from both frames are respected */
 			gst_video_frame_copy(&temp_input_frame, &input_frame);
 
 			GST_BUFFER_FLAGS(base_blitter->internal_input_frame) |= (GST_BUFFER_FLAGS(input_buffer) & (GST_VIDEO_BUFFER_FLAG_INTERLACED | GST_VIDEO_BUFFER_FLAG_TFF | GST_VIDEO_BUFFER_FLAG_RFF | GST_VIDEO_BUFFER_FLAG_ONEFIELD));
