@@ -51,6 +51,7 @@ static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter);
 
 static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *input_frame, struct g2d_surface *surface);
 static GstImxG2DFormatDetails const * gst_imx_g2d_blitter_get_format_details(GstVideoFormat gst_format);
+static void gst_imx_g2d_blitter_region_to_surface(struct g2d_surface *surf, GstImxBaseBlitterRegion const *region);
 
 
 
@@ -255,10 +256,9 @@ static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 
 static gboolean gst_imx_g2d_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
 {
-	guint n;
+	guint i;
+	GstImxBaseBlitterRegion empty_regions[4];
 	GstImxG2DBlitter *g2d_blitter = GST_IMX_G2D_BLITTER(base_blitter);
-	guint vleft, vtop, vright, vbottom;
-	guint oleft, otop, oright, obottom;
 
 	g2d_blitter->output_region_uptodate = FALSE;
 
@@ -268,74 +268,16 @@ static gboolean gst_imx_g2d_blitter_set_regions(GstImxBaseBlitter *base_blitter,
 	if (video_region == NULL)
 		video_region = output_region;
 
-	vleft   = video_region->x;
-	vtop    = video_region->y;
-	vright  = vleft + video_region->width;
-	vbottom = vtop  + video_region->height;
+	gst_imx_g2d_blitter_region_to_surface(&(g2d_blitter->dest_surface), video_region);
 
-	oleft   = output_region->x;
-	otop    = output_region->y;
-	oright  = oleft + output_region->width;
-	obottom = otop  + output_region->height;
+	gst_imx_base_blitter_calculate_empty_regions(base_blitter, empty_regions, &(g2d_blitter->num_empty_dest_surfaces), video_region, output_region);
 
-	g2d_blitter->dest_surface.left   = vleft;
-	g2d_blitter->dest_surface.top    = vtop;
-	g2d_blitter->dest_surface.right  = vright;
-	g2d_blitter->dest_surface.bottom = vbottom;
-
-	GST_INFO_OBJECT(base_blitter, "defined video region (%d,%d - %d,%d)", vleft, vtop, vright, vbottom);
-	GST_INFO_OBJECT(base_blitter, "defined output region (%d,%d - %d,%d)", oleft, otop, oright, obottom);
-
-	n = 0;
-
-	if (vleft > oleft)
+	for (i = 0; i < g2d_blitter->num_empty_dest_surfaces; ++i)
 	{
-		struct g2d_surface *surf = &(g2d_blitter->empty_dest_surfaces[n]);
-		*surf = g2d_blitter->dest_surface;
-		surf->left = oleft;
-		surf->right = vleft;
-		surf->top = otop;
-		surf->bottom = obottom;
-		++n;
-
-		GST_INFO_OBJECT(base_blitter, "added left empty region (%d,%d - %d,%d)", surf->left, surf->top, surf->right, surf->bottom);
+		g2d_blitter->empty_dest_surfaces[i] = g2d_blitter->dest_surface;
+		g2d_blitter->empty_dest_surfaces[i].clrcolor = 0xFF223344;
+		gst_imx_g2d_blitter_region_to_surface(&(g2d_blitter->empty_dest_surfaces[i]), &(empty_regions[i]));
 	}
-	if (vright < oright)
-	{
-		struct g2d_surface *surf = &(g2d_blitter->empty_dest_surfaces[n]);
-		*surf = g2d_blitter->dest_surface;
-		surf->left = vright;
-		surf->right = oright;
-		surf->top = otop;
-		surf->bottom = obottom;
-		++n;
-
-		GST_INFO_OBJECT(base_blitter, "added right empty region (%d,%d - %d,%d)", surf->left, surf->top, surf->right, surf->bottom);
-	}
-	if (vtop > otop)
-	{
-		/* keep left & right intact */
-		struct g2d_surface *surf = &(g2d_blitter->empty_dest_surfaces[n]);
-		*surf = g2d_blitter->dest_surface;
-		surf->top = otop;
-		surf->bottom = vtop;
-		++n;
-
-		GST_INFO_OBJECT(base_blitter, "added top empty region (%d,%d - %d,%d)", surf->left, surf->top, surf->right, surf->bottom);
-	}
-	if (vbottom < obottom)
-	{
-		/* keep left & right intact */
-		struct g2d_surface *surf = &(g2d_blitter->empty_dest_surfaces[n]);
-		*surf = g2d_blitter->dest_surface;
-		surf->top = vbottom;
-		surf->bottom = obottom;
-		++n;
-
-		GST_INFO_OBJECT(base_blitter, "added bottom empty region (%d,%d - %d,%d)", surf->left, surf->top, surf->right, surf->bottom);
-	}
-
-	g2d_blitter->num_empty_dest_surfaces = n;
 
 	return TRUE;
 }
@@ -436,6 +378,8 @@ static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_bli
 	surface->width = video_meta->width;
 	surface->height = video_meta->height;
 
+	GST_DEBUG_OBJECT(g2d_blitter, "surface stride: %d pixels  width: %d pixels", surface->stride, surface->width);
+
 	{
 		guint i;
 
@@ -511,4 +455,13 @@ static GstImxG2DFormatDetails const * gst_imx_g2d_blitter_get_format_details(Gst
 	}
 
 #undef FORMAT_DETAILS
+}
+
+
+static void gst_imx_g2d_blitter_region_to_surface(struct g2d_surface *surf, GstImxBaseBlitterRegion const *region)
+{
+	surf->left   = region->x;
+	surf->top    = region->y;
+	surf->right  = region->x + region->width;
+	surf->bottom = region->y + region->height;
 }
