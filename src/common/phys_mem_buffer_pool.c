@@ -27,7 +27,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_phys_mem_bufferpool_debug);
 #define GST_CAT_DEFAULT imx_phys_mem_bufferpool_debug
 
 
-#define DEFAULT_HORIZ_ALIGNMENT 8
+#define DEFAULT_HORIZ_ALIGNMENT 16
 #define DEFAULT_VERT_ALIGNMENT 8
 
 
