@@ -91,7 +91,7 @@ static const gchar ** gst_imx_phys_mem_buffer_pool_get_options(G_GNUC_UNUSED Gst
 static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, GstStructure *config)
 {
 	GstImxPhysMemBufferPool *imx_phys_mem_pool;
-	guint unaligned_width, unaligned_height;
+	guint width, height;
 	GstVideoInfo info;
 	GstVideoAlignment align;
 	GstCaps *caps;
@@ -149,18 +149,21 @@ static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, Gst
 	imx_phys_mem_pool->vert_alignment = vert_alignment;
 	GST_INFO_OBJECT(pool, "using horiz/vert alignment: %u/%u", horiz_alignment, vert_alignment);
 
+	/* Alignment does *not* modify width/height values, since these describe
+	 * the actual width/height of the frame, and do not contain padding pixels.
+	 * What *is* modified are the padding and stride values inside the video info. */
+
 	gst_video_alignment_reset(&align);
-	unaligned_width = GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info));
-	unaligned_height = GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info));
-	align.padding_right = (horiz_alignment - (unaligned_width & (horiz_alignment - 1))) & (horiz_alignment - 1);
-	align.padding_bottom = (vert_alignment - (unaligned_height & (vert_alignment - 1))) & (vert_alignment - 1);
+	width = GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info));
+	height = GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info));
+	align.padding_right = (horiz_alignment - (width & (horiz_alignment - 1))) & (horiz_alignment - 1);
+	align.padding_bottom = (vert_alignment - (height & (vert_alignment - 1))) & (vert_alignment - 1);
 	gst_video_info_align(&(imx_phys_mem_pool->video_info), &align);
 
 	GST_INFO_OBJECT(
 		pool,
-		"aligned video info:  unaligned width/height: %u/%u  aligned width/height: %u/%u  padding values right/bottom %u %u",
-		unaligned_width, unaligned_height,
-		GST_VIDEO_INFO_WIDTH(&(imx_phys_mem_pool->video_info)), GST_VIDEO_INFO_HEIGHT(&(imx_phys_mem_pool->video_info)),
+		"aligned video info:  width/height: %u/%u  padding values right/bottom %u %u",
+		width, height,
 		align.padding_right, align.padding_bottom
 	);
 
