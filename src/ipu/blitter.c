@@ -265,7 +265,7 @@ static gboolean gst_imx_ipu_blitter_set_input_video_info(GstImxBaseBlitter *base
 }
 
 
-#define GST_IMX_FILL_IPU_TASK(ipu_blitter, buffer, taskio) \
+#define GST_IMX_FILL_IPU_TASK(ipu_blitter, buffer, taskio, apply_crop) \
 do { \
  \
 	GstVideoMeta *video_meta; \
@@ -281,7 +281,7 @@ do { \
 	(taskio).width = video_meta->width + phys_mem_meta->x_padding; \
 	(taskio).height = video_meta->height + phys_mem_meta->y_padding; \
  \
-	if (ipu_blitter->apply_crop_metadata && (video_crop_meta != NULL)) \
+	if ((apply_crop) && ipu_blitter->apply_crop_metadata && (video_crop_meta != NULL)) \
 	{ \
 		if ((video_crop_meta->x >= (guint)(video_meta->width)) || (video_crop_meta->y >= (guint)(video_meta->height))) \
 			return FALSE; \
@@ -308,7 +308,7 @@ static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBaseBlitter *base_blit
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
 
-	GST_IMX_FILL_IPU_TASK(ipu_blitter, input_frame, ipu_blitter->priv->task.input);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, input_frame, ipu_blitter->priv->task.input, TRUE);
 
 	ipu_blitter->current_frame = input_frame;
 	ipu_blitter->priv->task.input.deinterlace.enable = 0;
@@ -377,13 +377,35 @@ static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBaseBlitter *base_blit
 static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
-	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output, FALSE);
+
+	ipu_blitter->output_buffer_region.x = 0;
+	ipu_blitter->output_buffer_region.y = 0;
+	ipu_blitter->output_buffer_region.width = ipu_blitter->priv->task.output.crop.w;
+	ipu_blitter->output_buffer_region.height = ipu_blitter->priv->task.output.crop.h;
+
 	return TRUE;
 }
 
 
 static gboolean gst_imx_ipu_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
 {
+	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
+
+	if (output_region == NULL)
+		output_region = &(ipu_blitter->output_buffer_region);
+
+	if (video_region == NULL)
+		video_region = output_region;
+
+	if (video_region != NULL)
+	{
+		ipu_blitter->priv->task.output.crop.pos.x = video_region->x;
+		ipu_blitter->priv->task.output.crop.pos.y = video_region->y;
+		ipu_blitter->priv->task.output.crop.w = video_region->width;
+		ipu_blitter->priv->task.output.crop.h = video_region->height;
+	}
+
 	return TRUE;
 }
 

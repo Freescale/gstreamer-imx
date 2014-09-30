@@ -112,6 +112,8 @@ struct _GstImxIpuBlitter
 
 	gboolean apply_crop_metadata;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
+
+	GstImxBaseBlitterRegion output_buffer_region;
 };
 
 
