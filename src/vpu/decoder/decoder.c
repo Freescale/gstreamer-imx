@@ -200,7 +200,8 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 		"format = (string) { I420, I42B, Y444 }, "
 		"width = (int) [ 16, MAX ], "
 		"height = (int) [ 16, MAX ], "
-		"framerate = (fraction) [ 0, MAX ]"
+		"framerate = (fraction) [ 0, MAX ], "
+		"interlace-mode = { progressive, interleaved } "
 	)
 );
 
@@ -971,6 +972,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 			fbparams.min_framebuffer_count = min_fbcount_indicated_by_vpu + GST_IMX_VPU_MIN_NUM_FREE_FRAMEBUFFERS + vpu_dec->num_additional_framebuffers;
 			GST_INFO_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen number: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
+			GST_INFO_OBJECT(vpu_dec, "interlacing: %d", vpu_dec->init_info.nInterlace);
 
 			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
 			if (vpu_dec->current_framebuffers == NULL)
@@ -1207,14 +1209,14 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 		if (sys_frame_nr_valid)
 		{
-			GST_LOG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %" GST_IMX_PHYS_ADDR_FORMAT "  system frame number: %u  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gst_imx_phys_addr_t)(out_frame_info.pDisplayFrameBuf->pbufY), out_system_frame_number, (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
+			GST_LOG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %" GST_IMX_PHYS_ADDR_FORMAT "  system frame number: %u  gstbuffer addr: %p  field type: %d  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gst_imx_phys_addr_t)(out_frame_info.pDisplayFrameBuf->pbufY), out_system_frame_number, (gpointer)buffer, out_frame_info.eFieldType, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
 		}
 		else
 		{
 			GST_LOG_OBJECT(vpu_dec, "system frame number invalid or unusable - getting oldest pending frame instead");
 			out_frame = gst_video_decoder_get_oldest_frame(decoder);
 
-			GST_LOG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %" GST_IMX_PHYS_ADDR_FORMAT "  system frame number: <none; oldest frame>  gstbuffer addr: %p  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gst_imx_phys_addr_t)(out_frame_info.pDisplayFrameBuf->pbufY), (gpointer)buffer, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
+			GST_LOG_OBJECT(vpu_dec, "output frame:  codecframe: %p  framebuffer phys addr: %" GST_IMX_PHYS_ADDR_FORMAT "  system frame number: <none; oldest frame>  gstbuffer addr: %p  field type: %d  pic type: %d  Y stride: %d  CbCr stride: %d", (gpointer)out_frame, (gst_imx_phys_addr_t)(out_frame_info.pDisplayFrameBuf->pbufY), (gpointer)buffer, out_frame_info.eFieldType, out_frame_info.ePicType, out_frame_info.pDisplayFrameBuf->nStrideY, out_frame_info.pDisplayFrameBuf->nStrideC);
 		}
 
 		/* If a framebuffer is sent downstream directly, it will
@@ -1223,6 +1225,42 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		 * frames. Since this is a fresh frame, and it wasn't
 		 * used yet, mark it now as undisplayed. */
 		gst_imx_vpu_mark_buf_as_not_displayed(buffer);
+
+		if (vpu_dec->init_info.nInterlace)
+		{
+			/* Specify field type for deinterlacing */
+			switch (out_frame_info.eFieldType)
+			{
+				case VPU_FIELD_TOP:
+					GST_LOG_OBJECT(vpu_dec, "interlaced picture, 1 field, top");
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_ONEFIELD);
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_TFF);
+					break;
+
+				case VPU_FIELD_BOTTOM:
+					GST_LOG_OBJECT(vpu_dec, "interlaced picture, 1 field, bottom");
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_ONEFIELD);
+					break;
+
+				case VPU_FIELD_TB:
+					GST_LOG_OBJECT(vpu_dec, "interlaced picture, 2 fields, top first");
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_TFF);
+					break;
+
+				case VPU_FIELD_BT:
+					GST_LOG_OBJECT(vpu_dec, "interlaced picture, 2 fields, bottom first");
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+					break;
+
+				default:
+					GST_LOG_OBJECT(vpu_dec, "interlaced picture, undefined format (using default: 2 fields, bottom first)");
+					GST_BUFFER_FLAG_SET(buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+					break;
+			}
+		}
 
 		if (out_frame != NULL)
 		{
