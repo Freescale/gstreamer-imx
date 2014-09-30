@@ -66,7 +66,8 @@ typedef struct _GstImxIpuBlitterPrivate GstImxIpuBlitterPrivate;
 		"format = (string) " GST_IMX_IPU_VIDEO_FORMATS ", " \
 		"width = (int) [ 64, MAX ], " \
 		"height = (int) [ 64, MAX ], " \
-		"framerate = (fraction) [ 0, MAX ]; " \
+		"framerate = (fraction) [ 0, MAX ], " \
+		"interlace-mode = (string) { progressive, mixed, interleaved }; " \
 	)
 
 #define GST_IMX_IPU_BLITTER_SRC_CAPS GST_IMX_IPU_BLITTER_SINK_CAPS
@@ -106,6 +107,8 @@ struct _GstImxIpuBlitter
 	GstImxIpuBlitterPrivate *priv;
 
 	GstVideoInfo input_video_info;
+
+	GstBuffer *current_frame, *previous_frame; /* used for deinterlacing */
 
 	gboolean apply_crop_metadata;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
