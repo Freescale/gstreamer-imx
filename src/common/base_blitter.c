@@ -223,6 +223,88 @@ gboolean gst_imx_base_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstIm
 }
 
 
+void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion *empty_regions, guint *num_defined_regions, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
+{
+	guint n;
+	guint vleft, vtop, vright, vbottom;
+	guint oleft, otop, oright, obottom;
+
+	g_assert(base_blitter != NULL);
+	g_assert(empty_regions != NULL);
+	g_assert(num_defined_regions != NULL);
+	g_assert(output_region != NULL);
+
+	if (video_region == NULL)
+	{
+		*num_defined_regions = 0;
+		GST_DEBUG_OBJECT(base_blitter, "no video region specified, implying output_region == video_region  ->  no empty regions to define");
+		return;
+	}
+
+	vleft   = video_region->x;
+	vtop    = video_region->y;
+	vright  = vleft + video_region->width;
+	vbottom = vtop  + video_region->height;
+
+	oleft   = output_region->x;
+	otop    = output_region->y;
+	oright  = oleft + output_region->width;
+	obottom = otop  + output_region->height;
+
+	n = 0;
+
+	GST_DEBUG_OBJECT(base_blitter, "defined video region (%d,%d - %d,%d)", vleft, vtop, vright, vbottom);
+	GST_DEBUG_OBJECT(base_blitter, "defined output region (%d,%d - %d,%d)", oleft, otop, oright, obottom);
+
+	if (vleft > oleft)
+	{
+		GstImxBaseBlitterRegion *empty_region = &(empty_regions[n]);
+		empty_region->x = oleft;
+		empty_region->y = otop;
+		empty_region->width = vleft - oleft;
+		empty_region->height = obottom - otop;
+		++n;
+
+		GST_DEBUG_OBJECT(base_blitter, "added left empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->width, empty_region->height);
+	}
+	if (vright < oright)
+	{
+		GstImxBaseBlitterRegion *empty_region = &(empty_regions[n]);
+		empty_region->x = vright;
+		empty_region->y = otop;
+		empty_region->width = oright - vright;
+		empty_region->height = obottom - otop;
+		++n;
+
+		GST_DEBUG_OBJECT(base_blitter, "added right empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->width, empty_region->height);
+	}
+	if (vtop > otop)
+	{
+		GstImxBaseBlitterRegion *empty_region = &(empty_regions[n]);
+		empty_region->x = vleft;
+		empty_region->y = otop;
+		empty_region->width = vright - vleft;
+		empty_region->height = vtop - otop;
+		++n;
+
+		GST_DEBUG_OBJECT(base_blitter, "added top empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->width, empty_region->height);
+	}
+	if (vbottom < obottom)
+	{
+		GstImxBaseBlitterRegion *empty_region = &(empty_regions[n]);
+		empty_region->x = vleft;
+		empty_region->y = vbottom;
+		empty_region->width = vright - vleft;
+		empty_region->height = obottom - vbottom;
+		++n;
+
+		GST_DEBUG_OBJECT(base_blitter, "added bottom empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->width, empty_region->height);
+	}
+
+	*num_defined_regions = n;
+}
+
+
 gboolean gst_imx_base_blitter_set_input_video_info(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info)
 {
 	GstImxBaseBlitterClass *klass;

@@ -191,6 +191,21 @@ gboolean gst_imx_base_blitter_set_output_buffer(GstImxBaseBlitter *base_blitter,
  */
 gboolean gst_imx_base_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 
+/* Calculates empty regions.
+ *
+ * Empty regions are those with pixels that lie inside the output but outside the video region.
+ * Blitters must fill these regions with black pixels. This utility function takes care of
+ * calculating these empty regions. empty_regions must point to an array of four
+ * GstImxBaseBlitterRegion instances. num_defined_regions gets filled with the number of actually
+ * computed regions (this number is always <= 4). A derived blitter can then fill the
+ * first N regions described the empty_region array with black pixels (N = num_defined_regions).
+ *
+ * video_region can be NULL. In that case, the video region is assumed to encompass the
+ * entire output region, which means there are no empty regions. num_defined_regions is set to 0
+ * in that case. The other parameters must not be NULL.
+ */
+void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion *empty_regions, guint *num_defined_regions, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
+
 /* Sets the input video info.
  *
  * A copy of this video info is placed in the base_blitter's input_video_info member.
