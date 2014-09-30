@@ -50,6 +50,10 @@ typedef struct _GstImxBlitterVideoTransformPrivate GstImxBlitterVideoTransformPr
 #define GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(obj) do { g_mutex_unlock(&(((GstImxBlitterVideoTransform*)(obj))->mutex)); } while (0)
 
 
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM_INPUT_INFO(obj)  (&(((GstImxBlitterVideoTransform*)(obj))->input_video_info))
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM_OUTPUT_INFO(obj) (&(((GstImxBlitterVideoTransform*)(obj))->output_video_info))
+
+
 /**
  * GstImxBlitterVideoTransform:
  *
