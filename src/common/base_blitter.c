@@ -185,6 +185,8 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 			 * frames are respected */
 			gst_video_frame_copy(&temp_input_frame, &input_frame);
 
+			GST_BUFFER_FLAGS(base_blitter->internal_input_frame) |= (GST_BUFFER_FLAGS(input_buffer) & (GST_VIDEO_BUFFER_FLAG_INTERLACED | GST_VIDEO_BUFFER_FLAG_TFF | GST_VIDEO_BUFFER_FLAG_RFF | GST_VIDEO_BUFFER_FLAG_ONEFIELD));
+
 			gst_video_frame_unmap(&temp_input_frame);
 			gst_video_frame_unmap(&input_frame);
 		}
