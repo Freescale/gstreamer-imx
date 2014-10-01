@@ -265,7 +265,7 @@ void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitte
 		empty_region->height = obottom - otop;
 		++n;
 
-		GST_DEBUG_OBJECT(base_blitter, "added left empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->width, empty_region->height);
+		GST_DEBUG_OBJECT(base_blitter, "added left empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->x + empty_region->width, empty_region->y + empty_region->height);
 	}
 	if (vright < oright)
 	{
@@ -276,7 +276,7 @@ void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitte
 		empty_region->height = obottom - otop;
 		++n;
 
-		GST_DEBUG_OBJECT(base_blitter, "added right empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->width, empty_region->height);
+		GST_DEBUG_OBJECT(base_blitter, "added right empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->x + empty_region->width, empty_region->y + empty_region->height);
 	}
 	if (vtop > otop)
 	{
@@ -287,7 +287,7 @@ void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitte
 		empty_region->height = vtop - otop;
 		++n;
 
-		GST_DEBUG_OBJECT(base_blitter, "added top empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->width, empty_region->height);
+		GST_DEBUG_OBJECT(base_blitter, "added top empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->x + empty_region->width, empty_region->y + empty_region->height);
 	}
 	if (vbottom < obottom)
 	{
@@ -298,7 +298,7 @@ void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitte
 		empty_region->height = obottom - vbottom;
 		++n;
 
-		GST_DEBUG_OBJECT(base_blitter, "added bottom empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->width, empty_region->height);
+		GST_DEBUG_OBJECT(base_blitter, "added bottom empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->x + empty_region->width, empty_region->y + empty_region->height);
 	}
 
 	*num_defined_regions = n;
@@ -383,7 +383,8 @@ GstBufferPool* gst_imx_base_blitter_create_bufferpool(GstImxBaseBlitter *base_bl
 	config = gst_buffer_pool_get_config(pool);
 	gst_buffer_pool_config_set_params(config, caps, size, min_buffers, max_buffers);
 
-	/* If the allocator value is NULL, create an allocator */
+	/* If the allocator value is NULL, get an allocator
+	 * it is unref'd by the buffer pool when it is unref'd */
 	if (allocator == NULL)
 		allocator = klass->get_phys_mem_allocator(base_blitter);
 	if (allocator == NULL)

@@ -122,6 +122,8 @@ struct _GstImxBaseBlitter
  * @get_phys_mem_allocator: Required.
  *                          Returns a GstAllocator which allocates physically contiguous memory.
  *                          Which allocator to use is up to the derived blitter.
+ *                          The base blitter class unrefs the returned allocator when it is no
+ *                          longer needed.
  *                          If something went wrong, it returns NULL.
  * @blit_frame:             Required.
  *                          Performs the actual blit operation.
