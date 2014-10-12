@@ -456,6 +456,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	GstVideoCodecState *output_state;
 	GstImxVpuBaseEncClass *klass;
 	GstImxVpuBaseEnc *vpu_base_enc;
+	int param;
 	
 	vpu_base_enc = GST_IMX_VPU_BASE_ENC(encoder);
 	klass = GST_IMX_VPU_BASE_ENC_CLASS(G_OBJECT_GET_CLASS(vpu_base_enc));
@@ -535,11 +536,26 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	/* configure AFTER setting vpu_inst_opened to TRUE, to make sure that in case of
 	   config failure the VPU handle is closed in the finalizer */
 
-	ret = VPU_EncConfig(vpu_base_enc->handle, VPU_ENC_CONF_NONE, NULL);
-	if (ret != VPU_ENC_RET_SUCCESS)
+	if (vpu_base_enc->bitrate != 0)
 	{
-		GST_ERROR_OBJECT(vpu_base_enc, "could not apply default configuration: %s", gst_imx_vpu_strerror(ret));
-		return FALSE;
+		param = vpu_base_enc->bitrate;
+		ret = VPU_EncConfig(vpu_base_enc->handle, VPU_ENC_CONF_BIT_RATE, &param);
+		if (ret != VPU_ENC_RET_SUCCESS)
+		{
+			GST_ERROR_OBJECT(vpu_base_enc, "could not configure bitrate: %s", gst_imx_vpu_strerror(ret));
+			return FALSE;
+		}
+	}
+
+	if (vpu_base_enc->intra_refresh != 0)
+	{
+		param = vpu_base_enc->intra_refresh;
+		ret = VPU_EncConfig(vpu_base_enc->handle, VPU_ENC_CONF_INTRA_REFRESH, &param);
+		if (ret != VPU_ENC_RET_SUCCESS)
+		{
+			GST_ERROR_OBJECT(vpu_base_enc, "could not configure bitrate: %s", gst_imx_vpu_strerror(ret));
+			return FALSE;
+		}
 	}
 
 	ret = VPU_EncGetInitialInfo(vpu_base_enc->handle, &(vpu_base_enc->init_info));
