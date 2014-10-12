@@ -375,10 +375,10 @@ static void gst_imx_vpu_base_enc_get_property(GObject *object, guint prop_id, GV
 			g_value_set_uint(value, vpu_base_enc->bitrate);
 			break;
 		case PROP_SLICE_SIZE:
-			g_value_set_int(value, vpu_base_enc->bitrate);
+			g_value_set_int(value, vpu_base_enc->slice_size);
 			break;
 		case PROP_INTRA_REFRESH:
-			g_value_set_uint(value, vpu_base_enc->bitrate);
+			g_value_set_uint(value, vpu_base_enc->intra_refresh);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
