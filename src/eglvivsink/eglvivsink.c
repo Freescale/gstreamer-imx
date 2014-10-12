@@ -642,7 +642,19 @@ static gboolean gst_imx_egl_viv_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 	 * (the C standard defines && as a sequence point) */
 	if (!gst_imx_egl_viv_sink_gles2_renderer_is_started(egl_viv_sink->gles2_renderer))
 	{
-		gst_video_overlay_prepare_window_handle(GST_VIDEO_OVERLAY(egl_viv_sink));
+		/* Unlock renderer access mutex for the prepare_window_handle call.
+		 * This call will post a "prepare-window-handle" bus message, which
+		 * in may cause the application to call gst_video_overlay_set_window_handle().
+		 * This in turn will eventually call gst_imx_egl_viv_sink_set_window_handle().
+		 * That function locks the renderer access mutex internally, so if it is
+		 * already locked, it causes a deadlock. Furthermore, while the application
+		 * handles the message, it may want to set some of the renderer's properties,
+		 * which again would deadlock with an already-locked renderer access mutex. */
+		{
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			gst_video_overlay_prepare_window_handle(GST_VIDEO_OVERLAY(egl_viv_sink));
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+		}
 
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_window_handle(egl_viv_sink->gles2_renderer, egl_viv_sink->window_handle);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_event_handling(egl_viv_sink->gles2_renderer, egl_viv_sink->handle_events);
