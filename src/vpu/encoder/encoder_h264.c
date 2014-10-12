@@ -241,7 +241,7 @@ static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_
 	enc_enc_param->eFormat = VPU_V_AVC;
 	enc_enc_param->nQuantParam = enc->quant_param;
 	if (enc->idr_interval)
-		enc_enc_param->nForceIPicture = !(enc->frame_cnt % enc->idr_interval);
+		enc_enc_param->nForceIPicture = enc_enc_param->nForceIPicture || !(enc->frame_cnt % enc->idr_interval);
 	enc->frame_cnt++;
 
 	return TRUE;
