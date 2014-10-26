@@ -82,6 +82,9 @@ struct _GstImxBlitterVideoSink
 	/* File descriptor of the Linux framebuffer */
 	int framebuffer_fd;
 
+	gint window_x_coord, window_y_coord;
+	guint window_width, window_height;
+
 	/* Copy of the GstVideoInfo structure generated from the input caps */
 	GstVideoInfo input_video_info;
 };
