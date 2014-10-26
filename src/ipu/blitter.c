@@ -379,10 +379,10 @@ static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
 	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output, FALSE);
 
-	ipu_blitter->output_buffer_region.x = 0;
-	ipu_blitter->output_buffer_region.y = 0;
-	ipu_blitter->output_buffer_region.width = ipu_blitter->priv->task.output.crop.w;
-	ipu_blitter->output_buffer_region.height = ipu_blitter->priv->task.output.crop.h;
+	ipu_blitter->output_buffer_region.x1 = 0;
+	ipu_blitter->output_buffer_region.y1 = 0;
+	ipu_blitter->output_buffer_region.x2 = ipu_blitter->priv->task.output.crop.w;
+	ipu_blitter->output_buffer_region.y2 = ipu_blitter->priv->task.output.crop.h;
 
 	return TRUE;
 }
@@ -400,10 +400,10 @@ static gboolean gst_imx_ipu_blitter_set_regions(GstImxBaseBlitter *base_blitter,
 
 	if (video_region != NULL)
 	{
-		ipu_blitter->priv->task.output.crop.pos.x = video_region->x;
-		ipu_blitter->priv->task.output.crop.pos.y = video_region->y;
-		ipu_blitter->priv->task.output.crop.w = video_region->width;
-		ipu_blitter->priv->task.output.crop.h = video_region->height;
+		ipu_blitter->priv->task.output.crop.pos.x = video_region->x1;
+		ipu_blitter->priv->task.output.crop.pos.y = video_region->y1;
+		ipu_blitter->priv->task.output.crop.w = video_region->x2 - video_region->x1;
+		ipu_blitter->priv->task.output.crop.h = video_region->y2 - video_region->y1;
 	}
 
 	return TRUE;

@@ -868,16 +868,17 @@ static void gst_imx_blitter_video_sink_update_regions(GstImxBlitterVideoSink *bl
 		keep_aspect = FALSE;
 	}
 
-	output_region.x = blitter_video_sink->window_x_coord;
-	output_region.y = blitter_video_sink->window_y_coord;
-	output_region.width = (blitter_video_sink->window_width == 0) ? ((guint)(fb_video_meta->width)) : blitter_video_sink->window_width;
-	output_region.height = (blitter_video_sink->window_height == 0) ? ((guint)(fb_video_meta->height)) : blitter_video_sink->window_height;
+	output_region.x1 = blitter_video_sink->window_x_coord;
+	output_region.y1 = blitter_video_sink->window_y_coord;
+	output_region.x2 = output_region.x1 + ((blitter_video_sink->window_width == 0) ? ((guint)(fb_video_meta->width)) : blitter_video_sink->window_width);
+	output_region.y2 = output_region.y1 + ((blitter_video_sink->window_height == 0) ? ((guint)(fb_video_meta->height)) : blitter_video_sink->window_height);
 
 	/* Calculate and set the blitter's output region */
 	if (keep_aspect)
 	{
 		GstImxBaseBlitterRegion video_region;
 		guint ratio_factor;
+		guint outw, outh, videow, videoh;
 
 		GST_INFO_OBJECT(blitter_video_sink, "calculated display ratio:  %u:%u", display_ratio_n, display_ratio_d);
 
@@ -900,37 +901,44 @@ static void gst_imx_blitter_video_sink_update_regions(GstImxBlitterVideoSink *bl
 		 * fw*dd/fh is the ratio_factor
 		 */
 
-		ratio_factor = (guint)gst_util_uint64_scale_int(output_region.width, display_ratio_d, output_region.height);
+		outw = output_region.x2 - output_region.x1;
+		outh = output_region.y2 - output_region.y1;
+		videow = video_region.x2 - video_region.x1;
+		videoh = video_region.y2 - video_region.y1;
+
+		ratio_factor = (guint)gst_util_uint64_scale_int(outw, display_ratio_d, outh);
 
 		if (ratio_factor >= display_ratio_n)
 		{
 			GST_INFO_OBJECT(blitter_video_sink, "maximizing video height");
-			video_region.width = (guint)gst_util_uint64_scale_int(output_region.height, display_ratio_n, display_ratio_d);
-			video_region.height = output_region.height;
+			videow = (guint)gst_util_uint64_scale_int(outh, display_ratio_n, display_ratio_d);
+			videoh = outh;
 		}
 		else
 		{
 			GST_INFO_OBJECT(blitter_video_sink, "maximizing video width");
-			video_region.width = output_region.width;
-			video_region.height = (guint)gst_util_uint64_scale_int(output_region.width, display_ratio_d, display_ratio_n);
+			videow = outw;
+			videoh = (guint)gst_util_uint64_scale_int(outw, display_ratio_d, display_ratio_n);
 		}
 
 		/* Safeguard to ensure width/height aren't out of bounds
 		 * (should not happen, but better safe than sorry) */
-		video_region.width = MIN(video_region.width, output_region.width);
-		video_region.height = MIN(video_region.height, output_region.height);
+		videow = MIN(videow, outw);
+		videoh = MIN(videoh, outh);
 
-		video_region.x = output_region.x + (output_region.width - video_region.width) / 2;
-		video_region.y = output_region.y + (output_region.height - video_region.height) / 2;
+		video_region.x1 = output_region.x1 + (outw - videow) / 2;
+		video_region.y1 = output_region.y1 + (outh - videoh) / 2;
+		video_region.x2 = video_region.x1 + videow;
+		video_region.y2 = video_region.y1 + videoh;
 
-		GST_INFO_OBJECT(blitter_video_sink, "setting video region to x %u y %u width %u height %u", video_region.x, video_region.y, video_region.width, video_region.height);
+		GST_INFO_OBJECT(blitter_video_sink, "setting video region to (%d,%d - %d,%d)", video_region.x1, video_region.y1, video_region.x2, video_region.y2);
 
 		gst_imx_base_blitter_set_regions(blitter_video_sink->blitter, &video_region, &output_region);
 	}
 	else
 	{
 		GST_INFO_OBJECT(blitter_video_sink, "not keeping aspect ratio");
-		GST_INFO_OBJECT(blitter_video_sink, "setting video region to cover the entire framebuffer: x %u y %u width %u height %u", 0, 0, fb_video_meta->width, fb_video_meta->height);
+		GST_INFO_OBJECT(blitter_video_sink, "setting video region to cover the entire window rectangle: (%d,%d - %d,%d)", output_region.x1, output_region.y1, output_region.x2, output_region.y2);
 		gst_imx_base_blitter_set_regions(blitter_video_sink->blitter, NULL, &output_region);
 	}
 }

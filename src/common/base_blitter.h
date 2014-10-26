@@ -54,10 +54,17 @@ typedef struct _GstImxBaseBlitterPrivate GstImxBaseBlitterPrivate;
  */
 
 
+/**
+ * GstImxBaseBlitterRegion:
+ *
+ * Rectangular region. (x1,y1) describes its top left, (x2,y2) its bottom
+ * right coordinates. (x2,y2) are right outside of the rectangle pixels,
+ * meaning that for example a rectangle with top left coordinates (10,20)
+ * and width 400 and height 300 has bottom right coordinates (410,320).
+ */
 struct _GstImxBaseBlitterRegion
 {
-	gint x, y;
-	guint width, height;
+	gint x1, y1, x2, y2;
 };
 
 

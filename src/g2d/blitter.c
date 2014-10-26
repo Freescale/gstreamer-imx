@@ -242,10 +242,10 @@ static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 	g2d_blitter->dest_surface.clrcolor = 0x00000000;
 	/* g2d_blitter->dest_surface.rot is set in gst_imx_g2d_blitter_set_output_rotation */
 
-	g2d_blitter->output_buffer_region.x = 0;
-	g2d_blitter->output_buffer_region.y = 0;
-	g2d_blitter->output_buffer_region.width = g2d_blitter->dest_surface.width;
-	g2d_blitter->output_buffer_region.height = g2d_blitter->dest_surface.height;
+	g2d_blitter->output_buffer_region.x1 = 0;
+	g2d_blitter->output_buffer_region.y1 = 0;
+	g2d_blitter->output_buffer_region.x2 = g2d_blitter->dest_surface.width;
+	g2d_blitter->output_buffer_region.y2 = g2d_blitter->dest_surface.height;
 
 	g2d_blitter->num_empty_dest_surfaces = 0;
 	g2d_blitter->output_region_uptodate = FALSE;
@@ -460,8 +460,8 @@ static GstImxG2DFormatDetails const * gst_imx_g2d_blitter_get_format_details(Gst
 
 static void gst_imx_g2d_blitter_region_to_surface(struct g2d_surface *surf, GstImxBaseBlitterRegion const *region)
 {
-	surf->left   = region->x;
-	surf->top    = region->y;
-	surf->right  = region->x + region->width;
-	surf->bottom = region->y + region->height;
+	surf->left   = region->x1;
+	surf->top    = region->y1;
+	surf->right  = region->x2;
+	surf->bottom = region->y2;
 }

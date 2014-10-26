@@ -241,15 +241,15 @@ void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitte
 		return;
 	}
 
-	vleft   = video_region->x;
-	vtop    = video_region->y;
-	vright  = vleft + video_region->width;
-	vbottom = vtop  + video_region->height;
+	vleft   = video_region->x1;
+	vtop    = video_region->y1;
+	vright  = video_region->x2;
+	vbottom = video_region->y2;
 
-	oleft   = output_region->x;
-	otop    = output_region->y;
-	oright  = oleft + output_region->width;
-	obottom = otop  + output_region->height;
+	oleft   = output_region->x1;
+	otop    = output_region->y1;
+	oright  = output_region->x2;
+	obottom = output_region->y2;
 
 	n = 0;
 
@@ -259,46 +259,46 @@ void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitte
 	if (vleft > oleft)
 	{
 		GstImxBaseBlitterRegion *empty_region = &(empty_regions[n]);
-		empty_region->x = oleft;
-		empty_region->y = otop;
-		empty_region->width = vleft - oleft;
-		empty_region->height = obottom - otop;
+		empty_region->x1 = oleft;
+		empty_region->y1 = otop;
+		empty_region->x2 = vleft;
+		empty_region->y2 = obottom;
 		++n;
 
-		GST_DEBUG_OBJECT(base_blitter, "added left empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->x + empty_region->width, empty_region->y + empty_region->height);
+		GST_DEBUG_OBJECT(base_blitter, "added left empty region (%d,%d - %d,%d)", empty_region->x1, empty_region->y1, empty_region->x2, empty_region->y2);
 	}
 	if (vright < oright)
 	{
 		GstImxBaseBlitterRegion *empty_region = &(empty_regions[n]);
-		empty_region->x = vright;
-		empty_region->y = otop;
-		empty_region->width = oright - vright;
-		empty_region->height = obottom - otop;
+		empty_region->x1 = vright;
+		empty_region->y1 = otop;
+		empty_region->x2 = oright;
+		empty_region->y2 = obottom;
 		++n;
 
-		GST_DEBUG_OBJECT(base_blitter, "added right empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->x + empty_region->width, empty_region->y + empty_region->height);
+		GST_DEBUG_OBJECT(base_blitter, "added right empty region (%d,%d - %d,%d)", empty_region->x1, empty_region->y1, empty_region->x2, empty_region->y2);
 	}
 	if (vtop > otop)
 	{
 		GstImxBaseBlitterRegion *empty_region = &(empty_regions[n]);
-		empty_region->x = vleft;
-		empty_region->y = otop;
-		empty_region->width = vright - vleft;
-		empty_region->height = vtop - otop;
+		empty_region->x1 = vleft;
+		empty_region->y1 = otop;
+		empty_region->x2 = vright;
+		empty_region->y2 = vtop;
 		++n;
 
-		GST_DEBUG_OBJECT(base_blitter, "added top empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->x + empty_region->width, empty_region->y + empty_region->height);
+		GST_DEBUG_OBJECT(base_blitter, "added top empty region (%d,%d - %d,%d)", empty_region->x1, empty_region->y1, empty_region->x2, empty_region->y2);
 	}
 	if (vbottom < obottom)
 	{
 		GstImxBaseBlitterRegion *empty_region = &(empty_regions[n]);
-		empty_region->x = vleft;
-		empty_region->y = vbottom;
-		empty_region->width = vright - vleft;
-		empty_region->height = obottom - vbottom;
+		empty_region->x1 = vleft;
+		empty_region->y1 = vbottom;
+		empty_region->x2 = vright;
+		empty_region->y2 = obottom;
 		++n;
 
-		GST_DEBUG_OBJECT(base_blitter, "added bottom empty region (%d,%d - %d,%d)", empty_region->x, empty_region->y, empty_region->x + empty_region->width, empty_region->y + empty_region->height);
+		GST_DEBUG_OBJECT(base_blitter, "added bottom empty region (%d,%d - %d,%d)", empty_region->x1, empty_region->y1, empty_region->x2, empty_region->y2);
 	}
 
 	*num_defined_regions = n;
