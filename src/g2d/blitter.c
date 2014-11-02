@@ -239,7 +239,7 @@ static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, output_frame, &(g2d_blitter->dest_surface));
 	g2d_blitter->dest_surface.blendfunc = G2D_ZERO;
 	g2d_blitter->dest_surface.global_alpha = 255;
-	g2d_blitter->dest_surface.clrcolor = 0x00000000;
+	g2d_blitter->dest_surface.clrcolor = 0xFF000000;
 	/* g2d_blitter->dest_surface.rot is set in gst_imx_g2d_blitter_set_output_rotation */
 
 	g2d_blitter->output_buffer_region.x1 = 0;
@@ -275,7 +275,7 @@ static gboolean gst_imx_g2d_blitter_set_regions(GstImxBaseBlitter *base_blitter,
 	for (i = 0; i < g2d_blitter->num_empty_dest_surfaces; ++i)
 	{
 		g2d_blitter->empty_dest_surfaces[i] = g2d_blitter->dest_surface;
-		g2d_blitter->empty_dest_surfaces[i].clrcolor = 0xFF223344;
+		g2d_blitter->empty_dest_surfaces[i].clrcolor = 0xFF000000;
 		gst_imx_g2d_blitter_region_to_surface(&(g2d_blitter->empty_dest_surfaces[i]), &(empty_regions[i]));
 	}
 
