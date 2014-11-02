@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+
+
+def configure(conf):
+	from waflib.Build import Logs
+	if conf.check_cc(mandatory = 0, lib = 'pxp', uselib_store = 'IMXPXP') and \
+	   conf.check_cc(mandatory = 0, header_name = 'pxp_lib.h', uselib = 'KERNEL_HEADERS', uselib_store = 'IMXPXP'):
+		Logs.pprint('GREEN', 'PxP elements will be built')
+                conf.env['PXP_ELEMENTS_ENABLED'] = 1
+	else:
+		Logs.pprint('RED', 'PxP elements will not be built - headers and/or libraries not found')
+
+
+def build(bld):
+	if bld.env['PXP_ELEMENTS_ENABLED']:
+		bld(
+			features = ['c', 'cshlib'],
+			includes = ['.', '../..'],
+			uselib = bld.env['COMMON_USELIB'] + ['IMXPXP', 'KERNEL_HEADERS'],
+			use = 'gstimxcommon',
+			target = 'gstimxpxp',
+			source = bld.path.ant_glob('*.c'),
+			install_path = bld.env['PLUGIN_INSTALL_PATH']
+		)
