@@ -50,10 +50,41 @@ def options(opt):
 	opt.add_option('--with-package-name', action = 'store', default = "Unknown package release", help = 'specify package name to use in plugin [default: %default]')
 	opt.add_option('--with-package-origin', action = 'store', default = "Unknown package origin", help = 'specify package origin URL to use in plugin [default: %default]')
 	opt.add_option('--plugin-install-path', action = 'store', default = "${PREFIX}/lib/gstreamer-1.0", help = 'where to install the plugin for GStreamer 1.0 [default: %default]')
+	opt.add_option('--kernel-headers', action = 'store', default = None, help = 'specify path to the kernel headers')
 	opt.load('compiler_c')
 	opt.load('gnu_dirs')
-	opt.recurse('src/ipu')
 	opt.recurse('src/eglvivsink')
+
+
+def check_linux_headers(conf):
+	import os
+	incpaths = []
+	notfound = None
+	if conf.options.kernel_headers:
+		kernel_headers_fullpath = os.path.abspath(os.path.expanduser(conf.options.kernel_headers))
+		incpaths += [kernel_headers_fullpath]
+	# for the test, make sure the right version.h is used by adding an include path to
+	# <kernel_headers_fullpath>/../usr/include
+	with_uapi = conf.check_cc(fragment = '''
+		#include <linux/version.h>
+		int main() {
+		#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 5, 0)
+			return 0;
+		#else
+		#error fail
+		#endif
+		}
+		''',
+		includes = incpaths + [os.path.abspath(os.path.expanduser(os.path.join(kernel_headers_fullpath, '..', 'usr', 'include')))],
+		mandatory = False,
+		execute = False,
+		msg = 'checking whether or not the kernel version is greater than 3.5.0'
+	)
+	if conf.options.kernel_headers:
+		if with_uapi:
+			incpaths = [os.path.join(kernel_headers_fullpath, 'uapi')] + incpaths
+	if incpaths:
+		conf.env['INCLUDES_KERNEL_HEADERS'] = incpaths
 
 
 def configure(conf):
@@ -93,6 +124,11 @@ def configure(conf):
 	conf.check_cfg(package = 'gstreamer-1.0 >= 1.2.0', uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
 	conf.check_cfg(package = 'gstreamer-base-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_BASE', args = '--cflags --libs', mandatory = 1)
 	conf.check_cfg(package = 'gstreamer-video-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 1)
+
+
+	# check the kernel header path
+
+	check_linux_headers(conf)
 
 
 	# misc definitions & env vars

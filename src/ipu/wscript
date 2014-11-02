@@ -1,38 +1,8 @@
 #!/usr/bin/env python
 
 
-def options(opt):
-	opt.add_option('--kernel-headers', action = 'store', default = None, help = 'specify path to the kernel headers')
-
-
 def configure(conf):
-	import os
 	from waflib.Build import Logs
-	incpaths = []
-	notfound = None
-	if conf.options.kernel_headers:
-		kernel_headers_fullpath = os.path.abspath(os.path.expanduser(conf.options.kernel_headers))
-		incpaths += [kernel_headers_fullpath]
-	# for the test, make sure the right version.h is used by adding an include path to
-	# <kernel_headers_fullpath>/../usr/include
-	with_uapi = conf.check_cc(fragment = '''
-		#include <linux/version.h>
-		int main() {
-		#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 5, 0)
-			return 0;
-		#else
-		#error fail
-		#endif
-		}
-		''',
-		includes = incpaths + [os.path.abspath(os.path.expanduser(os.path.join(kernel_headers_fullpath, '..', 'usr', 'include')))],
-		mandatory = False,
-		execute = False,
-		msg = 'checking whether or not the kernel version is greater than 3.5.0'
-	)
-	if conf.options.kernel_headers:
-		if with_uapi:
-			incpaths = [os.path.join(kernel_headers_fullpath, 'uapi')] + incpaths
 	if conf.check_cc(fragment = '''
 		#include <sys/types.h>
 		#include <linux/fb.h>
@@ -41,7 +11,7 @@ def configure(conf):
 		int main() { return 0; }
 		''',
 		uselib_store = 'IMXIPU',
-		includes = incpaths,
+		uselib = 'KERNEL_HEADERS',
 		mandatory = False,
 		execute = False,
 		msg = 'checking for linux/fb.h and the IPU header linux/ipu.h'
@@ -57,7 +27,7 @@ def build(bld):
 		bld(
 			features = ['c', 'cshlib'],
 			includes = ['.', '../..'],
-			uselib = bld.env['COMMON_USELIB'] + ['IMXIPU'],
+			uselib = bld.env['COMMON_USELIB'] + ['IMXIPU', 'KERNEL_HEADERS'],
 			use = 'gstimxcommon',
 			target = 'gstimxipu',
 			source = bld.path.ant_glob('*.c') + bld.path.ant_glob('videotransform/*.c') + bld.path.ant_glob('sink/*.c'),
