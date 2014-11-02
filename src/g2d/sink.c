@@ -71,9 +71,9 @@ void gst_imx_g2d_video_sink_class_init(GstImxG2DVideoSinkClass *klass)
 
 	gst_element_class_set_static_metadata(
 		element_class,
-		"Freescale IPU video sink",
+		"Freescale G2D video sink",
 		"Sink/Video",
-		"Video output using the Freescale IPU",
+		"Video output using the Freescale G2D API",
 		"Carlos Rafael Giani <dv@pseudoterminal.org>"
 	);
 

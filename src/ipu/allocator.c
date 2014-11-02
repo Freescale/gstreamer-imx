@@ -69,7 +69,7 @@ static gboolean gst_imx_ipu_alloc_phys_mem(GstImxPhysMemAllocator *allocator, Gs
 	}
 	else
 	{
-		memory->phys_addr = m;
+		memory->phys_addr = (gst_imx_phys_addr_t)m;
 		GST_DEBUG_OBJECT(allocator, "allocated %u bytes of physical memory at address %" GST_IMX_PHYS_ADDR_FORMAT, size, memory->phys_addr);
 		return TRUE;
 	}

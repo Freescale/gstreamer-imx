@@ -29,7 +29,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxIpuAllocator GstImxIpuAllocator;
 typedef struct _GstImxIpuAllocatorClass GstImxIpuAllocatorClass;
-typedef struct _GstImxIpuMemory GstImxIpuMemory;
 
 
 #define GST_TYPE_IMX_IPU_ALLOCATOR             (gst_imx_ipu_allocator_get_type())

@@ -226,8 +226,8 @@ gboolean gst_imx_base_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstIm
 void gst_imx_base_blitter_calculate_empty_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion *empty_regions, guint *num_defined_regions, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
 {
 	guint n;
-	guint vleft, vtop, vright, vbottom;
-	guint oleft, otop, oright, obottom;
+	gint vleft, vtop, vright, vbottom;
+	gint oleft, otop, oright, obottom;
 
 	g_assert(base_blitter != NULL);
 	g_assert(empty_regions != NULL);

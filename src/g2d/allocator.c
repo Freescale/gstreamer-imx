@@ -62,7 +62,7 @@ static gboolean gst_imx_g2d_alloc_phys_mem(GstImxPhysMemAllocator *allocator, Gs
 	else
 	{
 		memory->mapped_virt_addr = buf->buf_vaddr;
-		memory->phys_addr = (guintptr)(buf->buf_paddr);
+		memory->phys_addr = (gst_imx_phys_addr_t)(buf->buf_paddr);
 		memory->internal = buf;
 
 		GST_INFO_OBJECT(allocator, "allocated %u bytes of physical memory, vaddr %p paddr %" GST_IMX_PHYS_ADDR_FORMAT, size, memory->mapped_virt_addr, memory->phys_addr);

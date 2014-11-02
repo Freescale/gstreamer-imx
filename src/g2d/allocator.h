@@ -29,7 +29,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxG2DAllocator GstImxG2DAllocator;
 typedef struct _GstImxG2DAllocatorClass GstImxG2DAllocatorClass;
-typedef struct _GstImxIpuMemory GstImxIpuMemory;
 
 
 #define GST_TYPE_IMX_G2D_ALLOCATOR             (gst_imx_g2d_allocator_get_type())
