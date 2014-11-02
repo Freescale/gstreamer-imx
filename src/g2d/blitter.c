@@ -35,7 +35,7 @@ G_DEFINE_TYPE(GstImxG2DBlitter, gst_imx_g2d_blitter, GST_TYPE_IMX_BASE_BLITTER)
 typedef struct
 {
 	enum g2d_format format;
-	guint bytes_per_pixel;
+	guint bits_per_pixel;
 }
 GstImxG2DFormatDetails;
 
@@ -374,7 +374,7 @@ static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_bli
 	}
 
 	surface->format = fmt_details->format;
-	surface->stride = video_meta->stride[0] / fmt_details->bytes_per_pixel;
+	surface->stride = video_meta->stride[0] * 8 / fmt_details->bits_per_pixel;
 	surface->width = video_meta->width;
 	surface->height = video_meta->height;
 
@@ -437,19 +437,19 @@ static GstImxG2DFormatDetails const * gst_imx_g2d_blitter_get_format_details(Gst
 
 	switch (gst_format)
 	{
-		case GST_VIDEO_FORMAT_RGB16: FORMAT_DETAILS(G2D_RGB565, 2);
-		case GST_VIDEO_FORMAT_RGBA: FORMAT_DETAILS(G2D_RGBA8888, 4);
-		case GST_VIDEO_FORMAT_RGBx: FORMAT_DETAILS(G2D_RGBX8888, 4);
-		case GST_VIDEO_FORMAT_BGRA: FORMAT_DETAILS(G2D_BGRA8888, 4);
-		case GST_VIDEO_FORMAT_BGRx: FORMAT_DETAILS(G2D_BGRX8888, 4);
-		case GST_VIDEO_FORMAT_NV12: FORMAT_DETAILS(G2D_NV12, 1);
-		case GST_VIDEO_FORMAT_I420: FORMAT_DETAILS(G2D_I420, 1);
-		case GST_VIDEO_FORMAT_YV12: FORMAT_DETAILS(G2D_YV12, 1);
-		case GST_VIDEO_FORMAT_NV21: FORMAT_DETAILS(G2D_NV21, 1);
-		case GST_VIDEO_FORMAT_YUY2: FORMAT_DETAILS(G2D_YUYV, 2);
-		//case GST_VIDEO_FORMAT_YVYU: FORMAT_DETAILS(G2D_YVYU, 2);
-		case GST_VIDEO_FORMAT_UYVY: FORMAT_DETAILS(G2D_UYVY, 2);
-		//case GST_VIDEO_FORMAT_NV16: FORMAT_DETAILS(G2D_NV16, 1);
+		case GST_VIDEO_FORMAT_RGB16: FORMAT_DETAILS(G2D_RGB565, 16);
+		case GST_VIDEO_FORMAT_RGBA: FORMAT_DETAILS(G2D_RGBA8888, 32);
+		case GST_VIDEO_FORMAT_RGBx: FORMAT_DETAILS(G2D_RGBX8888, 32);
+		case GST_VIDEO_FORMAT_BGRA: FORMAT_DETAILS(G2D_BGRA8888, 32);
+		case GST_VIDEO_FORMAT_BGRx: FORMAT_DETAILS(G2D_BGRX8888, 32);
+		case GST_VIDEO_FORMAT_NV12: FORMAT_DETAILS(G2D_NV12, 8);
+		case GST_VIDEO_FORMAT_I420: FORMAT_DETAILS(G2D_I420, 8);
+		case GST_VIDEO_FORMAT_YV12: FORMAT_DETAILS(G2D_YV12, 8);
+		case GST_VIDEO_FORMAT_NV21: FORMAT_DETAILS(G2D_NV21, 8);
+		case GST_VIDEO_FORMAT_YUY2: FORMAT_DETAILS(G2D_YUYV, 16);
+		//case GST_VIDEO_FORMAT_YVYU: FORMAT_DETAILS(G2D_YVYU, 16);
+		case GST_VIDEO_FORMAT_UYVY: FORMAT_DETAILS(G2D_UYVY, 16);
+		//case GST_VIDEO_FORMAT_NV16: FORMAT_DETAILS(G2D_NV16, 16);
 
 		default: return NULL;
 	}
