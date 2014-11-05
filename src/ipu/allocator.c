@@ -96,10 +96,9 @@ static gboolean gst_imx_ipu_free_phys_mem(GstImxPhysMemAllocator *allocator, Gst
 }
 
 
-static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size, G_GNUC_UNUSED GstMapFlags flags)
+static gpointer gst_imx_ipu_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *phys_mem, gssize size, G_GNUC_UNUSED GstMapFlags flags)
 {
 	int prot = 0;
-	GstImxPhysMemory *phys_mem = (GstImxPhysMemory *)memory;
 	GstImxIpuAllocator *ipu_allocator = GST_IMX_IPU_ALLOCATOR(allocator);
 
 	g_assert(phys_mem->mapped_virt_addr == NULL);

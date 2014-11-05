@@ -16,14 +16,14 @@ def configure(conf):
 		execute = False,
 		msg = 'checking for linux/fb.h and the IPU header linux/ipu.h'
 	):
-		Logs.pprint('GREEN', 'IPU sink will be built')
-		conf.env['IPUSINK_ENABLED'] = 1
+		Logs.pprint('GREEN', 'IPU elements will be built')
+		conf.env['IPU_ELEMENTS_ENABLED'] = 1
 	else:
-		Logs.pprint('RED', 'IPU sink will not be built - headers not found')
+		Logs.pprint('RED', 'IPU elements will not be built - headers not found')
 
 
 def build(bld):
-	if bld.env['IPUSINK_ENABLED']:
+	if bld.env['IPU_ELEMENTS_ENABLED']:
 		bld(
 			features = ['c', 'cshlib'],
 			includes = ['.', '../..'],
