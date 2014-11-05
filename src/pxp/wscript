@@ -3,12 +3,21 @@
 
 def configure(conf):
 	from waflib.Build import Logs
-	if conf.check_cc(mandatory = 0, lib = 'pxp', uselib_store = 'IMXPXP') and \
-	   conf.check_cc(mandatory = 0, header_name = 'pxp_lib.h', uselib = 'KERNEL_HEADERS', uselib_store = 'IMXPXP'):
+	if conf.check_cc(fragment = '''
+		#include <linux/pxp_device.h>
+
+		int main() { return 0; }
+		''',
+		uselib_store = 'IMXPXP',
+		uselib = 'KERNEL_HEADERS',
+		mandatory = False,
+		execute = False,
+		msg = 'checking for linux/pxp_device.h'
+	):
 		Logs.pprint('GREEN', 'PxP elements will be built')
-                conf.env['PXP_ELEMENTS_ENABLED'] = 1
+		conf.env['PXP_ELEMENTS_ENABLED'] = 1
 	else:
-		Logs.pprint('RED', 'PxP elements will not be built - headers and/or libraries not found')
+		Logs.pprint('RED', 'PxP elements will not be built - headers not found')
 
 
 def build(bld):

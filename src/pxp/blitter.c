@@ -18,8 +18,9 @@
 
 
 #include <string.h>
-#include <pxp_lib.h>
+#include <linux/pxp_device.h>
 #include <errno.h>
+#include <sys/ioctl.h>
 #include "blitter.h"
 #include "allocator.h"
 #include "device.h"
@@ -38,7 +39,7 @@ G_DEFINE_TYPE(GstImxPxPBlitter, gst_imx_pxp_blitter, GST_TYPE_IMX_BASE_BLITTER)
 struct _GstImxPxPBlitterPrivate
 {
 	struct pxp_config_data pxp_config;
-	pxp_chan_handle_t pxp_channel;
+	struct pxp_chan_handle pxp_channel;
 	gboolean pxp_channel_requested;
 };
 
@@ -133,10 +134,11 @@ void gst_imx_pxp_blitter_init(GstImxPxPBlitter *pxp_blitter)
 	proc_data->rot_pos = 0;
 	proc_data->lut_transform = PXP_LUT_NONE;
 
-	if (!gst_imx_pxp_init())
+	if (!gst_imx_pxp_open())
 		GST_ERROR_OBJECT(pxp_blitter, "could not initialize PxP: %s", strerror(errno));
 
-	ret = pxp_request_channel(&(pxp_blitter->priv->pxp_channel));
+	ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_GET_CHAN, &(pxp_blitter->priv->pxp_channel.handle));
+
 	if (ret != 0)
 		GST_ERROR_OBJECT(pxp_blitter, "could not request PxP channel: %s", strerror(errno));
 	else
@@ -242,14 +244,14 @@ static void gst_imx_pxp_blitter_finalize(GObject *object)
 
 	if (pxp_blitter->priv->pxp_channel_requested)
 	{
-		pxp_release_channel(&(pxp_blitter->priv->pxp_channel));
+		ioctl(gst_imx_pxp_get_fd(), PXP_IOC_PUT_CHAN, &(pxp_blitter->priv->pxp_channel.handle));
 		pxp_blitter->priv->pxp_channel_requested = FALSE;
 	}
 
 	if (pxp_blitter->priv != NULL)
 		g_slice_free1(sizeof(GstImxPxPBlitterPrivate), pxp_blitter->priv);
 
-	gst_imx_pxp_shutdown();
+	gst_imx_pxp_close();
 
 	G_OBJECT_CLASS(gst_imx_pxp_blitter_parent_class)->finalize(object);
 }
@@ -378,21 +380,22 @@ static gboolean gst_imx_pxp_blitter_blit_frame(GstImxBaseBlitter *base_blitter)
 
 	pxp_blitter->priv->pxp_config.proc_data.scaling = (pxp_blitter->priv->pxp_config.proc_data.srect.width != pxp_blitter->priv->pxp_config.proc_data.drect.width) || (pxp_blitter->priv->pxp_config.proc_data.srect.height != pxp_blitter->priv->pxp_config.proc_data.drect.height);
 
-	ret = pxp_config_channel(&(pxp_blitter->priv->pxp_channel), &(pxp_blitter->priv->pxp_config));
+	pxp_blitter->priv->pxp_config.handle = pxp_blitter->priv->pxp_channel.handle;
+	ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_CONFIG_CHAN, &(pxp_blitter->priv->pxp_config));
 	if (ret != 0)
 	{
 		GST_ERROR_OBJECT(pxp_blitter, "could not configure PxP channel: %s", strerror(errno));
 		return FALSE;
 	}
 
-	ret = pxp_start_channel(&(pxp_blitter->priv->pxp_channel));
+	ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_START_CHAN, &(pxp_blitter->priv->pxp_channel.handle));
 	if (ret != 0)
 	{
 		GST_ERROR_OBJECT(pxp_blitter, "could not start PxP channel: %s", strerror(errno));
 		return FALSE;
 	}
 
-	ret = pxp_wait_for_completion(&(pxp_blitter->priv->pxp_channel), 3);
+	ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_WAIT4CMPLT, &(pxp_blitter->priv->pxp_channel));
 	if (ret != 0)
 	{
 		GST_ERROR_OBJECT(pxp_blitter, "could not wait for PxP channel completion: %s", strerror(errno));
@@ -466,15 +469,15 @@ static void gst_imx_pxp_blitter_set_layer_params(G_GNUC_UNUSED GstImxPxPBlitter 
 	layer_params->stride = video_meta->stride[0] * 8 / format_details->bits_per_pixel;
 	layer_params->pixel_fmt = format_details->format;
 
-	layer_params->combine_enable = false;
+	layer_params->combine_enable = FALSE;
 
 	layer_params->color_key_enable = 0;
 	layer_params->color_key = 0x00000000;
-	layer_params->global_alpha_enable = false;
-	layer_params->global_override = false;
+	layer_params->global_alpha_enable = FALSE;
+	layer_params->global_override = FALSE;
 	layer_params->global_alpha = 0;
-	layer_params->alpha_invert = false;
-	layer_params->local_alpha_enable = false;
+	layer_params->alpha_invert = FALSE;
+	layer_params->local_alpha_enable = FALSE;
 
 	layer_params->paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
 }

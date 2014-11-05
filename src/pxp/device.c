@@ -1,4 +1,4 @@
-/* Common functions for the Freescale IPU device
+/* Common functions for the Freescale PxP device
  * Copyright (C) 2014  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
@@ -20,7 +20,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <pxp_lib.h>
+#include <linux/pxp_device.h>
 #include "device.h"
 
 
@@ -28,36 +28,26 @@ GST_DEBUG_CATEGORY_EXTERN(imx_pxp_device_debug);
 #define GST_CAT_DEFAULT imx_pxp_device_debug
 
 
-/* The IPU device is opened/closed globally.
- * While it could be opened in each GstImxIpuBlitter instance, bugs in the
- * IPU kernel driver make it preferable to open/close the IPU device just once,
- * globally, for all blitter instances.
- *
- * The IPU is opened/closed for each blitter instance, and for each IPU allocator.
- * The latter, to make sure the IPU FD is not closed before all blitter instances
- * *and* all allocators (and therefore all IPU-allocated DMA buffer blocks) are
- * finalized.
- */
-
-
 static GMutex inst_counter_mutex;
 static int inst_counter = 0;
+static int pxp_fd = -1;
 
 
 
-gboolean gst_imx_pxp_init(void)
+gboolean gst_imx_pxp_open(void)
 {
 	g_mutex_lock(&inst_counter_mutex);
 	if (inst_counter == 0)
 	{
-		if (pxp_init() != 0)
+		g_assert(pxp_fd == -1);
+		pxp_fd = open("/dev/pxp_device", O_RDWR, 0);
+		if (pxp_fd < 0)
 		{
-			GST_ERROR("could not initialize PxP: %s", strerror(errno));
-			g_mutex_unlock(&inst_counter_mutex);
+			GST_ERROR("could not open /dev/pxp_device: %s", strerror(errno));
 			return FALSE;
 		}
-		else
-			GST_INFO("PxP initialized");
+
+		GST_INFO("PxP device opened");
 	}
 	++inst_counter;
 	g_mutex_unlock(&inst_counter_mutex);
@@ -66,7 +56,7 @@ gboolean gst_imx_pxp_init(void)
 }
 
 
-void gst_imx_pxp_shutdown(void)
+void gst_imx_pxp_close(void)
 {
 	g_mutex_lock(&inst_counter_mutex);
 	if (inst_counter > 0)
@@ -74,9 +64,18 @@ void gst_imx_pxp_shutdown(void)
 		--inst_counter;
 		if (inst_counter == 0)
 		{
-			pxp_uninit();
-			GST_INFO("PxP shut down");
+			g_assert(pxp_fd != -1);
+			close(pxp_fd);
+			pxp_fd = -1;
+
+			GST_INFO("PxP device closed");
 		}
 	}
 	g_mutex_unlock(&inst_counter_mutex);
+}
+
+
+int gst_imx_pxp_get_fd(void)
+{
+	return pxp_fd;
 }

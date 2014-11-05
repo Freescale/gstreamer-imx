@@ -26,8 +26,9 @@
 G_BEGIN_DECLS
 
 
-gboolean gst_imx_pxp_init(void);
-void gst_imx_pxp_shutdown(void);
+gboolean gst_imx_pxp_open(void);
+void gst_imx_pxp_close(void);
+int gst_imx_pxp_get_fd(void);
 
 
 G_END_DECLS
