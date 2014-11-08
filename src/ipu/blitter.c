@@ -53,6 +53,7 @@ static GstAllocator* gst_imx_ipu_blitter_get_phys_mem_allocator(GstImxBaseBlitte
 static gboolean gst_imx_ipu_blitter_blit_frame(GstImxBaseBlitter *base_blitter);
 static void gst_imx_ipu_blitter_clear_previous_buffer(GstImxIpuBlitter *ipu_blitter);
 static gboolean gst_imx_ipu_blitter_flush(GstImxBaseBlitter *base_blitter);
+static void gst_imx_ipu_blitter_init_dummy_black_buffer(GstImxIpuBlitter *ipu_blitter);
 
 static guint32 gst_imx_ipu_blitter_get_v4l_format(GstVideoFormat format);
 //static int gst_imx_ipu_video_bpp(GstVideoFormat fmt);
@@ -139,6 +140,9 @@ void gst_imx_ipu_blitter_class_init(GstImxIpuBlitterClass *klass)
 void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 {
 	ipu_blitter->previous_frame = NULL;
+	ipu_blitter->allocator = NULL;
+	ipu_blitter->dummy_black_buffer = NULL;
+	ipu_blitter->output_region_uptodate = FALSE;
 
 	ipu_blitter->priv = g_slice_alloc(sizeof(GstImxIpuBlitterPrivate));
 	memset(&(ipu_blitter->priv->task), 0, sizeof(struct ipu_task));
@@ -148,6 +152,10 @@ void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 		GST_ELEMENT_ERROR(ipu_blitter, RESOURCE, OPEN_READ_WRITE, ("could not open IPU device"), (NULL));
 		return;
 	}
+
+	ipu_blitter->allocator = gst_imx_ipu_allocator_new();
+
+	gst_imx_ipu_blitter_init_dummy_black_buffer(ipu_blitter);
 
 	GST_INFO_OBJECT(ipu_blitter, "initialized blitter");
 }
@@ -244,6 +252,12 @@ static void gst_imx_ipu_blitter_finalize(GObject *object)
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(object);
 
 	gst_imx_ipu_blitter_flush(GST_IMX_BASE_BLITTER(object));
+
+	if (ipu_blitter->dummy_black_buffer != NULL)
+		gst_buffer_unref(ipu_blitter->dummy_black_buffer);
+
+	if (ipu_blitter->allocator != NULL)
+		gst_object_unref(GST_OBJECT(ipu_blitter->allocator));
 
 	if (ipu_blitter->priv != NULL)
 	{
@@ -384,6 +398,8 @@ static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 	ipu_blitter->output_buffer_region.x2 = ipu_blitter->priv->task.output.crop.w;
 	ipu_blitter->output_buffer_region.y2 = ipu_blitter->priv->task.output.crop.h;
 
+	ipu_blitter->output_region_uptodate = FALSE;
+
 	return TRUE;
 }
 
@@ -391,6 +407,8 @@ static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 static gboolean gst_imx_ipu_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
+
+	ipu_blitter->output_region_uptodate = FALSE;
 
 	if (output_region == NULL)
 		output_region = &(ipu_blitter->output_buffer_region);
@@ -406,13 +424,16 @@ static gboolean gst_imx_ipu_blitter_set_regions(GstImxBaseBlitter *base_blitter,
 		ipu_blitter->priv->task.output.crop.h = video_region->y2 - video_region->y1;
 	}
 
+	ipu_blitter->output_region = *output_region;
+
 	return TRUE;
 }
 
 
-static GstAllocator* gst_imx_ipu_blitter_get_phys_mem_allocator(G_GNUC_UNUSED GstImxBaseBlitter *base_blitter)
+static GstAllocator* gst_imx_ipu_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter)
 {
-	return gst_imx_ipu_allocator_new();
+	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
+	return (GstAllocator *)gst_object_ref(GST_OBJECT(ipu_blitter->allocator));
 }
 
 
@@ -440,6 +461,60 @@ static gboolean gst_imx_ipu_blitter_blit_frame(GstImxBaseBlitter *base_blitter)
 		ipu_blitter->priv->task.output.rotate
 	);
 
+	/* Clear empty regions if necessary
+	 * Do so by clearing the entire output region
+	 * XXX this is necessary because unlike G2D, the IPU has problems with
+	 * pixel perfect positioning, that is, neighbouring regions sometimes
+	 * have a few pixels of space between them
+	 */
+	if (!(ipu_blitter->output_region_uptodate))
+	{
+		struct ipu_task task;
+		GstImxBaseBlitterRegion *output_region = &(ipu_blitter->output_region);
+
+		GST_LOG_OBJECT(ipu_blitter, "need to clear empty regions");
+
+		/* Copy main task object, and replace its input data with the one
+		 * for the dummy input object. This way, the data for the output
+		 * is copied implicitely as well.
+		 */
+		task = ipu_blitter->priv->task;
+
+		GST_IMX_FILL_IPU_TASK(ipu_blitter, ipu_blitter->dummy_black_buffer, task.input, FALSE);
+
+		task.input.deinterlace.enable = 0;
+		task.output.rotate = IPU_ROTATE_NONE;
+		task.output.crop.pos.x = output_region->x1;
+		task.output.crop.pos.y = output_region->y1;
+		task.output.crop.w = output_region->x2 - output_region->x1;
+		task.output.crop.h = output_region->y2 - output_region->y1;
+
+		GST_LOG_OBJECT(
+			ipu_blitter,
+			"clear op task input:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  phys addr %" GST_IMX_PHYS_ADDR_FORMAT "  deinterlace enable %u motion 0x%x",
+			task.input.width, task.input.height,
+			task.input.format,
+			task.input.crop.pos.x, task.input.crop.pos.y, task.input.crop.w, task.input.crop.h,
+			(gst_imx_phys_addr_t)(task.input.paddr),
+			task.input.deinterlace.enable, task.input.deinterlace.motion
+		);
+		GST_LOG_OBJECT(
+			ipu_blitter,
+			"clear op task output:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  paddr %" GST_IMX_PHYS_ADDR_FORMAT "  rotate: %u",
+			task.output.width, task.output.height,
+			task.output.format,
+			task.output.crop.pos.x, task.output.crop.pos.y, task.output.crop.w, task.output.crop.h,
+			(gst_imx_phys_addr_t)(task.output.paddr),
+			task.output.rotate
+		);
+
+		ret = ioctl(gst_imx_ipu_get_fd(), IPU_QUEUE_TASK, &task);
+		if (ret == -1)
+			GST_ERROR_OBJECT(ipu_blitter, "queuing IPU task failed: %s", strerror(errno));
+
+		ipu_blitter->output_region_uptodate = TRUE;
+	}
+
 	/* The actual blit operation
 	 * Input and output frame are assumed to be set up properly at this point
 	 */
@@ -460,8 +535,8 @@ static gboolean gst_imx_ipu_blitter_blit_frame(GstImxBaseBlitter *base_blitter)
 		GST_ERROR_OBJECT(ipu_blitter, "queuing IPU task failed: %s", strerror(errno));
 		return FALSE;
 	}
-	else
-		return TRUE;
+
+	return TRUE;
 }
 
 
@@ -481,6 +556,36 @@ static gboolean gst_imx_ipu_blitter_flush(GstImxBaseBlitter *base_blitter)
 	gst_imx_ipu_blitter_clear_previous_buffer(ipu_blitter);
 	ipu_blitter->current_frame = NULL;
 	return TRUE;
+}
+
+
+static void gst_imx_ipu_blitter_init_dummy_black_buffer(GstImxIpuBlitter *ipu_blitter)
+{
+	GstVideoInfo video_info;
+
+	gst_video_info_init(&video_info);
+	gst_video_info_set_format(&video_info, GST_VIDEO_FORMAT_RGBx, 64, 64);
+
+	ipu_blitter->dummy_black_buffer = gst_buffer_new_allocate(ipu_blitter->allocator, GST_VIDEO_INFO_SIZE(&video_info), NULL);
+	gst_buffer_memset(ipu_blitter->dummy_black_buffer, 0, 0, GST_VIDEO_INFO_SIZE(&video_info));
+
+	gst_buffer_add_video_meta_full(
+		ipu_blitter->dummy_black_buffer,
+		GST_VIDEO_FRAME_FLAG_NONE,
+		GST_VIDEO_INFO_FORMAT(&video_info),
+		GST_VIDEO_INFO_WIDTH(&video_info),
+		GST_VIDEO_INFO_HEIGHT(&video_info),
+		GST_VIDEO_INFO_N_PLANES(&video_info),
+		&(GST_VIDEO_INFO_PLANE_OFFSET(&video_info, 0)),
+		&(GST_VIDEO_INFO_PLANE_STRIDE(&video_info, 0))
+	);
+
+	{
+		GstImxPhysMemory *imx_phys_mem_mem = (GstImxPhysMemory *)gst_buffer_peek_memory(ipu_blitter->dummy_black_buffer, 0);
+		GstImxPhysMemMeta *phys_mem_meta = (GstImxPhysMemMeta *)GST_IMX_PHYS_MEM_META_ADD(ipu_blitter->dummy_black_buffer);
+
+		phys_mem_meta->phys_addr = imx_phys_mem_mem->phys_addr;
+	}
 }
 
 

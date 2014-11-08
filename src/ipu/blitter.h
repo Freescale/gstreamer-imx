@@ -113,7 +113,12 @@ struct _GstImxIpuBlitter
 	gboolean apply_crop_metadata;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 
-	GstImxBaseBlitterRegion output_buffer_region;
+	GstImxBaseBlitterRegion output_buffer_region, output_region;
+
+	gboolean output_region_uptodate;
+	GstBuffer *dummy_black_buffer;
+
+	GstAllocator *allocator;
 };
 
 
