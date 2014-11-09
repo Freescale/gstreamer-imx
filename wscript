@@ -59,10 +59,12 @@ def options(opt):
 def check_linux_headers(conf):
 	import os
 	incpaths = []
+	extra_incpaths = []
 	notfound = None
 	if conf.options.kernel_headers:
 		kernel_headers_fullpath = os.path.abspath(os.path.expanduser(conf.options.kernel_headers))
 		incpaths += [kernel_headers_fullpath]
+		extra_incpaths += [os.path.abspath(os.path.expanduser(os.path.join(kernel_headers_fullpath, '..', 'usr', 'include')))]
 	# for the test, make sure the right version.h is used by adding an include path to
 	# <kernel_headers_fullpath>/../usr/include
 	with_uapi = conf.check_cc(fragment = '''
@@ -75,7 +77,7 @@ def check_linux_headers(conf):
 		#endif
 		}
 		''',
-		includes = incpaths + [os.path.abspath(os.path.expanduser(os.path.join(kernel_headers_fullpath, '..', 'usr', 'include')))],
+		includes = incpaths + extra_incpaths,
 		mandatory = False,
 		execute = False,
 		msg = 'checking whether or not the kernel version is greater than 3.5.0'
