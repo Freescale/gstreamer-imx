@@ -45,7 +45,7 @@ static void gst_imx_g2d_blitter_finalize(GObject *object);
 static gboolean gst_imx_g2d_blitter_set_input_video_info(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
 static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
 static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
-static gboolean gst_imx_g2d_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
+static gboolean gst_imx_g2d_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 static GstAllocator* gst_imx_g2d_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter);
 static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter);
 
@@ -97,7 +97,7 @@ void gst_imx_g2d_blitter_class_init(GstImxG2DBlitterClass *klass)
 	base_class->set_input_video_info   = GST_DEBUG_FUNCPTR(gst_imx_g2d_blitter_set_input_video_info);
 	base_class->set_input_frame        = GST_DEBUG_FUNCPTR(gst_imx_g2d_blitter_set_input_frame);
 	base_class->set_output_frame       = GST_DEBUG_FUNCPTR(gst_imx_g2d_blitter_set_output_frame);
-	base_class->set_regions            = GST_DEBUG_FUNCPTR(gst_imx_g2d_blitter_set_regions);
+	base_class->set_output_regions     = GST_DEBUG_FUNCPTR(gst_imx_g2d_blitter_set_output_regions);
 	base_class->get_phys_mem_allocator = GST_DEBUG_FUNCPTR(gst_imx_g2d_blitter_get_phys_mem_allocator);
 	base_class->blit_frame             = GST_DEBUG_FUNCPTR(gst_imx_g2d_blitter_blit_frame);
 
@@ -254,7 +254,7 @@ static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 }
 
 
-static gboolean gst_imx_g2d_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
+static gboolean gst_imx_g2d_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
 {
 	guint i;
 	GstImxBaseBlitterRegion empty_regions[4];

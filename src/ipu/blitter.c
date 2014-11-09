@@ -48,7 +48,7 @@ static void gst_imx_ipu_blitter_finalize(GObject *object);
 static gboolean gst_imx_ipu_blitter_set_input_video_info(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
 static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
 static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
-static gboolean gst_imx_ipu_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
+static gboolean gst_imx_ipu_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 static GstAllocator* gst_imx_ipu_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter);
 static gboolean gst_imx_ipu_blitter_blit_frame(GstImxBaseBlitter *base_blitter);
 static void gst_imx_ipu_blitter_clear_previous_buffer(GstImxIpuBlitter *ipu_blitter);
@@ -128,7 +128,7 @@ void gst_imx_ipu_blitter_class_init(GstImxIpuBlitterClass *klass)
 	base_class->set_input_video_info   = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_input_video_info);
 	base_class->set_input_frame        = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_input_frame);
 	base_class->set_output_frame       = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_output_frame);
-	base_class->set_regions            = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_regions);
+	base_class->set_output_regions     = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_output_regions);
 	base_class->get_phys_mem_allocator = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_get_phys_mem_allocator);
 	base_class->blit_frame             = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_blit_frame);
 	base_class->flush                  = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_flush);
@@ -404,7 +404,7 @@ static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 }
 
 
-static gboolean gst_imx_ipu_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
+static gboolean gst_imx_ipu_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
 

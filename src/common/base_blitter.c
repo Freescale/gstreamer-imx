@@ -47,7 +47,7 @@ void gst_imx_base_blitter_class_init(GstImxBaseBlitterClass *klass)
 	klass->set_input_video_info   = NULL;
 	klass->set_input_frame        = NULL;
 	klass->set_output_frame       = NULL;
-	klass->set_regions            = NULL;
+	klass->set_output_regions     = NULL;
 	klass->get_phys_mem_allocator = NULL;
 	klass->blit_frame             = NULL;
 	klass->flush                  = NULL;
@@ -209,15 +209,15 @@ gboolean gst_imx_base_blitter_set_output_buffer(GstImxBaseBlitter *base_blitter,
 }
 
 
-gboolean gst_imx_base_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
+gboolean gst_imx_base_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
 {
 	GstImxBaseBlitterClass *klass;
 
 	g_assert(base_blitter != NULL);
 	klass = GST_IMX_BASE_BLITTER_CLASS(G_OBJECT_GET_CLASS(base_blitter));
 
-	if (klass->set_regions != NULL)
-		return klass->set_regions(base_blitter, video_region, output_region);
+	if (klass->set_output_regions != NULL)
+		return klass->set_output_regions(base_blitter, video_region, output_region);
 	else
 		return TRUE;
 }

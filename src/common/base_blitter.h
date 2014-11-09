@@ -122,9 +122,9 @@ struct _GstImxBaseBlitter
  *                          Sets the blitter's output frame. The output frame must be a physically
  *                          contiguous buffer.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
- * @set_regions:            Optional.
+ * @set_output_regions:     Optional.
  *                          Sets the blitter's output and video regions in the output framebuffer.
- *                          Called by @gst_imx_base_blitter_set_regions. See this
+ *                          Called by @gst_imx_base_blitter_set_output_regions. See this
  *                          function's documentation for details.
  * @get_phys_mem_allocator: Required.
  *                          Returns a GstAllocator which allocates physically contiguous memory.
@@ -151,7 +151,7 @@ struct _GstImxBaseBlitterClass
 	gboolean (*set_input_video_info)(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
 	gboolean (*set_input_frame)(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
 	gboolean (*set_output_frame)(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
-	gboolean (*set_regions)(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
+	gboolean (*set_output_regions)(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 	GstAllocator* (*get_phys_mem_allocator)(GstImxBaseBlitter *base_blitter);
 	gboolean (*blit_frame)(GstImxBaseBlitter *base_blitter);
 	gboolean (*flush)(GstImxBaseBlitter *base_blitter);
@@ -193,12 +193,12 @@ gboolean gst_imx_base_blitter_set_output_buffer(GstImxBaseBlitter *base_blitter,
  * any regions previously defined by this function are no longer valid. Note that derived
  * blitters are free ignore this call, and define the regions on their own.
  *
- * If @set_regions is NULL, this function does nothing.
+ * If @set_output_regions is NULL, this function does nothing.
  *
- * Return TRUE is setting the regions completed successfully (or if @set_regions is NULL),
+ * Return TRUE is setting the regions completed successfully (or if @set_output_regions is NULL),
  * FALSE otherwise.
  */
-gboolean gst_imx_base_blitter_set_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
+gboolean gst_imx_base_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 
 /* Calculates empty regions.
  *

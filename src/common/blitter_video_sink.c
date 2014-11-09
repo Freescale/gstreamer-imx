@@ -933,12 +933,12 @@ static void gst_imx_blitter_video_sink_update_regions(GstImxBlitterVideoSink *bl
 
 		GST_INFO_OBJECT(blitter_video_sink, "setting video region to (%d,%d - %d,%d)", video_region.x1, video_region.y1, video_region.x2, video_region.y2);
 
-		gst_imx_base_blitter_set_regions(blitter_video_sink->blitter, &video_region, &output_region);
+		gst_imx_base_blitter_set_output_regions(blitter_video_sink->blitter, &video_region, &output_region);
 	}
 	else
 	{
 		GST_INFO_OBJECT(blitter_video_sink, "not keeping aspect ratio");
 		GST_INFO_OBJECT(blitter_video_sink, "setting video region to cover the entire window rectangle: (%d,%d - %d,%d)", output_region.x1, output_region.y1, output_region.x2, output_region.y2);
-		gst_imx_base_blitter_set_regions(blitter_video_sink->blitter, NULL, &output_region);
+		gst_imx_base_blitter_set_output_regions(blitter_video_sink->blitter, NULL, &output_region);
 	}
 }
