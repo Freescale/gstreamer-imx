@@ -315,10 +315,14 @@ static void gst_imx_vpu_base_enc_close_encoder(GstImxVpuBaseEnc *vpu_base_enc)
 {
 	VpuEncRetCode enc_ret;
 
-	if (vpu_base_enc->internal_input_buffer != NULL)
+	if (vpu_base_enc->internal_input_buffer != NULL) {
 		gst_buffer_unref(vpu_base_enc->internal_input_buffer);
-	if (vpu_base_enc->internal_bufferpool != NULL)
+		vpu_base_enc->internal_input_buffer = NULL;
+	}
+	if (vpu_base_enc->internal_bufferpool != NULL) {
 		gst_object_unref(vpu_base_enc->internal_bufferpool);
+		vpu_base_enc->internal_bufferpool = NULL;
+	}
 
 	if (vpu_base_enc->output_phys_buffer != NULL)
 	{
