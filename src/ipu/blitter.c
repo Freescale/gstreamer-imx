@@ -46,7 +46,7 @@ struct _GstImxIpuBlitterPrivate
 static void gst_imx_ipu_blitter_finalize(GObject *object);
 
 static gboolean gst_imx_ipu_blitter_set_input_video_info(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
-static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
+static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region);
 static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
 static gboolean gst_imx_ipu_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 static GstAllocator* gst_imx_ipu_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter);
@@ -169,19 +169,6 @@ GstImxIpuBlitter* gst_imx_ipu_blitter_new(void)
 }
 
 
-void gst_imx_ipu_blitter_enable_crop(GstImxIpuBlitter *ipu_blitter, gboolean crop)
-{
-	GST_TRACE_OBJECT(ipu_blitter, "set crop to %d", crop);
-	ipu_blitter->apply_crop_metadata = crop;
-}
-
-
-gboolean gst_imx_ipu_blitter_is_crop_enabled(GstImxIpuBlitter *ipu_blitter)
-{
-	return ipu_blitter->apply_crop_metadata;
-}
-
-
 void gst_imx_ipu_blitter_set_output_rotation_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterRotationMode rotation_mode)
 {
 	switch (rotation_mode)
@@ -279,15 +266,14 @@ static gboolean gst_imx_ipu_blitter_set_input_video_info(GstImxBaseBlitter *base
 }
 
 
-#define GST_IMX_FILL_IPU_TASK(ipu_blitter, buffer, taskio, apply_crop) \
+#define GST_IMX_FILL_IPU_TASK(ipu_blitter, buffer, taskio, frame_region_ptr) \
 do { \
  \
 	GstVideoMeta *video_meta; \
-	GstVideoCropMeta *video_crop_meta; \
 	GstImxPhysMemMeta *phys_mem_meta; \
+	GstImxBaseBlitterRegion *frame_region = (GstImxBaseBlitterRegion *)frame_region_ptr; \
  \
 	video_meta = gst_buffer_get_video_meta(buffer); \
-	video_crop_meta = gst_buffer_get_video_crop_meta(buffer); \
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(buffer); \
  \
 	g_assert((video_meta != NULL) && (phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0)); \
@@ -295,15 +281,12 @@ do { \
 	(taskio).width = video_meta->width + phys_mem_meta->x_padding; \
 	(taskio).height = video_meta->height + phys_mem_meta->y_padding; \
  \
-	if ((apply_crop) && ipu_blitter->apply_crop_metadata && (video_crop_meta != NULL)) \
+	if (frame_region != NULL) \
 	{ \
-		if ((video_crop_meta->x >= (guint)(video_meta->width)) || (video_crop_meta->y >= (guint)(video_meta->height))) \
-			return FALSE; \
- \
-		(taskio).crop.pos.x = video_crop_meta->x; \
-		(taskio).crop.pos.y = video_crop_meta->y; \
-		(taskio).crop.w = MIN(video_crop_meta->width, video_meta->width - video_crop_meta->x); \
-		(taskio).crop.h = MIN(video_crop_meta->height, video_meta->height - video_crop_meta->y); \
+		(taskio).crop.pos.x = frame_region->x1; \
+		(taskio).crop.pos.y = frame_region->y1; \
+		(taskio).crop.w = frame_region->x2 - frame_region->x1; \
+		(taskio).crop.h = frame_region->y2 - frame_region->y1; \
 	} \
 	else \
 	{ \
@@ -318,11 +301,11 @@ do { \
 } while (0)
 
 
-static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame)
+static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
 
-	GST_IMX_FILL_IPU_TASK(ipu_blitter, input_frame, ipu_blitter->priv->task.input, TRUE);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, input_frame, ipu_blitter->priv->task.input, input_region);
 
 	ipu_blitter->current_frame = input_frame;
 	ipu_blitter->priv->task.input.deinterlace.enable = 0;
@@ -391,7 +374,7 @@ static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBaseBlitter *base_blit
 static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
-	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output, FALSE);
+	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output, NULL);
 
 	ipu_blitter->output_buffer_region.x1 = 0;
 	ipu_blitter->output_buffer_region.y1 = 0;

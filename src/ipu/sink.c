@@ -31,7 +31,6 @@ enum
 {
 	PROP_0,
 	PROP_OUTPUT_ROTATION,
-	PROP_INPUT_CROP,
 	PROP_DEINTERLACE_MODE
 };
 
@@ -100,17 +99,6 @@ void gst_imx_ipu_video_sink_class_init(GstImxIpuVideoSinkClass *klass)
 	);
 	g_object_class_install_property(
 		object_class,
-		PROP_INPUT_CROP,
-		g_param_spec_boolean(
-			"enable-crop",
-			"Enable input frame cropping",
-			"Whether or not to crop input frames based on their video crop metadata",
-			GST_IMX_IPU_BLITTER_CROP_DEFAULT,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
-	g_object_class_install_property(
-		object_class,
 		PROP_DEINTERLACE_MODE,
 		g_param_spec_enum(
 			"deinterlace-mode",
@@ -127,7 +115,6 @@ void gst_imx_ipu_video_sink_class_init(GstImxIpuVideoSinkClass *klass)
 void gst_imx_ipu_video_sink_init(GstImxIpuVideoSink *ipu_video_sink)
 {
 	ipu_video_sink->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
-	ipu_video_sink->input_crop = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
 	ipu_video_sink->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 }
 
@@ -147,14 +134,6 @@ static void gst_imx_ipu_video_sink_set_property(GObject *object, guint prop_id, 
 			if (ipu_video_sink->blitter != NULL)
 				gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_sink->blitter, ipu_video_sink->output_rotation);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
-			break;
-
-		case PROP_INPUT_CROP:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
-			ipu_video_sink->input_crop = g_value_get_boolean(value);
-			if (ipu_video_sink->blitter != NULL)
-				gst_imx_ipu_blitter_enable_crop(ipu_video_sink->blitter, ipu_video_sink->input_crop);
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
 			break;
 
 		case PROP_DEINTERLACE_MODE:
@@ -184,12 +163,6 @@ static void gst_imx_ipu_video_sink_get_property(GObject *object, guint prop_id, 
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
 			break;
 
-		case PROP_INPUT_CROP:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
-			g_value_set_boolean(value, ipu_video_sink->input_crop);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
-			break;
-
 		case PROP_DEINTERLACE_MODE:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
 			g_value_set_enum(value, ipu_video_sink->deinterlace_mode);
@@ -215,7 +188,6 @@ static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_vid
 	}
 
 	gst_imx_ipu_blitter_set_output_rotation_mode(blitter, ipu_video_sink->output_rotation);
-	gst_imx_ipu_blitter_enable_crop(blitter, ipu_video_sink->input_crop);
 	gst_imx_ipu_blitter_set_deinterlace_mode(blitter, ipu_video_sink->deinterlace_mode);
 
 	gst_imx_blitter_video_sink_set_blitter(blitter_video_sink, GST_IMX_BASE_BLITTER(blitter));

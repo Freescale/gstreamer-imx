@@ -43,6 +43,9 @@ typedef struct _GstImxBaseBlitterPrivate GstImxBaseBlitterPrivate;
 #define GST_IS_IMX_BASE_BLITTER_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_BASE_BLITTER))
 
 
+#define GST_IMX_BASE_BLITTER_CROP_DEFAULT  FALSE
+
+
 /**
  * The blitter base class implements operations common for various blitters
  * in the i.MX SoC. It handles fallbacks for input buffers that are not
@@ -94,6 +97,8 @@ struct _GstImxBaseBlitter
 
 	/* Internal copy of the latest video info for the incoming video data. */
 	GstVideoInfo input_video_info;
+
+	gboolean apply_crop_metadata;
 };
 
 
@@ -117,6 +122,8 @@ struct _GstImxBaseBlitter
  *                          @gst_imx_base_blitter_blit call. This is especially true if the internal
  *                          copy mentioned above is used. In short: the blitter should always assume
  *                          that the frames are invalid after @blit_frame was called.
+ *                          The "input_region" parameter contains what region inside the frame to
+ *                          actually use. This might be a subset of the frame if cropping is applied.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
  * @set_output_frame:       Required.
  *                          Sets the blitter's output frame. The output frame must be a physically
@@ -149,7 +156,7 @@ struct _GstImxBaseBlitterClass
 	GstObjectClass parent_class;
 
 	gboolean (*set_input_video_info)(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
-	gboolean (*set_input_frame)(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
+	gboolean (*set_input_frame)(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region);
 	gboolean (*set_output_frame)(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
 	gboolean (*set_output_regions)(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 	GstAllocator* (*get_phys_mem_allocator)(GstImxBaseBlitter *base_blitter);
@@ -251,8 +258,10 @@ gboolean gst_imx_base_blitter_flush(GstImxBaseBlitter *base_blitter);
  */
 GstBufferPool* gst_imx_base_blitter_create_bufferpool(GstImxBaseBlitter *base_blitter, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params);
 
-
 GstAllocator* gst_imx_base_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter);
+
+void gst_imx_base_blitter_enable_crop(GstImxBaseBlitter *base_blitter, gboolean crop);
+gboolean gst_imx_base_blitter_is_crop_enabled(GstImxBaseBlitter *base_blitter);
 
 
 G_END_DECLS

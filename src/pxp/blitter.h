@@ -103,7 +103,6 @@ struct _GstImxPxPBlitter
 	GstImxBaseBlitter parent;
 	GstImxPxPBlitterPrivate *priv;
 
-	gboolean apply_crop_metadata;
 	GstImxPxPBlitterRotationMode rotation_mode;
 
 	GstImxBaseBlitterRegion output_buffer_region;
@@ -121,9 +120,6 @@ GType gst_imx_pxp_blitter_rotation_mode_get_type(void);
 GType gst_imx_pxp_blitter_get_type(void);
 
 GstImxPxPBlitter* gst_imx_pxp_blitter_new(void);
-
-void gst_imx_pxp_blitter_enable_crop(GstImxPxPBlitter *pxp_blitter, gboolean crop);
-gboolean gst_imx_pxp_blitter_is_crop_enabled(GstImxPxPBlitter *pxp_blitter);
 
 GstImxPxPBlitterRotationMode gst_imx_pxp_blitter_get_output_rotation(GstImxPxPBlitter *pxp_blitter);
 void gst_imx_pxp_blitter_set_output_rotation(GstImxPxPBlitter *pxp_blitter, GstImxPxPBlitterRotationMode rotation);

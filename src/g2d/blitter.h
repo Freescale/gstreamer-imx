@@ -97,7 +97,6 @@ GstImxG2DBlitterRotationMode;
 
 
 #define GST_IMX_G2D_BLITTER_OUTPUT_ROTATION_DEFAULT  GST_IMX_G2D_BLITTER_ROTATION_NONE
-#define GST_IMX_G2D_BLITTER_CROP_DEFAULT  FALSE
 
 
 #define GST_IMX_G2D_BLITTER_MAX_NUM_EMPTY_SURFACES 4
@@ -112,7 +111,6 @@ struct _GstImxG2DBlitter
 	struct g2d_surface empty_dest_surfaces[GST_IMX_G2D_BLITTER_MAX_NUM_EMPTY_SURFACES];
 	guint num_empty_dest_surfaces;
 	gboolean output_region_uptodate;
-	gboolean apply_crop_metadata;
 
 	GstImxBaseBlitterRegion output_buffer_region;
 };
@@ -129,9 +127,6 @@ GType gst_imx_g2d_blitter_rotation_mode_get_type(void);
 GType gst_imx_g2d_blitter_get_type(void);
 
 GstImxG2DBlitter* gst_imx_g2d_blitter_new(void);
-
-void gst_imx_g2d_blitter_enable_crop(GstImxG2DBlitter *g2d_blitter, gboolean crop);
-gboolean gst_imx_g2d_blitter_is_crop_enabled(GstImxG2DBlitter *g2d_blitter);
 
 GstImxG2DBlitterRotationMode gst_imx_g2d_blitter_get_output_rotation(GstImxG2DBlitter *g2d_blitter);
 void gst_imx_g2d_blitter_set_output_rotation(GstImxG2DBlitter *g2d_blitter, GstImxG2DBlitterRotationMode rotation);

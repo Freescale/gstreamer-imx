@@ -43,13 +43,13 @@ GstImxG2DFormatDetails;
 static void gst_imx_g2d_blitter_finalize(GObject *object);
 
 static gboolean gst_imx_g2d_blitter_set_input_video_info(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
-static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
+static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region);
 static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
 static gboolean gst_imx_g2d_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 static GstAllocator* gst_imx_g2d_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter);
 static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter);
 
-static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *input_frame, struct g2d_surface *surface);
+static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *input_frame, struct g2d_surface *surface, GstImxBaseBlitterRegion const *input_region);
 static GstImxG2DFormatDetails const * gst_imx_g2d_blitter_get_format_details(GstVideoFormat gst_format);
 static void gst_imx_g2d_blitter_region_to_surface(struct g2d_surface *surf, GstImxBaseBlitterRegion const *region);
 
@@ -114,7 +114,6 @@ void gst_imx_g2d_blitter_init(GstImxG2DBlitter *g2d_blitter)
 	g2d_blitter->output_region_uptodate = FALSE;
 
 	gst_imx_g2d_blitter_set_output_rotation(g2d_blitter, GST_IMX_G2D_BLITTER_OUTPUT_ROTATION_DEFAULT);
-	g2d_blitter->apply_crop_metadata = GST_IMX_G2D_BLITTER_CROP_DEFAULT;
 }
 
 
@@ -123,19 +122,6 @@ GstImxG2DBlitter* gst_imx_g2d_blitter_new(void)
 	GstImxG2DBlitter* g2d_blitter = (GstImxG2DBlitter *)g_object_new(gst_imx_g2d_blitter_get_type(), NULL);
 
 	return g2d_blitter;
-}
-
-
-void gst_imx_g2d_blitter_enable_crop(GstImxG2DBlitter *g2d_blitter, gboolean crop)
-{
-	GST_TRACE_OBJECT(g2d_blitter, "set crop to %d", crop);
-	g2d_blitter->apply_crop_metadata = crop;
-}
-
-
-gboolean gst_imx_g2d_blitter_is_crop_enabled(GstImxG2DBlitter *g2d_blitter)
-{
-	return g2d_blitter->apply_crop_metadata;
 }
 
 
@@ -214,13 +200,13 @@ static gboolean gst_imx_g2d_blitter_set_input_video_info(G_GNUC_UNUSED GstImxBas
 }
 
 
-static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame)
+static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region)
 {
 	GstImxG2DBlitter *g2d_blitter = GST_IMX_G2D_BLITTER(base_blitter);
 
 	g_assert(g2d_blitter != NULL);
 
-	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, input_frame, &(g2d_blitter->source_surface));
+	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, input_frame, &(g2d_blitter->source_surface), input_region);
 	g2d_blitter->source_surface.blendfunc = G2D_ONE;
 	g2d_blitter->source_surface.global_alpha = 255;
 	g2d_blitter->source_surface.clrcolor = 0x00000000;
@@ -236,7 +222,7 @@ static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 
 	g_assert(g2d_blitter != NULL);
 
-	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, output_frame, &(g2d_blitter->dest_surface));
+	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, output_frame, &(g2d_blitter->dest_surface), NULL);
 	g2d_blitter->dest_surface.blendfunc = G2D_ZERO;
 	g2d_blitter->dest_surface.global_alpha = 255;
 	g2d_blitter->dest_surface.clrcolor = 0xFF000000;
@@ -352,10 +338,9 @@ static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter)
 }
 
 
-static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *video_frame, struct g2d_surface *surface)
+static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *video_frame, struct g2d_surface *surface, GstImxBaseBlitterRegion const *input_region)
 {
 	GstVideoMeta *video_meta;
-	GstVideoCropMeta *video_crop_meta;
 	GstImxPhysMemMeta *phys_mem_meta;
 	GstImxG2DFormatDetails const *fmt_details;
 
@@ -400,14 +385,9 @@ static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_bli
 		}
 	}
 
-	if (g2d_blitter->apply_crop_metadata && ((video_crop_meta = gst_buffer_get_video_crop_meta(video_frame)) != NULL))
+	if (input_region != NULL)
 	{
-		// TODO: set flag if crop rectangle is outside of the bounds of the frame
-
-		surface->left = video_crop_meta->x;
-		surface->top = video_crop_meta->y;
-		surface->right = MIN(video_crop_meta->x + video_crop_meta->width, video_meta->width);
-		surface->bottom = MIN(video_crop_meta->y + video_crop_meta->height, video_meta->height);
+		gst_imx_g2d_blitter_region_to_surface(surface, input_region);
 	}
 	else
 	{

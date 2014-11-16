@@ -44,6 +44,7 @@ enum
 	PROP_0,
 	PROP_FORCE_ASPECT_RATIO,
 	PROP_FBDEV_NAME,
+	PROP_INPUT_CROP,
 	PROP_WINDOW_X_COORD,
 	PROP_WINDOW_Y_COORD,
 	PROP_WINDOW_WIDTH,
@@ -132,6 +133,17 @@ void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *klass)
 	);
 	g_object_class_install_property(
 		object_class,
+		PROP_INPUT_CROP,
+		g_param_spec_boolean(
+			"enable-crop",
+			"Enable input frame cropping",
+			"Whether or not to crop input frames based on their video crop metadata",
+			GST_IMX_BASE_BLITTER_CROP_DEFAULT,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
 		PROP_WINDOW_X_COORD,
 		g_param_spec_int(
 			"window-x-coord",
@@ -195,6 +207,8 @@ void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_video_sink)
 	blitter_video_sink->window_height = DEFAULT_WINDOW_HEIGHT;
 
 	gst_video_info_init(&(blitter_video_sink->input_video_info));
+
+	blitter_video_sink->input_crop = GST_IMX_BASE_BLITTER_CROP_DEFAULT;
 
 	g_mutex_init(&(blitter_video_sink->mutex));
 }
@@ -278,6 +292,16 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			break;
 		}
 
+		case PROP_INPUT_CROP:
+		{
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->input_crop = g_value_get_boolean(value);
+			if (blitter_video_sink->blitter != NULL)
+				gst_imx_base_blitter_enable_crop(blitter_video_sink->blitter, blitter_video_sink->input_crop);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			break;
+		}
+
 		case PROP_WINDOW_X_COORD:
 		{
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
@@ -340,6 +364,12 @@ static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_
 		case PROP_FBDEV_NAME:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			g_value_set_string(value, blitter_video_sink->framebuffer_name);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
+			break;
+
+		case PROP_INPUT_CROP:
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_boolean(value, blitter_video_sink->input_crop);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
@@ -412,6 +442,8 @@ static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *
 			/* start() must call gst_imx_blitter_video_sink_set_blitter(),
 			 * otherwise the sink cannot function properly */
 			g_assert(blitter_video_sink->blitter != NULL);
+
+			gst_imx_base_blitter_enable_crop(blitter_video_sink->blitter, blitter_video_sink->input_crop);
 
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 

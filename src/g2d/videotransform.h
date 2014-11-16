@@ -46,7 +46,6 @@ struct _GstImxG2DVideoTransform
 	GstImxBlitterVideoTransform parent;
 	GstImxG2DBlitter *blitter;
 	GstImxG2DBlitterRotationMode output_rotation;
-	gboolean input_crop;
 };
 
 

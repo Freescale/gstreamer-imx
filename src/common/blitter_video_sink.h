@@ -87,6 +87,9 @@ struct _GstImxBlitterVideoSink
 
 	/* Copy of the GstVideoInfo structure generated from the input caps */
 	GstVideoInfo input_video_info;
+
+	/* Flag to indicate if the videocrop meta metadata shall be applied */
+	gboolean input_crop;
 };
 
 

@@ -55,7 +55,7 @@ GstImxPxPFormatDetails;
 static void gst_imx_pxp_blitter_finalize(GObject *object);
 
 static gboolean gst_imx_pxp_blitter_set_input_video_info(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
-static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
+static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region);
 static gboolean gst_imx_pxp_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
 static gboolean gst_imx_pxp_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 static GstAllocator* gst_imx_pxp_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter);
@@ -145,7 +145,6 @@ void gst_imx_pxp_blitter_init(GstImxPxPBlitter *pxp_blitter)
 		pxp_blitter->priv->pxp_channel_requested = TRUE;
 
 	gst_imx_pxp_blitter_set_output_rotation(pxp_blitter, GST_IMX_PXP_BLITTER_OUTPUT_ROTATION_DEFAULT);
-	pxp_blitter->apply_crop_metadata = GST_IMX_PXP_BLITTER_CROP_DEFAULT;
 }
 
 
@@ -154,19 +153,6 @@ GstImxPxPBlitter* gst_imx_pxp_blitter_new(void)
 	GstImxPxPBlitter* pxp_blitter = (GstImxPxPBlitter *)g_object_new(gst_imx_pxp_blitter_get_type(), NULL);
 
 	return pxp_blitter;
-}
-
-
-void gst_imx_pxp_blitter_enable_crop(GstImxPxPBlitter *pxp_blitter, gboolean crop)
-{
-	GST_TRACE_OBJECT(pxp_blitter, "set crop to %d", crop);
-	pxp_blitter->apply_crop_metadata = crop;
-}
-
-
-gboolean gst_imx_pxp_blitter_is_crop_enabled(GstImxPxPBlitter *pxp_blitter)
-{
-	return pxp_blitter->apply_crop_metadata;
 }
 
 
@@ -263,11 +249,10 @@ static gboolean gst_imx_pxp_blitter_set_input_video_info(G_GNUC_UNUSED GstImxBas
 }
 
 
-static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame)
+static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region)
 {
 	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(base_blitter);
 	struct pxp_config_data *pxp_config;
-	GstVideoCropMeta *video_crop_meta;
 
 	g_assert(pxp_blitter != NULL);
 
@@ -275,14 +260,12 @@ static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBaseBlitter *base_blit
 
 	gst_imx_pxp_blitter_set_layer_params(pxp_blitter, input_frame, &(pxp_config->s0_param));
 
-	if (pxp_blitter->apply_crop_metadata && ((video_crop_meta = gst_buffer_get_video_crop_meta(input_frame)) != NULL))
+	if (input_region != NULL)
 	{
-		// TODO: set flag if crop rectangle is outside of the bounds of the frame
-
-		pxp_config->proc_data.srect.left = video_crop_meta->x;
-		pxp_config->proc_data.srect.top = video_crop_meta->y;
-		pxp_config->proc_data.srect.width = MIN(video_crop_meta->x + video_crop_meta->width, pxp_config->s0_param.width);
-		pxp_config->proc_data.srect.height = MIN(video_crop_meta->y + video_crop_meta->height, pxp_config->s0_param.height);
+		pxp_config->proc_data.srect.left = input_region->x1;
+		pxp_config->proc_data.srect.top = input_region->y1;
+		pxp_config->proc_data.srect.width = input_region->x2 - input_region->x1;
+		pxp_config->proc_data.srect.height = input_region->y2 - input_region->y1;
 	}
 	else
 	{

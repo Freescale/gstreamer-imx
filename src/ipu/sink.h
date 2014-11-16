@@ -45,7 +45,6 @@ struct _GstImxIpuVideoSink
 	GstImxBlitterVideoSink parent;
 	GstImxIpuBlitter *blitter;
 	GstImxIpuBlitterRotationMode output_rotation;
-	gboolean input_crop;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 };
 

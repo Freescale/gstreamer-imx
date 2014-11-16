@@ -30,8 +30,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_g2d_video_sink_debug);
 enum
 {
 	PROP_0,
-	PROP_OUTPUT_ROTATION,
-	PROP_INPUT_CROP
+	PROP_OUTPUT_ROTATION
 };
 
 
@@ -97,24 +96,12 @@ void gst_imx_g2d_video_sink_class_init(GstImxG2DVideoSinkClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
-	g_object_class_install_property(
-		object_class,
-		PROP_INPUT_CROP,
-		g_param_spec_boolean(
-			"enable-crop",
-			"Enable input frame cropping",
-			"Whether or not to crop input frames based on their video crop metadata",
-			GST_IMX_G2D_BLITTER_CROP_DEFAULT,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
 }
 
 
 void gst_imx_g2d_video_sink_init(GstImxG2DVideoSink *g2d_video_sink)
 {
 	g2d_video_sink->output_rotation = GST_IMX_G2D_BLITTER_OUTPUT_ROTATION_DEFAULT;
-	g2d_video_sink->input_crop = GST_IMX_G2D_BLITTER_CROP_DEFAULT;
 }
 
 
@@ -135,14 +122,6 @@ static void gst_imx_g2d_video_sink_set_property(GObject *object, guint prop_id, 
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(g2d_video_sink);
 			break;
 
-		case PROP_INPUT_CROP:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(g2d_video_sink);
-			g2d_video_sink->input_crop = g_value_get_boolean(value);
-			if (g2d_video_sink->blitter != NULL)
-				gst_imx_g2d_blitter_enable_crop(g2d_video_sink->blitter, g2d_video_sink->input_crop);
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(g2d_video_sink);
-			break;
-
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -159,12 +138,6 @@ static void gst_imx_g2d_video_sink_get_property(GObject *object, guint prop_id, 
 		case PROP_OUTPUT_ROTATION:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(g2d_video_sink);
 			g_value_set_enum(value, g2d_video_sink->output_rotation);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(g2d_video_sink);
-			break;
-
-		case PROP_INPUT_CROP:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(g2d_video_sink);
-			g_value_set_boolean(value, g2d_video_sink->input_crop);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(g2d_video_sink);
 			break;
 
@@ -187,7 +160,6 @@ static gboolean gst_imx_g2d_video_sink_start(GstImxBlitterVideoSink *blitter_vid
 	}
 
 	gst_imx_g2d_blitter_set_output_rotation(blitter, g2d_video_sink->output_rotation);
-	gst_imx_g2d_blitter_enable_crop(blitter, g2d_video_sink->input_crop);
 
 	gst_imx_blitter_video_sink_set_blitter(blitter_video_sink, GST_IMX_BASE_BLITTER(blitter));
 

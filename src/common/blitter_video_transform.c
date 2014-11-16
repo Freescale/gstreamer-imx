@@ -28,6 +28,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_blitter_video_transform_debug);
 #define GST_CAT_DEFAULT imx_blitter_video_transform_debug
 
 
+enum
+{
+	PROP_0,
+	PROP_INPUT_CROP
+};
+
+
 G_DEFINE_ABSTRACT_TYPE(GstImxBlitterVideoTransform, gst_imx_blitter_video_transform, GST_TYPE_BASE_TRANSFORM)
 
 
@@ -36,6 +43,8 @@ static void gst_imx_blitter_video_transform_finalize(GObject *object);
 static GstStateChangeReturn gst_imx_blitter_video_transform_change_state(GstElement *element, GstStateChange transition);
 static gboolean gst_imx_blitter_video_transform_sink_event(GstBaseTransform *transform, GstEvent *event);
 static gboolean gst_imx_blitter_video_transform_src_event(GstBaseTransform *transform, GstEvent *event);
+static void gst_imx_blitter_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_blitter_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
 /* caps handling */
 static GstCaps* gst_imx_blitter_video_transform_transform_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *filter);
@@ -77,6 +86,8 @@ void gst_imx_blitter_video_transform_class_init(GstImxBlitterVideoTransformClass
 
 	element_class->change_state                 = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_change_state);
 	object_class->finalize                      = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_finalize);
+	object_class->set_property                  = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_set_property);
+	object_class->get_property                  = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_get_property);
 	base_transform_class->sink_event            = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_sink_event);
 	base_transform_class->src_event             = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_src_event);
 	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_transform_caps);
@@ -99,6 +110,18 @@ void gst_imx_blitter_video_transform_class_init(GstImxBlitterVideoTransformClass
 	klass->are_video_infos_equal = NULL;
 
 	klass->are_transforms_necessary = NULL;
+
+	g_object_class_install_property(
+		object_class,
+		PROP_INPUT_CROP,
+		g_param_spec_boolean(
+			"enable-crop",
+			"Enable input frame cropping",
+			"Whether or not to crop input frames based on their video crop metadata",
+			GST_IMX_BASE_BLITTER_CROP_DEFAULT,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -114,6 +137,8 @@ void gst_imx_blitter_video_transform_init(GstImxBlitterVideoTransform *blitter_v
 	gst_video_info_init(&(blitter_video_transform->output_video_info));
 
 	blitter_video_transform->blitter = NULL;
+
+	blitter_video_transform->input_crop = GST_IMX_BASE_BLITTER_CROP_DEFAULT;
 
 	g_mutex_init(&(blitter_video_transform->mutex));
 
@@ -165,8 +190,10 @@ static GstStateChangeReturn gst_imx_blitter_video_transform_change_state(GstElem
 			}
 
 			/* start() must call gst_imx_blitter_video_transform_set_blitter(),
-			 * otherwise the sink cannot function properly */
+			 * otherwise the video transform element cannot function properly */
 			g_assert(blitter_video_transform->blitter != NULL);
+
+			gst_imx_base_blitter_enable_crop(blitter_video_transform->blitter, blitter_video_transform->input_crop);
 
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 
@@ -208,6 +235,46 @@ static GstStateChangeReturn gst_imx_blitter_video_transform_change_state(GstElem
 	}
 
 	return ret;
+}
+
+
+static void gst_imx_blitter_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+{
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(object);
+
+	switch (prop_id)
+	{
+		case PROP_INPUT_CROP:
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
+			blitter_video_transform->input_crop = g_value_get_boolean(value);
+			if (blitter_video_transform->blitter != NULL)
+				gst_imx_base_blitter_enable_crop(blitter_video_transform->blitter, blitter_video_transform->input_crop);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
+			break;
+
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
+}
+
+
+static void gst_imx_blitter_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(object);
+
+	switch (prop_id)
+	{
+		case PROP_INPUT_CROP:
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
+			g_value_set_boolean(value, blitter_video_transform->input_crop);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
+			break;
+
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+			break;
+	}
 }
 
 

@@ -30,8 +30,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_pxp_video_transform_debug);
 enum
 {
 	PROP_0,
-	PROP_OUTPUT_ROTATION,
-	PROP_INPUT_CROP
+	PROP_OUTPUT_ROTATION
 };
 
 
@@ -114,24 +113,12 @@ void gst_imx_pxp_video_transform_class_init(GstImxPxPVideoTransformClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
-	g_object_class_install_property(
-		object_class,
-		PROP_INPUT_CROP,
-		g_param_spec_boolean(
-			"enable-crop",
-			"Enable input frame cropping",
-			"Whether or not to crop input frames based on their video crop metadata",
-			GST_IMX_PXP_BLITTER_CROP_DEFAULT,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
 }
 
 
 void gst_imx_pxp_video_transform_init(GstImxPxPVideoTransform *pxp_video_transform)
 {
 	pxp_video_transform->output_rotation = GST_IMX_PXP_BLITTER_OUTPUT_ROTATION_DEFAULT;
-	pxp_video_transform->input_crop = GST_IMX_PXP_BLITTER_CROP_DEFAULT;
 }
 
 
@@ -148,14 +135,6 @@ static void gst_imx_pxp_video_transform_set_property(GObject *object, guint prop
 			pxp_video_transform->output_rotation = g_value_get_enum(value);
 			if (pxp_video_transform->blitter != NULL)
 				gst_imx_pxp_blitter_set_output_rotation(pxp_video_transform->blitter, pxp_video_transform->output_rotation);
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(pxp_video_transform);
-			break;
-
-		case PROP_INPUT_CROP:
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(pxp_video_transform);
-			pxp_video_transform->input_crop = g_value_get_boolean(value);
-			if (pxp_video_transform->blitter != NULL)
-				gst_imx_pxp_blitter_enable_crop(pxp_video_transform->blitter, pxp_video_transform->input_crop);
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(pxp_video_transform);
 			break;
 
@@ -178,12 +157,6 @@ static void gst_imx_pxp_video_transform_get_property(GObject *object, guint prop
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(pxp_video_transform);
 			break;
 
-		case PROP_INPUT_CROP:
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(pxp_video_transform);
-			g_value_set_boolean(value, pxp_video_transform->input_crop);
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(pxp_video_transform);
-			break;
-
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -203,7 +176,6 @@ gboolean gst_imx_pxp_video_transform_start(GstImxBlitterVideoTransform *blitter_
 	}
 
 	gst_imx_pxp_blitter_set_output_rotation(blitter, pxp_video_transform->output_rotation);
-	gst_imx_pxp_blitter_enable_crop(blitter, pxp_video_transform->input_crop);
 
 	gst_imx_blitter_video_transform_set_blitter(blitter_video_transform, GST_IMX_BASE_BLITTER(blitter));
 

@@ -64,6 +64,8 @@ void gst_imx_base_blitter_init(GstImxBaseBlitter *base_blitter)
 	base_blitter->internal_input_frame = NULL;
 
 	gst_video_info_init(&(base_blitter->input_video_info));
+
+	base_blitter->apply_crop_metadata = GST_IMX_BASE_BLITTER_CROP_DEFAULT;
 }
 
 
@@ -90,8 +92,10 @@ static void gst_imx_base_blitter_finalize(GObject *object)
 
 gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, GstBuffer *input_buffer)
 {
+	GstVideoMeta *video_meta;
 	GstImxPhysMemMeta *phys_mem_meta;
 	GstImxBaseBlitterClass *klass;
+	GstImxBaseBlitterRegion input_region;
 
 	g_assert(base_blitter != NULL);
 	klass = GST_IMX_BASE_BLITTER_CLASS(G_OBJECT_GET_CLASS(base_blitter));
@@ -108,13 +112,35 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 		base_blitter->internal_input_frame = NULL;
 	}
 
+	video_meta = gst_buffer_get_video_meta(input_buffer);
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(input_buffer);
+
+	{
+		GstVideoCropMeta *video_crop_meta;
+		guint width = (video_meta != NULL) ? video_meta->width : (guint)(GST_VIDEO_INFO_WIDTH(&(base_blitter->input_video_info)));
+		guint height = (video_meta != NULL) ? video_meta->height : (guint)(GST_VIDEO_INFO_HEIGHT(&(base_blitter->input_video_info)));
+
+		if (base_blitter->apply_crop_metadata && ((video_crop_meta = gst_buffer_get_video_crop_meta(input_buffer)) != NULL))
+		{
+			input_region.x1 = video_crop_meta->x;
+			input_region.y1 = video_crop_meta->y;
+			input_region.x2 = MIN(video_crop_meta->x + video_crop_meta->width, width);
+			input_region.y2 = MIN(video_crop_meta->y + video_crop_meta->height, height);
+		}
+		else
+		{
+			input_region.x1 = 0;
+			input_region.y1 = 0;
+			input_region.x2 = width;
+			input_region.y2 = height;
+		}
+	}
 
 	/* Test if the input buffer uses DMA memory */
 	if ((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0))
 	{
 		/* DMA memory present - the input buffer can be used as an actual input buffer */
-		klass->set_input_frame(base_blitter, input_buffer);
+		klass->set_input_frame(base_blitter, input_buffer, &input_region);
 
 		GST_TRACE_OBJECT(base_blitter, "input buffer uses DMA memory - setting it as actual input buffer");
 	}
@@ -187,7 +213,7 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 			gst_video_frame_unmap(&input_frame);
 		}
 
-		klass->set_input_frame(base_blitter, base_blitter->internal_input_frame);
+		klass->set_input_frame(base_blitter, base_blitter->internal_input_frame, &input_region);
 	}
 
 	return TRUE;
@@ -412,4 +438,17 @@ GstAllocator* gst_imx_base_blitter_get_phys_mem_allocator(GstImxBaseBlitter *bas
 	g_assert(klass->get_phys_mem_allocator != NULL);
 
 	return klass->get_phys_mem_allocator(base_blitter);
+}
+
+
+void gst_imx_base_blitter_enable_crop(GstImxBaseBlitter *base_blitter, gboolean crop)
+{
+	GST_TRACE_OBJECT(base_blitter, "set crop to %d", crop);
+	base_blitter->apply_crop_metadata = crop;
+}
+
+
+gboolean gst_imx_base_blitter_is_crop_enabled(GstImxBaseBlitter *base_blitter)
+{
+	return base_blitter->apply_crop_metadata;
 }

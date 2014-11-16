@@ -31,7 +31,6 @@ enum
 {
 	PROP_0,
 	PROP_OUTPUT_ROTATION,
-	PROP_INPUT_CROP,
 	PROP_DEINTERLACE_MODE
 };
 
@@ -123,17 +122,6 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 	);
 	g_object_class_install_property(
 		object_class,
-		PROP_INPUT_CROP,
-		g_param_spec_boolean(
-			"enable-crop",
-			"Enable input frame cropping",
-			"Whether or not to crop input frames based on their video crop metadata",
-			GST_IMX_IPU_BLITTER_CROP_DEFAULT,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
-	g_object_class_install_property(
-		object_class,
 		PROP_DEINTERLACE_MODE,
 		g_param_spec_enum(
 			"deinterlace-mode",
@@ -150,7 +138,6 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transform)
 {
 	ipu_video_transform->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
-	ipu_video_transform->input_crop = GST_IMX_IPU_BLITTER_CROP_DEFAULT;
 	ipu_video_transform->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 }
 
@@ -168,14 +155,6 @@ static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop
 			ipu_video_transform->output_rotation = g_value_get_enum(value);
 			if (ipu_video_transform->blitter != NULL)
 				gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_transform->blitter, ipu_video_transform->output_rotation);
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
-			break;
-
-		case PROP_INPUT_CROP:
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
-			ipu_video_transform->input_crop = g_value_get_boolean(value);
-			if (ipu_video_transform->blitter != NULL)
-				gst_imx_ipu_blitter_enable_crop(ipu_video_transform->blitter, ipu_video_transform->input_crop);
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
 			break;
 
@@ -203,12 +182,6 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 		case PROP_OUTPUT_ROTATION:
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
 			g_value_set_enum(value, ipu_video_transform->output_rotation);
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
-			break;
-
-		case PROP_INPUT_CROP:
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
-			g_value_set_boolean(value, ipu_video_transform->input_crop);
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
 			break;
 
@@ -272,7 +245,6 @@ gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform *blitter_
 	}
 
 	gst_imx_ipu_blitter_set_output_rotation_mode(blitter, ipu_video_transform->output_rotation);
-	gst_imx_ipu_blitter_enable_crop(blitter, ipu_video_transform->input_crop);
 	gst_imx_ipu_blitter_set_deinterlace_mode(blitter, ipu_video_transform->deinterlace_mode);
 
 	gst_imx_blitter_video_transform_set_blitter(blitter_video_transform, GST_IMX_BASE_BLITTER(blitter));

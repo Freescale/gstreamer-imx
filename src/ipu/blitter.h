@@ -110,7 +110,6 @@ struct _GstImxIpuBlitter
 
 	GstBuffer *current_frame, *previous_frame; /* used for deinterlacing */
 
-	gboolean apply_crop_metadata;
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 
 	GstImxBaseBlitterRegion output_buffer_region, output_region;
@@ -136,9 +135,6 @@ GType gst_imx_ipu_blitter_get_type(void);
 
 
 GstImxIpuBlitter* gst_imx_ipu_blitter_new(void);
-
-void gst_imx_ipu_blitter_enable_crop(GstImxIpuBlitter *ipu_blitter, gboolean crop);
-gboolean gst_imx_ipu_blitter_is_crop_enabled(GstImxIpuBlitter *ipu_blitter);
 
 void gst_imx_ipu_blitter_set_output_rotation_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterRotationMode rotation_mode);
 GstImxIpuBlitterRotationMode gst_imx_ipu_blitter_get_output_rotation_mode(GstImxIpuBlitter *ipu_blitter);
