@@ -376,11 +376,6 @@ static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
 	GST_IMX_FILL_IPU_TASK(ipu_blitter, output_frame, ipu_blitter->priv->task.output, NULL);
 
-	ipu_blitter->output_buffer_region.x1 = 0;
-	ipu_blitter->output_buffer_region.y1 = 0;
-	ipu_blitter->output_buffer_region.x2 = ipu_blitter->priv->task.output.crop.w;
-	ipu_blitter->output_buffer_region.y2 = ipu_blitter->priv->task.output.crop.h;
-
 	ipu_blitter->output_region_uptodate = FALSE;
 
 	return TRUE;
@@ -392,12 +387,6 @@ static gboolean gst_imx_ipu_blitter_set_output_regions(GstImxBaseBlitter *base_b
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
 
 	ipu_blitter->output_region_uptodate = FALSE;
-
-	if (output_region == NULL)
-		output_region = &(ipu_blitter->output_buffer_region);
-
-	if (video_region == NULL)
-		video_region = output_region;
 
 	if (video_region != NULL)
 	{

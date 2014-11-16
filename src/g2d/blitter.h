@@ -111,8 +111,6 @@ struct _GstImxG2DBlitter
 	struct g2d_surface empty_dest_surfaces[GST_IMX_G2D_BLITTER_MAX_NUM_EMPTY_SURFACES];
 	guint num_empty_dest_surfaces;
 	gboolean output_region_uptodate;
-
-	GstImxBaseBlitterRegion output_buffer_region;
 };
 
 

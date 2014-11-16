@@ -99,6 +99,8 @@ struct _GstImxBaseBlitter
 	GstVideoInfo input_video_info;
 
 	gboolean apply_crop_metadata;
+
+	GstImxBaseBlitterRegion output_buffer_region;
 };
 
 
@@ -132,7 +134,8 @@ struct _GstImxBaseBlitter
  * @set_output_regions:     Optional.
  *                          Sets the blitter's output and video regions in the output framebuffer.
  *                          Called by @gst_imx_base_blitter_set_output_regions. See this
- *                          function's documentation for details.
+ *                          function's documentation for details. Unlike that function though,
+ *                          this vfunc's video_region and output_region parameters are never NULL.
  * @get_phys_mem_allocator: Required.
  *                          Returns a GstAllocator which allocates physically contiguous memory.
  *                          Which allocator to use is up to the derived blitter.

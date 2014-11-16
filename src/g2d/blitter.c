@@ -228,11 +228,6 @@ static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 	g2d_blitter->dest_surface.clrcolor = 0xFF000000;
 	/* g2d_blitter->dest_surface.rot is set in gst_imx_g2d_blitter_set_output_rotation */
 
-	g2d_blitter->output_buffer_region.x1 = 0;
-	g2d_blitter->output_buffer_region.y1 = 0;
-	g2d_blitter->output_buffer_region.x2 = g2d_blitter->dest_surface.width;
-	g2d_blitter->output_buffer_region.y2 = g2d_blitter->dest_surface.height;
-
 	g2d_blitter->num_empty_dest_surfaces = 0;
 	g2d_blitter->output_region_uptodate = FALSE;
 
@@ -247,12 +242,6 @@ static gboolean gst_imx_g2d_blitter_set_output_regions(GstImxBaseBlitter *base_b
 	GstImxG2DBlitter *g2d_blitter = GST_IMX_G2D_BLITTER(base_blitter);
 
 	g2d_blitter->output_region_uptodate = FALSE;
-
-	if (output_region == NULL)
-		output_region = &(g2d_blitter->output_buffer_region);
-
-	if (video_region == NULL)
-		video_region = output_region;
 
 	gst_imx_g2d_blitter_region_to_surface(&(g2d_blitter->dest_surface), video_region);
 

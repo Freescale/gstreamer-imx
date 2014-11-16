@@ -297,10 +297,6 @@ static gboolean gst_imx_pxp_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 		pxp_config->out_param.height = i;
 	}
 
-	pxp_blitter->output_buffer_region.x1 = 0;
-	pxp_blitter->output_buffer_region.y1 = 0;
-	pxp_blitter->output_buffer_region.x2 = pxp_config->out_param.width;
-	pxp_blitter->output_buffer_region.y2 = pxp_config->out_param.height;
 	pxp_config->proc_data.drect.left = 0;
 	pxp_config->proc_data.drect.top = 0;
 	pxp_config->proc_data.drect.width = pxp_config->out_param.width;
@@ -316,12 +312,6 @@ static gboolean gst_imx_pxp_blitter_set_output_regions(GstImxBaseBlitter *base_b
 	struct pxp_config_data *pxp_config;
 
 	pxp_config = &(pxp_blitter->priv->pxp_config);
-
-	if (output_region == NULL)
-		output_region = &(pxp_blitter->output_buffer_region);
-
-	if (video_region == NULL)
-		video_region = output_region;
 
 	if ((pxp_config->proc_data.rotate == 90) || (pxp_config->proc_data.rotate == 270))
 	{

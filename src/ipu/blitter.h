@@ -112,7 +112,7 @@ struct _GstImxIpuBlitter
 
 	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
 
-	GstImxBaseBlitterRegion output_buffer_region, output_region;
+	GstImxBaseBlitterRegion output_region;
 
 	gboolean output_region_uptodate;
 	GstBuffer *dummy_black_buffer;

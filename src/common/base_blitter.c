@@ -223,13 +223,21 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 gboolean gst_imx_base_blitter_set_output_buffer(GstImxBaseBlitter *base_blitter, GstBuffer *output_buffer)
 {
 	GstImxBaseBlitterClass *klass;
+	GstVideoMeta *video_meta;
 
 	g_assert(base_blitter != NULL);
 	klass = GST_IMX_BASE_BLITTER_CLASS(G_OBJECT_GET_CLASS(base_blitter));
+	video_meta = gst_buffer_get_video_meta(output_buffer);
 
 	g_assert(klass->set_output_frame != NULL);
 	g_assert(output_buffer != NULL);
 	g_assert(GST_IMX_PHYS_MEM_META_GET(output_buffer) != NULL);
+	g_assert(video_meta != NULL);
+
+	base_blitter->output_buffer_region.x1 = 0;
+	base_blitter->output_buffer_region.y1 = 0;
+	base_blitter->output_buffer_region.x2 = video_meta->width;
+	base_blitter->output_buffer_region.y2 = video_meta->height;
 
 	return klass->set_output_frame(base_blitter, output_buffer);
 }
@@ -243,7 +251,15 @@ gboolean gst_imx_base_blitter_set_output_regions(GstImxBaseBlitter *base_blitter
 	klass = GST_IMX_BASE_BLITTER_CLASS(G_OBJECT_GET_CLASS(base_blitter));
 
 	if (klass->set_output_regions != NULL)
+	{
+		if (output_region == NULL)
+			output_region = &(base_blitter->output_buffer_region);
+
+		if (video_region == NULL)
+			video_region = output_region;
+
 		return klass->set_output_regions(base_blitter, video_region, output_region);
+	}
 	else
 		return TRUE;
 }

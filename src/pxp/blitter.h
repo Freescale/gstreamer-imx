@@ -104,8 +104,6 @@ struct _GstImxPxPBlitter
 	GstImxPxPBlitterPrivate *priv;
 
 	GstImxPxPBlitterRotationMode rotation_mode;
-
-	GstImxBaseBlitterRegion output_buffer_region;
 };
 
 
