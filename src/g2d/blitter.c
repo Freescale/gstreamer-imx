@@ -43,13 +43,13 @@ GstImxG2DFormatDetails;
 static void gst_imx_g2d_blitter_finalize(GObject *object);
 
 static gboolean gst_imx_g2d_blitter_set_input_video_info(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
-static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region);
+static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
 static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
 static gboolean gst_imx_g2d_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
 static GstAllocator* gst_imx_g2d_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter);
-static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter);
+static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *input_region);
 
-static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *input_frame, struct g2d_surface *surface, GstImxBaseBlitterRegion const *input_region);
+static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *input_frame, struct g2d_surface *surface);
 static GstImxG2DFormatDetails const * gst_imx_g2d_blitter_get_format_details(GstVideoFormat gst_format);
 static void gst_imx_g2d_blitter_region_to_surface(struct g2d_surface *surf, GstImxBaseBlitterRegion const *region);
 
@@ -200,13 +200,13 @@ static gboolean gst_imx_g2d_blitter_set_input_video_info(G_GNUC_UNUSED GstImxBas
 }
 
 
-static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame, GstImxBaseBlitterRegion const *input_region)
+static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame)
 {
 	GstImxG2DBlitter *g2d_blitter = GST_IMX_G2D_BLITTER(base_blitter);
 
 	g_assert(g2d_blitter != NULL);
 
-	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, input_frame, &(g2d_blitter->source_surface), input_region);
+	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, input_frame, &(g2d_blitter->source_surface));
 	g2d_blitter->source_surface.blendfunc = G2D_ONE;
 	g2d_blitter->source_surface.global_alpha = 255;
 	g2d_blitter->source_surface.clrcolor = 0x00000000;
@@ -222,7 +222,7 @@ static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBaseBlitter *base_bli
 
 	g_assert(g2d_blitter != NULL);
 
-	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, output_frame, &(g2d_blitter->dest_surface), NULL);
+	gst_imx_g2d_blitter_set_surface_params(g2d_blitter, output_frame, &(g2d_blitter->dest_surface));
 	g2d_blitter->dest_surface.blendfunc = G2D_ZERO;
 	g2d_blitter->dest_surface.global_alpha = 255;
 	g2d_blitter->dest_surface.clrcolor = 0xFF000000;
@@ -264,7 +264,7 @@ static GstAllocator* gst_imx_g2d_blitter_get_phys_mem_allocator(G_GNUC_UNUSED Gs
 }
 
 
-static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter)
+static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *input_region)
 {
 	guint i;
 	gboolean ret;
@@ -311,10 +311,15 @@ static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter)
 		g2d_blitter->output_region_uptodate = TRUE;
 	}
 
-	if (ret && (g2d_blit(g2d_blitter->handle, &(g2d_blitter->source_surface), &(g2d_blitter->dest_surface)) != 0))
+	if (GST_IMX_BASE_BLITTER_VIDEO_VISIBILITY_TYPE(g2d_blitter) != GST_IMX_BASE_BLITTER_VISIBILITY_NONE)
 	{
-		GST_ERROR_OBJECT(g2d_blitter, "blitting failed");
-		ret = FALSE;
+		gst_imx_g2d_blitter_region_to_surface(&(g2d_blitter->source_surface), input_region);
+
+		if (ret && (g2d_blit(g2d_blitter->handle, &(g2d_blitter->source_surface), &(g2d_blitter->dest_surface)) != 0))
+		{
+			GST_ERROR_OBJECT(g2d_blitter, "blitting failed");
+			ret = FALSE;
+		}
 	}
 
 	if (g2d_finish(g2d_blitter->handle) != 0)
@@ -327,7 +332,7 @@ static gboolean gst_imx_g2d_blitter_blit_frame(GstImxBaseBlitter *base_blitter)
 }
 
 
-static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *video_frame, struct g2d_surface *surface, GstImxBaseBlitterRegion const *input_region)
+static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *video_frame, struct g2d_surface *surface)
 {
 	GstVideoMeta *video_meta;
 	GstImxPhysMemMeta *phys_mem_meta;
@@ -372,18 +377,6 @@ static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_bli
 			surface->planes[1] = surface->planes[2];
 			surface->planes[2] = paddr;
 		}
-	}
-
-	if (input_region != NULL)
-	{
-		gst_imx_g2d_blitter_region_to_surface(surface, input_region);
-	}
-	else
-	{
-		surface->left = 0;
-		surface->top = 0;
-		surface->right = video_meta->width;
-		surface->bottom = video_meta->height;
 	}
 
 	return TRUE;
