@@ -26,7 +26,7 @@ Available plugins
 * `imxvpuenc_h264` : h.264 baseline profile Annex.B encoder
 * `imxvpuenc_mpeg4` : MPEG-4 encoder
 * `imxvpuenc_mjpeg` : Motion JPEG encoder
-* `imxipusink` : video sink using the IPU to output to Framebuffer (may not work well if X11 or Wayland are running)
+* `imxipuvideosink` : video sink using the IPU to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxipuvideotransform` : video transform element using the IPU, capable of scaling, deinterlacing, rotating (in 90 degree steps), flipping frames, and converting between color spaces
 * `imxg2dvideosink` : video sink using the GPU's 2D core (through the G2D API) to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxg2dvideotransform` : video transform element using the GPU's 2D core (through the G2D API), capable of scaling, rotating (in 90 degree steps), flipping frames, and converting between color spaces
@@ -54,7 +54,7 @@ the following environment variables to whatever is necessary for cross compilati
 
 Then, run:
 
-    ./waf configure --prefix=PREFIX --kernel-headers=KERNEL-HEADER-RPATH
+    ./waf configure --prefix=PREFIX --kernel-headers=KERNEL-HEADER-PATH
 
 (The aforementioned environment variables are only necessary for this configure call.)
 PREFIX defines the installation prefix, that is, where the built binaries will be installed.
