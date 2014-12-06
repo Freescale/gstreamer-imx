@@ -444,6 +444,10 @@ static gboolean gst_imx_ipu_blitter_blit_frame(GstImxBaseBlitter *base_blitter, 
 		GST_IMX_FILL_IPU_TASK(ipu_blitter, ipu_blitter->dummy_black_buffer, task.input);
 
 		task.input.deinterlace.enable = 0;
+		task.input.crop.pos.x = 0;
+		task.input.crop.pos.y = 0;
+		task.input.crop.w = task.input.width;
+		task.input.crop.h = task.input.height;
 		task.output.rotate = IPU_ROTATE_NONE;
 		task.output.crop.pos.x = output_region->x1;
 		task.output.crop.pos.y = output_region->y1;
