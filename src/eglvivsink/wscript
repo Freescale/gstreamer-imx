@@ -108,7 +108,7 @@ def configure(conf):
 def build(bld):
 	if bld.env['EGLVIVSINK_ENABLED']:
 		bld(
-			features = ['c', 'cshlib'],
+			features = ['c', bld.env['CLIBTYPE']],
 			includes = ['../..'],
 			use = 'gstimxcommon',
 			uselib = ['EGL', 'GLES2'] + bld.env['PLATFORM_USELIBS'] + ['GSTREAMER_VIDEO'] + bld.env['COMMON_USELIB'],

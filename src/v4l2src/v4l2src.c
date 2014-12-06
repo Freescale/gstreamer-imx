@@ -17,6 +17,8 @@
  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include <config.h>
+
 #include <gst/gst.h>
 #include <gst/base/gstpushsrc.h>
 #include <fcntl.h>
@@ -27,8 +29,6 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <linux/videodev2.h>
-
-#include <config.h>
 #include "v4l2src.h"
 #include "v4l2_buffer_pool.h"
 

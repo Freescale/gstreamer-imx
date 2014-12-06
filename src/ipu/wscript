@@ -25,7 +25,7 @@ def configure(conf):
 def build(bld):
 	if bld.env['IPU_ELEMENTS_ENABLED']:
 		bld(
-			features = ['c', 'cshlib'],
+			features = ['c', bld.env['CLIBTYPE']],
 			includes = ['.', '../..'],
 			uselib = bld.env['COMMON_USELIB'] + ['IMXIPU', 'KERNEL_HEADERS'],
 			use = 'gstimxcommon',

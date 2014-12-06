@@ -7,7 +7,7 @@ def configure(conf):
 
 def build(bld):
 	bld(
-		features = ['c', 'cshlib'],
+		features = ['c', bld.env['CLIBTYPE']],
 		includes = ['.', '../..'],
 		uselib = bld.env['COMMON_USELIB'] + ['FSLVPUWRAPPER'],
 		use = 'gstimxcommon',

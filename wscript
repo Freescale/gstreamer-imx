@@ -51,6 +51,7 @@ def options(opt):
 	opt.add_option('--with-package-origin', action = 'store', default = "Unknown package origin", help = 'specify package origin URL to use in plugin [default: %default]')
 	opt.add_option('--plugin-install-path', action = 'store', default = "${PREFIX}/lib/gstreamer-1.0", help = 'where to install the plugin for GStreamer 1.0 [default: %default]')
 	opt.add_option('--kernel-headers', action = 'store', default = None, help = 'specify path to the kernel headers')
+	opt.add_option('--build-for-android', action = 'store_true', default = False, help = 'build with Android support [default: %default]')
 	opt.load('compiler_c')
 	opt.load('gnu_dirs')
 	opt.recurse('src/eglvivsink')
@@ -113,11 +114,23 @@ def configure(conf):
 	add_compiler_flags(conf, conf.env, compiler_flags, 'C', 'C')
 
 
+	# some extra output for Android
+	conf.msg('Building for Android', result = 'yes' if conf.options.build_for_android else 'no', color = 'GREEN' if conf.options.build_for_android else 'YELLOW')
+	if conf.options.build_for_android:
+		conf.define('BUILD_FOR_ANDROID', 1)
+		conf.define('GST_PLUGIN_BUILD_STATIC', 1)
+		conf.env['BUILD_FOR_ANDROID'] = True
+		conf.env['CLIBTYPE'] = 'cstlib' # Cannot use shared library builds of gstreamer-imx with Android
+	else:
+		conf.env['CLIBTYPE'] = 'cshlib'
+
+
 	# test for pthreads and the math library
 
 	conf.check_cc(lib = 'm', uselib_store = 'M', mandatory = 1)
 
-	if conf.check_cc(lib = 'pthread', uselib_store = 'PTHREAD', mandatory = 1):
+	# Android's libc (called "bionic") includes the pthreads library, however it still needs the -pthread flag
+	if conf.options.build_for_android or conf.check_cc(lib = 'pthread', uselib_store = 'PTHREAD', mandatory = 1):
 		conf.env['CFLAGS_PTHREAD'] += ['-pthread']
 
 
