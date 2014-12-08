@@ -1,0 +1,67 @@
+#!/usr/bin/env python
+
+
+import os, re
+from waflib import Logs, Errors
+
+
+def add_fslcodec(conf, desc, codec_name, arm_core, gstcaps):
+	try:
+		orig_codec_fn = "lib_%s_wrap_%s_elinux.so" % (codec_name, arm_core)
+		objdump_out = conf.cmd_and_log('%s -p "%s"' % (conf.env['OBJDUMP'], os.path.join(conf.env['UNIAUDIO_BUILD_CODEC_PATH'], orig_codec_fn)), env = dict(os.environ)).splitlines()
+		soname_line = reduce(lambda a,b : a or b, map(lambda x: x if x.find('SONAME') != -1 else None, objdump_out))
+		soname_line = soname_line.strip()
+		soname = re.search('SONAME\s*(\S*)', soname_line).group(1)
+		print(soname)
+		codec_fn = orig_codec_fn
+
+		path = conf.env['UNIAUDIO_TARGET_CODEC_PATH']
+		fullpath = os.path.join(path, soname)
+		suffix = "%s_%s" % (codec_name.upper(), arm_core.upper())
+		conf.env['CODEC_ENTRIES'] += [ { "filename": fullpath, "gstcaps": gstcaps } ]
+		Logs.pprint('NORMAL', '  added %s decoder' % desc)
+	except Errors.WafError as e:
+		Logs.pprint('NORMAL', '  could not add %s decoder' % desc)
+
+
+def configure(conf):
+	from waflib.Build import Logs
+	if conf.check_cfg(package = 'libfslaudiocodec', uselib_store = 'FSLAUDIOCODEC', args = '--cflags --libs', mandatory = 0):
+		conf.env['UNIAUDIO_DECODER_ENABLED'] = 1
+		conf.define('WITH_UNIAUDIO_DECODER', 1)
+		fslcodec_libdirvar = conf.check_cfg(package = 'libfslaudiocodec', args = '--variable=libdir', msg = 'Getting fslcodec plugin directory', okmsg = 'found', mandatory = 0).strip()
+		conf.env['UNIAUDIO_BUILD_CODEC_PATH'] = os.path.join(conf.env['LIBPATH_FSLAUDIOCODEC'][0], 'wrap')
+		conf.env['UNIAUDIO_TARGET_CODEC_PATH'] = os.path.join(fslcodec_libdirvar, 'wrap')
+		Logs.pprint('GREEN', 'uniaudio decoder will be built')
+	else:
+		Logs.pprint('RED', 'uniaudio decoder will not be built - libfslaudiocodec package not found')
+
+	if conf.env['UNIAUDIO_DECODER_ENABLED']:
+		conf.env['CODEC_ENTRIES'] = []
+		add_fslcodec(conf, "AAC LC", "aacd", "arm12", "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}")
+		add_fslcodec(conf, "MP3", "mp3d", "arm12", "audio/mpeg, mpegversion=(int)1, layer=(int)3, parsed=(boolean)true")
+		add_fslcodec(conf, "Vorbis", "vorbisd", "arm12", "audio/x-vorbis")
+		add_fslcodec(conf, "narrowband AMR", "nbamrd", "arm12", "audio/AMR")
+		add_fslcodec(conf, "wideband AMR", "wbamrd", "arm12", "audio/AMR-WB")
+
+		codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
+		conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s, { NULL, NULL } }" % codec_str, quote = False)
+
+
+def build(bld):
+	base_source = ['plugin.c']
+	extra_source = []
+	if bld.env['UNIAUDIO_DECODER_ENABLED']:
+		extra_source += ['uniaudio_codec.c', 'uniaudio_decoder.c']
+
+	if extra_source:
+		bld(
+			features = ['c', bld.env['CLIBTYPE']],
+			includes = ['.', '../..'],
+			uselib = bld.env['COMMON_USELIB'] + ['IMX_ASRC', 'KERNEL_HEADERS', 'DL', 'FSLAUDIOCODEC'],
+			use = 'gstimxcommon',
+			target = 'gstimxaudio',
+			source = base_source + extra_source,
+			install_path = bld.env['PLUGIN_INSTALL_PATH']
+		)
+

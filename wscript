@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 
-from waflib.Build import BuildContext, CleanContext, InstallContext, UninstallContext
+from waflib.Build import BuildContext, CleanContext, InstallContext, UninstallContext, Logs
 
 top = '.'
 out = 'build'
@@ -21,7 +21,8 @@ int main()
 def check_compiler_flag(conf, flag, lang):
 	return conf.check(fragment = c_cflag_check_code, mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for compiler switch %s' % flag, cxxflags = conf.env[lang + 'FLAGS'] + [flag], okmsg = 'yes', errmsg = 'no')  
 def check_compiler_flags_2(conf, cflags, ldflags, msg):
-	return conf.check(fragment = c_cflag_check_code, mandatory = 0, execute = 0, define_ret = 0, msg = msg, cxxflags = cflags, ldflags = ldflags, okmsg = 'yes', errmsg = 'no')
+	Logs.pprint('NORMAL', msg)
+	return conf.check(fragment = c_cflag_check_code, mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking if building with these flags works', cxxflags = cflags, ldflags = ldflags, okmsg = 'yes', errmsg = 'no')
 
 
 def add_compiler_flags(conf, env, flags, lang, compiler, uselib = ''):
@@ -99,11 +100,11 @@ def configure(conf):
 	# check and add compiler flags
 
 	if conf.env['CFLAGS'] and conf.env['LINKFLAGS']:
-		check_compiler_flags_2(conf, conf.env['CFLAGS'], conf.env['LINKFLAGS'], "Testing compiler flags %s and linker flags %s" % (' '.join(conf.env['CFLAGS']), ' '.join(conf.env['LINKFLAGS'])))
+		check_compiler_flags_2(conf, conf.env['CFLAGS'], conf.env['LINKFLAGS'], "Need to test compiler flags %s and linker flags %s" % (' '.join(conf.env['CFLAGS']), ' '.join(conf.env['LINKFLAGS'])))
 	elif conf.env['CFLAGS']:
-		check_compiler_flags_2(conf, conf.env['CFLAGS'], '', "Testing compiler flags %s" % ' '.join(conf.env['CFLAGS']))
+		check_compiler_flags_2(conf, conf.env['CFLAGS'], '', "Need to test compiler flags %s" % ' '.join(conf.env['CFLAGS']))
 	elif conf.env['LINKFLAGS']:
-		check_compiler_flags_2(conf, '', conf.env['LINKFLAGS'], "Testing linker flags %s" % ' '.join(conf.env['LINKFLAGS']))
+		check_compiler_flags_2(conf, '', conf.env['LINKFLAGS'], "Need to test linker flags %s" % ' '.join(conf.env['LINKFLAGS']))
 
 	compiler_flags = ['-Wextra', '-Wall', '-std=gnu99', '-fPIC', '-DPIC']
 	if conf.options.enable_debug:
@@ -112,6 +113,14 @@ def configure(conf):
 		compiler_flags += ['-O2']
 
 	add_compiler_flags(conf, conf.env, compiler_flags, 'C', 'C')
+
+
+	# configure objdump utility
+	try:
+		conf.env['OBJDUMP'] = os.environ['OBJDUMP']
+		conf.msg(msg = 'Checking for program objdump', result = conf.env['OBJDUMP'])
+	except KeyError as e:
+		conf.env['OBJDUMP'] = conf.find_program('objdump', var = 'OBJDUMP')
 
 
 	# some extra output for Android
@@ -125,8 +134,9 @@ def configure(conf):
 		conf.env['CLIBTYPE'] = 'cshlib'
 
 
-	# test for pthreads and the math library
+	# test for miscellaneous system libraries
 
+	conf.check_cc(lib = 'dl', uselib_store = 'DL', mandatory = 1)
 	conf.check_cc(lib = 'm', uselib_store = 'M', mandatory = 1)
 
 	# Android's libc (called "bionic") includes the pthreads library, however it still needs the -pthread flag
@@ -138,6 +148,7 @@ def configure(conf):
 
 	conf.check_cfg(package = 'gstreamer-1.0 >= 1.2.0', uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
 	conf.check_cfg(package = 'gstreamer-base-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_BASE', args = '--cflags --libs', mandatory = 1)
+	conf.check_cfg(package = 'gstreamer-audio-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 0)
 	conf.check_cfg(package = 'gstreamer-video-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 1)
 
 
@@ -155,7 +166,7 @@ def configure(conf):
 	conf.define('PACKAGE', "gstreamer-imx")
 	conf.define('VERSION', "1.0")
 
-	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_VIDEO', 'PTHREAD', 'M']
+	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_AUDIO', 'GSTREAMER_VIDEO', 'PTHREAD', 'M']
 
 
 	conf.recurse('src/common')
@@ -165,6 +176,7 @@ def configure(conf):
 	conf.recurse('src/vpu')
 	conf.recurse('src/eglvivsink')
 	conf.recurse('src/v4l2src')
+	conf.recurse('src/audio')
 
 
 	conf.write_config_header('config.h')
@@ -179,4 +191,5 @@ def build(bld):
 	bld.recurse('src/vpu')
 	bld.recurse('src/eglvivsink')
 	bld.recurse('src/v4l2src')
+	bld.recurse('src/audio')
 
