@@ -21,7 +21,7 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <pxp_lib.h>
+#include <linux/pxp_device.h>
 #include "allocator.h"
 #include "device.h"
 
