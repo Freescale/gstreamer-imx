@@ -276,8 +276,10 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			gst_buffer_map(codec_data, &map, GST_MAP_READ);
 			parameter.codecData.size = map.size;
 			parameter.codecData.buf = (char *)(map.data);
-			gst_buffer_unmap(codec_data, &map);
 			UNIA_SET_PARAMETER(UNIA_CODEC_DATA, "codec data");
+			gst_buffer_unmap(codec_data, &map);
+
+			GST_DEBUG_OBJECT(dec, "codec data: %" G_GSIZE_FORMAT, gst_buffer_get_size(codec_data));
 
 			if (unref_codec_data)
 				gst_buffer_unref(codec_data);
