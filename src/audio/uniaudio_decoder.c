@@ -284,7 +284,7 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 		}
 	}
 
-	parameter.framed = TRUE;
+	parameter.framed = FALSE;
 	UNIA_SET_PARAMETER(UNIA_FRAMED, "framed");
 
 	GST_DEBUG_OBJECT(dec, "decoder configured");
