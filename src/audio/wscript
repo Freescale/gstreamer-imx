@@ -41,7 +41,7 @@ def configure(conf):
 		add_fslcodec(conf, "AAC LC", "aacd", "arm12", "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}")
 		add_fslcodec(conf, "MP3", "mp3d", "arm12", "audio/mpeg, mpegversion=(int)1, layer=(int)3, parsed=(boolean)true")
 		add_fslcodec(conf, "Vorbis", "vorbisd", "arm12", "audio/x-vorbis")
-		add_fslcodec(conf, "narrowband AMR", "nbamrd", "arm12", "audio/AMR")
+		add_fslcodec(conf, "narrowband AMR", "nbamrd", "arm11", "audio/AMR")
 		add_fslcodec(conf, "wideband AMR", "wbamrd", "arm12", "audio/AMR-WB")
 
 		codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
