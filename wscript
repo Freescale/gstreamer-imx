@@ -160,6 +160,8 @@ def configure(conf):
 	# misc definitions & env vars
 
 	conf.env['PLUGIN_INSTALL_PATH'] = os.path.expanduser(conf.options.plugin_install_path)
+	if conf.env['BUILD_FOR_ANDROID']:
+		conf.env['PLUGIN_INSTALL_PATH'] = os.path.join(conf.env['PLUGIN_INSTALL_PATH'], 'static')
 
 	conf.define('GST_PACKAGE_NAME', conf.options.with_package_name)
 	conf.define('GST_PACKAGE_ORIGIN', conf.options.with_package_origin)
