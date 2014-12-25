@@ -177,19 +177,19 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 		return FALSE;
 	}
 
-	/* Get rate and channels from caps */
+	/* Get configuration parameters from caps */
 	{
-		int rate, channels;
-		gchar const *stream_format;
+		int samplerate, channels, bitrate;
+		gchar const *stream_format, *sample_format;
 		GValue const *value;
 		GstBuffer *codec_data = NULL;
 		gboolean unref_codec_data = FALSE;
 		GstStructure *structure = gst_caps_get_structure(caps, 0);
 
-		if (gst_structure_get_int(structure, "rate", &rate))
+		if (gst_structure_get_int(structure, "rate", &samplerate))
 		{
-			GST_DEBUG_OBJECT(dec, "input caps sample rate: %d Hz", rate);
-			parameter.samplerate = rate;
+			GST_DEBUG_OBJECT(dec, "input caps sample rate: %d Hz", samplerate);
+			parameter.samplerate = samplerate;
 			UNIA_SET_PARAMETER(UNIA_SAMPLERATE, "sample rate");
 		}
 
@@ -198,6 +198,13 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			GST_DEBUG_OBJECT(dec, "input caps channel count: %d", channels);
 			parameter.channels = channels;
 			UNIA_SET_PARAMETER(UNIA_CHANNEL, "channel");
+		}
+
+		if (gst_structure_get_int(structure, "bitrate", &bitrate))
+		{
+			GST_DEBUG_OBJECT(dec, "input caps channel count: %d", bitrate);
+			parameter.bitrate = bitrate;
+			UNIA_SET_PARAMETER(UNIA_BITRATE, "bitrate");
 		}
 
 		if ((stream_format = gst_structure_get_string(structure, "stream-format")) != NULL)
@@ -214,8 +221,28 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			UNIA_SET_PARAMETER(UNIA_STREAM_TYPE, "stream type");
 		}
 
+		if ((sample_format = gst_structure_get_string(structure, "format")) != NULL)
+		{
+			GstAudioFormat fmt;
+			GstAudioFormatInfo const * fmtinfo;
+
+			GST_DEBUG_OBJECT(dec, "input caps stream sample format: %s", sample_format);
+			if ((fmt = gst_audio_format_from_string(sample_format)) == GST_AUDIO_FORMAT_UNKNOWN)
+			{
+				GST_ERROR_OBJECT(dec, "format is unknown, cannot continue");
+				return FALSE;
+			}
+
+			fmtinfo = gst_audio_format_get_info(fmt);
+			g_assert(fmtinfo != NULL);
+
+			parameter.depth = GST_AUDIO_FORMAT_INFO_DEPTH(fmtinfo);
+			UNIA_SET_PARAMETER(UNIA_DEPTH, "depth");
+		}
+
 		if ((value = gst_structure_get_value(structure, "codec_data")) != NULL)
 		{
+			GST_DEBUG_OBJECT(dec, "reading codec_data value");
 			codec_data = gst_value_get_buffer(value);
 			unref_codec_data = FALSE;
 		}
@@ -225,6 +252,8 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			GstAdapter *streamheader_adapter = gst_adapter_new();
 			unref_codec_data = TRUE;
 
+			GST_DEBUG_OBJECT(dec, "reading streamheader value (%u headers)", num_buffers);
+
 			if (num_buffers >= MIN_NUM_VORBIS_HEADERS)
 			{
 				guint i;
@@ -232,7 +261,7 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 				{
 					GValue const *array_value = gst_value_array_get_value(value, i);
 					GstBuffer *buf = gst_value_get_buffer(array_value);
-					GST_DEBUG_OBJECT(dec, "add streamheader buffer #%u/#%u with %" G_GSIZE_FORMAT " byte", i, num_buffers, gst_buffer_get_size(buf));
+					GST_DEBUG_OBJECT(dec, "add streamheader buffer #%u with %" G_GSIZE_FORMAT " byte", i, gst_buffer_get_size(buf));
 					gst_adapter_push(streamheader_adapter, gst_buffer_copy(buf));
 				}
 			}
