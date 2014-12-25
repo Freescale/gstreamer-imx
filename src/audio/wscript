@@ -43,6 +43,7 @@ def configure(conf):
 		add_fslcodec(conf, "Vorbis", "vorbisd", "arm12", "audio/x-vorbis")
 		add_fslcodec(conf, "narrowband AMR", "nbamrd", "arm11", "audio/AMR")
 		add_fslcodec(conf, "wideband AMR", "wbamrd", "arm12", "audio/AMR-WB")
+		add_fslcodec(conf, "WMA", "wma10d", "arm12", "audio/x-wma, wmaversion = (int)[ 1, 4 ]")
 
 		codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
 		conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s, { NULL, NULL } }" % codec_str, quote = False)

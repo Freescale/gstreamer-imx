@@ -179,7 +179,7 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 
 	/* Get configuration parameters from caps */
 	{
-		int samplerate, channels, bitrate;
+		int samplerate, channels, bitrate, block_align, wmaversion;
 		gchar const *stream_format, *sample_format;
 		GValue const *value;
 		GstBuffer *codec_data = NULL;
@@ -205,6 +205,20 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			GST_DEBUG_OBJECT(dec, "input caps channel count: %d", bitrate);
 			parameter.bitrate = bitrate;
 			UNIA_SET_PARAMETER(UNIA_BITRATE, "bitrate");
+		}
+
+		if (gst_structure_get_int(structure, "block_align", &block_align))
+		{
+			GST_DEBUG_OBJECT(dec, "block alignment: %d", block_align);
+			parameter.blockalign = block_align;
+			UNIA_SET_PARAMETER(UNIA_WMA_BlOCKALIGN, "blockalign");
+		}
+
+		if (gst_structure_get_int(structure, "wmaversion", &wmaversion))
+		{
+			GST_DEBUG_OBJECT(dec, "WMA version: %d", wmaversion);
+			parameter.version = wmaversion;
+			UNIA_SET_PARAMETER(UNIA_WMA_VERSION, "wmaversion");
 		}
 
 		if ((stream_format = gst_structure_get_string(structure, "stream-format")) != NULL)
