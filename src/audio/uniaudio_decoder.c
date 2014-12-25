@@ -324,6 +324,11 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 		uint8 *out_buf = NULL;
 		uint32 out_size = 0;
 
+		if (buffer != NULL)
+			GST_TRACE_OBJECT(dec, "feeding %lu bytes to the decoder", in_size);
+		else
+			GST_TRACE_OBJECT(dec, "draining decoder");
+
 		dec_ret = imx_audio_uniaudio_dec->codec->decode_frame(
 			imx_audio_uniaudio_dec->handle,
 			in_buf, in_size,
@@ -331,10 +336,7 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 			&out_buf, &out_size
 		);
 
-		if (buffer != NULL)
-			GST_TRACE_OBJECT(dec, "feeding %lu bytes to the decoder", in_size);
-		else
-			GST_TRACE_OBJECT(dec, "draining decoder");
+		GST_TRACE_OBJECT(dec, "decode_frame:  return 0x%x  offset %lu  out_size %lu", (unsigned int)dec_ret, offset, out_size);
 
 		if ((out_buf != NULL) && (out_size > 0))
 		{
@@ -348,21 +350,23 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 		{
 			dec_loop = FALSE;
 		}
-		else
+
+		switch (dec_ret)
 		{
-			switch (dec_ret)
+			case ACODEC_SUCCESS:
+				break;
+			case ACODEC_END_OF_STREAM:
+				dec_loop = FALSE;
+				break;
+			case ACODEC_NOT_ENOUGH_DATA:
+				break;
+			case ACODEC_CAPIBILITY_CHANGE:
+				break;
+			default:
 			{
-				case ACODEC_SUCCESS:
-					break;
-				case ACODEC_END_OF_STREAM:
-					dec_loop = FALSE;
-					break;
-				default:
-				{
-					dec_loop = FALSE;
-					flow_error = TRUE;
-					GST_ELEMENT_ERROR(dec, STREAM, DECODE, ("could not decode"), ("error message: %s", imx_audio_uniaudio_dec->codec->get_last_error(imx_audio_uniaudio_dec->handle)));
-				}
+				dec_loop = FALSE;
+				flow_error = TRUE;
+				GST_ELEMENT_ERROR(dec, STREAM, DECODE, ("could not decode"), ("error message: %s", imx_audio_uniaudio_dec->codec->get_last_error(imx_audio_uniaudio_dec->handle)));
 			}
 		}
 	}
