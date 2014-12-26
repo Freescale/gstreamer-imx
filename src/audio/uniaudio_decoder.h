@@ -50,6 +50,7 @@ struct _GstImxAudioUniaudioDec
 	UniACodec_Handle handle;
 	gboolean has_audioinfo_set;
 	GstAdapter *out_adapter;
+	GstBuffer *codec_data;
 };
 
 

@@ -110,6 +110,7 @@ void gst_imx_audio_uniaudio_dec_init(GstImxAudioUniaudioDec *imx_decoder)
 	imx_decoder->codec = NULL;
 	imx_decoder->handle = NULL;
 	imx_decoder->out_adapter = gst_adapter_new();
+	imx_decoder->codec_data = NULL;
 }
 
 
@@ -117,6 +118,9 @@ static void gst_imx_audio_uniaudio_dec_finalize(GObject *object)
 {
 	GstImxAudioUniaudioDec *imx_audio_uniaudio_dec = GST_IMX_AUDIO_UNIAUDIO_DEC(object);
 	g_object_unref(G_OBJECT(imx_audio_uniaudio_dec->out_adapter));
+	if (imx_audio_uniaudio_dec->codec_data != NULL)
+		gst_buffer_unref(imx_audio_uniaudio_dec->codec_data);
+
 	G_OBJECT_CLASS(gst_imx_audio_uniaudio_dec_parent_class)->finalize(object);
 }
 
@@ -183,7 +187,6 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 		gchar const *stream_format, *sample_format;
 		GValue const *value;
 		GstBuffer *codec_data = NULL;
-		gboolean unref_codec_data = FALSE;
 		GstStructure *structure = gst_caps_get_structure(caps, 0);
 
 		if (gst_structure_get_int(structure, "rate", &samplerate))
@@ -254,17 +257,33 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			UNIA_SET_PARAMETER(UNIA_DEPTH, "depth");
 		}
 
+		/* Handle codec data, either directly from a codec_data caps,
+		 * or assemble it from a list of buffers specified by the
+		 * streamheader caps (typically used by Vorbis audio) */
+
+		/* Cleanup old codec data first */
+		if (imx_audio_uniaudio_dec->codec_data != NULL)
+		{
+			gst_buffer_unref(imx_audio_uniaudio_dec->codec_data);
+			imx_audio_uniaudio_dec->codec_data = NULL;
+		}
+
+		/* Check if either codec_data or streamheader caps exist */
 		if ((value = gst_structure_get_value(structure, "codec_data")) != NULL)
 		{
+			/* codec_data caps exist - simply make a copy of its buffer
+			 * (this makes sure we own that buffer properly) */
+
+			GstBuffer *caps_buffer;
 			GST_DEBUG_OBJECT(dec, "reading codec_data value");
-			codec_data = gst_value_get_buffer(value);
-			unref_codec_data = FALSE;
+			caps_buffer = gst_value_get_buffer(value);
+			g_assert(caps_buffer != NULL);
+			codec_data = gst_buffer_copy(caps_buffer);
 		}
 		else if ((value = gst_structure_get_value(structure, "streamheader")) != NULL)
 		{
 			guint num_buffers = gst_value_array_get_size(value);
 			GstAdapter *streamheader_adapter = gst_adapter_new();
-			unref_codec_data = TRUE;
 
 			GST_DEBUG_OBJECT(dec, "reading streamheader value (%u headers)", num_buffers);
 
@@ -284,6 +303,13 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			g_object_unref(G_OBJECT(streamheader_adapter));
 		}
 
+		/* At this point, if either codec_data or streamheader caps were found,
+		 * the codec_data pointer will refer to a valid non-empty buffer with
+		 * codec data inside. This buffer is owned by this audio decoder object,
+		 * and must be kept around for as long as the decoder needs to be ran,
+		 * since the set_parameter call below does *not* copy the codec data
+		 * bytes into some internal buffer. Instead, the uniaudio decoder plugin
+		 * expects the caller to keep the buffer valid. */
 		if ((codec_data != NULL) && (gst_buffer_get_size(codec_data) != 0))
 		{
 			GstMapInfo map;
@@ -293,10 +319,7 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			UNIA_SET_PARAMETER(UNIA_CODEC_DATA, "codec data");
 			gst_buffer_unmap(codec_data, &map);
 
-			GST_DEBUG_OBJECT(dec, "codec data: %" G_GSIZE_FORMAT, gst_buffer_get_size(codec_data));
-
-			if (unref_codec_data)
-				gst_buffer_unref(codec_data);
+			GST_DEBUG_OBJECT(dec, "codec data: %lu byte", parameter.codecData.size);
 		}
 	}
 
