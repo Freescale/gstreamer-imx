@@ -26,9 +26,6 @@ GST_DEBUG_CATEGORY_STATIC(imx_audio_uniaudio_dec_debug);
 #define GST_CAT_DEFAULT imx_audio_uniaudio_dec_debug
 
 
-#define MIN_NUM_VORBIS_HEADERS 3
-
-
 static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	"src",
 	GST_PAD_SRC,
@@ -110,6 +107,7 @@ void gst_imx_audio_uniaudio_dec_init(GstImxAudioUniaudioDec *imx_decoder)
 	imx_decoder->codec = NULL;
 	imx_decoder->handle = NULL;
 	imx_decoder->out_adapter = gst_adapter_new();
+	imx_decoder->skip_header_counter = 0;
 	imx_decoder->codec_data = NULL;
 }
 
@@ -117,6 +115,7 @@ void gst_imx_audio_uniaudio_dec_init(GstImxAudioUniaudioDec *imx_decoder)
 static void gst_imx_audio_uniaudio_dec_finalize(GObject *object)
 {
 	GstImxAudioUniaudioDec *imx_audio_uniaudio_dec = GST_IMX_AUDIO_UNIAUDIO_DEC(object);
+
 	g_object_unref(G_OBJECT(imx_audio_uniaudio_dec->out_adapter));
 	if (imx_audio_uniaudio_dec->codec_data != NULL)
 		gst_buffer_unref(imx_audio_uniaudio_dec->codec_data);
@@ -188,6 +187,8 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 		GValue const *value;
 		GstBuffer *codec_data = NULL;
 		GstStructure *structure = gst_caps_get_structure(caps, 0);
+
+		imx_audio_uniaudio_dec->skip_header_counter = 0;
 
 		if (gst_structure_get_int(structure, "rate", &samplerate))
 		{
@@ -282,24 +283,27 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 		}
 		else if ((value = gst_structure_get_value(structure, "streamheader")) != NULL)
 		{
-			guint num_buffers = gst_value_array_get_size(value);
+			/* streamheader caps exist, which are a list of buffers
+			 * these buffers need to be concatenated and then given as
+			 * one consecutive codec data buffer to the decoder */
+
+			guint i, num_buffers = gst_value_array_get_size(value);
 			GstAdapter *streamheader_adapter = gst_adapter_new();
 
 			GST_DEBUG_OBJECT(dec, "reading streamheader value (%u headers)", num_buffers);
 
-			if (num_buffers >= MIN_NUM_VORBIS_HEADERS)
-			{
-				guint i;
-				for (i = 0; i < num_buffers; ++i)
-				{
-					GValue const *array_value = gst_value_array_get_value(value, i);
-					GstBuffer *buf = gst_value_get_buffer(array_value);
-					GST_DEBUG_OBJECT(dec, "add streamheader buffer #%u with %" G_GSIZE_FORMAT " byte", i, gst_buffer_get_size(buf));
-					gst_adapter_push(streamheader_adapter, gst_buffer_copy(buf));
-				}
-			}
+			imx_audio_uniaudio_dec->num_vorbis_headers = num_buffers;
 
+			/* Use the GstAdapter to stitch these buffers together */
+			for (i = 0; i < num_buffers; ++i)
+			{
+				GValue const *array_value = gst_value_array_get_value(value, i);
+				GstBuffer *buf = gst_value_get_buffer(array_value);
+				GST_DEBUG_OBJECT(dec, "add streamheader buffer #%u with %" G_GSIZE_FORMAT " byte", i, gst_buffer_get_size(buf));
+				gst_adapter_push(streamheader_adapter, gst_buffer_copy(buf));
+			}
 			codec_data = gst_adapter_take_buffer(streamheader_adapter, gst_adapter_available(streamheader_adapter));
+
 			g_object_unref(G_OBJECT(streamheader_adapter));
 		}
 
@@ -347,6 +351,16 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 	uint8 *in_buf = NULL;
 	uint32 in_size = 0;
 	gboolean dec_loop = TRUE, flow_error = FALSE;
+
+	/* With some formats such as Vorbis, the first few buffers are actually redundant,
+	 * since they contain codec data that was already specified in codec_data or
+	 * streamheader caps earlier. If this is the case, skip these buffers. */
+	if (imx_audio_uniaudio_dec->skip_header_counter < imx_audio_uniaudio_dec->num_vorbis_headers)
+	{
+		GST_TRACE_OBJECT(dec, "skipping header buffer #%u", imx_audio_uniaudio_dec->skip_header_counter);
+		++imx_audio_uniaudio_dec->skip_header_counter;
+		return gst_audio_decoder_finish_frame(dec, NULL, 1);
+	}
 
 	if (buffer != NULL)
 	{
