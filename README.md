@@ -4,8 +4,8 @@ gstreamer-imx
 About
 -----
 
-This is a set of [GStreamer 1.0](http://gstreamer.freedesktop.org/) plugins for plugins for Freescale's
-i.MX platform, with emphasis on video en/decoding using the i.MX VPU engine.
+This is a set of [GStreamer 1.0](http://gstreamer.freedesktop.org/) plugins for Freescale's
+i.MX platform, which make use of the i.MX multimedia capabilities.
 
 Currently, this software has been tested only with the i.MX6 SoC family.
 
@@ -30,8 +30,11 @@ Available plugins
 * `imxipuvideotransform` : video transform element using the IPU, capable of scaling, deinterlacing, rotating (in 90 degree steps), flipping frames, and converting between color spaces
 * `imxg2dvideosink` : video sink using the GPU's 2D core (through the G2D API) to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxg2dvideotransform` : video transform element using the GPU's 2D core (through the G2D API), capable of scaling, rotating (in 90 degree steps), flipping frames, and converting between color spaces
+* `imxpxpvideosink` : video sink using the PxP engine to output to Framebuffer (may not work well if X11 or Wayland are running)
+* `imxpxpvideotransform` : video transform element using the PxP engine, capable of scaling, rotating (in 90 degree steps), flipping frames, and converting between color spaces
 * `imxeglvivsink` : custom OpenGL ES 2.x based video sink; using the Vivante direct textures, which allow for smooth playback
 * `imxv4l2src` : customized Video4Linux source with i.MX specific tweaks
+* `imxuniaudiodec` : audio decoder plugin based on Freescale's unified audio (UniAudio) architecture
 
 
 Dependencies
