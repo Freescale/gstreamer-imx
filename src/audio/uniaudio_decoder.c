@@ -327,6 +327,9 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 		}
 	}
 
+	/* framed = TRUE works with mp3, AMR-NB/WB, and Vorbis, but does not seem to
+	 * change anything; however, it does break WMA decoding, since the WMA decoder
+	 * then expects some additional ASF headers, so just always set framed to FALSE */
 	parameter.framed = FALSE;
 	UNIA_SET_PARAMETER(UNIA_FRAMED, "framed");
 

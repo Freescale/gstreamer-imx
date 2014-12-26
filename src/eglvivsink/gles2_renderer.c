@@ -811,7 +811,7 @@ static gboolean gst_imx_egl_viv_sink_gles2_renderer_render_current_frame(GstImxE
 			return FALSE;
 
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-		if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glDrawElements"))
+		if (!gst_imx_egl_viv_sink_gles2_renderer_check_gl_error("render", "glDrawArrays"))
 			return FALSE;
 	}
 

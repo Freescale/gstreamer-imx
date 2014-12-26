@@ -665,12 +665,6 @@ static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitte
 		return fmt;
 	}
 
-	if (fb_fix->type != FB_TYPE_PACKED_PIXELS)
-	{
-		GST_DEBUG_OBJECT(blitter_video_sink, "unknown framebuffer type %d", fb_fix->type);
-		return fmt;
-	}
-
 	switch (fb_var->bits_per_pixel)
 	{
 		case 15:
@@ -827,7 +821,7 @@ static gboolean gst_imx_blitter_video_sink_init_framebuffer(GstImxBlitterVideoSi
 	gst_buffer_add_video_meta(buffer, GST_VIDEO_FRAME_FLAG_NONE, fb_format, fb_width, fb_height);
 
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_ADD(buffer);
-	phys_mem_meta->phys_addr = (guintptr)(fb_fix.smem_start);
+	phys_mem_meta->phys_addr = (gst_imx_phys_addr_t)(fb_fix.smem_start);
 
 	blitter_video_sink->framebuffer = buffer;
 
