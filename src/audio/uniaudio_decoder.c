@@ -17,6 +17,7 @@
  */
 
 
+#include <string.h>
 #include <stdlib.h>
 #include "uniaudio_decoder.h"
 #include "uniaudio_codec.h"
@@ -24,6 +25,90 @@
 
 GST_DEBUG_CATEGORY_STATIC(imx_audio_uniaudio_dec_debug);
 #define GST_CAT_DEFAULT imx_audio_uniaudio_dec_debug
+
+
+static uint32 uniaudio_channel_map_mono[] =
+{
+	UA_CHANNEL_FRONT_CENTER
+};
+
+static uint32 uniaudio_channel_map_2_0_stereo[] =
+{
+	UA_CHANNEL_FRONT_LEFT,
+	UA_CHANNEL_FRONT_RIGHT
+};
+
+static uint32 uniaudio_channel_map_3_0_stereo[] =
+{
+	UA_CHANNEL_FRONT_LEFT,
+	UA_CHANNEL_FRONT_RIGHT,
+	UA_CHANNEL_FRONT_CENTER
+};
+
+static uint32 uniaudio_channel_map_4_0_quad[] =
+{
+	UA_CHANNEL_FRONT_LEFT,
+	UA_CHANNEL_FRONT_RIGHT,
+	UA_CHANNEL_REAR_LEFT,
+	UA_CHANNEL_REAR_RIGHT,
+};
+
+static uint32 uniaudio_channel_map_4_1_quad[] =
+{
+	UA_CHANNEL_FRONT_LEFT,
+	UA_CHANNEL_FRONT_RIGHT,
+	UA_CHANNEL_FRONT_CENTER,
+	UA_CHANNEL_REAR_LEFT,
+	UA_CHANNEL_REAR_RIGHT,
+};
+
+static uint32 uniaudio_channel_map_5_1_surround[] =
+{
+	UA_CHANNEL_FRONT_LEFT,
+	UA_CHANNEL_FRONT_RIGHT,
+	UA_CHANNEL_FRONT_CENTER,
+	UA_CHANNEL_LFE,
+	UA_CHANNEL_REAR_LEFT,
+	UA_CHANNEL_REAR_RIGHT
+};
+
+static uint32 uniaudio_channel_map_6_1_surround[] =
+{
+	UA_CHANNEL_FRONT_LEFT,
+	UA_CHANNEL_FRONT_RIGHT,
+	UA_CHANNEL_FRONT_CENTER,
+	UA_CHANNEL_REAR_CENTER,
+	UA_CHANNEL_LFE,
+	UA_CHANNEL_SIDE_LEFT,
+	UA_CHANNEL_SIDE_RIGHT
+};
+
+static uint32 uniaudio_channel_map_7_1_surround[] =
+{
+	UA_CHANNEL_FRONT_LEFT,
+	UA_CHANNEL_FRONT_RIGHT,
+	UA_CHANNEL_FRONT_CENTER,
+	UA_CHANNEL_LFE,
+	UA_CHANNEL_REAR_LEFT,
+	UA_CHANNEL_REAR_RIGHT,
+	UA_CHANNEL_SIDE_LEFT,
+	UA_CHANNEL_SIDE_RIGHT
+};
+
+static uint32 const * uniaudio_channel_maps[] =
+{
+	NULL, /* no 0-channel map */
+	uniaudio_channel_map_mono,
+	uniaudio_channel_map_2_0_stereo,
+	uniaudio_channel_map_3_0_stereo,
+	uniaudio_channel_map_4_0_quad,
+	uniaudio_channel_map_4_1_quad,
+	uniaudio_channel_map_5_1_surround,
+	uniaudio_channel_map_6_1_surround,
+	uniaudio_channel_map_7_1_surround
+};
+
+#define CHANNEL_MAPS_SIZE (sizeof(uniaudio_channel_maps) / sizeof(gint32 *))
 
 
 static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
@@ -50,6 +135,9 @@ static gboolean gst_imx_audio_uniaudio_dec_stop(GstAudioDecoder *dec);
 static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstCaps *caps);
 static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *dec, GstBuffer *buffer);
 static void gst_imx_audio_uniaudio_dec_flush(GstAudioDecoder *dec, gboolean hard);
+
+static void gst_imx_audio_uniaudio_dec_clear_channel_positions(GstImxAudioUniaudioDec *imx_audio_uniaudio_dec);
+static void gst_imx_audio_uniaudio_dec_fill_channel_positions(GstImxAudioUniaudioDec *imx_audio_uniaudio_dec, uint32 const *uniaudio_out_layout, guint num_channels);
 
 static gboolean gst_imx_audio_uniaudio_dec_close_handle(GstImxAudioUniaudioDec *imx_audio_uniaudio_dec);
 static void* gst_imx_audio_uniaudio_dec_calloc(uint32 num_elements, uint32 size);
@@ -106,6 +194,8 @@ void gst_imx_audio_uniaudio_dec_init(GstImxAudioUniaudioDec *imx_decoder)
 
 	imx_decoder->codec = NULL;
 	imx_decoder->handle = NULL;
+	imx_decoder->original_channel_positions = NULL;
+	imx_decoder->reordered_channel_positions = NULL;
 	imx_decoder->out_adapter = gst_adapter_new();
 	imx_decoder->skip_header_counter = 0;
 	imx_decoder->codec_data = NULL;
@@ -119,6 +209,7 @@ static void gst_imx_audio_uniaudio_dec_finalize(GObject *object)
 	g_object_unref(G_OBJECT(imx_audio_uniaudio_dec->out_adapter));
 	if (imx_audio_uniaudio_dec->codec_data != NULL)
 		gst_buffer_unref(imx_audio_uniaudio_dec->codec_data);
+	gst_imx_audio_uniaudio_dec_clear_channel_positions(imx_audio_uniaudio_dec);
 
 	G_OBJECT_CLASS(gst_imx_audio_uniaudio_dec_parent_class)->finalize(object);
 }
@@ -148,6 +239,18 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 	do \
 	{ \
 		if (imx_audio_uniaudio_dec->codec->set_parameter(imx_audio_uniaudio_dec->handle, (PARAM_ID), &parameter) != ACODEC_SUCCESS) \
+		{ \
+			GST_ERROR_OBJECT(dec, "setting %s parameter failed: %s", (DESC), imx_audio_uniaudio_dec->codec->get_last_error(imx_audio_uniaudio_dec->handle)); \
+			gst_imx_audio_uniaudio_dec_close_handle(imx_audio_uniaudio_dec); \
+			return FALSE; \
+		} \
+	} \
+	while (0)
+
+#define UNIA_SET_PARAMETER_EX(PARAM_ID, DESC, VALUE) \
+	do \
+	{ \
+		if (imx_audio_uniaudio_dec->codec->set_parameter(imx_audio_uniaudio_dec->handle, (PARAM_ID), ((UniACodecParameter *)(VALUE))) != ACODEC_SUCCESS) \
 		{ \
 			GST_ERROR_OBJECT(dec, "setting %s parameter failed: %s", (DESC), imx_audio_uniaudio_dec->codec->get_last_error(imx_audio_uniaudio_dec->handle)); \
 			gst_imx_audio_uniaudio_dec_close_handle(imx_audio_uniaudio_dec); \
@@ -199,9 +302,16 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 
 		if (gst_structure_get_int(structure, "channels", &channels))
 		{
+			CHAN_TABLE table;
+
 			GST_DEBUG_OBJECT(dec, "input caps channel count: %d", channels);
 			parameter.channels = channels;
 			UNIA_SET_PARAMETER(UNIA_CHANNEL, "channel");
+
+			memset(&table, 0, sizeof(table));
+			table.size = CHANNEL_MAPS_SIZE;
+			memcpy(&table.channel_table, uniaudio_channel_maps, sizeof(uniaudio_channel_maps));
+			UNIA_SET_PARAMETER_EX(UNIA_CHAN_MAP_TABLE, "channel map", &table);
 		}
 
 		if (gst_structure_get_int(structure, "bitrate", &bitrate))
@@ -435,6 +545,7 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 	{
 		UniACodecParameter parameter;
 		GstAudioFormat pcm_fmt;
+		GstAudioInfo audio_info;
 
 		imx_audio_uniaudio_dec->codec->get_parameter(imx_audio_uniaudio_dec->handle, UNIA_OUTPUT_PCM_FORMAT, &parameter);
 
@@ -449,13 +560,18 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 
 		GST_DEBUG_OBJECT(imx_audio_uniaudio_dec, "setting output format to: %s  %d Hz  %d channels", gst_audio_format_to_string(pcm_fmt), (gint)(parameter.outputFormat.samplerate), (gint)(parameter.outputFormat.channels));
 
-		GstAudioInfo audio_info;
+		gst_imx_audio_uniaudio_dec_clear_channel_positions(imx_audio_uniaudio_dec);
+		gst_imx_audio_uniaudio_dec_fill_channel_positions(imx_audio_uniaudio_dec, parameter.outputFormat.layout, parameter.outputFormat.channels);
+
+		imx_audio_uniaudio_dec->pcm_format = pcm_fmt;
+		imx_audio_uniaudio_dec->num_channels = parameter.outputFormat.channels;
+
 		gst_audio_info_set_format(
 			&audio_info,
 			pcm_fmt,
 			parameter.outputFormat.samplerate,
 			parameter.outputFormat.channels,
-			NULL
+			imx_audio_uniaudio_dec->reordered_channel_positions
 		);
 		gst_audio_decoder_set_output_format(dec, &audio_info);
 
@@ -468,6 +584,16 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 	if (avail_out_size > 0)
 	{
 		out_buffer = gst_adapter_take_buffer(imx_audio_uniaudio_dec->out_adapter, avail_out_size);
+		if (imx_audio_uniaudio_dec->original_channel_positions != imx_audio_uniaudio_dec->reordered_channel_positions)
+		{
+			gst_audio_buffer_reorder_channels(
+				out_buffer,
+				imx_audio_uniaudio_dec->pcm_format,
+				imx_audio_uniaudio_dec->num_channels,
+				imx_audio_uniaudio_dec->original_channel_positions,
+				imx_audio_uniaudio_dec->reordered_channel_positions
+			);
+		}
 		return gst_audio_decoder_finish_frame(dec, out_buffer, 1);
 	}
 	else
@@ -481,6 +607,67 @@ static void gst_imx_audio_uniaudio_dec_flush(GstAudioDecoder *dec, gboolean G_GN
 {
 	GstImxAudioUniaudioDec *imx_audio_uniaudio_dec = GST_IMX_AUDIO_UNIAUDIO_DEC(dec);
 	imx_audio_uniaudio_dec->codec->reset(imx_audio_uniaudio_dec->handle);
+}
+
+
+static void gst_imx_audio_uniaudio_dec_fill_channel_positions(GstImxAudioUniaudioDec *imx_audio_uniaudio_dec, uint32 const *uniaudio_out_layout, guint num_channels)
+{
+	guint i;
+	gsize num_chanpos_bytes = num_channels * sizeof(GstAudioChannelPosition);
+
+	imx_audio_uniaudio_dec->original_channel_positions = g_malloc0(num_chanpos_bytes);
+	imx_audio_uniaudio_dec->reordered_channel_positions = g_malloc0(num_chanpos_bytes);
+
+	if (num_channels == 1)
+	{
+		imx_audio_uniaudio_dec->original_channel_positions[0] = GST_AUDIO_CHANNEL_POSITION_MONO;
+	}
+	else
+	{
+		for (i = 0; i < num_channels; ++i)
+		{
+			GstAudioChannelPosition *pos = &(imx_audio_uniaudio_dec->original_channel_positions[i]);
+			switch (uniaudio_out_layout[i])
+			{
+				case UA_CHANNEL_FRONT_LEFT:         *pos = GST_AUDIO_CHANNEL_POSITION_FRONT_LEFT; break;
+				case UA_CHANNEL_FRONT_RIGHT:        *pos = GST_AUDIO_CHANNEL_POSITION_FRONT_RIGHT; break;
+				case UA_CHANNEL_REAR_CENTER:        *pos = GST_AUDIO_CHANNEL_POSITION_REAR_CENTER; break;
+				case UA_CHANNEL_REAR_LEFT:          *pos = GST_AUDIO_CHANNEL_POSITION_REAR_LEFT; break;
+				case UA_CHANNEL_REAR_RIGHT:         *pos = GST_AUDIO_CHANNEL_POSITION_REAR_RIGHT; break;
+				case UA_CHANNEL_LFE:                *pos = GST_AUDIO_CHANNEL_POSITION_LFE1; break;
+				case UA_CHANNEL_FRONT_CENTER:       *pos = GST_AUDIO_CHANNEL_POSITION_FRONT_CENTER; break;
+				case UA_CHANNEL_FRONT_LEFT_CENTER:  *pos = GST_AUDIO_CHANNEL_POSITION_FRONT_LEFT; break;
+				case UA_CHANNEL_FRONT_RIGHT_CENTER: *pos = GST_AUDIO_CHANNEL_POSITION_FRONT_RIGHT; break;
+				case UA_CHANNEL_SIDE_LEFT:          *pos = GST_AUDIO_CHANNEL_POSITION_SIDE_LEFT; break;
+				case UA_CHANNEL_SIDE_RIGHT:         *pos = GST_AUDIO_CHANNEL_POSITION_SIDE_RIGHT; break;
+
+				default: *pos = GST_AUDIO_CHANNEL_POSITION_INVALID;
+			}
+		}
+	}
+
+	if (gst_audio_check_valid_channel_positions(imx_audio_uniaudio_dec->original_channel_positions, num_channels, TRUE))
+	{
+		GST_DEBUG_OBJECT(imx_audio_uniaudio_dec, "channel positions are in valid order, no need to reorder channels");
+		imx_audio_uniaudio_dec->reordered_channel_positions = imx_audio_uniaudio_dec->original_channel_positions;
+	}
+	else
+	{
+		GST_DEBUG_OBJECT(imx_audio_uniaudio_dec, "channel positions are not in valid order -> need to reorder channels");
+		memcpy(imx_audio_uniaudio_dec->reordered_channel_positions, imx_audio_uniaudio_dec->original_channel_positions, num_chanpos_bytes);
+		gst_audio_channel_positions_to_valid_order(imx_audio_uniaudio_dec->reordered_channel_positions, num_channels);
+	}
+}
+
+
+static void gst_imx_audio_uniaudio_dec_clear_channel_positions(GstImxAudioUniaudioDec *imx_audio_uniaudio_dec)
+{
+	g_free(imx_audio_uniaudio_dec->original_channel_positions);
+	if (imx_audio_uniaudio_dec->reordered_channel_positions != imx_audio_uniaudio_dec->original_channel_positions)
+		g_free(imx_audio_uniaudio_dec->reordered_channel_positions);
+
+	imx_audio_uniaudio_dec->original_channel_positions = NULL;
+	imx_audio_uniaudio_dec->reordered_channel_positions = NULL;
 }
 
 

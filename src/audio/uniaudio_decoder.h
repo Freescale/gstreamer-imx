@@ -49,6 +49,9 @@ struct _GstImxAudioUniaudioDec
 	GstImxAudioUniaudioCodec *codec;
 	UniACodec_Handle handle;
 	gboolean has_audioinfo_set;
+	GstAudioChannelPosition *original_channel_positions, *reordered_channel_positions;
+	GstAudioFormat pcm_format;
+	guint num_channels;
 	GstAdapter *out_adapter;
 	guint skip_header_counter, num_vorbis_headers;
 	GstBuffer *codec_data;
