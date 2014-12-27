@@ -288,10 +288,16 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 		int samplerate, channels, bitrate, block_align, wmaversion;
 		gchar const *stream_format, *sample_format;
 		GValue const *value;
+		gboolean framed, is_vorbis;
 		GstBuffer *codec_data = NULL;
 		GstStructure *structure = gst_caps_get_structure(caps, 0);
 
 		imx_audio_uniaudio_dec->skip_header_counter = 0;
+
+		is_vorbis = (g_strcmp0(gst_structure_get_name(structure), "audio/x-vorbis") == 0);
+		parameter.framed = is_vorbis || (gst_structure_get_boolean(structure, "framed", &framed) && framed) || (gst_structure_get_boolean(structure, "parsed", &framed) && framed);
+		GST_DEBUG_OBJECT(dec, "input is framed: %d", parameter.framed);
+		UNIA_SET_PARAMETER(UNIA_FRAMED, "framed");
 
 		if (gst_structure_get_int(structure, "rate", &samplerate))
 		{
@@ -436,12 +442,6 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			GST_DEBUG_OBJECT(dec, "codec data: %lu byte", parameter.codecData.size);
 		}
 	}
-
-	/* framed = TRUE works with mp3, AMR-NB/WB, and Vorbis, but does not seem to
-	 * change anything; however, it does break WMA decoding, since the WMA decoder
-	 * then expects some additional ASF headers, so just always set framed to FALSE */
-	parameter.framed = FALSE;
-	UNIA_SET_PARAMETER(UNIA_FRAMED, "framed");
 
 	GST_DEBUG_OBJECT(dec, "decoder configured");
 
