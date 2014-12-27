@@ -1,19 +1,80 @@
+==== version 0.10.0 (2014-12-27) ====
+
+* new codebase for 2D blitter based video sinks and transform elements
+  The new code introduces the GstImxBaseBlitter base class, which is the
+  foundation for blitter-based elements. This class, along with the
+  GstImxBlitterVideoTransform and GstImxBlitterVideoSink base classes,
+  take care of most of the work for blitter-based operations. Derived
+  classes mostly just implement their blitter specific parts on top.
+  This makes it easy to support G2D, IPU, and PxP based operations.
+  The GstImxBlitterVideoSink also preserves the aspect ratio, and
+  areas left empty by the correction are filled with black pixels.
+
+* new G2D elements: imxg2dvideosink imxg2dvideotransform
+  G2D is an API on top of the Vivante GPU's Pixel Engine. Starting with
+  this release, imxg2dvideosink is considered the video sink of choice,
+  along with imxeglvivsink. G2D is generally easier to operate than IPU.
+
+* new PxP elements: imxpxpvideosink imxpxpvideotransform
+  The PxP system is particularly useful with cameras, since it is the
+  only one which can convert from the Y42B colorspace to another one,
+  and Y42B is often used by USB webcams.
+
+* ipu: rewrite code from scratch to be based on the blitter base classes
+  Note that imxipusink has been renamed to imxipuvideosink. Also, thanks
+  to the GstImxBlitterVideoSink, the IPU sink now preserves the aspect ratio.
+
+* ipu: fix memory protection bits in mmap() calls
+
+* phys mem buffer pool now uses a default horizontal alignment of 16 instead of 8
+  This alignment works better with all blitters
+
+* eglvivsink: fix deadlock in set_caps() function
+  The deadlock appeared in some situations when the eglvivsink was embedded
+  inside another window
+
+* vpu: decoder: add interlace information to output buffers
+
+* vpu: encoder:
+  * fix gst_buffer that was not set to NULL after unref
+  * configure bitrate and intra refresh period in set_format() call
+  * fix get_property() requests for slice size and intra refresh period
+  * IDR interval was sometimes unsetting the nForceIPicture flag even if it was
+    set before (for example, because the frame is a sync point)
+
+* new elements for audio decoding based on Freescale's unified audio (UniAudio) architecture
+  These elements depend on the libfslcodec library. Tested with libfslcodec 4.0.1.
+  Supported formats:
+  * MPEG-1 layer 1/2/3
+  * Ogg Vorbis
+  * AAC Low Complexity (LC)
+  * WMA (up to WMA version 10) (*)
+  * AMR-Narrowband
+  * AMR-Wideband
+
+  (*) codec is not included in libfslcodec by default; to obtain the specific
+  codec, a license for this format must be presented to your Freescale FAE
+
+* preliminary support for Android builds
+  Android requires some changes in the building process. Most importantly, the
+  plugins and common lib must be built as static libraries.
+
 ==== version 0.9.9 (2014-09-21) ====
 
-* ipu, vpu, v4l2src: Use reference counting for resources
+* ipu, vpu, v4l2src: use reference counting for resources
   This ensures that resources are freed only after when every entity
   that uses them has been shut down
 
   ipu: use a global FD and increase/decrease refcount for each blitter
-       instance and for every (de)allocation
+  instance and for every (de)allocation
 
   vpu: increment/decrement refcount not only when creating/shutting down
-       decoder instances, but also for every (de)allocation
+  decoder instances, but also for every (de)allocation
 
   v4l2src: instead of using a raw FD, use a reference-counted FD object
 
 * ipu: use a global FD instead of per-blitter FDs
-  this circumvents bugs in the IPU kernel driver which are triggered
+  This circumvents bugs in the IPU kernel driver which are triggered
   when multiple IPU FDs are open at the same time
 
 * introduce a proper physical address type and a printf conversion specifier
@@ -24,17 +85,17 @@
 
 * rplace obsolete "padding" member in phys mem meta with better defined
   x_padding/y_padding ones
-  this avoids having to do calculations like "padding / stride" to get to
+  This avoids having to do calculations like "padding / stride" to get to
   the number of additional rows, for example
 
 * use a reference counter for mapping physical memory
-  necessary because the same physical memory might get mapped multiple times
+  Necessary because the same physical memory might get mapped multiple times
   (commonly done by gst_video_frame_map() and multi-planar formats like I420)
   until now, it was mapped the first time, and subsequent mapping calls were
   just ignored, but a reference counter is much cleaner and safer
 
 * ipu: fix kernel version detection and include paths in wscript
-  now, the <3.5.0 kernel version check works properly
+  Now, the <3.5.0 kernel version check works properly
 
 * eglvivsink: remove RGB from the list of supported formats
   Vivante direct textures support various RGBA/RGBx formats, but not RGB

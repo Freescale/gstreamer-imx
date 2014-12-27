@@ -557,7 +557,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 		ret = VPU_EncConfig(vpu_base_enc->handle, VPU_ENC_CONF_INTRA_REFRESH, &param);
 		if (ret != VPU_ENC_RET_SUCCESS)
 		{
-			GST_ERROR_OBJECT(vpu_base_enc, "could not configure bitrate: %s", gst_imx_vpu_strerror(ret));
+			GST_ERROR_OBJECT(vpu_base_enc, "could not configure intra refresh period: %s", gst_imx_vpu_strerror(ret));
 			return FALSE;
 		}
 	}
