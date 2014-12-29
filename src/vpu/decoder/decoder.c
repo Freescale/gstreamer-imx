@@ -987,6 +987,20 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		{
 			GstVideoCodecState *state = vpu_dec->current_output_state;
 
+			/* In some corner cases, width & height are not set in the input caps. If this happens, use the
+			 * width & height from the current_framebuffers object that was initialized earlier. It receives
+			 * width and height information from the bitstream itself (through the init_info structure). */
+			if (state->info.width == 0)
+			{
+				state->info.width = vpu_dec->current_framebuffers->pic_width;
+				GST_INFO_OBJECT(vpu_dec, "output state width is 0 - using the value %u from the framebuffers object instead", state->info.width);
+			}
+			if (state->info.height == 0)
+			{
+				state->info.height = vpu_dec->current_framebuffers->pic_height;
+				GST_INFO_OBJECT(vpu_dec, "output state height is 0 - using the value %u from the framebuffers object instead", state->info.height);
+			}
+
 			GST_VIDEO_INFO_INTERLACE_MODE(&(state->info)) = vpu_dec->init_info.nInterlace ? GST_VIDEO_INTERLACE_MODE_INTERLEAVED : GST_VIDEO_INTERLACE_MODE_PROGRESSIVE;
 			gst_video_decoder_set_output_state(decoder, fmt, state->info.width, state->info.height, state);
 			gst_video_codec_state_unref(vpu_dec->current_output_state);
