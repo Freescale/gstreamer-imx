@@ -67,7 +67,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 G_DEFINE_TYPE(GstImxVpuMPEG4Enc, gst_imx_vpu_mpeg4_enc, GST_TYPE_IMX_VPU_BASE_ENC)
 
 
-static gboolean gst_imx_vpu_mpeg4_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
+static gboolean gst_imx_vpu_mpeg4_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecState *input_state, VpuEncOpenParam *open_param);
 static GstCaps* gst_imx_vpu_mpeg4_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base_enc);
 static gboolean gst_imx_vpu_mpeg4_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
 static void gst_imx_vpu_mpeg4_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
@@ -128,7 +128,7 @@ void gst_imx_vpu_mpeg4_enc_init(GstImxVpuMPEG4Enc *enc)
 
 
 
-static gboolean gst_imx_vpu_mpeg4_enc_set_open_params(G_GNUC_UNUSED GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param)
+static gboolean gst_imx_vpu_mpeg4_enc_set_open_params(G_GNUC_UNUSED GstImxVpuBaseEnc *vpu_base_enc, G_GNUC_UNUSED GstVideoCodecState *input_state, VpuEncOpenParam *open_param)
 {
 	open_param->eFormat = VPU_V_MPEG4;
 	open_param->eColorFormat = VPU_COLOR_420;

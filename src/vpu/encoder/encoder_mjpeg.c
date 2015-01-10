@@ -42,7 +42,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
 		"video/x-raw,"
-		"format = (string) I420, "
+		"format = (string) { I420, I42B, Y444, GRAY8 }, "
 		"width = (int) [ 48, 1920, 8 ], "
 		"height = (int) [ 32, 1080, 8 ], "
 		"framerate = (fraction) [ 0, MAX ]"
@@ -62,7 +62,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 G_DEFINE_TYPE(GstImxVpuMJPEGEnc, gst_imx_vpu_mjpeg_enc, GST_TYPE_IMX_VPU_BASE_ENC)
 
 
-static gboolean gst_imx_vpu_mjpeg_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
+static gboolean gst_imx_vpu_mjpeg_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecState *input_state, VpuEncOpenParam *open_param);
 static GstCaps* gst_imx_vpu_mjpeg_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base_enc);
 static gboolean gst_imx_vpu_mjpeg_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
 static void gst_imx_vpu_mjpeg_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
@@ -123,10 +123,29 @@ void gst_imx_vpu_mjpeg_enc_init(GstImxVpuMJPEGEnc *enc)
 
 
 
-static gboolean gst_imx_vpu_mjpeg_enc_set_open_params(G_GNUC_UNUSED GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param)
+static gboolean gst_imx_vpu_mjpeg_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecState *input_state, VpuEncOpenParam *open_param)
 {
+	GstVideoFormat fmt = GST_VIDEO_INFO_FORMAT(&(input_state->info));
+
+	switch (fmt)
+	{
+		case GST_VIDEO_FORMAT_I420:
+			open_param->eColorFormat = VPU_COLOR_420;
+			break;
+		case GST_VIDEO_FORMAT_Y42B:
+			open_param->eColorFormat = VPU_COLOR_422H;
+			break;
+		case GST_VIDEO_FORMAT_Y444:
+			open_param->eColorFormat = VPU_COLOR_444;
+			break;
+		case GST_VIDEO_FORMAT_GRAY8:
+			open_param->eColorFormat = VPU_COLOR_400;
+			break;
+		default:
+			GST_ERROR_OBJECT(vpu_base_enc, "unsupported video format %s", gst_video_format_to_string(fmt));
+	}
+
 	open_param->eFormat = VPU_V_MJPG;
-	open_param->eColorFormat = VPU_COLOR_420;
 
 	/* These are default settings from VPU_EncOpenSimp */
 	open_param->VpuEncStdParam.mp4Param.mp4_dataPartitionEnable = 0;

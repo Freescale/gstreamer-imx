@@ -520,7 +520,7 @@ static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVid
 	vpu_base_enc->open_param.nIntraRefresh = vpu_base_enc->intra_refresh;
 
 	/* Give the derived class a chance to set params */
-	if (!klass->set_open_params(vpu_base_enc, &(vpu_base_enc->open_param)))
+	if (!klass->set_open_params(vpu_base_enc, state, &(vpu_base_enc->open_param)))
 	{
 		GST_ERROR_OBJECT(vpu_base_enc, "derived class could not set open params");
 		return FALSE;

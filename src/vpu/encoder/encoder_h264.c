@@ -72,7 +72,7 @@ G_DEFINE_TYPE(GstImxVpuH264Enc, gst_imx_vpu_h264_enc, GST_TYPE_IMX_VPU_BASE_ENC)
 
 
 static void gst_imx_vpu_h264_enc_finalize(GObject *object);
-static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param);
+static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecState *input_state, VpuEncOpenParam *open_param);
 static GstCaps* gst_imx_vpu_h264_enc_get_output_caps(GstImxVpuBaseEnc *vpu_base_enc);
 static gboolean gst_imx_vpu_h264_enc_set_frame_enc_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncEncParam *enc_enc_param, VpuEncOpenParam *open_param);
 static gsize gst_imx_vpu_h264_enc_fill_output_buffer(GstImxVpuBaseEnc *vpu_base_enc, GstVideoCodecFrame *frame, gsize output_offset, void *encoded_data_addr, gsize encoded_data_size, gboolean contains_header);
@@ -156,7 +156,7 @@ static void gst_imx_vpu_h264_enc_finalize(GObject *object)
 }
 
 
-static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, VpuEncOpenParam *open_param)
+static gboolean gst_imx_vpu_h264_enc_set_open_params(GstImxVpuBaseEnc *vpu_base_enc, G_GNUC_UNUSED GstVideoCodecState *input_state, VpuEncOpenParam *open_param)
 {
 	GstCaps *template_caps, *allowed_caps;
 	GstImxVpuH264Enc *enc = GST_IMX_VPU_H264_ENC(vpu_base_enc);
