@@ -96,6 +96,7 @@ static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, Gst
 	GstVideoAlignment align;
 	GstCaps *caps;
 	gsize size;
+	guint min_buffers, max_buffers;
 	guint horiz_alignment, vert_alignment;
 	GstAllocator *allocator;
 
@@ -119,7 +120,7 @@ static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, Gst
 
 	imx_phys_mem_pool = GST_IMX_PHYS_MEM_BUFFER_POOL(pool);
 
-	if (!gst_buffer_pool_config_get_params(config, &caps, &size, NULL, NULL))
+	if (!gst_buffer_pool_config_get_params(config, &caps, &size, &min_buffers, &max_buffers))
 	{
 		GST_ERROR_OBJECT(pool, "pool configuration invalid");
 		return FALSE;
@@ -159,6 +160,11 @@ static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, Gst
 	align.padding_right = (horiz_alignment - (width & (horiz_alignment - 1))) & (horiz_alignment - 1);
 	align.padding_bottom = (vert_alignment - (height & (vert_alignment - 1))) & (vert_alignment - 1);
 	gst_video_info_align(&(imx_phys_mem_pool->video_info), &align);
+
+	/* After alignment, the size of the video info changed. The pool config needs to be
+	 * updated to contain the new size. Otherwise, the buffer pool class will constantly
+	 * reallocate buffers, because the different sizes confuse it. */
+	gst_buffer_pool_config_set_params(config, caps, GST_VIDEO_INFO_SIZE(&(imx_phys_mem_pool->video_info)), min_buffers, max_buffers);
 
 	GST_INFO_OBJECT(
 		pool,

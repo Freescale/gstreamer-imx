@@ -166,6 +166,8 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 
 			if (base_blitter->internal_bufferpool == NULL)
 			{
+				GST_TRACE_OBJECT(base_blitter, "need to create internal bufferpool");
+
 				/* Internal bufferpool does not exist yet - create it now,
 				 * so that it can in turn create the internal input buffer */
 
@@ -196,6 +198,7 @@ gboolean gst_imx_base_blitter_set_input_buffer(GstImxBaseBlitter *base_blitter, 
 		}
 
 		/* Create new temporary internal input frame */
+		GST_TRACE_OBJECT(base_blitter, "acquiring buffer for temporary internal input frame");
 		flow_ret = gst_buffer_pool_acquire_buffer(base_blitter->internal_bufferpool, &(base_blitter->internal_input_frame), NULL);
 		if (flow_ret != GST_FLOW_OK)
 		{
@@ -417,6 +420,8 @@ gboolean gst_imx_base_blitter_set_input_video_info(GstImxBaseBlitter *base_blitt
 
 	if ((klass->set_input_video_info != NULL) && !(klass->set_input_video_info(base_blitter, input_video_info)))
 		return FALSE;
+
+	GST_DEBUG_OBJECT(base_blitter, "setting new input video info ; need to clean up old internal input frame & bufferpool");
 
 	/* Unref the internal input frame, since the input video info
 	 * changed, and the frame therefore no longer fits */
