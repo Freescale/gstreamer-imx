@@ -510,6 +510,11 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 			gst_adapter_push(imx_audio_uniaudio_dec->out_adapter, tmp_buf);
 		}
 
+		if (out_buf != NULL)
+		{
+			gst_imx_audio_uniaudio_dec_free(out_buf);
+		}
+
 		if ((buffer != NULL) && (offset == in_map.size))
 		{
 			dec_loop = FALSE;
