@@ -574,12 +574,11 @@ static GstStateChangeReturn gst_imx_egl_viv_sink_change_state(GstElement *elemen
 		case GST_STATE_CHANGE_NULL_TO_READY:
 		{
 			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
-
 			egl_viv_sink->gles2_renderer = gst_imx_egl_viv_sink_gles2_renderer_create(egl_viv_sink->native_display_name);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+
 			if (egl_viv_sink->gles2_renderer == NULL)
 				return GST_STATE_CHANGE_FAILURE;
-
-			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
 
 			break;
 		}
