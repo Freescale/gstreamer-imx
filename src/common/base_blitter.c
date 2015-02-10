@@ -37,7 +37,7 @@ static gboolean gst_imx_base_blitter_do_regions_intersect(GstImxBaseBlitterRegio
 static void gst_imx_base_blitter_calc_region_intersection(GstImxBaseBlitterRegion const *first_region, GstImxBaseBlitterRegion const *second_region, GstImxBaseBlitterRegion *intersection);
 static gboolean gst_imx_base_blitter_is_region_contained(GstImxBaseBlitterRegion const *outer_region, GstImxBaseBlitterRegion const *inner_region);
 static void gst_imx_base_blitter_computer_visible_input_region(GstImxBaseBlitter *base_blitter);
-static GstImxBaseBlitterRegion const * gst_imx_base_blitter_calc_output_region_visibility(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *output_region, GstImxBaseBlitterVisibilityType *output_visibility_type, GstImxBaseBlitterRegion *sub_out_region);
+static GstImxBaseBlitterRegion const * gst_imx_base_blitter_calc_region_visibility(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *region, GstImxBaseBlitterVisibilityType *visibility_type, GstImxBaseBlitterRegion *sub_out_region);
 
 
 
@@ -278,7 +278,7 @@ gboolean gst_imx_base_blitter_set_output_regions(GstImxBaseBlitter *base_blitter
 	if (output_region == NULL)
 		output_region = &(base_blitter->output_buffer_region);
 
-	output_region = gst_imx_base_blitter_calc_output_region_visibility(base_blitter, output_region, &out_vis_type, &sub_out_region);
+	output_region = gst_imx_base_blitter_calc_region_visibility(base_blitter, output_region, &out_vis_type, &sub_out_region);
 
 	if (video_region == NULL)
 		video_region = output_region;
@@ -305,7 +305,7 @@ gboolean gst_imx_base_blitter_set_output_regions(GstImxBaseBlitter *base_blitter
 		{
 			GST_TRACE_OBJECT(base_blitter, "output region is not fully contained in the output buffer region -> need to check video region visibility");
 			orig_video_region = video_region;
-			video_region = gst_imx_base_blitter_calc_output_region_visibility(base_blitter, video_region, &video_vis_type, &sub_video_region);
+			video_region = gst_imx_base_blitter_calc_region_visibility(base_blitter, video_region, &video_vis_type, &sub_video_region);
 			break;
 		}
 	}
@@ -631,29 +631,29 @@ static void gst_imx_base_blitter_computer_visible_input_region(GstImxBaseBlitter
 }
 
 
-static GstImxBaseBlitterRegion const * gst_imx_base_blitter_calc_output_region_visibility(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *output_region, GstImxBaseBlitterVisibilityType *output_visibility_type, GstImxBaseBlitterRegion *sub_out_region)
+static GstImxBaseBlitterRegion const * gst_imx_base_blitter_calc_region_visibility(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *region, GstImxBaseBlitterVisibilityType *visibility_type, GstImxBaseBlitterRegion *sub_out_region)
 {
-	if (gst_imx_base_blitter_is_region_contained(&(base_blitter->output_buffer_region), output_region))
+	if (gst_imx_base_blitter_is_region_contained(&(base_blitter->output_buffer_region), region))
 	{
-		GST_TRACE_OBJECT(base_blitter, "output region is fully contained in the output buffer region");
-		*output_visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_FULL;
+		GST_TRACE_OBJECT(base_blitter, "region is fully contained in the output buffer region");
+		*visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_FULL;
 	}
 	else
 	{
-		if (gst_imx_base_blitter_do_regions_intersect(&(base_blitter->output_buffer_region), output_region))
+		if (gst_imx_base_blitter_do_regions_intersect(&(base_blitter->output_buffer_region), region))
 		{
-			GST_TRACE_OBJECT(base_blitter, "output region is not fully contained in the output buffer region");
-			gst_imx_base_blitter_calc_region_intersection(&(base_blitter->output_buffer_region), output_region, sub_out_region);
-			output_region = sub_out_region;
-			GST_TRACE_OBJECT(base_blitter, "clipped output region: (%d, %d) - (%d, %d)", sub_out_region->x1, sub_out_region->y1, sub_out_region->x2, sub_out_region->y2);
-			*output_visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_PARTIAL;
+			GST_TRACE_OBJECT(base_blitter, "region is not fully contained in the output buffer region");
+			gst_imx_base_blitter_calc_region_intersection(&(base_blitter->output_buffer_region), region, sub_out_region);
+			region = sub_out_region;
+			GST_TRACE_OBJECT(base_blitter, "clipped region: (%d, %d) - (%d, %d)", sub_out_region->x1, sub_out_region->y1, sub_out_region->x2, sub_out_region->y2);
+			*visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_PARTIAL;
 		}
 		else
 		{
-			GST_TRACE_OBJECT(base_blitter, "output region is fully outside of the output buffer region");
-			*output_visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_NONE;
+			GST_TRACE_OBJECT(base_blitter, "region is fully outside of the output buffer region");
+			*visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_NONE;
 		}
 	}
 
-	return output_region;
+	return region;
 }
