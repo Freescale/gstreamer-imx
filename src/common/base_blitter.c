@@ -70,6 +70,9 @@ void gst_imx_base_blitter_init(GstImxBaseBlitter *base_blitter)
 	base_blitter->internal_input_frame = NULL;
 	base_blitter->visible_input_region_uptodate = FALSE;
 
+	base_blitter->video_visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_FULL;
+	base_blitter->output_visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_FULL;
+
 	gst_video_info_init(&(base_blitter->input_video_info));
 
 	base_blitter->apply_crop_metadata = GST_IMX_BASE_BLITTER_CROP_DEFAULT;
