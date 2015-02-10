@@ -269,6 +269,7 @@ gboolean gst_imx_base_blitter_set_output_regions(GstImxBaseBlitter *base_blitter
 
 	if (klass->set_output_regions == NULL)
 	{
+		GST_TRACE_OBJECT(base_blitter, "set_output_regions function is NULL -> setting visibility to full");
 		base_blitter->video_visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_FULL;
 		base_blitter->output_visibility_type = GST_IMX_BASE_BLITTER_VISIBILITY_FULL;
 		return TRUE;
@@ -315,7 +316,7 @@ gboolean gst_imx_base_blitter_set_output_regions(GstImxBaseBlitter *base_blitter
 	base_blitter->full_video_region = *orig_video_region;
 	base_blitter->visible_video_region = *video_region;
 
-	if (out_vis_type == GST_IMX_BASE_BLITTER_VISIBILITY_NONE)
+	if ((out_vis_type == GST_IMX_BASE_BLITTER_VISIBILITY_NONE) || (video_vis_type == GST_IMX_BASE_BLITTER_VISIBILITY_NONE))
 		return TRUE;
 	else
 		return klass->set_output_regions(base_blitter, video_region, output_region);
@@ -465,6 +466,12 @@ gboolean gst_imx_base_blitter_blit(GstImxBaseBlitter *base_blitter)
 	if (base_blitter->output_visibility_type == GST_IMX_BASE_BLITTER_VISIBILITY_NONE)
 	{
 		GST_TRACE_OBJECT(base_blitter, "output region outside of output buffer bounds -> no need to draw anything");
+		return TRUE;
+	}
+
+	if (base_blitter->video_visibility_type == GST_IMX_BASE_BLITTER_VISIBILITY_NONE)
+	{
+		GST_TRACE_OBJECT(base_blitter, "video region outside of output buffer bounds -> no need to draw anything");
 		return TRUE;
 	}
 
