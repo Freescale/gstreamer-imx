@@ -55,6 +55,7 @@ static void gst_imx_ipu_blitter_clear_previous_buffer(GstImxIpuBlitter *ipu_blit
 static gboolean gst_imx_ipu_blitter_flush(GstImxBaseBlitter *base_blitter);
 static void gst_imx_ipu_blitter_init_dummy_black_buffer(GstImxIpuBlitter *ipu_blitter);
 
+static void gst_imx_ipu_blitter_print_ipu_fourcc(u32 format, char buf[5]);
 static guint32 gst_imx_ipu_blitter_get_v4l_format(GstVideoFormat format);
 //static int gst_imx_ipu_video_bpp(GstVideoFormat fmt);
 
@@ -397,26 +398,29 @@ static gboolean gst_imx_ipu_blitter_blit_frame(GstImxBaseBlitter *base_blitter, 
 {
 	int ret;
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(base_blitter);
+	char fourcc[5];
 
 	ipu_blitter->priv->task.input.crop.pos.x = input_region->x1;
 	ipu_blitter->priv->task.input.crop.pos.y = input_region->y1;
 	ipu_blitter->priv->task.input.crop.w = input_region->x2 - input_region->x1;
 	ipu_blitter->priv->task.input.crop.h = input_region->y2 - input_region->y1;
 
+	gst_imx_ipu_blitter_print_ipu_fourcc(ipu_blitter->priv->task.input.format, fourcc);
 	GST_LOG_OBJECT(
 		ipu_blitter,
-		"task input:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  phys addr %" GST_IMX_PHYS_ADDR_FORMAT "  deinterlace enable %u motion 0x%x",
+		"task input:  width:  %u  height: %u  format: 0x%x (%s)  crop: %u,%u %ux%u  phys addr %" GST_IMX_PHYS_ADDR_FORMAT "  deinterlace enable %u motion 0x%x",
 		ipu_blitter->priv->task.input.width, ipu_blitter->priv->task.input.height,
-		ipu_blitter->priv->task.input.format,
+		ipu_blitter->priv->task.input.format, fourcc,
 		ipu_blitter->priv->task.input.crop.pos.x, ipu_blitter->priv->task.input.crop.pos.y, ipu_blitter->priv->task.input.crop.w, ipu_blitter->priv->task.input.crop.h,
 		(gst_imx_phys_addr_t)(ipu_blitter->priv->task.input.paddr),
 		ipu_blitter->priv->task.input.deinterlace.enable, ipu_blitter->priv->task.input.deinterlace.motion
 	);
+	gst_imx_ipu_blitter_print_ipu_fourcc(ipu_blitter->priv->task.output.format, fourcc);
 	GST_LOG_OBJECT(
 		ipu_blitter,
-		"task output:  width:  %u  height: %u  format: 0x%x  crop: %u,%u %ux%u  paddr %" GST_IMX_PHYS_ADDR_FORMAT "  rotate: %u",
+		"task output:  width:  %u  height: %u  format: 0x%x (%s)  crop: %u,%u %ux%u  paddr %" GST_IMX_PHYS_ADDR_FORMAT "  rotate: %u",
 		ipu_blitter->priv->task.output.width, ipu_blitter->priv->task.output.height,
-		ipu_blitter->priv->task.output.format,
+		ipu_blitter->priv->task.output.format, fourcc,
 		ipu_blitter->priv->task.output.crop.pos.x, ipu_blitter->priv->task.output.crop.pos.y, ipu_blitter->priv->task.output.crop.w, ipu_blitter->priv->task.output.crop.h,
 		(gst_imx_phys_addr_t)(ipu_blitter->priv->task.output.paddr),
 		ipu_blitter->priv->task.output.rotate
@@ -551,6 +555,18 @@ static void gst_imx_ipu_blitter_init_dummy_black_buffer(GstImxIpuBlitter *ipu_bl
 
 		phys_mem_meta->phys_addr = imx_phys_mem_mem->phys_addr;
 	}
+}
+
+
+static void gst_imx_ipu_blitter_print_ipu_fourcc(u32 format, char buf[5])
+{
+	int i;
+	for (i = 0; i < 4; ++i)
+	{
+		u8 b = format >> (i * 8) & 0xff;
+		buf[i] = (b < 32) ? '.' : ((char)b);
+	}
+	buf[4] = 0;
 }
 
 
