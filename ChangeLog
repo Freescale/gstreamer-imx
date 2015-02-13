@@ -1,3 +1,35 @@
+==== version 0.10.1 (2015-02-12) ====
+
+* uniaudio: fix memory leak in decoder
+  Decoded buffers weren't freed properly, leading to rapidly
+  increasing memory leaks
+
+* eglvivsink: fix deadlock
+  This deadlock occurred in the NULL->READY state change if said
+  state change failed
+
+* vpu: encoder: pass input video codec state to derived classes
+  This is interesting for the MJPEG encoder for example, to properly
+  choose the configured color format
+
+* vpu: decoder: handle missing width and height values in caps
+  Typically, containers do have this information and set it in the caps,
+  but there are corner cases where this isn't true. Before, these caused
+  assertions inside the decoder. Now they are handled properly. (The
+  values detected by the VPU are used then.)
+
+* fixed video info size bug in phys mem buffer pool
+  This bug caused a mismatch between the configured size and the actual
+  size of video buffers. This lead to excessive physmem free calls
+  in the buffer pool, which in turn means that physical memory was
+  constantly being allocated and freed.
+
+* fixes to base blitter:
+  * don't draw anything if the video region is invisible
+  * set output and video region visibility to FULL by default, fixing
+    some cases of "green screen" output (which means nothing was being
+    blitted)
+
 ==== version 0.10.0 (2014-12-27) ====
 
 * new codebase for 2D blitter based video sinks and transform elements

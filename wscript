@@ -6,6 +6,7 @@ from waflib.Build import BuildContext, CleanContext, InstallContext, UninstallCo
 top = '.'
 out = 'build'
 
+gstimx_version = "0.10.1"
 
 # the code inside fragment deliberately does an unsafe implicit cast float->char to trigger a
 # compiler warning; sometimes, gcc does not tell about an unsupported parameter *unless* the
@@ -166,8 +167,9 @@ def configure(conf):
 	conf.define('GST_PACKAGE_NAME', conf.options.with_package_name)
 	conf.define('GST_PACKAGE_ORIGIN', conf.options.with_package_origin)
 	conf.define('PACKAGE', "gstreamer-imx")
-	conf.define('VERSION', "1.0")
+	conf.define('VERSION', gstimx_version)
 
+	conf.env['GSTIMX_VERSION'] = gstimx_version
 	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_AUDIO', 'GSTREAMER_VIDEO', 'PTHREAD', 'M']
 
 
