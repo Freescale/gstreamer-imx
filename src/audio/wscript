@@ -45,8 +45,12 @@ def configure(conf):
 		add_fslcodec(conf, "wideband AMR", "wbamrd", "arm12", "audio/AMR-WB")
 		add_fslcodec(conf, "WMA", "wma10d", "arm12", "audio/x-wma, wmaversion = (int)[ 1, 4 ]")
 
-		codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
-		conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s, { NULL, NULL } }" % codec_str, quote = False)
+		null_terminator = "{ NULL, NULL }"
+		if conf.env['CODEC_ENTRIES']:
+			codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
+			conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s, %s }" % (codec_str, null_terminator), quote = False)
+		else:
+			conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s }" % null_terminator, quote = False)
 
 
 def build(bld):
