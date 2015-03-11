@@ -90,6 +90,8 @@ struct _GstImxBlitterVideoSink
 
 	/* Flag to indicate if the videocrop meta metadata shall be applied */
 	gboolean input_crop;
+
+	gboolean do_transpose;
 };
 
 
@@ -138,6 +140,8 @@ GType gst_imx_blitter_video_sink_get_type(void);
  * with GST_IS_IMX_BLITTER_VIDEO_SINK_LOCK/UNLOCK calls.
  */
 gboolean gst_imx_blitter_video_sink_set_blitter(GstImxBlitterVideoSink *blitter_video_sink, GstImxBaseBlitter *blitter);
+
+void gst_imx_blitter_video_sink_transpose_frames(GstImxBlitterVideoSink *blitter_video_sink, gboolean do_transpose);
 
 
 G_END_DECLS

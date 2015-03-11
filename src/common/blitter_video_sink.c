@@ -205,6 +205,7 @@ void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_video_sink)
 	blitter_video_sink->window_y_coord = DEFAULT_WINDOW_Y_COORD;
 	blitter_video_sink->window_width = DEFAULT_WINDOW_WIDTH;
 	blitter_video_sink->window_height = DEFAULT_WINDOW_HEIGHT;
+	blitter_video_sink->do_transpose = FALSE;
 
 	gst_video_info_init(&(blitter_video_sink->input_video_info));
 
@@ -653,6 +654,15 @@ gboolean gst_imx_blitter_video_sink_set_blitter(GstImxBlitterVideoSink *blitter_
 }
 
 
+void gst_imx_blitter_video_sink_transpose_frames(GstImxBlitterVideoSink *blitter_video_sink, gboolean do_transpose)
+{
+	g_assert(blitter_video_sink != NULL);
+	blitter_video_sink->do_transpose = do_transpose;
+	GST_DEBUG_OBJECT(blitter_video_sink, "transposing frames: %d", blitter_video_sink->do_transpose);
+	gst_imx_blitter_video_sink_update_regions(blitter_video_sink);
+}
+
+
 static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitterVideoSink *blitter_video_sink, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix)
 {
 	GstVideoFormat fmt = GST_VIDEO_FORMAT_UNKNOWN;
@@ -886,6 +896,16 @@ static void gst_imx_blitter_video_sink_update_regions(GstImxBlitterVideoSink *bl
 				GST_ERROR_OBJECT(blitter_video_sink, "aspect ratio calculation failed -> using 1:1 display ratio");
 				keep_aspect = FALSE;
 			}
+			else if (blitter_video_sink->do_transpose)
+			{
+				guint d;
+
+				GST_DEBUG_OBJECT(blitter_video_sink, "transposing frame width and height to compensate for rotation");
+
+				d = display_ratio_d;
+				display_ratio_d = display_ratio_n;
+				display_ratio_n = d;
+			}
 		}
 	}
 	else
@@ -898,6 +918,8 @@ static void gst_imx_blitter_video_sink_update_regions(GstImxBlitterVideoSink *bl
 	output_region.y1 = blitter_video_sink->window_y_coord;
 	output_region.x2 = output_region.x1 + ((blitter_video_sink->window_width == 0) ? ((guint)(fb_video_meta->width)) : blitter_video_sink->window_width);
 	output_region.y2 = output_region.y1 + ((blitter_video_sink->window_height == 0) ? ((guint)(fb_video_meta->height)) : blitter_video_sink->window_height);
+
+	GST_DEBUG_OBJECT(blitter_video_sink, "window: %u x %u", blitter_video_sink->window_width, blitter_video_sink->window_height);
 
 	/* Calculate and set the blitter's output region */
 	if (keep_aspect)
@@ -929,8 +951,6 @@ static void gst_imx_blitter_video_sink_update_regions(GstImxBlitterVideoSink *bl
 
 		outw = output_region.x2 - output_region.x1;
 		outh = output_region.y2 - output_region.y1;
-		videow = video_region.x2 - video_region.x1;
-		videoh = video_region.y2 - video_region.y1;
 
 		ratio_factor = (guint)gst_util_uint64_scale_int(outw, display_ratio_d, outh);
 
@@ -957,7 +977,7 @@ static void gst_imx_blitter_video_sink_update_regions(GstImxBlitterVideoSink *bl
 		video_region.x2 = video_region.x1 + videow;
 		video_region.y2 = video_region.y1 + videoh;
 
-		GST_INFO_OBJECT(blitter_video_sink, "setting video region to (%d,%d - %d,%d)", video_region.x1, video_region.y1, video_region.x2, video_region.y2);
+		GST_INFO_OBJECT(blitter_video_sink, "setting video region to %u x %u (%d,%d - %d,%d)", videow, videoh, video_region.x1, video_region.y1, video_region.x2, video_region.y2);
 
 		gst_imx_base_blitter_set_output_regions(blitter_video_sink->blitter, &video_region, &output_region);
 	}

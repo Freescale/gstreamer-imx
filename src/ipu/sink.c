@@ -52,6 +52,8 @@ static void gst_imx_ipu_video_sink_get_property(GObject *object, guint prop_id, 
 static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_video_sink);
 static gboolean gst_imx_ipu_video_sink_stop(GstImxBlitterVideoSink *blitter_video_sink);
 
+static void gst_imx_ipu_video_sink_set_transpose_flag(GstImxIpuVideoSink *ipu_video_sink);
+
 
 
 
@@ -132,7 +134,10 @@ static void gst_imx_ipu_video_sink_set_property(GObject *object, guint prop_id, 
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
 			ipu_video_sink->output_rotation = g_value_get_enum(value);
 			if (ipu_video_sink->blitter != NULL)
+			{
 				gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_sink->blitter, ipu_video_sink->output_rotation);
+				gst_imx_ipu_video_sink_set_transpose_flag(ipu_video_sink);
+			}
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
 			break;
 
@@ -191,6 +196,7 @@ static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_vid
 	gst_imx_ipu_blitter_set_deinterlace_mode(blitter, ipu_video_sink->deinterlace_mode);
 
 	gst_imx_blitter_video_sink_set_blitter(blitter_video_sink, GST_IMX_BASE_BLITTER(blitter));
+	gst_imx_ipu_video_sink_set_transpose_flag(ipu_video_sink);
 
 	gst_object_unref(GST_OBJECT(blitter));
 
@@ -205,5 +211,21 @@ static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_vid
 static gboolean gst_imx_ipu_video_sink_stop(G_GNUC_UNUSED GstImxBlitterVideoSink *blitter_video_sink)
 {
 	return TRUE;
+}
+
+
+static void gst_imx_ipu_video_sink_set_transpose_flag(GstImxIpuVideoSink *ipu_video_sink)
+{
+	switch (ipu_video_sink->output_rotation)
+	{
+		case GST_IMX_IPU_BLITTER_ROTATION_90CW:
+		case GST_IMX_IPU_BLITTER_ROTATION_90CW_HFLIP:
+		case GST_IMX_IPU_BLITTER_ROTATION_90CW_VFLIP:
+		case GST_IMX_IPU_BLITTER_ROTATION_90CCW:
+			gst_imx_blitter_video_sink_transpose_frames(GST_IMX_BLITTER_VIDEO_SINK(ipu_video_sink), TRUE);
+			break;
+		default:
+			gst_imx_blitter_video_sink_transpose_frames(GST_IMX_BLITTER_VIDEO_SINK(ipu_video_sink), FALSE);
+	}
 }
 

@@ -118,7 +118,10 @@ static void gst_imx_g2d_video_sink_set_property(GObject *object, guint prop_id, 
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(g2d_video_sink);
 			g2d_video_sink->output_rotation = g_value_get_enum(value);
 			if (g2d_video_sink->blitter != NULL)
+			{
 				gst_imx_g2d_blitter_set_output_rotation(g2d_video_sink->blitter, g2d_video_sink->output_rotation);
+				gst_imx_blitter_video_sink_transpose_frames(GST_IMX_BLITTER_VIDEO_SINK(g2d_video_sink), (g2d_video_sink->output_rotation == GST_IMX_G2D_BLITTER_ROTATION_90) || (g2d_video_sink->output_rotation == GST_IMX_G2D_BLITTER_ROTATION_270));
+			}
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(g2d_video_sink);
 			break;
 
@@ -160,8 +163,8 @@ static gboolean gst_imx_g2d_video_sink_start(GstImxBlitterVideoSink *blitter_vid
 	}
 
 	gst_imx_g2d_blitter_set_output_rotation(blitter, g2d_video_sink->output_rotation);
-
 	gst_imx_blitter_video_sink_set_blitter(blitter_video_sink, GST_IMX_BASE_BLITTER(blitter));
+	gst_imx_blitter_video_sink_transpose_frames(GST_IMX_BLITTER_VIDEO_SINK(g2d_video_sink), (g2d_video_sink->output_rotation == GST_IMX_G2D_BLITTER_ROTATION_90) || (g2d_video_sink->output_rotation == GST_IMX_G2D_BLITTER_ROTATION_270));
 
 	gst_object_unref(GST_OBJECT(blitter));
 
