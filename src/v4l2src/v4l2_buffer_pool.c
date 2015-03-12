@@ -307,25 +307,29 @@ static gboolean gst_imx_v4l2_buffer_pool_stop(GstBufferPool *bpool)
 	GstImxV4l2BufferPool *pool = GST_IMX_V4L2_BUFFER_POOL(bpool);
 	enum v4l2_buf_type type;
 	guint i;
-	gboolean ret;
+	gboolean ret = TRUE;
 
 	GST_DEBUG_OBJECT(pool, "stop");
 
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_STREAMOFF, &type) < 0)
 	{
-		GST_ERROR_OBJECT(pool, "VIDIOC_STREAMOFF error: %s",
-				g_strerror(errno));
+		GST_ERROR_OBJECT(pool, "VIDIOC_STREAMOFF error: %s", g_strerror(errno));
 		return FALSE;
 	}
 
-	ret = GST_BUFFER_POOL_CLASS(gst_imx_v4l2_buffer_pool_parent_class)->stop(bpool);
-
 	for (i = 0; i < pool->num_buffers; i++)
+	{
 		if (pool->buffers[i])
-			gst_imx_v4l2_buffer_pool_free_buffer(bpool, pool->buffers[i]);
+		{
+			GST_BUFFER_POOL_CLASS(gst_imx_v4l2_buffer_pool_parent_class)->release_buffer(bpool, pool->buffers[i]);
+			pool->buffers[i] = NULL;
+		}
+	}
 	g_free(pool->buffers);
 	pool->buffers = NULL;
+
+	ret = GST_BUFFER_POOL_CLASS(gst_imx_v4l2_buffer_pool_parent_class)->stop(bpool);
 
 	return ret;
 }
