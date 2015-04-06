@@ -35,6 +35,7 @@ Available plugins
 * `imxeglvivsink` : custom OpenGL ES 2.x based video sink; using the Vivante direct textures, which allow for smooth playback
 * `imxv4l2src` : customized Video4Linux source with i.MX specific tweaks
 * `imxuniaudiodec` : audio decoder plugin based on Freescale's unified audio (UniAudio) architecture
+* `imxmp3audioenc` : MP3 audio encoder plugin based on Freescale's MP3 encoder
 
 
 Dependencies

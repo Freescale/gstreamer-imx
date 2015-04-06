@@ -20,6 +20,7 @@
 #include <config.h>
 #include <gst/gst.h>
 #include "uniaudio_decoder.h"
+#include "mp3_encoder.h"
 
 
 
@@ -28,6 +29,9 @@ static gboolean plugin_init(GstPlugin *plugin)
 	gboolean ret = TRUE;
 #ifdef WITH_UNIAUDIO_DECODER
 	ret = ret && gst_element_register(plugin, "imxuniaudiodec", GST_RANK_PRIMARY + 1, gst_imx_audio_uniaudio_dec_get_type());
+#endif
+#ifdef WITH_MP3_ENCODER
+	ret = ret && gst_element_register(plugin, "imxmp3audioenc", GST_RANK_PRIMARY + 1, gst_imx_audio_mp3_enc_get_type());
 #endif
 	return ret;
 }

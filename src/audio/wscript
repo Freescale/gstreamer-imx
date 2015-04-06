@@ -24,33 +24,50 @@ def add_fslcodec(conf, desc, codec_name, arm_core, gstcaps):
 		Logs.pprint('NORMAL', '  could not add %s decoder' % desc)
 
 
-def configure(conf):
-	from waflib.Build import Logs
-	if conf.check_cfg(package = 'libfslaudiocodec', uselib_store = 'FSLAUDIOCODEC', args = '--cflags --libs', mandatory = 0):
-		conf.env['UNIAUDIO_DECODER_ENABLED'] = 1
-		conf.define('WITH_UNIAUDIO_DECODER', 1)
-		fslcodec_libdirvar = conf.check_cfg(package = 'libfslaudiocodec', args = '--variable=libdir', msg = 'Getting fslcodec plugin directory', okmsg = 'found', mandatory = 0).strip()
-		conf.env['UNIAUDIO_BUILD_CODEC_PATH'] = os.path.join(conf.env['LIBPATH_FSLAUDIOCODEC'][0], 'wrap')
-		conf.env['UNIAUDIO_TARGET_CODEC_PATH'] = os.path.join(fslcodec_libdirvar, 'wrap')
+def configure_uniaudio_decoder(conf):
+	fslcodec_libdirvar = conf.check_cfg(package = 'libfslaudiocodec', args = '--variable=libdir', msg = 'Searching fslcodec plugin directory', okmsg = 'found', errmsg = 'not found', mandatory = 0).strip()
+	if not fslcodec_libdirvar:
+		Logs.pprint('RED', 'could not find fslcodec plugin directory - not building uniaudio decoder')
+		return
+
+	conf.env['UNIAUDIO_BUILD_CODEC_PATH'] = os.path.join(conf.env['LIBPATH_FSLAUDIOCODEC'][0], 'wrap')
+	conf.env['UNIAUDIO_TARGET_CODEC_PATH'] = os.path.join(fslcodec_libdirvar, 'wrap')
+
+	conf.env['CODEC_ENTRIES'] = []
+	add_fslcodec(conf, "AAC LC", "aacd", "arm12", "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}")
+	add_fslcodec(conf, "MP3", "mp3d", "arm12", "audio/mpeg, mpegversion=(int)1, layer=(int)3, parsed=(boolean)true")
+	add_fslcodec(conf, "Vorbis", "vorbisd", "arm12", "audio/x-vorbis")
+	add_fslcodec(conf, "narrowband AMR", "nbamrd", "arm11", "audio/AMR")
+	add_fslcodec(conf, "wideband AMR", "wbamrd", "arm12", "audio/AMR-WB")
+	add_fslcodec(conf, "WMA", "wma10d", "arm12", "audio/x-wma, wmaversion = (int)[ 1, 4 ]")
+
+	null_terminator = "{ NULL, NULL }"
+	if conf.env['CODEC_ENTRIES']:
+		codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
+		conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s, %s }" % (codec_str, null_terminator), quote = False)
 		Logs.pprint('GREEN', 'uniaudio decoder will be built')
 	else:
-		Logs.pprint('RED', 'uniaudio decoder will not be built - libfslaudiocodec package not found')
+		Logs.pprint('RED', 'no fslcodec plugins found - not building uniaudio decoder')
 
-	if conf.env['UNIAUDIO_DECODER_ENABLED']:
-		conf.env['CODEC_ENTRIES'] = []
-		add_fslcodec(conf, "AAC LC", "aacd", "arm12", "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}")
-		add_fslcodec(conf, "MP3", "mp3d", "arm12", "audio/mpeg, mpegversion=(int)1, layer=(int)3, parsed=(boolean)true")
-		add_fslcodec(conf, "Vorbis", "vorbisd", "arm12", "audio/x-vorbis")
-		add_fslcodec(conf, "narrowband AMR", "nbamrd", "arm11", "audio/AMR")
-		add_fslcodec(conf, "wideband AMR", "wbamrd", "arm12", "audio/AMR-WB")
-		add_fslcodec(conf, "WMA", "wma10d", "arm12", "audio/x-wma, wmaversion = (int)[ 1, 4 ]")
+	conf.env['UNIAUDIO_DECODER_ENABLED'] = 1
+	conf.define('WITH_UNIAUDIO_DECODER', 1)
 
-		null_terminator = "{ NULL, NULL }"
-		if conf.env['CODEC_ENTRIES']:
-			codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
-			conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s, %s }" % (codec_str, null_terminator), quote = False)
-		else:
-			conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s }" % null_terminator, quote = False)
+
+def configure_mp3_encoder(conf):
+	if conf.check_cc(lib = '_mp3_enc_arm12_elinux', uselib_store = 'FSLAUDIOCODEC', mandatory = 0):
+		conf.env['MP3_ENCODER_ENABLED'] = 1
+		conf.define('WITH_MP3_ENCODER', 1)
+		Logs.pprint('GREEN', 'mp3 encoder will be built')
+	else:
+		Logs.pprint('RED', 'mp3 encoder will not be built')
+
+
+def configure(conf):
+	if conf.check_cfg(package = 'libfslaudiocodec', uselib_store = 'FSLAUDIOCODEC', args = '--cflags --libs', mandatory = 0):
+		configure_uniaudio_decoder(conf)
+		configure_mp3_encoder(conf)
+	else:
+		Logs.pprint('RED', 'audio plugins will not be built - libfslaudiocodec package not found')
 
 
 def build(bld):
@@ -58,6 +75,8 @@ def build(bld):
 	extra_source = []
 	if bld.env['UNIAUDIO_DECODER_ENABLED']:
 		extra_source += ['uniaudio_codec.c', 'uniaudio_decoder.c']
+	if bld.env['MP3_ENCODER_ENABLED']:
+		extra_source += ['mp3_encoder.c']
 
 	if extra_source:
 		bld(
