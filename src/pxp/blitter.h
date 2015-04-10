@@ -39,8 +39,66 @@ typedef struct _GstImxPxPBlitterPrivate GstImxPxPBlitterPrivate;
 #define GST_IS_IMX_PXP_BLITTER_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_PXP_BLITTER))
 
 
-/* XXX: RGB15, GRAY8, NV21, NV16 are also supported,
- * but show incorrect output. Disabled for now. */
+/* The PxP headers define many formats, but only a subset of those is actually supported.
+ * The notes below explain why certain source and destination formats were excluded. The
+ * subsequent section outlines the formats that *do* work.
+ * The format names are those of GstVideoFormat. A table describing the corresponging PxP
+ * format can be found at the end of this comment block.
+ *
+ * Broken source formats:
+ *   RGBx RGBA BGRA ABGR RGB BGR: black screen for RGB & grayscale formats, green screen
+ *                                for YUV formats
+ *   RGB15: the first scanline is repeated in all other scanlines
+ *   GRAY8: produces greenish output with BGRx BGRA RGB RGB16 UYVY as destination formats
+ *   v308: image corrupted
+ *   IYU1: green screen with all destination formats (except for GRAY8, which display black)
+ *   NV21: colors are corrupted
+ *   NV16: left half of the screen is fine, right one is greenish
+ *   YUV9 YVU9: green screen
+ *
+ * Broken destination formats:
+ *   YUY2 YVYU v308 IYU1 I420 YV12 Y42B NV12 NV21 NV16 YUV9 YVU9: produce a green screen
+ *   RGBx BGRA ABGR BGR RGB15: either show black, or only the first scanline
+ *   RGB: red<->blue channels reversed
+ *
+ * Working source formats:
+ *   BGRx RGB16 YUY2 UYVY YVYU I420 YV12 Y42B NV12
+ *
+ * Working destination formats:
+ *   BGRx BGRA RGB16 GRAY8 UYVY
+ *
+ * "Working" means any of these source can be used with any of these destination formats.
+ * Exception: BGRx, RGB16 => UYVY produces reversed colors (red<->blue channels reversed).
+ *
+ * GstVideoFormat -> PxP mapping table:
+ * NOTE: for the RGBx/BGRx formats, PxP RGB == GStreamer BGR , and vice versa
+ *       for v308, the PxP format is PXP_PIX_FMT_VUY444 in FSL kernel 3.14 and above
+ *   RGBx -> PXP_PIX_FMT_BGR32
+ *   BGRx -> PXP_PIX_FMT_RGB32
+ *   RGBA -> PXP_PIX_FMT_RGBA32
+ *   BGRA -> PXP_PIX_FMT_BGRA32
+ *   ABGR -> PXP_PIX_FMT_ABGR32
+ *   RGB -> PXP_PIX_FMT_RGB24
+ *   BGR -> PXP_PIX_FMT_BGR24
+ *   RGB16 -> PXP_PIX_FMT_RGB565
+ *   RGB15 -> PXP_PIX_FMT_RGB555
+ *   GRAY8 -> PXP_PIX_FMT_GREY
+ *   YUY2 -> PXP_PIX_FMT_YUYV
+ *   UYVY -> PXP_PIX_FMT_UYVY
+ *   YVYU -> PXP_PIX_FMT_YVYU
+ *   v308 -> PXP_PIX_FMT_YUV444
+ *   IYU1 -> PXP_PIX_FMT_Y41P
+ *   I420 -> PXP_PIX_FMT_YUV420P
+ *   YV12 -> PXP_PIX_FMT_YVU420P
+ *   Y42B -> PXP_PIX_FMT_YUV422P
+ *   NV12 -> PXP_PIX_FMT_NV12
+ *   NV21 -> PXP_PIX_FMT_NV21
+ *   NV16 -> PXP_PIX_FMT_NV16
+ *   YUV9 -> PXP_PIX_FMT_YUV410P
+ *   YVU9 -> PXP_PIX_FMT_YVU410P
+ */
+
+
 #define GST_IMX_PXP_SINK_VIDEO_FORMATS \
 	" { " \
 	"   BGRx " \
@@ -63,11 +121,10 @@ typedef struct _GstImxPxPBlitterPrivate GstImxPxPBlitterPrivate;
 		"framerate = (fraction) [ 0, MAX ]; " \
 	)
 
-/* XXX: RGBA, BGR, RGB15, NV12, NV21, NV16, UYVY, YVYU are also
- * supported, but show incorrect output. Disabled for now. */
 #define GST_IMX_PXP_SRC_VIDEO_FORMATS \
 	" { " \
 	"   BGRx " \
+	" , BGRA " \
 	" , RGB16 " \
 	" , GRAY8 " \
 	" } "

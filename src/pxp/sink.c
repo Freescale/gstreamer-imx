@@ -72,7 +72,7 @@ void gst_imx_pxp_video_sink_class_init(GstImxPxPVideoSinkClass *klass)
 		element_class,
 		"Freescale PxP video sink",
 		"Sink/Video",
-		"Video output using the Freescale IPU",
+		"Video output using the Freescale PxP engine",
 		"Carlos Rafael Giani <dv@pseudoterminal.org>"
 	);
 

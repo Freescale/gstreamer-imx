@@ -84,7 +84,7 @@ void gst_imx_pxp_video_transform_class_init(GstImxPxPVideoTransformClass *klass)
 		element_class,
 		"Freescale PxP video transform",
 		"Filter/Converter/Video/Scaler",
-		"Video transformation using the PxP API",
+		"Video transformation using the PxP engine",
 		"Carlos Rafael Giani <dv@pseudoterminal.org>"
 	);
 
