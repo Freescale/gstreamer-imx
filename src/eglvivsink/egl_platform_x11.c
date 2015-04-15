@@ -426,7 +426,6 @@ static void gst_imx_egl_viv_sink_egl_platform_send_cmd(GstImxEglVivSinkEGLPlatfo
 	if (platform->native_window == 0)
 	{
 		GST_LOG("window not open - cannot send cmd");
-		EGL_PLATFORM_UNLOCK(platform);
 		return;
 	}
 	x11_window = (Window)(platform->native_window);
