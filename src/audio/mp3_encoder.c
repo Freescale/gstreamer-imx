@@ -271,7 +271,7 @@ static gboolean gst_imx_audio_mp3_enc_start(GstAudioEncoder *audioencoder)
 		gpointer ptr;
 		MP3E_Mem_Alloc_Info *alloc_info = &(imx_audio_mp3_enc->config.mem_info[i]);
 		GST_DEBUG_OBJECT(audioencoder, "allocating memory block with %d byte and alignment %d", alloc_info->size, alloc_info->align);
-		ptr = g_malloc(alloc_info->size);
+		ptr = g_malloc(alloc_info->size + alloc_info->align);
 		if (ptr == NULL)
 		{
 			GST_ERROR_OBJECT(audioencoder, "allocating memory block failed");
