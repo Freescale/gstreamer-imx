@@ -51,7 +51,7 @@ GType gst_imx_phys_mem_meta_api_get_type(void)
 	return type;
 }
 
-static gboolean gst_imx_phys_meta_transform(GstBuffer *dest, GstMeta *meta, GstBuffer *buffer, GQuark type, gpointer data)
+static gboolean gst_imx_phys_mem_meta_transform(GstBuffer *dest, GstMeta *meta, GstBuffer *buffer, GQuark type, gpointer data)
 {
 	GstImxPhysMemMeta *dmeta, *smeta;
 
@@ -62,7 +62,7 @@ static gboolean gst_imx_phys_meta_transform(GstBuffer *dest, GstMeta *meta, GstB
 		GstMetaTransformCopy *copy = data;
 		gboolean do_copy = FALSE;
 
-		if (!(copy->region))
+		if (!(copy->region)) // TODO: is this check correct?
 		{
 			GST_LOG("not copying metadata: only a region is being copied (not the entire block)");
 		}
@@ -121,7 +121,7 @@ static gboolean gst_imx_phys_meta_transform(GstBuffer *dest, GstMeta *meta, GstB
 }
 
 
-static void gst_imx_phys_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
+static void gst_imx_phys_mem_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
 {
 	GstImxPhysMemMeta *smeta = (GstImxPhysMemMeta *)meta;
 	GST_TRACE("freeing physmem metadata with phys addr %" GST_IMX_PHYS_ADDR_FORMAT, smeta->phys_addr);
@@ -140,8 +140,8 @@ GstMetaInfo const * gst_imx_phys_mem_meta_get_info(void)
 			"GstImxPhysMemMeta",
 			sizeof(GstImxPhysMemMeta),
 			GST_DEBUG_FUNCPTR(gst_imx_phys_mem_meta_init),
-			GST_DEBUG_FUNCPTR(gst_imx_phys_meta_free),
-			GST_DEBUG_FUNCPTR(gst_imx_phys_meta_transform)
+			GST_DEBUG_FUNCPTR(gst_imx_phys_mem_meta_free),
+			GST_DEBUG_FUNCPTR(gst_imx_phys_mem_meta_transform)
 		);
 		g_once_init_leave(&gst_imx_phys_mem_meta_info, meta);
 	}

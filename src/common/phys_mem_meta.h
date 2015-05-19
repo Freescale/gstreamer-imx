@@ -21,8 +21,6 @@
 #define GST_IMX_COMMON_PHYS_MEM_META_H
 
 #include <gst/gst.h>
-#include <gst/video/video.h>
-#include <gst/video/gstvideometa.h>
 
 #include "phys_mem_addr.h"
 
