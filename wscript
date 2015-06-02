@@ -6,7 +6,7 @@ from waflib.Build import BuildContext, CleanContext, InstallContext, UninstallCo
 top = '.'
 out = 'build'
 
-gstimx_version = "0.10.1"
+gstimx_version = "0.10.2"
 
 # the code inside fragment deliberately does an unsafe implicit cast float->char to trigger a
 # compiler warning; sometimes, gcc does not tell about an unsupported parameter *unless* the

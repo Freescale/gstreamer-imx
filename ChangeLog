@@ -1,3 +1,28 @@
+==== version 0.10.2 (2015-06-02) ====
+
+* uniaudio: Create correct config header even if no codecs were found
+  This prevents compilation errors in this case
+
+* g2d/ipu/pxp blitter sink: Respect aspect ratio also in 90/270 degree rotations
+  For these rotations, width and height have to be swapped prior to calculating
+  the aspect-corrected frame
+
+* v4l2src: Call the buffer pool baseclass stop() function
+  This fixes segmentation faults during shutdown
+
+* audio: new MP3 encoder element using the libfslcodec MP3 encoder
+  This encoder is suitable for real-time encoding, since it encodes much faster
+  than LAME for example (though not reaching LAME's compression efficiency)
+
+* pxp: Remove broken/unsupported formats
+  PxP unfortunately does not have consistent format support; the formats that
+  actually work properly had to be determined empirically
+
+* eglvivsink: Fix double mutex unlock
+  Double unlocks occurred in X11 builds with gst-play and gtk-play
+
+* Cleanup phys mem meta naming
+
 ==== version 0.10.1 (2015-02-12) ====
 
 * uniaudio: fix memory leak in decoder
