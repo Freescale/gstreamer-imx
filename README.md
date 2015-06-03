@@ -33,7 +33,7 @@ Available plugins
 * `imxpxpvideosink` : video sink using the PxP engine to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxpxpvideotransform` : video transform element using the PxP engine, capable of scaling, rotating (in 90 degree steps), flipping frames, and converting between color spaces
 * `imxeglvivsink` : custom OpenGL ES 2.x based video sink; using the Vivante direct textures, which allow for smooth playback
-* `imxv4l2src` : customized Video4Linux source with i.MX specific tweaks
+* `imxv4l2videosrc` : customized Video4Linux source with i.MX specific tweaks
 * `imxuniaudiodec` : audio decoder plugin based on Freescale's unified audio (UniAudio) architecture
 * `imxmp3audioenc` : MP3 audio encoder plugin based on Freescale's MP3 encoder
 

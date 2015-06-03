@@ -24,23 +24,23 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GstImxV4l2Src GstImxV4l2Src;
-typedef struct _GstImxV4l2SrcClass GstImxV4l2SrcClass;
+typedef struct _GstImxV4l2VideoSrc GstImxV4l2VideoSrc;
+typedef struct _GstImxV4l2VideoSrcClass GstImxV4l2VideoSrcClass;
 
 #define GST_TYPE_IMX_V4L2SRC \
 	(gst_imx_v4l2src_get_type())
 #define GST_IMX_V4L2SRC(obj) \
-	(G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_V4L2SRC, GstImxV4l2Src))
+	(G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_V4L2SRC, GstImxV4l2VideoSrc))
 #define GST_IMX_V4L2SRC_CLASS(klass) \
-	(G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_V4L2SRC, GstImxV4l2SrcClass))
+	(G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_V4L2SRC, GstImxV4l2VideoSrcClass))
 #define GST_IMX_V4L2SRC_GET_CLASS(obj) \
-	(G_TYPE_INSTANCE_GET_CLASS((obj), GST_TYPE_IMX_V4L2SRC, GstImxV4l2SrcClass))
+	(G_TYPE_INSTANCE_GET_CLASS((obj), GST_TYPE_IMX_V4L2SRC, GstImxV4l2VideoSrcClass))
 #define GST_IS_IMX_V4L2SRC(obj) \
 	(G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_V4L2SRC))
 #define GST_IS_IMX_V4L2SRC_CLASS(klass) \
 	(G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_V4L2SRC))
 
-struct _GstImxV4l2Src
+struct _GstImxV4l2VideoSrc
 {
 	GstPushSrc parent;
 
@@ -60,7 +60,7 @@ struct _GstImxV4l2Src
 	int queue_size;
 };
 
-struct _GstImxV4l2SrcClass
+struct _GstImxV4l2VideoSrcClass
 {
 	GstPushSrcClass parent_class;
 };

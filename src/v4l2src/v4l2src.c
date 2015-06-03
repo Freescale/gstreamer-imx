@@ -63,16 +63,16 @@ GST_DEBUG_CATEGORY_STATIC(gst_imx_v4l2src_debug_category);
 
 #define DEBUG_INIT \
 	GST_DEBUG_CATEGORY_INIT(gst_imx_v4l2src_debug_category, \
-			"imxv4l2src", 0, "V4L2 CSI video source");
+			"imxv4l2videosrc", 0, "V4L2 CSI video source");
 
-G_DEFINE_TYPE_WITH_CODE(GstImxV4l2Src, gst_imx_v4l2src,
+G_DEFINE_TYPE_WITH_CODE(GstImxV4l2VideoSrc, gst_imx_v4l2src,
 	GST_TYPE_PUSH_SRC, DEBUG_INIT)
 
 /* TODO: This part is nonessential, and causes compilation errors with certain 3.10 kernels,
  * since VIDIOC_DBG_G_CHIP_IDENT is an experimental interface. Disabled for now. */
 /*#define WITH_CHIP_IDENTIFICATION*/
 
-static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
+static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 {
 	struct v4l2_format fmt = {0};
 	struct v4l2_streamparm parm = {0};
@@ -155,7 +155,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2Src *v4l2src)
 
 static gboolean gst_imx_v4l2src_start(GstBaseSrc *src)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	struct v4l2_format fmt;
 	int fd_v4l;
 
@@ -189,7 +189,7 @@ static gboolean gst_imx_v4l2src_start(GstBaseSrc *src)
 
 static gboolean gst_imx_v4l2src_stop(GstBaseSrc *src)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 
 	GST_LOG_OBJECT(v4l2src, "stop");
 
@@ -201,7 +201,7 @@ static gboolean gst_imx_v4l2src_stop(GstBaseSrc *src)
 static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 		GstQuery *query)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(bsrc);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(bsrc);
 	struct v4l2_format fmt;
 	GstBufferPool *pool;
 	guint size, min, max;
@@ -261,7 +261,7 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 
 static GstFlowReturn gst_imx_v4l2src_fill(GstPushSrc *src, GstBuffer *buf)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstClockTime ts;
 
 	GST_LOG_OBJECT(v4l2src, "fill");
@@ -280,7 +280,7 @@ static GstFlowReturn gst_imx_v4l2src_fill(GstPushSrc *src, GstBuffer *buf)
 
 static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
 
 	/* not much to negotiate;
@@ -301,7 +301,7 @@ static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 
 static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
 
 	GST_INFO_OBJECT(v4l2src, "get caps filter %" GST_PTR_FORMAT, (gpointer)filter);
@@ -321,7 +321,7 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 
 static gboolean gst_imx_v4l2src_set_caps(GstBaseSrc *src, GstCaps *caps)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(src);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 
 	GST_INFO_OBJECT(v4l2src, "set caps %" GST_PTR_FORMAT, (gpointer)caps);
 
@@ -331,7 +331,7 @@ static gboolean gst_imx_v4l2src_set_caps(GstBaseSrc *src, GstCaps *caps)
 static void gst_imx_v4l2src_set_property(GObject *object, guint prop_id,
 		const GValue *value, GParamSpec *pspec)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(object);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(object);
 
 	switch (prop_id)
 	{
@@ -366,7 +366,7 @@ static void gst_imx_v4l2src_set_property(GObject *object, guint prop_id,
 static void gst_imx_v4l2src_get_property(GObject *object, guint prop_id,
 		GValue *value, GParamSpec *pspec)
 {
-	GstImxV4l2Src *v4l2src = GST_IMX_V4L2SRC(object);
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(object);
 
 	switch (prop_id)
 	{
@@ -396,7 +396,7 @@ static void gst_imx_v4l2src_get_property(GObject *object, guint prop_id,
 	}
 }
 
-static void gst_imx_v4l2src_init(GstImxV4l2Src *v4l2src)
+static void gst_imx_v4l2src_init(GstImxV4l2VideoSrc *v4l2src)
 {
 	v4l2src->capture_mode = DEFAULT_CAPTURE_MODE;
 	v4l2src->fps_n = DEFAULT_FRAMERATE_NUM;
@@ -409,7 +409,7 @@ static void gst_imx_v4l2src_init(GstImxV4l2Src *v4l2src)
 	gst_base_src_set_live(GST_BASE_SRC(v4l2src), TRUE);
 }
 
-static void gst_imx_v4l2src_class_init(GstImxV4l2SrcClass *klass)
+static void gst_imx_v4l2src_class_init(GstImxV4l2VideoSrcClass *klass)
 {
 	GObjectClass *gobject_class;
 	GstElementClass *element_class;
@@ -482,14 +482,14 @@ static void gst_imx_v4l2src_class_init(GstImxV4l2SrcClass *klass)
 
 static gboolean plugin_init(GstPlugin *plugin)
 {
-	return gst_element_register(plugin, "imxv4l2src", GST_RANK_PRIMARY,
+	return gst_element_register(plugin, "imxv4l2videosrc", GST_RANK_PRIMARY,
 			gst_imx_v4l2src_get_type());
 }
 
 GST_PLUGIN_DEFINE(
 		GST_VERSION_MAJOR,
 		GST_VERSION_MINOR,
-		imxv4l2src,
+		imxv4l2videosrc,
 		"GStreamer i.MX V4L2 CSI video source",
 		plugin_init,
 		VERSION,
