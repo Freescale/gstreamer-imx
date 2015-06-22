@@ -201,4 +201,5 @@ def build(bld):
 	bld.recurse('src/eglvivsink')
 	bld.recurse('src/v4l2src')
 	bld.recurse('src/audio')
+	bld.recurse('src/blitter')
 
