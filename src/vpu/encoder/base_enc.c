@@ -50,6 +50,18 @@ enum
 #define ALIGN_VAL_TO(LENGTH, ALIGN_SIZE)  ( ((guintptr)((LENGTH) + (ALIGN_SIZE) - 1) / (ALIGN_SIZE)) * (ALIGN_SIZE) )
 
 
+/* TODO: Memory-mapped writes into physically contiguous memory blocks are quite slow. This is
+ * probably caused by the mapping type: if for example it is not mapped with write combining
+ * enabled, random access to the memory will cause lots of wasteful cycles, explaining the
+ * slowdown. Until this can be verified, the buffer pool is disabled; upstream does not get a
+ * proposal for its allocation, and buffer contents end up copied over to a local physical
+ * memory block by using memcpy(). Currently, doing that is ~3 times faster than letting
+ * upstream write directly into physical memory blocks allocated by the proposed buffer pool.
+ * (This also affects the IPU elements.)
+ */
+/*#define ENABLE_PROPOSE_ALLOCATION 1*/
+
+
 static GMutex inst_counter_mutex;
 static int inst_counter = 0;
 
@@ -69,7 +81,9 @@ static gboolean gst_imx_vpu_base_enc_start(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_base_enc_stop(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_base_enc_set_format(GstVideoEncoder *encoder, GstVideoCodecState *state);
 static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *frame);
+#ifdef ENABLE_PROPOSE_ALLOCATION
 static gboolean gst_imx_vpu_base_enc_propose_allocation(GstVideoEncoder *encoder, GstQuery *query);
+#endif
 
 
 
@@ -93,16 +107,9 @@ void gst_imx_vpu_base_enc_class_init(GstImxVpuBaseEncClass *klass)
 	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_set_format);
 	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_handle_frame);
 
-	/* TODO: Memory-mapped writes into physically contiguous memory blocks are quite slow. This is
-	 * probably caused by the mapping type: if for example it is not mapped with write combining
-	 * enabled, random access to the memory will cause lots of wasteful cycles, explaining the
-	 * slowdown. Until this can be verified, the buffer pool is disabled; upstream does not get a
-	 * proposal for its allocation, and buffer contents end up copied over to a local physical
-	 * memory block by using memcpy(). Currently, doing that is ~3 times faster than letting
-	 * upstream write directly into physical memory blocks allocated by the proposed buffer pool.
-	 * (This also affects the IPU elements.)
-	 */
-	/*base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_propose_allocation);*/
+#ifdef ENABLE_PROPOSE_ALLOCATION
+	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_base_enc_propose_allocation);
+#endif
 
 	klass->set_open_params = NULL;
 	klass->get_output_caps = NULL;
@@ -894,6 +901,7 @@ static GstFlowReturn gst_imx_vpu_base_enc_handle_frame(GstVideoEncoder *encoder,
 }
 
 
+#ifdef ENABLE_PROPOSE_ALLOCATION
 static gboolean gst_imx_vpu_base_enc_propose_allocation(GstVideoEncoder *encoder, GstQuery *query)
 {
 	GstStructure *config;
@@ -932,3 +940,4 @@ static gboolean gst_imx_vpu_base_enc_propose_allocation(GstVideoEncoder *encoder
 
 	return TRUE;
 }
+#endif

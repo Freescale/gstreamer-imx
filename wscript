@@ -116,6 +116,11 @@ def configure(conf):
 	add_compiler_flags(conf, conf.env, compiler_flags, 'C', 'C')
 
 
+	# Disable warning about including kernel headers. This is generally not a good idea, but some APIs like IPU and PxP
+	# leave no other choice, since there are no (reliable) userspace libraries/headers for these.
+	add_compiler_flags(conf, conf.env, ['-Wno-cpp'], 'C', 'C', 'KERNEL_HEADERS')
+
+
 	# configure objdump utility
 	try:
 		conf.env['OBJDUMP'] = os.environ['OBJDUMP']
