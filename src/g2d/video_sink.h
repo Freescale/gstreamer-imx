@@ -1,5 +1,5 @@
 /* G2D-based i.MX video sink class
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,12 +17,11 @@
  */
 
 
-#ifndef GST_IMX_G2D_SINK_H
-#define GST_IMX_G2D_SINK_H
+#ifndef GST_IMX_G2D_VIDEO_SINK_H
+#define GST_IMX_G2D_VIDEO_SINK_H
 
 #include <gst/gst.h>
-#include "../common/blitter_video_sink.h"
-#include "blitter.h"
+#include "../blitter/video_sink.h"
 
 
 G_BEGIN_DECLS
@@ -42,15 +41,13 @@ typedef struct _GstImxG2DVideoSinkPrivate GstImxG2DVideoSinkPrivate;
 
 struct _GstImxG2DVideoSink
 {
-	GstImxBlitterVideoSink parent;
-	GstImxG2DBlitter *blitter;
-	GstImxG2DBlitterRotationMode output_rotation;
+	GstImxBlitterVideoSink2 parent;
 };
 
 
 struct _GstImxG2DVideoSinkClass
 {
-	GstImxBlitterVideoSinkClass parent_class;
+	GstImxBlitterVideoSink2Class parent_class;
 };
 
 
