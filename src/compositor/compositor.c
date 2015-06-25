@@ -417,6 +417,7 @@ static void gst_imx_compositor_dispose(GObject *object);
 static void gst_imx_compositor_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
+static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstQuery *query);
 static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstEvent *event);
 
 static GstCaps* gst_imx_compositor_update_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps);
@@ -445,6 +446,7 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 	object_class->set_property  = GST_DEBUG_FUNCPTR(gst_imx_compositor_set_property);
 	object_class->get_property  = GST_DEBUG_FUNCPTR(gst_imx_compositor_get_property);
 
+	aggregator_class->sink_query    = GST_DEBUG_FUNCPTR(gst_imx_compositor_sink_query);
 	aggregator_class->sink_event    = GST_DEBUG_FUNCPTR(gst_imx_compositor_sink_event);
 	aggregator_class->sinkpads_type = gst_imx_compositor_pad_get_type();
 
@@ -573,6 +575,55 @@ static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GVal
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
+	}
+}
+
+
+static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstQuery *query)
+{
+	switch (GST_QUERY_TYPE(query))
+	{
+		case GST_QUERY_CAPS:
+		{
+			GstCaps *filter, *caps;
+
+			gst_query_parse_caps(query, &filter);
+			caps = gst_pad_get_pad_template_caps(GST_PAD(pad));
+
+			if (filter != NULL)
+			{
+				GstCaps *unfiltered_caps = caps;
+				caps = gst_caps_make_writable(caps);
+				caps = gst_caps_intersect(unfiltered_caps, filter);
+				gst_caps_unref(unfiltered_caps);
+			}
+
+			GST_DEBUG_OBJECT(aggregator, "responding to CAPS query with caps %" GST_PTR_FORMAT, (gpointer)caps);
+
+			gst_query_set_caps_result(query, caps);
+
+			gst_caps_unref(caps);
+
+			return TRUE;
+		}
+
+		case GST_QUERY_ACCEPT_CAPS:
+		{
+			GstCaps *accept_caps, *template_caps;
+			gboolean ret;
+
+			gst_query_parse_accept_caps(query, &accept_caps);
+			template_caps = gst_pad_get_pad_template_caps(GST_PAD(pad));
+
+			ret = gst_caps_is_subset(accept_caps, template_caps);
+			GST_DEBUG_OBJECT(aggregator, "responding to ACCEPT_CAPS query with value %d  (acceptcaps: %" GST_PTR_FORMAT "  template caps %" GST_PTR_FORMAT ")", ret, (gpointer)accept_caps, (gpointer)template_caps);
+			gst_query_set_accept_caps_result(query, ret);
+
+			return TRUE;
+		}
+
+		default:
+			return GST_IMXBP_AGGREGATOR_CLASS(gst_imx_compositor_parent_class)->sink_query(aggregator, pad, query);
 	}
 }
 
