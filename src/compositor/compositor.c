@@ -419,6 +419,7 @@ static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GVal
 
 static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstEvent *event);
 
+static GstCaps* gst_imx_compositor_update_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps);
 static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer);
 static GstFlowReturn gst_imx_compositor_get_output_buffer(GstImxBPVideoAggregator *videoaggregator, GstBuffer **outbuffer);
 static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps);
@@ -447,6 +448,7 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 	aggregator_class->sink_event    = GST_DEBUG_FUNCPTR(gst_imx_compositor_sink_event);
 	aggregator_class->sinkpads_type = gst_imx_compositor_pad_get_type();
 
+	video_aggregator_class->update_caps       = GST_DEBUG_FUNCPTR(gst_imx_compositor_update_caps);
 	video_aggregator_class->aggregate_frames  = GST_DEBUG_FUNCPTR(gst_imx_compositor_aggregate_frames);
 	video_aggregator_class->get_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_compositor_get_output_buffer);
 	video_aggregator_class->negotiated_caps   = GST_DEBUG_FUNCPTR(gst_imx_compositor_negotiated_caps);
@@ -586,6 +588,27 @@ static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, Gs
 	}
 
 	return ret;
+}
+
+
+static GstCaps* gst_imx_compositor_update_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps)
+{
+	GstCaps *out_caps;
+	GstStructure *s;
+	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
+
+	gst_imx_compositor_update_overall_region(compositor);
+
+	out_caps = gst_caps_copy(caps);
+	s = gst_caps_get_structure(out_caps, 0);
+	gst_structure_set(
+		s,
+		"width", G_TYPE_INT, (gint)(compositor->overall_region.x2 - compositor->overall_region.x1),
+		"height", G_TYPE_INT, (gint)(compositor->overall_region.y2 - compositor->overall_region.y1),
+		NULL
+	);
+
+	return out_caps;
 }
 
 
