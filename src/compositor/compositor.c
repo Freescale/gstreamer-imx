@@ -766,6 +766,9 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 		else
 			gst_imx_region_merge(&(compositor->overall_region), &(compositor->overall_region), outer_region);
 
+		compositor->overall_region.x1 = 0;
+		compositor->overall_region.y1 = 0;
+
 		first = FALSE;
 		walk = g_list_next(walk);
 	}
