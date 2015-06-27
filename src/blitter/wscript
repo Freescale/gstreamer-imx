@@ -11,7 +11,7 @@ def build(bld):
 		target = 'gstimxblitter',
 		vnum = bld.env['GSTIMX_VERSION'],
 		source = bld.path.ant_glob('*.c'),
-		defines = ['GST_USE_UNSTABLE_API', 'HAVE_CONFIG_H'],
+		defines = ['HAVE_CONFIG_H'],
 		install_path = os.path.join(bld.env['PREFIX'], 'lib')
 	)
 

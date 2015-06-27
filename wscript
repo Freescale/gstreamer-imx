@@ -115,6 +115,7 @@ def configure(conf):
 
 	add_compiler_flags(conf, conf.env, compiler_flags, 'C', 'C')
 
+	add_compiler_flags(conf, conf.env, ['-Wno-unused-parameter', '-Wno-missing-field-initializers', '-Wno-sign-compare'], 'C', 'C', 'GSTBACKPORT')
 
 	# Disable warning about including kernel headers. This is generally not a good idea, but some APIs like IPU and PxP
 	# leave no other choice, since there are no (reliable) userspace libraries/headers for these.
@@ -172,6 +173,7 @@ def configure(conf):
 	conf.define('GST_PACKAGE_NAME', conf.options.with_package_name)
 	conf.define('GST_PACKAGE_ORIGIN', conf.options.with_package_origin)
 	conf.define('PACKAGE', "gstreamer-imx")
+	conf.define('PACKAGE_BUGREPORT', "https://github.com/Freescale/gstreamer-imx")
 	conf.define('VERSION', gstimx_version)
 
 	conf.env['GSTIMX_VERSION'] = gstimx_version
@@ -202,4 +204,5 @@ def build(bld):
 	bld.recurse('src/v4l2src')
 	bld.recurse('src/audio')
 	bld.recurse('src/blitter')
+	bld.recurse('src/compositor')
 

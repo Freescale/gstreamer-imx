@@ -19,8 +19,9 @@
 
 #include <config.h>
 #include <gst/gst.h>
-#include "sink.h"
-#include "videotransform.h"
+#include "video_sink.h"
+#include "video_transform.h"
+#include "compositor.h"
 
 
 
@@ -30,6 +31,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 
 	ret = ret && gst_element_register(plugin, "imxg2dvideosink", GST_RANK_PRIMARY + 1, gst_imx_g2d_video_sink_get_type());
 	ret = ret && gst_element_register(plugin, "imxg2dvideotransform", GST_RANK_PRIMARY + 1, gst_imx_g2d_video_transform_get_type());
+	ret = ret && gst_element_register(plugin, "imxg2dcompositor", GST_RANK_NONE, gst_imx_g2d_compositor_get_type());
 
 	return ret;
 }
