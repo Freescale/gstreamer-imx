@@ -17,6 +17,7 @@ static GstStateChangeReturn gst_imx_blitter_compositor_change_state(GstElement *
 GstAllocator* gst_imx_blitter_compositor_get_phys_mem_allocator(GstImxCompositor *compositor);
 void gst_imx_blitter_compositor_set_output_frame(GstImxCompositor *compositor, GstBuffer *output_frame);
 void gst_imx_blitter_compositor_set_output_video_info(GstImxCompositor *compositor, GstVideoInfo const *info);
+void gst_imx_blitter_compositor_fill_region(GstImxCompositor *compositor, GstImxRegion const *region, guint32 color);
 void gst_imx_blitter_compositor_draw_frame(GstImxCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha);
 
 
@@ -43,6 +44,7 @@ static void gst_imx_blitter_compositor_class_init(GstImxBlitterCompositorClass *
 	parent_class->get_phys_mem_allocator = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_get_phys_mem_allocator);
 	parent_class->set_output_frame       = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_set_output_frame);
 	parent_class->set_output_video_info  = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_set_output_video_info);
+	parent_class->fill_region            = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_fill_region);
 	parent_class->draw_frame             = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_draw_frame);
 
 	klass->get_blitter = NULL;
@@ -143,6 +145,15 @@ void gst_imx_blitter_compositor_set_output_video_info(GstImxCompositor *composit
 	g_assert(blitter_compositor->blitter != NULL);
 
 	gst_imx_blitter_set_output_video_info(blitter_compositor->blitter, info);
+}
+
+
+void gst_imx_blitter_compositor_fill_region(GstImxCompositor *compositor, GstImxRegion const *region, guint32 color)
+{
+	GstImxBlitterCompositor *blitter_compositor = GST_IMX_BLITTER_COMPOSITOR(compositor);
+	g_assert(blitter_compositor->blitter != NULL);
+
+	gst_imx_blitter_fill_region(blitter_compositor->blitter, region, color);
 }
 
 

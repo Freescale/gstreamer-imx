@@ -38,6 +38,7 @@ struct _GstImxCompositor
 	GstBufferPool *dma_bufferpool;
 	GstImxRegion overall_region;
 	gboolean overall_region_valid;
+	guint32 background_color;
 };
 
 
@@ -48,6 +49,7 @@ struct _GstImxCompositorClass
 	GstAllocator* (*get_phys_mem_allocator)(GstImxCompositor *compositor);
 	void (*set_output_frame)(GstImxCompositor *compositor, GstBuffer *output_frame);
 	void (*set_output_video_info)(GstImxCompositor *compositor, GstVideoInfo const *info);
+	void (*fill_region)(GstImxCompositor *compositor, GstImxRegion const *region, guint32 color);
 	void (*draw_frame)(GstImxCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha);
 };
 

@@ -206,7 +206,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 		g_param_spec_uint(
 			"fill-color",
 			"Fill color",
-			"Fill color",
+			"Fill color (format: 0xRRGGBBAA)",
 			0, 0xFFFFFFFF,
 			DEFAULT_PAD_FILL_COLOR,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
@@ -399,11 +399,13 @@ enum
 {
 	PROP_0,
 	PROP_OVERALL_WIDTH,
-	PROP_OVERALL_HEIGHT
+	PROP_OVERALL_HEIGHT,
+	PROP_BACKGROUND_COLOR
 };
 
 #define DEFAULT_OVERALL_WIDTH 0
 #define DEFAULT_OVERALL_HEIGHT 0
+#define DEFAULT_BACKGROUND_COLOR 0x00000000
 
 
 
@@ -481,6 +483,19 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
+	g_object_class_install_property(
+		object_class,
+		PROP_BACKGROUND_COLOR,
+		g_param_spec_uint(
+			"background-color",
+			"Background color",
+			"Background color (format: 0xRRGGBB)",
+			0,
+			0xFFFFFF,
+			DEFAULT_BACKGROUND_COLOR,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -490,6 +505,7 @@ static void gst_imx_compositor_init(GstImxCompositor *aggregator)
 	aggregator->overall_height = DEFAULT_OVERALL_HEIGHT;
 	aggregator->dma_bufferpool = NULL;
 	aggregator->overall_region_valid = FALSE;
+	aggregator->background_color = DEFAULT_BACKGROUND_COLOR;
 }
 
 
@@ -523,6 +539,10 @@ static void gst_imx_compositor_set_property(GObject *object, guint prop_id, GVal
 			compositor->overall_region_valid = FALSE;
 			break;
 
+		case PROP_BACKGROUND_COLOR:
+			compositor->background_color = g_value_get_uint(value);
+			break;
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -542,6 +562,10 @@ static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GVal
 
 		case PROP_OVERALL_HEIGHT:
 			g_value_set_uint(value, compositor->overall_height);
+			break;
+
+		case PROP_BACKGROUND_COLOR:
+			g_value_set_uint(value, compositor->background_color);
 			break;
 
 		default:
@@ -572,10 +596,13 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 	GstImxCompositorClass *klass = GST_IMX_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(videoaggregator));
 
 	g_assert(klass->set_output_frame != NULL);
+	g_assert(klass->fill_region != NULL);
 	g_assert(klass->draw_frame != NULL);
 
 	klass->set_output_frame(compositor, outbuffer);
 	gst_imx_compositor_update_overall_region(compositor);
+
+	klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color);
 
 	walk = GST_ELEMENT(videoaggregator)->sinkpads;
 	while (walk != NULL)
