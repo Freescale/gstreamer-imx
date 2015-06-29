@@ -503,13 +503,13 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 }
 
 
-static void gst_imx_compositor_init(GstImxCompositor *aggregator)
+static void gst_imx_compositor_init(GstImxCompositor *compositor)
 {
-	aggregator->overall_width = DEFAULT_OVERALL_WIDTH;
-	aggregator->overall_height = DEFAULT_OVERALL_HEIGHT;
-	aggregator->dma_bufferpool = NULL;
-	aggregator->overall_region_valid = FALSE;
-	aggregator->background_color = DEFAULT_BACKGROUND_COLOR;
+	compositor->overall_width = DEFAULT_OVERALL_WIDTH;
+	compositor->overall_height = DEFAULT_OVERALL_HEIGHT;
+	compositor->dma_bufferpool = NULL;
+	compositor->overall_region_valid = FALSE;
+	compositor->background_color = DEFAULT_BACKGROUND_COLOR;
 }
 
 
@@ -665,6 +665,7 @@ static GstCaps* gst_imx_compositor_update_caps(GstImxBPVideoAggregator *videoagg
 
 static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer)
 {
+	GstFlowReturn ret = GST_FLOW_OK;
 	GList *walk;
 	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
 	GstImxCompositorClass *klass = GST_IMX_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(videoaggregator));
@@ -673,34 +674,49 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 	g_assert(klass->fill_region != NULL);
 	g_assert(klass->draw_frame != NULL);
 
-	klass->set_output_frame(compositor, outbuffer);
+	if (!(klass->set_output_frame(compositor, outbuffer)))
+	{
+		GST_ERROR_OBJECT(compositor, "could not set the output frame");
+		return GST_FLOW_ERROR;
+	}
+
 	gst_imx_compositor_update_overall_region(compositor);
 
-	klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color);
-
-	walk = GST_ELEMENT(videoaggregator)->sinkpads;
-	while (walk != NULL)
+	if (klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color))
 	{
-		GstImxBPVideoAggregatorPad *videoaggregator_pad = walk->data;
-		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(videoaggregator_pad);
+		GST_OBJECT_LOCK(compositor);
 
-		gst_imx_compositor_pad_update_canvas(compositor_pad);
+		walk = GST_ELEMENT(videoaggregator)->sinkpads;
+		while (walk != NULL)
+		{
+			GstImxBPVideoAggregatorPad *videoaggregator_pad = walk->data;
+			GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(videoaggregator_pad);
 
-		klass->draw_frame(
-			compositor,
-			&(videoaggregator_pad->info),
-			&(compositor_pad->source_subset),
-			&(compositor_pad->canvas),
-			videoaggregator_pad->buffer,
-			compositor_pad->alpha
-		);
+			gst_imx_compositor_pad_update_canvas(compositor_pad);
 
-		walk = g_list_next(walk);
+			if (!klass->draw_frame(
+				compositor,
+				&(videoaggregator_pad->info),
+				&(compositor_pad->source_subset),
+				&(compositor_pad->canvas),
+				videoaggregator_pad->buffer,
+				compositor_pad->alpha
+			))
+			{
+				GST_ERROR_OBJECT(compositor, "error while drawing composition frame");
+				ret = GST_FLOW_ERROR;
+				break;
+			}
+
+			walk = g_list_next(walk);
+		}
+
+		GST_OBJECT_UNLOCK(compositor);
 	}
 
 	klass->set_output_frame(compositor, NULL);
 
-	return GST_FLOW_OK;
+	return ret;
 }
 
 
@@ -737,9 +753,9 @@ static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *vide
 		GstImxCompositorClass *klass = GST_IMX_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(compositor));
 
 		if (klass->set_output_video_info != NULL)
-			klass->set_output_video_info(compositor, &info);
-
-		return TRUE;
+			return klass->set_output_video_info(compositor, &info);
+		else
+			return TRUE;
 	}
 	else
 		return FALSE;

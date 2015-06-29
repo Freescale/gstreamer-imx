@@ -42,15 +42,51 @@ struct _GstImxCompositor
 };
 
 
+/**
+ * GstImxCompositorClass:
+ *
+ * @parent_class: The parent class structure
+ *
+ * @get_phys_mem_allocator: Required.
+ *                          Returns a GstAllocator which allocates physically contiguous memory.
+ *                          Which allocator to use is up to the subclass.
+ *                          This vfunc increases the allocator's refcount.
+ *                          If something went wrong, it returns NULL.
+ * @set_output_frame:       Required.
+ *                          Sets the frame that will contain the composed video.
+ *                          If the frame is non-NULL, the subclass must ref this frame and keep
+ *                          a pointer to it internally. All @draw_frame and @fill_region will
+ *                          target this output frame until a different one is set.
+ *                          If the frame is NULL, it instructs the subclass to unref any previously
+ *                          ref'd output frame. @draw_frame and @fill_region cannot be called
+ *                          afterwards unless a non-NULL frame is set again.
+ *                          Returns TRUE if it successfully completed, FALSE otherwise.
+ *                          If this returns FALSE, the given frame is *not* ref'd inside.
+ *                          In other words, if it returns FALSE, it is not necessary to explicitely
+ *                          call @set_output_frame with a NULL frame afterwards.
+ * @set_output_video_info:  Optional.
+ *                          This gives derived blitters the chance to update any internal state
+ *                          related to the video info.
+ *                          Returns TRUE if it successfully completed, FALSE otherwise.
+ * @fill_region:            Required.
+ *                          Fills a given region in the output frame with the given color.
+ *                          The color is specified as an unsigned 32-bit integer in format: 0x00RRGGBB.
+ *                          Returns TRUE if it successfully completed, FALSE otherwise.
+ * @draw_frame:             Required.
+ *                          Draws a given input frame on the output frame, using the given
+ *                          input info, input region, and output canvas.
+ *                          alpha 255 equals 100% opacity; alpha 0 means 100% transparency.
+ *                          Returns TRUE if it successfully completed, FALSE otherwise.
+ */
 struct _GstImxCompositorClass
 {
 	GstImxBPVideoAggregatorClass parent_class;
 
 	GstAllocator* (*get_phys_mem_allocator)(GstImxCompositor *compositor);
-	void (*set_output_frame)(GstImxCompositor *compositor, GstBuffer *output_frame);
-	void (*set_output_video_info)(GstImxCompositor *compositor, GstVideoInfo const *info);
-	void (*fill_region)(GstImxCompositor *compositor, GstImxRegion const *region, guint32 color);
-	void (*draw_frame)(GstImxCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha);
+	gboolean (*set_output_frame)(GstImxCompositor *compositor, GstBuffer *output_frame);
+	gboolean (*set_output_video_info)(GstImxCompositor *compositor, GstVideoInfo const *info);
+	gboolean (*fill_region)(GstImxCompositor *compositor, GstImxRegion const *region, guint32 color);
+	gboolean (*draw_frame)(GstImxCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha);
 };
 
 
