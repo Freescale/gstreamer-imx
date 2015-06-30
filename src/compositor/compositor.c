@@ -226,6 +226,17 @@ static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
 }
 
 
+static void gst_imx_compositor_pad_check_outer_region(GstImxCompositorPad *compositor_pad)
+{
+	GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
+
+	if ((compositor_pad->canvas.outer_region.x2 - compositor_pad->canvas.outer_region.x1) == 0)
+		compositor_pad->canvas.outer_region.x2 = compositor_pad->canvas.outer_region.x1 + GST_VIDEO_INFO_WIDTH(info);
+	if ((compositor_pad->canvas.outer_region.y2 - compositor_pad->canvas.outer_region.y1) == 0)
+		compositor_pad->canvas.outer_region.y2 = compositor_pad->canvas.outer_region.y1 + GST_VIDEO_INFO_HEIGHT(info);
+}
+
+
 static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor_pad)
 {
 	GstImxCompositor *compositor;
@@ -235,6 +246,8 @@ static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor
 		return;
 
 	compositor = GST_IMX_COMPOSITOR(gst_pad_get_parent_element(GST_PAD(compositor_pad)));
+
+	gst_imx_compositor_pad_check_outer_region(compositor_pad);
 
 	gst_imx_canvas_calculate_inner_region(&(compositor_pad->canvas), info);
 	gst_imx_canvas_clip(
@@ -845,6 +858,10 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 	{
 		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
 		GstImxRegion *outer_region = &(compositor_pad->canvas.outer_region);
+
+		/* The outer region might not be defined. Check for this, and if necessary,
+		 * set the outer region to be of the same size as the input frame. */
+		gst_imx_compositor_pad_check_outer_region(compositor_pad);
 
 		/* NOTE: *not* updating the pad canvas here, since the overall region is being
 		 * constructed in these iterations, and the canvas updates require a valid
