@@ -522,6 +522,7 @@ static void gst_imx_compositor_init(GstImxCompositor *compositor)
 	compositor->overall_height = DEFAULT_OVERALL_HEIGHT;
 	compositor->dma_bufferpool = NULL;
 	compositor->overall_region_valid = FALSE;
+	compositor->region_fill_necessary = TRUE;
 	compositor->background_color = DEFAULT_BACKGROUND_COLOR;
 }
 
@@ -695,7 +696,9 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 
 	gst_imx_compositor_update_overall_region(compositor);
 
-	if (klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color))
+	GST_LOG_OBJECT(compositor, "region_fill_necessary: %d", (gint)(compositor->region_fill_necessary));
+
+	if (!(compositor->region_fill_necessary) || klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color))
 	{
 		GST_OBJECT_LOCK(compositor);
 
@@ -847,12 +850,14 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 		compositor->overall_region.y1 = 0;
 		compositor->overall_region.x2 = compositor->overall_width;
 		compositor->overall_region.y2 = compositor->overall_height;
+		compositor->region_fill_necessary = TRUE;
 		return;
 	}
 
 	if (compositor->overall_region_valid)
 		return;
 
+	/* Walk through all pads and merge their outer canvas regions together */
 	walk = GST_ELEMENT(compositor)->sinkpads;
 	while (walk != NULL)
 	{
@@ -869,14 +874,41 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 		 * needs to exist prior to any canvas updates */
 
 		if (first)
+		{
 			compositor->overall_region = *outer_region;
+			first = FALSE;
+		}
 		else
 			gst_imx_region_merge(&(compositor->overall_region), &(compositor->overall_region), outer_region);
 
-		compositor->overall_region.x1 = 0;
-		compositor->overall_region.y1 = 0;
+		walk = g_list_next(walk);
+	}
 
-		first = FALSE;
+	/* Make sure the overall region starts at (0,0), since any other topleft
+	 * coordinate makes little sense */
+	compositor->overall_region.x1 = 0;
+	compositor->overall_region.y1 = 0;
+
+	/* Now that the overall region is computed, walk through the individual
+	 * outer regions, and check if any of them completely cover the overall region
+	 * If so, the compositor does not have to clear the frame first, thus
+	 * saving bandwidth */
+	compositor->region_fill_necessary = TRUE;
+	walk = GST_ELEMENT(compositor)->sinkpads;
+	while (walk != NULL)
+	{
+		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
+		GstImxRegion *outer_region = &(compositor_pad->canvas.outer_region);
+
+		/* Check if the outer region completely contains the overall region */
+		if (gst_imx_region_contains(&(compositor->overall_region), outer_region) == GST_IMX_REGION_CONTAINS_FULL)
+		{
+			/* disable filling if this outer region is opaque
+			 * (because it will completely cover the overall region) */
+			compositor->region_fill_necessary = (compositor_pad->alpha != 255);
+			break;
+		}
+
 		walk = g_list_next(walk);
 	}
 

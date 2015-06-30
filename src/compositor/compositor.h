@@ -38,6 +38,7 @@ struct _GstImxCompositor
 	GstBufferPool *dma_bufferpool;
 	GstImxRegion overall_region;
 	gboolean overall_region_valid;
+	gboolean region_fill_necessary;
 	guint32 background_color;
 };
 
