@@ -30,7 +30,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxG2DCompositor GstImxG2DCompositor;
 typedef struct _GstImxG2DCompositorClass GstImxG2DCompositorClass;
-typedef struct _GstImxG2DCompositorPrivate GstImxG2DCompositorPrivate;
 
 
 #define GST_TYPE_IMX_G2D_COMPOSITOR             (gst_imx_g2d_compositor_get_type())

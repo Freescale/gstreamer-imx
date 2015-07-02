@@ -29,7 +29,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxG2DBlitter GstImxG2DBlitter;
 typedef struct _GstImxG2DBlitterClass GstImxG2DBlitterClass;
-typedef struct _GstImxG2DBlitterPrivate GstImxG2DBlitterPrivate;
 
 
 #define GST_TYPE_IMX_G2D_BLITTER             (gst_imx_g2d_blitter_get_type())
@@ -85,7 +84,7 @@ typedef struct _GstImxG2DBlitterPrivate GstImxG2DBlitterPrivate;
 	)
 
 
-/* The G2D blitter uses sevral frames and surfaces.
+/* The G2D blitter uses several frames and surfaces.
  * Surfaces are g2d_surface instances which correspond to the frames with the same name.
  * For example, output_surface contains the physical address and video format of the output_frame.
  *
@@ -107,6 +106,7 @@ typedef struct _GstImxG2DBlitterPrivate GstImxG2DBlitterPrivate;
 struct _GstImxG2DBlitter
 {
 	GstImxBlitter parent;
+
 	GstVideoInfo input_video_info, output_video_info;
 	GstAllocator *allocator;
 	GstBuffer *input_frame, *output_frame, *fill_frame;

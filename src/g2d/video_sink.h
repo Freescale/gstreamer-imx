@@ -29,7 +29,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxG2DVideoSink GstImxG2DVideoSink;
 typedef struct _GstImxG2DVideoSinkClass GstImxG2DVideoSinkClass;
-typedef struct _GstImxG2DVideoSinkPrivate GstImxG2DVideoSinkPrivate;
 
 
 #define GST_TYPE_IMX_G2D_VIDEO_SINK             (gst_imx_g2d_video_sink_get_type())
