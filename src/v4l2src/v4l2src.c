@@ -109,8 +109,17 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 		}
 	}
 
+	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	if (ioctl(fd_v4l, VIDIOC_G_FMT, &fmt) < 0) {
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
+		close(fd_v4l);
+		return -1;
+	}
+
+	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d", fmt.fmt.pix.pixelformat);
+
 	fszenum.index = v4l2src->capture_mode;
-	fszenum.pixel_format = V4L2_PIX_FMT_YUV420;
+	fszenum.pixel_format = fmt.fmt.pix.pixelformat;
 	if (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &fszenum) < 0) {
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_ENUM_FRAMESIZES failed: %s", strerror(errno));
 		close(fd_v4l);
@@ -140,7 +149,6 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	}
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420;
 	fmt.fmt.pix.bytesperline = 0;
 	fmt.fmt.pix.priv = 0;
 	fmt.fmt.pix.sizeimage = 0;
@@ -282,12 +290,27 @@ static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 {
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
+	const char *pixel_format = NULL;
+	struct v4l2_format fmt;
+
+	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0) {
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
+		return FALSE;
+	}
+
+	switch (fmt.fmt.pix.pixelformat) {
+	case V4L2_PIX_FMT_YUV420: /* Special Case for handling YU12 */
+		pixel_format = "I420";
+		break;
+	default:
+		pixel_format = (char *)&fmt.fmt.pix.pixelformat;
+	}
 
 	/* not much to negotiate;
 	 * we already performed setup, so that is what will be streamed */
-
 	caps = gst_caps_new_simple("video/x-raw",
-			"format", G_TYPE_STRING, "I420",
+			"format", G_TYPE_STRING, pixel_format,
 			"width", G_TYPE_INT, v4l2src->capture_width,
 			"height", G_TYPE_INT, v4l2src->capture_height,
 			"framerate", GST_TYPE_FRACTION, v4l2src->fps_n, v4l2src->fps_d,
@@ -303,11 +326,12 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 {
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
+	const char *pixel_format = "I420";
 
 	GST_INFO_OBJECT(v4l2src, "get caps filter %" GST_PTR_FORMAT, (gpointer)filter);
 
 	caps = gst_caps_new_simple("video/x-raw",
-			"format", G_TYPE_STRING, "I420",
+			"format", G_TYPE_STRING, pixel_format,
 			"width", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 			"height", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 			"framerate", GST_TYPE_FRACTION_RANGE, 0, 1, 100, 1,
@@ -404,6 +428,7 @@ static void gst_imx_v4l2src_init(GstImxV4l2VideoSrc *v4l2src)
 	v4l2src->input = DEFAULT_INPUT;
 	v4l2src->devicename = g_strdup(DEFAULT_DEVICE);
 	v4l2src->queue_size = DEFAULT_QUEUE_SIZE;
+	v4l2src->fd_obj_v4l = NULL;
 
 	gst_base_src_set_format(GST_BASE_SRC(v4l2src), GST_FORMAT_TIME);
 	gst_base_src_set_live(GST_BASE_SRC(v4l2src), TRUE);
