@@ -68,17 +68,10 @@ GST_DEBUG_CATEGORY_STATIC(gst_imx_v4l2src_debug_category);
 G_DEFINE_TYPE_WITH_CODE(GstImxV4l2VideoSrc, gst_imx_v4l2src,
 	GST_TYPE_PUSH_SRC, DEBUG_INIT)
 
-/* TODO: This part is nonessential, and causes compilation errors with certain 3.10 kernels,
- * since VIDIOC_DBG_G_CHIP_IDENT is an experimental interface. Disabled for now. */
-/*#define WITH_CHIP_IDENTIFICATION*/
-
 static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 {
 	struct v4l2_format fmt = {0};
 	struct v4l2_streamparm parm = {0};
-#ifdef WITH_CHIP_IDENTIFICATION
-	struct v4l2_dbg_chip_ident chip;
-#endif
 	struct v4l2_frmsizeenum fszenum = {0};
 	v4l2_std_id id;
 	gint input;
@@ -90,14 +83,6 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 				v4l2src->devicename);
 		return -1;
 	}
-
-#ifdef WITH_CHIP_IDENTIFICATION
-	memset(&chip, 0, sizeof(chip));
-	if (ioctl(fd_v4l, VIDIOC_DBG_G_CHIP_IDENT, &chip))
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_DBG_G_CHIP_IDENT failed");
-	else
-		GST_INFO_OBJECT(v4l2src, "sensor chip is %s", chip.match.name);
-#endif
 
 	if (ioctl (fd_v4l, VIDIOC_G_STD, &id) < 0) {
 		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed: %s", strerror(errno));
