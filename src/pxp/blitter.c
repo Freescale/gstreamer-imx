@@ -1,5 +1,5 @@
 /* PxP-based i.MX blitter class
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -32,10 +32,10 @@ GST_DEBUG_CATEGORY_STATIC(imx_pxp_blitter_debug);
 #define GST_CAT_DEFAULT imx_pxp_blitter_debug
 
 
-G_DEFINE_TYPE(GstImxPxPBlitter, gst_imx_pxp_blitter, GST_TYPE_IMX_BASE_BLITTER)
+G_DEFINE_TYPE(GstImxPxPBlitter, gst_imx_pxp_blitter, GST_TYPE_IMX_BLITTER)
 
 
-/* Private structure storing IPU specific data */
+/* Private structure storing PxP specific data */
 struct _GstImxPxPBlitterPrivate
 {
 	struct pxp_config_data pxp_config;
@@ -52,169 +52,417 @@ typedef struct
 GstImxPxPFormatDetails;
 
 
+static guint const fill_frame_width = 8;
+static guint const fill_frame_height = 8;
+static GstVideoFormat const fill_frame_format = GST_VIDEO_FORMAT_BGRx;
+
+
 static void gst_imx_pxp_blitter_finalize(GObject *object);
 
-static gboolean gst_imx_pxp_blitter_set_input_video_info(GstImxBaseBlitter *base_blitter, GstVideoInfo *input_video_info);
-static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame);
-static gboolean gst_imx_pxp_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame);
-static gboolean gst_imx_pxp_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region);
-static GstAllocator* gst_imx_pxp_blitter_get_phys_mem_allocator(GstImxBaseBlitter *base_blitter);
-static gboolean gst_imx_pxp_blitter_blit_frame(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *input_region);
+static gboolean gst_imx_pxp_blitter_set_input_video_info(GstImxBlitter *blitter, GstVideoInfo const *input_video_info);
+static gboolean gst_imx_pxp_blitter_set_output_video_info(GstImxBlitter *blitter, GstVideoInfo const *output_video_info);
 
-static GstImxPxPFormatDetails const * gst_imx_pxp_blitter_get_pxp_format_details(GstVideoFormat gstfmt);
-static void gst_imx_pxp_blitter_set_layer_params(GstImxPxPBlitter *pxp_blitter, GstBuffer *video_frame, struct pxp_layer_param *layer_params);
+static gboolean gst_imx_pxp_blitter_set_input_region(GstImxBlitter *blitter, GstImxRegion const *input_region);
+static gboolean gst_imx_pxp_blitter_set_output_canvas(GstImxBlitter *blitter, GstImxCanvas const *output_canvas);
 
+static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *input_frame);
+static gboolean gst_imx_pxp_blitter_set_output_frame(GstImxBlitter *blitter, GstBuffer *output_frame);
 
+static GstAllocator* gst_imx_pxp_blitter_get_phys_mem_allocator(GstImxBlitter *blitter);
 
+static gboolean gst_imx_pxp_blitter_fill_region(GstImxBlitter *blitter, GstImxRegion const *region, guint32 color);
+static gboolean gst_imx_pxp_blitter_blit(GstImxBlitter *blitter, guint8 alpha);
 
-GType gst_imx_pxp_blitter_rotation_mode_get_type(void)
-{
-	static GType gst_imx_pxp_blitter_rotation_mode_type = 0;
-
-	if (!gst_imx_pxp_blitter_rotation_mode_type)
-	{
-		static GEnumValue rotation_mode_values[] =
-		{
-			{ GST_IMX_PXP_BLITTER_ROTATION_NONE, "No rotation", "none" },
-			{ GST_IMX_PXP_BLITTER_ROTATION_HFLIP, "Flip horizontally", "horizontal-flip" },
-			{ GST_IMX_PXP_BLITTER_ROTATION_VFLIP, "Flip vertically", "vertical-flip" },
-			{ GST_IMX_PXP_BLITTER_ROTATION_90, "Rotate clockwise 90 degrees", "rotate-90" },
-			{ GST_IMX_PXP_BLITTER_ROTATION_180, "Rotate 180 degrees", "rotate-180" },
-			{ GST_IMX_PXP_BLITTER_ROTATION_270, "Rotate clockwise 270 degrees", "rotate-270" },
-			{ 0, NULL, NULL },
-		};
-
-		gst_imx_pxp_blitter_rotation_mode_type = g_enum_register_static(
-			"ImxPxPBlitterRotationMode",
-			rotation_mode_values
-		);
-	}
-
-	return gst_imx_pxp_blitter_rotation_mode_type;
-}
+static void gst_imx_pxp_blitter_set_layer_params(G_GNUC_UNUSED GstImxPxPBlitter *pxp_blitter, GstBuffer *video_frame, GstVideoInfo const *info, struct pxp_layer_param *layer_params);
+static gboolean gst_imx_pxp_blitter_allocate_internal_fill_frame(GstImxPxPBlitter *pxp_blitter);
+static void gst_imx_pxp_blitter_set_output_rotation(GstImxPxPBlitter *pxp_blitter, GstImxCanvasInnerRotation rotation);
+static GstImxPxPFormatDetails const * gst_imx_pxp_blitter_get_format_details(GstVideoFormat gst_format);
 
 
 
 
-void gst_imx_pxp_blitter_class_init(GstImxPxPBlitterClass *klass)
+static void gst_imx_pxp_blitter_class_init(GstImxPxPBlitterClass *klass)
 {
 	GObjectClass *object_class;
-	GstImxBaseBlitterClass *base_class;
+	GstImxBlitterClass *base_class;
 
 	object_class = G_OBJECT_CLASS(klass);
-	base_class = GST_IMX_BASE_BLITTER_CLASS(klass);
+	base_class = GST_IMX_BLITTER_CLASS(klass);
 
 	object_class->finalize             = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_finalize);
 	base_class->set_input_video_info   = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_set_input_video_info);
+	base_class->set_output_video_info  = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_set_output_video_info);
+	base_class->set_input_region       = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_set_input_region);
+	base_class->set_output_canvas      = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_set_output_canvas);
 	base_class->set_input_frame        = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_set_input_frame);
 	base_class->set_output_frame       = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_set_output_frame);
-	base_class->set_output_regions     = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_set_output_regions);
 	base_class->get_phys_mem_allocator = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_get_phys_mem_allocator);
-	base_class->blit_frame             = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_blit_frame);
+	base_class->fill_region            = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_fill_region);
+	base_class->blit                   = GST_DEBUG_FUNCPTR(gst_imx_pxp_blitter_blit);
 
 	GST_DEBUG_CATEGORY_INIT(imx_pxp_blitter_debug, "imxpxpblitter", 0, "Freescale i.MX PxP blitter class");
 }
 
 
-void gst_imx_pxp_blitter_init(GstImxPxPBlitter *pxp_blitter)
+static void gst_imx_pxp_blitter_init(GstImxPxPBlitter *pxp_blitter)
 {
 	int ret;
 
-	pxp_blitter->priv = g_slice_alloc(sizeof(GstImxPxPBlitterPrivate));
-	pxp_blitter->priv->pxp_channel_requested = FALSE;
-
-	struct pxp_proc_data *proc_data = &(pxp_blitter->priv->pxp_config.proc_data);
-	memset(&(pxp_blitter->priv->pxp_config), 0, sizeof(struct pxp_config_data));
-	proc_data->overlay_state = 0;
-	proc_data->scaling = 0;
-	proc_data->hflip = 0;
-	proc_data->vflip = 0;
-	proc_data->bgcolor = 0;
-	proc_data->rotate = 0;
-	proc_data->rot_pos = 0;
-	proc_data->lut_transform = PXP_LUT_NONE;
-
 	if (!gst_imx_pxp_open())
-		GST_ERROR_OBJECT(pxp_blitter, "could not initialize PxP: %s", strerror(errno));
+	{
+		GST_ELEMENT_ERROR(pxp_blitter, RESOURCE, OPEN_READ_WRITE, ("could not open PxP device"), (NULL));
+		return;
+	}
 
-	ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_GET_CHAN, &(pxp_blitter->priv->pxp_channel.handle));
+	gst_video_info_init(&(pxp_blitter->input_video_info));
+	gst_video_info_init(&(pxp_blitter->output_video_info));
+	pxp_blitter->allocator = NULL;
+	pxp_blitter->input_frame = NULL;
+	pxp_blitter->output_frame = NULL;
+	pxp_blitter->use_entire_input_frame = TRUE;
 
-	if (ret != 0)
-		GST_ERROR_OBJECT(pxp_blitter, "could not request PxP channel: %s", strerror(errno));
+	pxp_blitter->priv = g_slice_alloc(sizeof(GstImxPxPBlitterPrivate));
+	memset(pxp_blitter->priv, 0, sizeof(GstImxPxPBlitterPrivate));
+
+	if ((ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_GET_CHAN, &(pxp_blitter->priv->pxp_channel.handle))) != 0)
+	{
+		GST_ELEMENT_ERROR(pxp_blitter, RESOURCE, OPEN_READ_WRITE, ("could not request PxP channel"), ("%s", strerror(errno)));
+		gst_imx_pxp_close();
+		return;
+	}
 	else
 		pxp_blitter->priv->pxp_channel_requested = TRUE;
 
-	gst_imx_pxp_blitter_set_output_rotation(pxp_blitter, GST_IMX_PXP_BLITTER_OUTPUT_ROTATION_DEFAULT);
+	pxp_blitter->visibility_mask = 0;
+	pxp_blitter->fill_color = 0xFF000000;
+	pxp_blitter->num_empty_regions = 0;
 }
 
 
 GstImxPxPBlitter* gst_imx_pxp_blitter_new(void)
 {
-	GstImxPxPBlitter* pxp_blitter = (GstImxPxPBlitter *)g_object_new(gst_imx_pxp_blitter_get_type(), NULL);
+	GstAllocator *allocator;
+	GstImxPxPBlitter *pxp_blitter;
+
+	allocator = gst_imx_pxp_allocator_new();
+	if (allocator == NULL)
+		return NULL;
+
+	pxp_blitter = (GstImxPxPBlitter *)g_object_new(gst_imx_pxp_blitter_get_type(), NULL);
+	pxp_blitter->allocator = gst_object_ref_sink(allocator);
+
+	if (!gst_imx_pxp_blitter_allocate_internal_fill_frame(pxp_blitter))
+	{
+		gst_object_unref(GST_OBJECT(pxp_blitter));
+		return NULL;
+	}
 
 	return pxp_blitter;
 }
 
 
-GstImxPxPBlitterRotationMode gst_imx_pxp_blitter_get_output_rotation(GstImxPxPBlitter *pxp_blitter)
+static void gst_imx_pxp_blitter_finalize(GObject *object)
 {
-	struct pxp_proc_data *proc_data = &(pxp_blitter->priv->pxp_config.proc_data);
+	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(object);
 
-	if (proc_data->hflip)
-		return GST_IMX_PXP_BLITTER_ROTATION_HFLIP;
-	if (proc_data->vflip)
-		return GST_IMX_PXP_BLITTER_ROTATION_VFLIP;
+	if (pxp_blitter->input_frame != NULL)
+		gst_buffer_unref(pxp_blitter->input_frame);
+	if (pxp_blitter->output_frame != NULL)
+		gst_buffer_unref(pxp_blitter->output_frame);
+	if (pxp_blitter->fill_frame != NULL)
+		gst_buffer_unref(pxp_blitter->fill_frame);
 
-	switch (proc_data->rotate)
+	if (pxp_blitter->allocator != NULL)
+		gst_object_unref(pxp_blitter->allocator);
+
+	if (pxp_blitter->priv != NULL)
 	{
-		case 0: return GST_IMX_PXP_BLITTER_ROTATION_NONE;
-		case 90: return GST_IMX_PXP_BLITTER_ROTATION_90;
-		case 180: return GST_IMX_PXP_BLITTER_ROTATION_180;
-		case 270: return GST_IMX_PXP_BLITTER_ROTATION_270;
-		default: break;
+		if (pxp_blitter->priv->pxp_channel_requested)
+		{
+			ioctl(gst_imx_pxp_get_fd(), PXP_IOC_PUT_CHAN, &(pxp_blitter->priv->pxp_channel.handle));
+			pxp_blitter->priv->pxp_channel_requested = FALSE;
+		}
+
+		gst_imx_pxp_close();
+		g_slice_free1(sizeof(GstImxPxPBlitterPrivate), pxp_blitter->priv);
 	}
 
-	return GST_IMX_PXP_BLITTER_ROTATION_NONE;
+	G_OBJECT_CLASS(gst_imx_pxp_blitter_parent_class)->finalize(object);
 }
 
 
-void gst_imx_pxp_blitter_set_output_rotation(GstImxPxPBlitter *pxp_blitter, GstImxPxPBlitterRotationMode rotation)
+static gboolean gst_imx_pxp_blitter_set_input_video_info(GstImxBlitter *blitter, GstVideoInfo const *input_video_info)
+{
+	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(blitter);
+	pxp_blitter->input_video_info = *input_video_info;
+	return TRUE;
+}
+
+
+static gboolean gst_imx_pxp_blitter_set_output_video_info(GstImxBlitter *blitter, GstVideoInfo const *output_video_info)
+{
+	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(blitter);
+	pxp_blitter->output_video_info = *output_video_info;
+	return TRUE;
+}
+
+
+static gboolean gst_imx_pxp_blitter_set_input_region(GstImxBlitter *blitter, GstImxRegion const *input_region)
+{
+	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(blitter);
+
+	if (input_region != NULL)
+	{
+		pxp_blitter->priv->pxp_config.proc_data.srect.left = input_region->x1;
+		pxp_blitter->priv->pxp_config.proc_data.srect.top = input_region->y1;
+		pxp_blitter->priv->pxp_config.proc_data.srect.width = input_region->x2 - input_region->x1;
+		pxp_blitter->priv->pxp_config.proc_data.srect.height = input_region->y2 - input_region->y1;
+
+		pxp_blitter->use_entire_input_frame = FALSE;
+	}
+	else
+		pxp_blitter->use_entire_input_frame = TRUE;
+
+	return TRUE;
+}
+
+
+static gboolean gst_imx_pxp_blitter_set_output_canvas(GstImxBlitter *blitter, GstImxCanvas const *output_canvas)
+{
+	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(blitter);
+	guint i;
+
+	pxp_blitter->priv->pxp_config.proc_data.drect.left = output_canvas->clipped_inner_region.x1;
+	pxp_blitter->priv->pxp_config.proc_data.drect.top = output_canvas->clipped_inner_region.y1;
+	pxp_blitter->priv->pxp_config.proc_data.drect.width = output_canvas->clipped_inner_region.x2 - output_canvas->clipped_inner_region.x1;
+	pxp_blitter->priv->pxp_config.proc_data.drect.height = output_canvas->clipped_inner_region.y2 - output_canvas->clipped_inner_region.y1;
+
+	pxp_blitter->visibility_mask = output_canvas->visibility_mask;
+	pxp_blitter->fill_color = output_canvas->fill_color;
+
+	pxp_blitter->num_empty_regions = 0;
+	for (i = 0; i < 4; ++i)
+	{
+		if ((pxp_blitter->visibility_mask & (1 << i)) == 0)
+			continue;
+
+		pxp_blitter->empty_regions[pxp_blitter->num_empty_regions] = output_canvas->empty_regions[i];
+		pxp_blitter->num_empty_regions++;
+	}
+
+	gst_imx_pxp_blitter_set_output_rotation(pxp_blitter, output_canvas->inner_rotation);
+
+	return TRUE;
+}
+
+
+static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *input_frame)
+{
+	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(blitter);
+	gst_buffer_replace(&(pxp_blitter->input_frame), input_frame);
+
+	if (pxp_blitter->input_frame != NULL)
+	{
+		gst_imx_pxp_blitter_set_layer_params(pxp_blitter, input_frame, &(pxp_blitter->input_video_info), &(pxp_blitter->priv->pxp_config.s0_param));
+
+		if (pxp_blitter->use_entire_input_frame)
+		{
+			pxp_blitter->priv->pxp_config.proc_data.srect.left = 0;
+			pxp_blitter->priv->pxp_config.proc_data.srect.top = 0;
+			pxp_blitter->priv->pxp_config.proc_data.srect.width = GST_VIDEO_INFO_WIDTH(&(pxp_blitter->input_video_info));
+			pxp_blitter->priv->pxp_config.proc_data.srect.height = GST_VIDEO_INFO_HEIGHT(&(pxp_blitter->input_video_info));
+		}
+	}
+
+	return TRUE;
+}
+
+
+static gboolean gst_imx_pxp_blitter_set_output_frame(GstImxBlitter *blitter, GstBuffer *output_frame)
+{
+	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(blitter);
+	gst_buffer_replace(&(pxp_blitter->output_frame), output_frame);
+
+	if (pxp_blitter->output_frame != NULL)
+	{
+		gst_imx_pxp_blitter_set_layer_params(pxp_blitter, output_frame, &(pxp_blitter->output_video_info), &(pxp_blitter->priv->pxp_config.out_param));
+	}
+
+	return TRUE;
+}
+
+
+static GstAllocator* gst_imx_pxp_blitter_get_phys_mem_allocator(GstImxBlitter *blitter)
+{
+	return gst_object_ref(GST_IMX_PXP_BLITTER_CAST(blitter)->allocator);
+}
+
+
+static gboolean gst_imx_pxp_blitter_fill_region(GstImxBlitter *blitter, GstImxRegion const *region, guint32 color)
+{
+	return TRUE;
+}
+
+
+static gboolean gst_imx_pxp_blitter_blit(GstImxBlitter *blitter, guint8 alpha)
+{
+	gboolean ret = TRUE;
+	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(blitter);
+	
+	if (!(pxp_blitter->priv->pxp_channel_requested))
+	{
+		GST_ERROR_OBJECT(pxp_blitter, "PxP channel handle wasn't requested - cannot blit");
+		return FALSE;
+	}
+
+	if (ret && (pxp_blitter->visibility_mask & GST_IMX_CANVAS_VISIBILITY_FLAG_REGION_INNER))
+	{
+		struct pxp_config_data *pconf = &(pxp_blitter->priv->pxp_config);
+
+		pconf->proc_data.scaling =
+			(pconf->proc_data.srect.width != pconf->proc_data.drect.width) ||
+			(pconf->proc_data.srect.height != pconf->proc_data.drect.height);
+
+		pconf->handle = pxp_blitter->priv->pxp_channel.handle;
+		ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_CONFIG_CHAN, pconf);
+		if (ret != 0)
+		{
+			GST_ERROR_OBJECT(pxp_blitter, "could not configure PxP channel: %s", strerror(errno));
+			return FALSE;
+		}
+
+		ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_START_CHAN, &(pxp_blitter->priv->pxp_channel.handle));
+		if (ret != 0)
+		{
+			GST_ERROR_OBJECT(pxp_blitter, "could not start PxP channel: %s", strerror(errno));
+			return FALSE;
+		}
+
+		ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_WAIT4CMPLT, &(pxp_blitter->priv->pxp_channel));
+		if (ret != 0)
+		{
+			GST_ERROR_OBJECT(pxp_blitter, "could not wait for PxP channel completion: %s", strerror(errno));
+			return FALSE;
+		}
+	}
+
+	return ret;
+}
+
+
+static void gst_imx_pxp_blitter_set_layer_params(G_GNUC_UNUSED GstImxPxPBlitter *pxp_blitter, GstBuffer *video_frame, GstVideoInfo const *info, struct pxp_layer_param *layer_params)
+{
+	GstVideoMeta *video_meta;
+	GstImxPhysMemMeta *phys_mem_meta;
+	GstVideoFormat format;
+	GstImxPxPFormatDetails const *format_details;
+	guint width, height, padded_width, padded_height;
+
+	g_assert(video_frame != NULL);
+
+	video_meta = gst_buffer_get_video_meta(video_frame);
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(video_frame);
+
+	g_assert((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0));
+
+	format = (video_meta != NULL) ? video_meta->format : GST_VIDEO_INFO_FORMAT(info);
+	width = (video_meta != NULL) ? video_meta->width : (guint)(GST_VIDEO_INFO_WIDTH(info));
+	height = (video_meta != NULL) ? video_meta->height : (guint)(GST_VIDEO_INFO_HEIGHT(info));
+
+	padded_width = width + phys_mem_meta->x_padding;
+	padded_height = height + phys_mem_meta->y_padding;
+
+	format_details = gst_imx_pxp_blitter_get_format_details(format);
+	g_assert(format_details != NULL);
+
+	/* In theory, the stride value could be set to padded_width and the
+	 * width value to the actual width. Unfortunately, there is no
+	 * more-or-less equivalent value for the height, and/or no way to
+	 * specify plane offsets. Therefore, set the padded width&height here,
+	 * and seleect a sub rect later in the proc_data (similar to how it is
+	 * done in GstImxIpuBlitter). */
+	layer_params->width = padded_width;
+	layer_params->height = padded_height;
+	layer_params->stride = padded_width;
+	layer_params->pixel_fmt = format_details->format;
+
+	layer_params->paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
+
+#if 0
+	layer_params->combine_enable = FALSE;
+
+	layer_params->color_key_enable = 0;
+	layer_params->color_key = 0x00000000;
+	layer_params->global_alpha_enable = FALSE;
+	layer_params->global_override = FALSE;
+	layer_params->global_alpha = 0;
+	layer_params->alpha_invert = FALSE;
+	layer_params->local_alpha_enable = FALSE;
+#endif
+}
+
+
+static gboolean gst_imx_pxp_blitter_allocate_internal_fill_frame(GstImxPxPBlitter *pxp_blitter)
+{
+	//GstImxPhysMemory *phys_mem;
+
+	/* Not using the dma bufferpool for this, since that bufferpool will
+	 * be configured to input frame sizes. Plus, the pool wouldn't yield any benefits here. */
+	pxp_blitter->fill_frame = gst_buffer_new_allocate(
+		pxp_blitter->allocator,
+		fill_frame_width * fill_frame_height * gst_imx_pxp_blitter_get_format_details(fill_frame_format)->bits_per_pixel / 8,
+		NULL
+	);
+
+	if (pxp_blitter->fill_frame == NULL)
+	{
+		GST_ERROR_OBJECT(pxp_blitter, "could not allocate internal fill frame");
+		return FALSE;
+	}
+
+	//phys_mem = (GstImxPhysMemory *)gst_buffer_peek_memory(pxp_blitter->fill_frame, 0);
+
+	return TRUE;
+}
+
+
+static void gst_imx_pxp_blitter_set_output_rotation(GstImxPxPBlitter *pxp_blitter, GstImxCanvasInnerRotation rotation)
 {
 	struct pxp_proc_data *proc_data = &(pxp_blitter->priv->pxp_config.proc_data);
 
 	switch (rotation)
 	{
-		case GST_IMX_PXP_BLITTER_ROTATION_NONE:
+		case GST_IMX_CANVAS_INNER_ROTATION_NONE:
 			proc_data->rotate = 0;
 			proc_data->hflip = 0;
 			proc_data->vflip = 0;
 			break;
 
-		case GST_IMX_PXP_BLITTER_ROTATION_90:
+		case GST_IMX_CANVAS_INNER_ROTATION_90_DEGREES:
 			proc_data->rotate = 90;
 			proc_data->hflip = 0;
 			proc_data->vflip = 0;
 			break;
 
-		case GST_IMX_PXP_BLITTER_ROTATION_180:
+		case GST_IMX_CANVAS_INNER_ROTATION_180_DEGREES:
 			proc_data->rotate = 180;
 			proc_data->hflip = 0;
 			proc_data->vflip = 0;
 			break;
 
-		case GST_IMX_PXP_BLITTER_ROTATION_270:
+		case GST_IMX_CANVAS_INNER_ROTATION_270_DEGREES:
 			proc_data->rotate = 270;
 			proc_data->hflip = 0;
 			proc_data->vflip = 0;
 			break;
 
-		case GST_IMX_PXP_BLITTER_ROTATION_HFLIP:
+		case GST_IMX_CANVAS_INNER_ROTATION_HFLIP:
 			proc_data->rotate = 0;
 			proc_data->hflip = 1;
 			proc_data->vflip = 0;
 			break;
 
-		case GST_IMX_PXP_BLITTER_ROTATION_VFLIP:
+		case GST_IMX_CANVAS_INNER_ROTATION_VFLIP:
 			proc_data->rotate = 0;
 			proc_data->hflip = 0;
 			proc_data->vflip = 1;
@@ -223,153 +471,7 @@ void gst_imx_pxp_blitter_set_output_rotation(GstImxPxPBlitter *pxp_blitter, GstI
 }
 
 
-static void gst_imx_pxp_blitter_finalize(GObject *object)
-{
-	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(object);
-	g_assert(pxp_blitter != NULL);
-
-	if (pxp_blitter->priv->pxp_channel_requested)
-	{
-		ioctl(gst_imx_pxp_get_fd(), PXP_IOC_PUT_CHAN, &(pxp_blitter->priv->pxp_channel.handle));
-		pxp_blitter->priv->pxp_channel_requested = FALSE;
-	}
-
-	if (pxp_blitter->priv != NULL)
-		g_slice_free1(sizeof(GstImxPxPBlitterPrivate), pxp_blitter->priv);
-
-	gst_imx_pxp_close();
-
-	G_OBJECT_CLASS(gst_imx_pxp_blitter_parent_class)->finalize(object);
-}
-
-
-static gboolean gst_imx_pxp_blitter_set_input_video_info(G_GNUC_UNUSED GstImxBaseBlitter *base_blitter, G_GNUC_UNUSED GstVideoInfo *input_video_info)
-{
-	return TRUE;
-}
-
-
-static gboolean gst_imx_pxp_blitter_set_input_frame(GstImxBaseBlitter *base_blitter, GstBuffer *input_frame)
-{
-	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(base_blitter);
-	struct pxp_config_data *pxp_config;
-
-	g_assert(pxp_blitter != NULL);
-
-	pxp_config = &(pxp_blitter->priv->pxp_config);
-
-	gst_imx_pxp_blitter_set_layer_params(pxp_blitter, input_frame, &(pxp_config->s0_param));
-
-	return TRUE;
-}
-
-
-static gboolean gst_imx_pxp_blitter_set_output_frame(GstImxBaseBlitter *base_blitter, GstBuffer *output_frame)
-{
-	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(base_blitter);
-	struct pxp_config_data *pxp_config;
-
-	g_assert(pxp_blitter != NULL);
-
-	pxp_config = &(pxp_blitter->priv->pxp_config);
-
-	gst_imx_pxp_blitter_set_layer_params(pxp_blitter, output_frame, &(pxp_config->out_param));
-
-	if ((pxp_config->proc_data.rotate == 90) || (pxp_config->proc_data.rotate == 270))
-	{
-		unsigned int i = pxp_config->out_param.width;
-		pxp_config->out_param.width = pxp_config->out_param.height;
-		pxp_config->out_param.height = i;
-	}
-
-	pxp_config->proc_data.drect.left = 0;
-	pxp_config->proc_data.drect.top = 0;
-	pxp_config->proc_data.drect.width = pxp_config->out_param.width;
-	pxp_config->proc_data.drect.height = pxp_config->out_param.height;
-
-	return TRUE;
-}
-
-
-static gboolean gst_imx_pxp_blitter_set_output_regions(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *video_region, GstImxBaseBlitterRegion const *output_region)
-{
-	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(base_blitter);
-	struct pxp_config_data *pxp_config;
-
-	pxp_config = &(pxp_blitter->priv->pxp_config);
-
-	if ((pxp_config->proc_data.rotate == 90) || (pxp_config->proc_data.rotate == 270))
-	{
-		pxp_config->proc_data.drect.left = video_region->y1;
-		pxp_config->proc_data.drect.top = video_region->x1;
-		pxp_config->proc_data.drect.width = video_region->y2 - video_region->y1;
-		pxp_config->proc_data.drect.height = video_region->x2 - video_region->x1;
-	}
-	else
-	{
-		pxp_config->proc_data.drect.left = video_region->x1;
-		pxp_config->proc_data.drect.top = video_region->y1;
-		pxp_config->proc_data.drect.width = video_region->x2 - video_region->x1;
-		pxp_config->proc_data.drect.height = video_region->y2 - video_region->y1;
-	}
-
-	return TRUE;
-}
-
-
-static GstAllocator* gst_imx_pxp_blitter_get_phys_mem_allocator(G_GNUC_UNUSED GstImxBaseBlitter *base_blitter)
-{
-	return gst_imx_pxp_allocator_new();
-}
-
-
-static gboolean gst_imx_pxp_blitter_blit_frame(GstImxBaseBlitter *base_blitter, GstImxBaseBlitterRegion const *input_region)
-{
-	int ret;
-	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(base_blitter);
-
-	g_assert(pxp_blitter != NULL);
-
-	if (!(pxp_blitter->priv->pxp_channel_requested))
-	{
-		GST_ERROR_OBJECT(pxp_blitter, "PxP channel handle wasn't requested - cannot blit");
-		return FALSE;
-	}
-
-	pxp_blitter->priv->pxp_config.proc_data.srect.left = input_region->x1;
-	pxp_blitter->priv->pxp_config.proc_data.srect.top = input_region->y1;
-	pxp_blitter->priv->pxp_config.proc_data.srect.width = input_region->x2 - input_region->x1;
-	pxp_blitter->priv->pxp_config.proc_data.srect.height = input_region->y2 - input_region->y1;
-
-	pxp_blitter->priv->pxp_config.proc_data.scaling = (pxp_blitter->priv->pxp_config.proc_data.srect.width != pxp_blitter->priv->pxp_config.proc_data.drect.width) || (pxp_blitter->priv->pxp_config.proc_data.srect.height != pxp_blitter->priv->pxp_config.proc_data.drect.height);
-
-	pxp_blitter->priv->pxp_config.handle = pxp_blitter->priv->pxp_channel.handle;
-	ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_CONFIG_CHAN, &(pxp_blitter->priv->pxp_config));
-	if (ret != 0)
-	{
-		GST_ERROR_OBJECT(pxp_blitter, "could not configure PxP channel: %s", strerror(errno));
-		return FALSE;
-	}
-
-	ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_START_CHAN, &(pxp_blitter->priv->pxp_channel.handle));
-	if (ret != 0)
-	{
-		GST_ERROR_OBJECT(pxp_blitter, "could not start PxP channel: %s", strerror(errno));
-		return FALSE;
-	}
-
-	ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_WAIT4CMPLT, &(pxp_blitter->priv->pxp_channel));
-	if (ret != 0)
-	{
-		GST_ERROR_OBJECT(pxp_blitter, "could not wait for PxP channel completion: %s", strerror(errno));
-		return FALSE;
-	}
-
-	return TRUE;
-}
-
-
-static GstImxPxPFormatDetails const * gst_imx_pxp_blitter_get_pxp_format_details(GstVideoFormat gstfmt)
+static GstImxPxPFormatDetails const * gst_imx_pxp_blitter_get_format_details(GstVideoFormat gstfmt)
 {
 #define FORMAT_DETAILS(PXPFMT, BPP) \
 		do { static GstImxPxPFormatDetails const d = { PXPFMT, BPP }; return &d; } while (0)
@@ -399,36 +501,7 @@ static GstImxPxPFormatDetails const * gst_imx_pxp_blitter_get_pxp_format_details
 }
 
 
-static void gst_imx_pxp_blitter_set_layer_params(G_GNUC_UNUSED GstImxPxPBlitter *pxp_blitter, GstBuffer *video_frame, struct pxp_layer_param *layer_params)
-{
-	GstVideoMeta *video_meta;
-	GstImxPhysMemMeta *phys_mem_meta;
-	GstImxPxPFormatDetails const *format_details;
 
-	g_assert(video_frame != NULL);
 
-	video_meta = gst_buffer_get_video_meta(video_frame);
-	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(video_frame);
 
-	g_assert((video_meta != NULL) && (phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0));
 
-	format_details = gst_imx_pxp_blitter_get_pxp_format_details(video_meta->format);
-	g_assert(format_details != NULL);
-
-	layer_params->width = video_meta->width;
-	layer_params->height = video_meta->height;
-	layer_params->stride = video_meta->stride[0] * 8 / format_details->bits_per_pixel;
-	layer_params->pixel_fmt = format_details->format;
-
-	layer_params->combine_enable = FALSE;
-
-	layer_params->color_key_enable = 0;
-	layer_params->color_key = 0x00000000;
-	layer_params->global_alpha_enable = FALSE;
-	layer_params->global_override = FALSE;
-	layer_params->global_alpha = 0;
-	layer_params->alpha_invert = FALSE;
-	layer_params->local_alpha_enable = FALSE;
-
-	layer_params->paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
-}

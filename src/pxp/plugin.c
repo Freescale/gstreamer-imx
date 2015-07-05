@@ -1,5 +1,5 @@
 /* Freescale PxP GStreamer 1.0 plugin definition
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -19,8 +19,8 @@
 
 #include <config.h>
 #include <gst/gst.h>
-#include "sink.h"
-#include "videotransform.h"
+#include "video_sink.h"
+#include "video_transform.h"
 
 
 GST_DEBUG_CATEGORY(imx_pxp_device_debug);
