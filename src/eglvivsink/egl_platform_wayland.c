@@ -17,9 +17,11 @@ GST_DEBUG_CATEGORY_STATIC(imx_egl_platform_wl_debug);
 struct _GstImxEglVivSinkEGLPlatform
 {
 	EGLNativeDisplayType native_display;
+	EGLNativeWindowType native_main_window;
 	EGLNativeWindowType native_window;
 	EGLDisplay egl_display;
 	EGLContext egl_context;
+	EGLSurface egl_main_surface;
 	EGLSurface egl_surface;
 
 	GstImxEglVivSinkWindowResizedEventCallback window_resized_event_cb;
@@ -32,6 +34,9 @@ struct _GstImxEglVivSinkEGLPlatform
 	guint fixed_window_width, fixed_window_height, video_width, video_height;
 	guint current_width, current_height;
 	guint screen_width, screen_height;
+	gint pending_x_coord, pending_y_coord;
+	gint x_coord, y_coord;
+	gboolean pending_subsurface_desync;
 
 	GMutex mutex;
 
@@ -39,10 +44,13 @@ struct _GstImxEglVivSinkEGLPlatform
 	struct wl_registry *registry;
 	int display_fd;
 	struct wl_compositor *compositor;
+	struct wl_subcompositor *subcompositor;
 	struct wl_shell *shell;
 	struct wl_output *output;
 
+	struct wl_surface *main_surface;
 	struct wl_surface *surface;
+	struct wl_subsurface *subsurface;
 	struct wl_shell_surface *shell_surface;
 
 	struct wl_callback *frame_cb;
@@ -137,6 +145,7 @@ static void resize_window_to_video(GstImxEglVivSinkEGLPlatform *platform)
 	GST_LOG("final size: %dx%d", platform->current_width, platform->current_height);
 
 	wl_egl_window_resize(platform->native_window, platform->current_width, platform->current_height, 0, 0);
+	platform->pending_subsurface_desync = TRUE;
 }
 
 
@@ -152,6 +161,9 @@ static void registry_handle_global(void *data, struct wl_registry *registry, uin
 		platform->shell = wl_registry_bind(registry, id, &wl_shell_interface, 1);
 	else if (g_strcmp0(interface, "wl_output") == 0)
 		platform->output = wl_registry_bind(registry, id, &wl_output_interface, 2);
+	else if (g_strcmp0(interface, "wl_subcompositor") == 0)
+		platform->subcompositor = wl_registry_bind(registry, id,
+			&wl_subcompositor_interface, 1);
 }
 
 static void registry_handle_global_remove(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_registry *registry, G_GNUC_UNUSED uint32_t name)
@@ -182,6 +194,7 @@ static void output_mode(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_output
 		platform->screen_width = w;
 		platform->screen_height = h;
 
+#if 0 /* This becomes unnecessary as the callback is dispatched before configuring the window. */
 		/* resize again in case the window is set to the video size
 		 * (this makes sure the window is not larger than the screen) */
 		if (
@@ -199,6 +212,7 @@ static void output_mode(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_output
 				write(platform->ctrl_pipe[1], &cmd, 1);
 			}
 		}
+#endif
 	}
 }
 
@@ -242,6 +256,8 @@ static void handle_configure(void *data, G_GNUC_UNUSED struct wl_shell_surface *
 		platform->window_resized_event_cb(platform, width, height, platform->user_context);
 	else
 		glViewport(0, 0, width, height);
+
+	platform->pending_subsurface_desync = TRUE;
 }
 
 static void handle_popup_done(G_GNUC_UNUSED void *data, G_GNUC_UNUSED struct wl_shell_surface *shell_surface)
@@ -265,6 +281,8 @@ static const struct wl_callback_listener frame_listener =
 	frame_callback
 };
 
+static void background_draw(GstImxEglVivSinkEGLPlatform *platform);
+
 static void frame_callback(void *data, struct wl_callback *callback, G_GNUC_UNUSED uint32_t time)
 {
 	GstImxEglVivSinkEGLPlatform *platform = data;
@@ -287,11 +305,31 @@ static void frame_callback(void *data, struct wl_callback *callback, G_GNUC_UNUS
 static void configure_callback(void *data, struct wl_callback *callback, uint32_t time)
 {
 	GstImxEglVivSinkEGLPlatform *platform = data;
+	struct wl_region *input_region;
 
 	wl_callback_destroy(callback);
 
-	platform->configured = TRUE;
+	/* Position sub-surface. */
+	if (!platform->fullscreen &&
+		(platform->pending_x_coord != platform->x_coord ||
+		 platform->pending_y_coord != platform->y_coord)) {
 
+		platform->x_coord = platform->pending_x_coord;
+		platform->y_coord = platform->pending_y_coord;
+		wl_subsurface_set_position(platform->subsurface,
+			platform->x_coord,
+			platform->y_coord);
+	}
+
+	/* Set the input region carefully so that we only receive events on the sub-surface. */
+	input_region = wl_compositor_create_region(platform->compositor);
+	wl_region_add(input_region, platform->x_coord, platform->y_coord,
+		platform->current_width, platform->current_height);
+	wl_surface_set_input_region(platform->main_surface, input_region);
+	wl_region_destroy(input_region);
+
+	platform->configured = TRUE;
+	background_draw(platform);
 	if (platform->frame_cb == NULL)
 		frame_callback(data, NULL, time);
 }
@@ -302,8 +340,19 @@ static struct wl_callback_listener configure_callback_listener =
 };
 
 
+static void background_draw(GstImxEglVivSinkEGLPlatform *platform)
+{
+	if (!platform->configured || !platform->do_render)
+		return;
 
-
+	eglMakeCurrent(platform->egl_display,
+		platform->egl_main_surface,
+		platform->egl_main_surface,
+		platform->egl_context);
+	glClearColor(0, 0, 0, 0);
+	glClear(GL_COLOR_BUFFER_BIT);
+	eglSwapBuffers(platform->egl_display, platform->egl_main_surface);
+}
 
 static void redraw(GstImxEglVivSinkEGLPlatform *platform)
 {
@@ -312,6 +361,7 @@ static void redraw(GstImxEglVivSinkEGLPlatform *platform)
 	if (!platform->configured || !platform->do_render)
 		return;
 
+	eglMakeCurrent(platform->egl_display, platform->egl_surface, platform->egl_surface, platform->egl_context);
 	/* The actual rendering */
 	if (platform->render_frame_cb != NULL)
 		platform->render_frame_cb(platform, platform->user_context);
@@ -328,6 +378,7 @@ static void redraw(GstImxEglVivSinkEGLPlatform *platform)
 	wl_region_destroy(region);
 
 	/* Finally, do the actual commit to the server */
+	wl_surface_commit(platform->main_surface);
 	eglSwapBuffers(platform->egl_display, platform->egl_surface);
 }
 
@@ -373,6 +424,11 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 	}
 
 	wl_output_add_listener(platform->output, &output_listener, platform);
+	if (wl_display_dispatch(platform->display) == -1)
+	{
+		GST_ERROR("wl_display_dispatch failed: %s", strerror(errno));
+		goto cleanup;
+	}
 
 	platform->display_fd = wl_display_get_fd(platform->display);
 
@@ -428,6 +484,9 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 	if (platform->shell != NULL)
 		wl_shell_destroy(platform->shell);
 
+	if (platform->subcompositor != NULL)
+		wl_subcompositor_destroy(platform->subcompositor);
+
 	if (platform->compositor != NULL)
 		wl_compositor_destroy(platform->compositor);
 
@@ -450,7 +509,7 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 }
 
 
-gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, guintptr window_handle, gboolean event_handling, GstVideoInfo *video_info, gboolean fullscreen, G_GNUC_UNUSED gint x_coord, G_GNUC_UNUSED gint y_coord, guint width, guint height, G_GNUC_UNUSED gboolean borderless)
+gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, guintptr window_handle, gboolean event_handling, GstVideoInfo *video_info, gboolean fullscreen, gint x_coord, gint y_coord, guint width, guint height, G_GNUC_UNUSED gboolean borderless)
 {
 	EGLint num_configs;
 	EGLConfig config;
@@ -462,6 +521,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		EGL_RED_SIZE, 1,
 		EGL_GREEN_SIZE, 1,
 		EGL_BLUE_SIZE, 1,
+		EGL_ALPHA_SIZE, 1,
 		EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
 		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
 		EGL_NONE
@@ -490,12 +550,23 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		goto fail;
 	}
 
+	if (platform->subcompositor == NULL)
+	{
+		GST_ERROR("subcompositor pointer is NULL");
+		goto fail;
+	}
+
 	if (platform->shell == NULL)
 	{
 		GST_ERROR("shell pointer is NULL");
 		goto fail;
 	}
 
+	if ((platform->main_surface = wl_compositor_create_surface(platform->compositor)) == NULL)
+	{
+		GST_ERROR("creating main Wayland surface failed");
+		goto fail;
+	}
 
 	if ((platform->surface = wl_compositor_create_surface(platform->compositor)) == NULL)
 	{
@@ -503,13 +574,23 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		goto fail;
 	}
 
-	if ((platform->shell_surface = wl_shell_get_shell_surface(platform->shell, platform->surface)) == NULL)
+	if ((platform->subsurface = wl_subcompositor_get_subsurface(platform->subcompositor,
+		platform->surface, platform->main_surface)) == NULL)
+	{
+		GST_ERROR("creating Wayland subsurface failed");
+		goto fail;
+	}
+
+	if ((platform->shell_surface = wl_shell_get_shell_surface(platform->shell,
+		platform->main_surface)) == NULL)
 	{
 		GST_ERROR("creating Wayland shell surface failed");
 		goto fail;
 	}
 
 	wl_shell_surface_add_listener(platform->shell_surface, &shell_surface_listener, platform);
+
+	platform->pending_subsurface_desync = TRUE;
 
 	platform->fixed_window_width = width;
 	platform->fixed_window_height = height;
@@ -518,6 +599,10 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 	platform->video_par_d = GST_VIDEO_INFO_PAR_D(video_info);
 	platform->video_width = GST_VIDEO_INFO_WIDTH(video_info);
 	platform->video_height = GST_VIDEO_INFO_HEIGHT(video_info);
+	platform->pending_x_coord = x_coord;
+	platform->pending_y_coord = y_coord;
+	platform->x_coord = -1;
+	platform->y_coord = -1;
 
 	platform->fullscreen = fullscreen;
 
@@ -537,6 +622,13 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		chosen_height = height;
 	}
 
+	platform->native_main_window = wl_egl_window_create(platform->main_surface,
+		platform->screen_width, platform->screen_height);
+	if (platform->native_main_window == NULL)
+	{
+		GST_ERROR("wl_egl_window_create failed to create the background window");
+		goto fail;
+	}
 
 	platform->native_window = wl_egl_window_create(platform->surface, chosen_width, chosen_height);
 	if (platform->native_window == NULL)
@@ -560,6 +652,13 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		goto fail;
 	}
 
+	platform->egl_main_surface = eglCreateWindowSurface(platform->egl_display, config, platform->native_main_window, NULL);
+	if (platform->egl_main_surface == EGL_NO_SURFACE)
+	{
+		GST_ERROR("eglCreateWindowSurface failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
+		goto fail;
+	}
+
 	platform->egl_surface = eglCreateWindowSurface(platform->egl_display, config, platform->native_window, NULL);
 	if (platform->egl_surface == EGL_NO_SURFACE)
 	{
@@ -567,7 +666,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatfo
 		goto fail;
 	}
 
-	if (!eglMakeCurrent(platform->egl_display, platform->egl_surface, platform->egl_surface, platform->egl_context))
+	if (!eglMakeCurrent(platform->egl_display, platform->egl_main_surface, platform->egl_main_surface, platform->egl_context))
 	{
 		GST_ERROR("eglMakeCurrent failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
 		goto fail;
@@ -638,17 +737,26 @@ gboolean gst_imx_egl_viv_sink_egl_platform_shutdown_window(GstImxEglVivSinkEGLPl
 
 	if (platform->egl_surface != EGL_NO_SURFACE)
 		eglDestroySurface(platform->egl_display, platform->egl_surface);
+	if (platform->egl_main_surface != EGL_NO_SURFACE)
+		eglDestroySurface(platform->egl_display, platform->egl_main_surface);
 
 	platform->egl_context = EGL_NO_CONTEXT;
 	platform->egl_surface = EGL_NO_SURFACE;
 
 
 	wl_egl_window_destroy(platform->native_window);
+	wl_egl_window_destroy(platform->native_main_window);
 
 	if (platform->shell_surface != NULL)
 	{
 		wl_shell_surface_destroy(platform->shell_surface);
 		platform->shell_surface = NULL;
+	}
+
+	if (platform->subsurface != NULL)
+	{
+		wl_subsurface_destroy(platform->subsurface);
+		platform->subsurface = NULL;
 	}
 
 	if (platform->surface != NULL)
@@ -657,7 +765,14 @@ gboolean gst_imx_egl_viv_sink_egl_platform_shutdown_window(GstImxEglVivSinkEGLPl
 		platform->surface = NULL;
 	}
 
+	if (platform->main_surface != NULL)
+	{
+		wl_surface_destroy(platform->main_surface);
+		platform->main_surface = NULL;
+	}
+
 	platform->native_window = NULL;
+	platform->native_main_window = NULL;
 
 
 	EGL_PLATFORM_UNLOCK(platform);
@@ -829,6 +944,11 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 			platform->frame_callback_invoked = FALSE;
 			GST_LOG("frame_callback_invoked set to FALSE");
 		}
+		if (platform->pending_subsurface_desync)
+		{
+			wl_subsurface_set_desync(platform->subsurface);
+			platform->pending_subsurface_desync = FALSE;
+		}
 
 		//EGL_PLATFORM_UNLOCK(platform);
 	}
@@ -847,9 +967,14 @@ void gst_imx_egl_viv_sink_egl_platform_stop_mainloop(GstImxEglVivSinkEGLPlatform
 }
 
 
-gboolean gst_imx_egl_viv_sink_egl_platform_set_coords(G_GNUC_UNUSED GstImxEglVivSinkEGLPlatform *platform, G_GNUC_UNUSED gint x_coord, gint G_GNUC_UNUSED y_coord)
+gboolean gst_imx_egl_viv_sink_egl_platform_set_coords(GstImxEglVivSinkEGLPlatform *platform, gint x_coord, gint y_coord)
 {
-	/* Since windows cannot be positioned explicitely in Wayland, nothing can be done here */
+	EGL_PLATFORM_LOCK(platform);
+
+	platform->pending_x_coord = x_coord;
+	platform->pending_y_coord = y_coord;
+
+	EGL_PLATFORM_UNLOCK(platform);
 	return TRUE;
 }
 
@@ -872,6 +997,7 @@ gboolean gst_imx_egl_viv_sink_egl_platform_set_size(GstImxEglVivSinkEGLPlatform 
 	else if ((width != 0) || (height != 0))
 	{
 		wl_egl_window_resize(platform->native_window, width, height, 0, 0);
+		platform->pending_subsurface_desync = TRUE;
 	}
 	else
 	{
