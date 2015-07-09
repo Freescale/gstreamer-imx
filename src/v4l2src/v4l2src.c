@@ -275,6 +275,7 @@ static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 {
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
+	GstVideoFormat gst_fmt;
 	const char *pixel_format = NULL;
 	struct v4l2_format fmt;
 
@@ -289,7 +290,8 @@ static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 		pixel_format = "I420";
 		break;
 	default:
-		pixel_format = (char *)&fmt.fmt.pix.pixelformat;
+		gst_fmt = gst_video_format_from_fourcc(fmt.fmt.pix.pixelformat);
+		pixel_format = gst_video_format_to_string(gst_fmt);
 	}
 
 	/* not much to negotiate;
