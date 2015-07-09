@@ -165,6 +165,15 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 			meta->vbuffer.m.offset);
 	g_assert(meta->mem);
 
+	/* Need to query twice to get the physical address */
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QUERYBUF, &meta->vbuffer) < 0)
+	{
+		GST_ERROR_OBJECT(pool, "VIDIOC_QUERYBUF for physical address error: %s",
+				g_strerror(errno));
+		gst_buffer_unref(buf);
+		return GST_FLOW_ERROR;
+	}
+
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_ADD(buf);
 	phys_mem_meta->phys_addr = meta->vbuffer.m.offset;
 
