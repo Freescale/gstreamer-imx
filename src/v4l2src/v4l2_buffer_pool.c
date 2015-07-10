@@ -138,6 +138,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	GstImxPhysMemMeta *phys_mem_meta;
 	GstVideoInfo *info;
 	GstVideoCropMeta *meta_crop;
+	struct v4l2_capability cap = {0};
 
 	buf = gst_buffer_new();
 	if (buf == NULL)
@@ -176,10 +177,17 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	}
 
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_ADD(buf);
-	phys_mem_meta->phys_addr = meta->vbuffer.m.offset;
 
-	/* Safeguard to catch data loss if in any future i.MX version the types do not match */
-	g_assert(meta->vbuffer.m.offset == (__u32)(phys_mem_meta->phys_addr));
+	/* XXX: This is only required for the tw6869 driver */
+	ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QUERYCAP, &cap);
+	if (strncmp(cap.card, "tw6869", 6) == 0)
+		phys_mem_meta->phys_addr = (*(__u32 *)meta->mem);
+	else {
+		phys_mem_meta->phys_addr = meta->vbuffer.m.offset;
+
+		/* Safeguard to catch data loss if in any future i.MX version the types do not match */
+		g_assert(meta->vbuffer.m.offset == (__u32)(phys_mem_meta->phys_addr));
+	}
 
 	if (pool->add_videometa)
 	{
