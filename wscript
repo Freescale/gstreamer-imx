@@ -146,10 +146,6 @@ def configure(conf):
 	conf.check_cc(lib = 'dl', uselib_store = 'DL', mandatory = 1)
 	conf.check_cc(lib = 'm', uselib_store = 'M', mandatory = 1)
 
-	# Android's libc (called "bionic") includes the pthreads library, however it still needs the -pthread flag
-	if conf.options.build_for_android or conf.check_cc(lib = 'pthread', uselib_store = 'PTHREAD', mandatory = 1):
-		conf.env['CFLAGS_PTHREAD'] += ['-pthread']
-
 
 	# test for GStreamer libraries
 
@@ -177,7 +173,7 @@ def configure(conf):
 	conf.define('VERSION', gstimx_version)
 
 	conf.env['GSTIMX_VERSION'] = gstimx_version
-	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_AUDIO', 'GSTREAMER_VIDEO', 'PTHREAD', 'M']
+	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_AUDIO', 'GSTREAMER_VIDEO', 'M']
 
 
 	conf.recurse('src/common')
