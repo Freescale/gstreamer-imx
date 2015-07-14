@@ -340,6 +340,24 @@ static void gst_imx_vpu_base_enc_close_encoder(GstImxVpuBaseEnc *vpu_base_enc)
 	}
 }
 
+static gboolean gst_imx_vpu_base_enc_set_bitrate (GstImxVpuBaseEnc *vpu_base_enc)
+{
+	VpuEncRetCode ret;
+
+	if (vpu_base_enc->bitrate != 0)
+	{
+		GST_INFO_OBJECT(vpu_base_enc, "Configuring bitrate to %d", vpu_base_enc->bitrate);
+		int param = vpu_base_enc->bitrate;
+		ret = VPU_EncConfig(vpu_base_enc->handle, VPU_ENC_CONF_BIT_RATE, &param);
+		if (ret != VPU_ENC_RET_SUCCESS)
+		{
+			GST_ERROR_OBJECT(vpu_base_enc, "could not configure bitrate: %s", gst_imx_vpu_strerror(ret));
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
 
 static void gst_imx_vpu_base_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
@@ -351,7 +369,11 @@ static void gst_imx_vpu_base_enc_set_property(GObject *object, guint prop_id, GV
 			vpu_base_enc->gop_size = g_value_get_uint(value);
 			break;
 		case PROP_BITRATE:
+			GST_OBJECT_LOCK(vpu_base_enc);
 			vpu_base_enc->bitrate = g_value_get_uint(value);
+			if(vpu_base_enc->vpu_inst_opened)
+				gst_imx_vpu_base_enc_set_bitrate(vpu_base_enc);
+			GST_OBJECT_UNLOCK(vpu_base_enc);
 			break;
 		case PROP_SLICE_SIZE:
 			vpu_base_enc->slice_size = g_value_get_int(value);
