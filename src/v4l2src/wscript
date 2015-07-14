@@ -6,14 +6,13 @@ def configure(conf):
 
 
 def build(bld):
-	if not bld.env['BUILD_FOR_ANDROID']:
-		bld(
-			features = ['c', bld.env['CLIBTYPE']],
-			includes = ['.', '../..'],
-			uselib = bld.env['COMMON_USELIB'],
-			use = 'gstimxcommon',
-			target = 'gstimxv4l2videosrc',
-			source = bld.path.ant_glob('*.c'),
-			install_path = bld.env['PLUGIN_INSTALL_PATH']
-		)
+	bld(
+		features = ['c', bld.env['CLIBTYPE']],
+		includes = ['.', '../..'],
+		uselib = bld.env['COMMON_USELIB'],
+		use = 'gstimxcommon',
+		target = 'gstimxv4l2videosrc',
+		source = bld.path.ant_glob('*.c'),
+		install_path = bld.env['PLUGIN_INSTALL_PATH']
+	)
 
