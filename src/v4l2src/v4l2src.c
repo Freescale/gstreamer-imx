@@ -101,7 +101,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 		return -1;
 	}
 
-	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d", fmt.fmt.pix.pixelformat);
+	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d  field = %d", fmt.fmt.pix.pixelformat, fmt.fmt.pix.field);
 
 	fszenum.index = v4l2src->capture_mode;
 	fszenum.pixel_format = fmt.fmt.pix.pixelformat;
@@ -277,6 +277,7 @@ static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 	GstCaps *caps;
 	GstVideoFormat gst_fmt;
 	const char *pixel_format = NULL;
+	const char *interlace_mode = "progressive";
 	struct v4l2_format fmt;
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -294,12 +295,16 @@ static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 		pixel_format = gst_video_format_to_string(gst_fmt);
 	}
 
+	if (fmt.fmt.pix.field == V4L2_FIELD_INTERLACED)
+		interlace_mode = "interleaved";
+
 	/* not much to negotiate;
 	 * we already performed setup, so that is what will be streamed */
 	caps = gst_caps_new_simple("video/x-raw",
 			"format", G_TYPE_STRING, pixel_format,
 			"width", G_TYPE_INT, v4l2src->capture_width,
 			"height", G_TYPE_INT, v4l2src->capture_height,
+			"interlace-mode", G_TYPE_STRING, interlace_mode,
 			"framerate", GST_TYPE_FRACTION, v4l2src->fps_n, v4l2src->fps_d,
 			"pixel-aspect-ratio", GST_TYPE_FRACTION, 1, 1,
 			NULL);
@@ -314,6 +319,7 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
 	const char *pixel_format = "I420";
+	const char *interlace_mode = "progressive";
 
 	GST_INFO_OBJECT(v4l2src, "get caps filter %" GST_PTR_FORMAT, (gpointer)filter);
 
@@ -321,6 +327,7 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 			"format", G_TYPE_STRING, pixel_format,
 			"width", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 			"height", GST_TYPE_INT_RANGE, 16, G_MAXINT,
+			"interlace-mode", G_TYPE_STRING, interlace_mode,
 			"framerate", GST_TYPE_FRACTION_RANGE, 0, 1, 100, 1,
 			"pixel-aspect-ratio", GST_TYPE_FRACTION_RANGE, 0, 1, 100, 1,
 			NULL);
