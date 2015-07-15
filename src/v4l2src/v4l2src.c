@@ -132,6 +132,11 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 		close(fd_v4l);
 		return -1;
 	}
+	/* Get the actual frame period if possible */
+	if (parm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME) {
+		v4l2src->fps_n = parm.parm.capture.timeperframe.denominator;
+		v4l2src->fps_d = parm.parm.capture.timeperframe.numerator;
+	}
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	fmt.fmt.pix.bytesperline = 0;
