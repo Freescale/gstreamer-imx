@@ -166,6 +166,8 @@ static void gst_imx_phys_mem_allocator_free(GstAllocator *allocator, GstMemory *
 	klass->free_phys_mem(phys_mem_alloc, phys_mem);
 
 	GST_INFO_OBJECT(allocator, "freed block %p at phys addr %" GST_IMX_PHYS_ADDR_FORMAT " with size: %u", (gpointer)memory, phys_mem->phys_addr, memory->size);
+
+	g_slice_free1(sizeof(GstImxPhysMemory), phys_mem);
 }
 
 
