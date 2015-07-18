@@ -58,6 +58,8 @@ struct _GstImxVpuDec
 
 	GstBuffer *codec_data;
 
+	GstAllocator *allocator;
+
 	/* set of framebuffers currently registered and in use by the decoder */
 	GstImxVpuFramebuffers *current_framebuffers;
 	/* number of framebuffers allocated in addition to the minimum number indicated

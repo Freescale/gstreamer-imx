@@ -290,6 +290,7 @@ void gst_imx_vpu_dec_init(GstImxVpuDec *vpu_dec)
 	vpu_dec->vpu_inst_opened = FALSE;
 
 	vpu_dec->codec_data = NULL;
+	vpu_dec->allocator = NULL;
 	vpu_dec->current_framebuffers = NULL;
 	vpu_dec->num_additional_framebuffers = DEFAULT_NUM_ADDITIONAL_FRAMEBUFFERS;
 	vpu_dec->recalculate_num_avail_framebuffers = FALSE;
@@ -398,7 +399,7 @@ static gboolean gst_imx_vpu_dec_alloc_dec_mem_blocks(GstImxVpuDec *vpu_dec)
 		}
 		else if (vpu_dec->mem_info.MemSubBlock[i].MemType == VPU_MEM_PHY)
 		{
-			GstImxPhysMemory *memory = (GstImxPhysMemory *)gst_allocator_alloc(gst_imx_vpu_dec_allocator_obtain(), size, NULL);
+			GstImxPhysMemory *memory = (GstImxPhysMemory *)gst_allocator_alloc(vpu_dec->allocator, size, NULL);
 			if (memory == NULL)
 				return FALSE;
 
@@ -428,7 +429,7 @@ static gboolean gst_imx_vpu_dec_free_dec_mem_blocks(GstImxVpuDec *vpu_dec)
 	 * if the first call failed, the second one wouldn't even be invoked
 	 * doing the logical AND afterwards fixes this */
 	ret1 = gst_imx_vpu_free_virt_mem_blocks(&(vpu_dec->virt_dec_mem_blocks));
-	ret2 = gst_imx_vpu_free_phys_mem_blocks((GstImxPhysMemAllocator *)gst_imx_vpu_dec_allocator_obtain(), &(vpu_dec->phys_dec_mem_blocks));
+	ret2 = gst_imx_vpu_free_phys_mem_blocks((GstImxPhysMemAllocator *)(vpu_dec->allocator), &(vpu_dec->phys_dec_mem_blocks));
 	return ret1 && ret2;
 }
 
@@ -680,6 +681,8 @@ static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder)
 
 	vpu_dec->frame_table = g_hash_table_new(NULL, NULL);
 
+	vpu_dec->allocator = gst_imx_vpu_dec_allocator_new();
+
 	/* Allocate the work buffers
 	 * Note that these are independent of decoder instances, so they
 	 * are allocated before the VPU_DecOpen() call, and are not
@@ -733,6 +736,12 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 	{
 		gst_video_codec_state_unref(vpu_dec->current_output_state);
 		vpu_dec->current_output_state = NULL;
+	}
+
+	if (vpu_dec->allocator != NULL)
+	{
+		gst_object_unref(GST_OBJECT(vpu_dec->allocator));
+		vpu_dec->allocator = NULL;
 	}
 
 	if (vpu_dec->frame_table != NULL)
@@ -974,7 +983,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			GST_INFO_OBJECT(vpu_dec, "minimum number of framebuffers indicated by the VPU: %u  chosen number: %u", min_fbcount_indicated_by_vpu, fbparams.min_framebuffer_count);
 			GST_INFO_OBJECT(vpu_dec, "interlacing: %d", vpu_dec->init_info.nInterlace);
 
-			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, gst_imx_vpu_dec_allocator_obtain());
+			vpu_dec->current_framebuffers = gst_imx_vpu_framebuffers_new(&fbparams, vpu_dec->allocator);
 			if (vpu_dec->current_framebuffers == NULL)
 				return GST_FLOW_ERROR;
 

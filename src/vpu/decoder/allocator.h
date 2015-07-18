@@ -54,7 +54,9 @@ struct _GstImxVpuDecAllocatorClass
 
 
 GType gst_imx_vpu_dec_allocator_get_type(void);
-GstAllocator* gst_imx_vpu_dec_allocator_obtain(void);
+
+/* Note that this function returns a floating reference. See gst_object_ref_sink() for details. */
+GstAllocator* gst_imx_vpu_dec_allocator_new(void);
 
 
 G_END_DECLS

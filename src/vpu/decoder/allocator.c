@@ -40,23 +40,10 @@ G_DEFINE_TYPE(GstImxVpuDecAllocator, gst_imx_vpu_dec_allocator, GST_TYPE_IMX_PHY
 
 
 
-static void gst_imx_vpu_dec_mem_init(void)
+GstAllocator* gst_imx_vpu_dec_allocator_new(void)
 {
-	GstAllocator *allocator = g_object_new(gst_imx_vpu_dec_allocator_get_type(), NULL);
-	gst_allocator_register(GST_IMX_VPU_DEC_ALLOCATOR_MEM_TYPE, allocator);
-}
-
-
-GstAllocator* gst_imx_vpu_dec_allocator_obtain(void)
-{
-	static GOnce dmabuf_allocator_once = G_ONCE_INIT;
 	GstAllocator *allocator;
-
-	g_once(&dmabuf_allocator_once, (GThreadFunc)gst_imx_vpu_dec_mem_init, NULL);
-
-	allocator = gst_allocator_find(GST_IMX_VPU_DEC_ALLOCATOR_MEM_TYPE);
-	if (allocator == NULL)
-		GST_WARNING("No allocator named %s found", GST_IMX_VPU_DEC_ALLOCATOR_MEM_TYPE);
+	allocator = g_object_new(gst_imx_vpu_dec_allocator_get_type(), NULL);
 
 	return allocator;
 }
