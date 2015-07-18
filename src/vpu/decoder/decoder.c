@@ -708,6 +708,10 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 
 	vpu_dec = GST_IMX_VPU_DEC(decoder);
 
+	/* Output frames that are already decoded but not yet displayed */
+	GST_INFO_OBJECT(decoder, "draining remaining frames from decoder");
+	gst_imx_vpu_dec_finish(decoder);
+
 	if (vpu_dec->current_framebuffers != NULL)
 	{
 		GST_INFO_OBJECT(decoder, "Setting flushing flag of framebuffers object during stop call");
