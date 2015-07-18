@@ -109,8 +109,8 @@ gboolean gst_imx_vpu_free_phys_mem_blocks(GstImxPhysMemAllocator *phys_mem_alloc
 	for (; mem_block_node != NULL; mem_block_node = mem_block_node->next)
 	{
 		GstMemory *memory = (GstMemory *)(mem_block_node->data);
-		gst_allocator_free((GstAllocator *)phys_mem_allocator, memory);
 		GST_INFO("freed phys memory block with %u bytes at phys addr %" GST_IMX_PHYS_ADDR_FORMAT, memory->size, ((GstImxPhysMemory *)memory)->phys_addr);
+		gst_memory_unref(memory);
 	}
 
 	g_slist_free(*phys_mem_blocks);
