@@ -621,8 +621,7 @@ static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, Gs
 
 			if (filter != NULL)
 			{
-				GstCaps *unfiltered_caps = caps;
-				caps = gst_caps_make_writable(caps);
+				GstCaps *unfiltered_caps = gst_caps_make_writable(caps);
 				caps = gst_caps_intersect(unfiltered_caps, filter);
 				gst_caps_unref(unfiltered_caps);
 			}
