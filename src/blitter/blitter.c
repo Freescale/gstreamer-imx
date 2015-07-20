@@ -162,10 +162,12 @@ gboolean gst_imx_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *fram
 	GstImxPhysMemMeta *phys_mem_meta;
 	GstImxBlitterClass *klass;
 
-	g_assert(frame != NULL);
 	g_assert(blitter != NULL);
 	klass = GST_IMX_BLITTER_CLASS(G_OBJECT_GET_CLASS(blitter));
 	g_assert(klass->set_input_frame != NULL);
+
+	if (frame == NULL)
+		return klass->set_input_frame(blitter, NULL);
 
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(frame);
 
