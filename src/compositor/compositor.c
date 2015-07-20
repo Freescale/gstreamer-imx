@@ -19,10 +19,10 @@ GST_DEBUG_CATEGORY_STATIC(imx_compositor_debug);
 enum
 {
 	PROP_PAD_0,
-	PROP_PAD_X1,
-	PROP_PAD_X2,
-	PROP_PAD_Y1,
-	PROP_PAD_Y2,
+	PROP_PAD_XPOS,
+	PROP_PAD_YPOS,
+	PROP_PAD_WIDTH,
+	PROP_PAD_HEIGHT,
 	PROP_PAD_LEFT_MARGIN,
 	PROP_PAD_TOP_MARGIN,
 	PROP_PAD_RIGHT_MARGIN,
@@ -33,17 +33,17 @@ enum
 	PROP_PAD_FILL_COLOR
 };
 
-#define DEFAULT_PAD_X1 0
-#define DEFAULT_PAD_X2 0
-#define DEFAULT_PAD_Y1 0
-#define DEFAULT_PAD_Y2 0
+#define DEFAULT_PAD_XPOS 0
+#define DEFAULT_PAD_YPOS 0
+#define DEFAULT_PAD_WIDTH 0
+#define DEFAULT_PAD_HEIGHT 0
 #define DEFAULT_PAD_LEFT_MARGIN 0
 #define DEFAULT_PAD_TOP_MARGIN 0
 #define DEFAULT_PAD_RIGHT_MARGIN 0
 #define DEFAULT_PAD_BOTTOM_MARGIN 0
 #define DEFAULT_PAD_ROTATION GST_IMX_CANVAS_INNER_ROTATION_NONE
 #define DEFAULT_PAD_KEEP_ASPECT_RATIO TRUE
-#define DEFAULT_PAD_ALPHA 255
+#define DEFAULT_PAD_ALPHA 1.0
 #define DEFAULT_PAD_FILL_COLOR (0xFF000000)
 
 
@@ -71,50 +71,50 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 
 	g_object_class_install_property(
 		object_class,
-		PROP_PAD_X1,
+		PROP_PAD_XPOS,
 		g_param_spec_int(
-			"x1",
-			"X1",
-			"Left X coordinate",
+			"xpos",
+			"X position",
+			"Left X coordinate in pixels",
 			G_MININT, G_MAXINT,
-			DEFAULT_PAD_X1,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			DEFAULT_PAD_XPOS,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
 		object_class,
-		PROP_PAD_X2,
+		PROP_PAD_YPOS,
 		g_param_spec_int(
-			"x2",
-			"X2",
-			"Right X coordinate",
+			"ypos",
+			"Y position",
+			"Top Y coordinate in pixels",
 			G_MININT, G_MAXINT,
-			DEFAULT_PAD_X2,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			DEFAULT_PAD_YPOS,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
 		object_class,
-		PROP_PAD_Y1,
+		PROP_PAD_WIDTH,
 		g_param_spec_int(
-			"y1",
-			"Y1",
-			"Top Y coordinate",
-			G_MININT, G_MAXINT,
-			DEFAULT_PAD_Y1,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			"width",
+			"Width",
+			"Width in pixels",
+			0, G_MAXINT,
+			DEFAULT_PAD_WIDTH,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
 		object_class,
-		PROP_PAD_Y2,
+		PROP_PAD_HEIGHT,
 		g_param_spec_int(
-			"y2",
-			"Y2",
-			"Bottom Y coordinate",
-			G_MININT, G_MAXINT,
-			DEFAULT_PAD_Y2,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			"height",
+			"Height",
+			"Height in pixels",
+			0, G_MAXINT,
+			DEFAULT_PAD_HEIGHT,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
@@ -126,7 +126,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 			"Left margin",
 			0, G_MAXUINT,
 			DEFAULT_PAD_LEFT_MARGIN,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
@@ -138,7 +138,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 			"Top margin",
 			0, G_MAXUINT,
 			DEFAULT_PAD_TOP_MARGIN,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
@@ -150,7 +150,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 			"Right margin",
 			0, G_MAXUINT,
 			DEFAULT_PAD_RIGHT_MARGIN,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
@@ -162,7 +162,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 			"Bottom margin",
 			0, G_MAXUINT,
 			DEFAULT_PAD_BOTTOM_MARGIN,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
@@ -174,7 +174,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 			"Rotation that shall be applied to output frames",
 			gst_imx_canvas_inner_rotation_get_type(),
 			DEFAULT_PAD_ROTATION,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
@@ -191,13 +191,13 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 	g_object_class_install_property(
 		object_class,
 		PROP_PAD_ALPHA,
-		g_param_spec_uint(
+		g_param_spec_double(
 			"alpha",
 			"Alpha",
-			"Alpha blending factor (range:  0 = fully transparent  255 = fully opaque)",
-			0, 255,
+			"Alpha blending factor (range:  0.0 = fully transparent  1.0 = fully opaque)",
+			0.0, 1.0,
 			DEFAULT_PAD_ALPHA,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 	g_object_class_install_property(
@@ -209,7 +209,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 			"Fill color (format: 0xRRGGBBAA)",
 			0, 0xFFFFFFFF,
 			DEFAULT_PAD_FILL_COLOR,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
 }
@@ -223,6 +223,10 @@ static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
 	compositor_pad->canvas.fill_color = DEFAULT_PAD_FILL_COLOR;
 	compositor_pad->canvas_needs_update = TRUE;
 	compositor_pad->alpha = DEFAULT_PAD_ALPHA;
+	compositor_pad->xpos = DEFAULT_PAD_XPOS;
+	compositor_pad->ypos = DEFAULT_PAD_YPOS;
+	compositor_pad->width = DEFAULT_PAD_WIDTH;
+	compositor_pad->height = DEFAULT_PAD_HEIGHT;
 }
 
 
@@ -230,10 +234,17 @@ static void gst_imx_compositor_pad_check_outer_region(GstImxCompositorPad *compo
 {
 	GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
 
-	if ((compositor_pad->canvas.outer_region.x2 - compositor_pad->canvas.outer_region.x1) == 0)
+	if (compositor_pad->width == 0)
 		compositor_pad->canvas.outer_region.x2 = compositor_pad->canvas.outer_region.x1 + GST_VIDEO_INFO_WIDTH(info);
-	if ((compositor_pad->canvas.outer_region.y2 - compositor_pad->canvas.outer_region.y1) == 0)
+	else
+		compositor_pad->canvas.outer_region.x2 = compositor_pad->canvas.outer_region.x1 + compositor_pad->width;
+
+	if (compositor_pad->height == 0)
 		compositor_pad->canvas.outer_region.y2 = compositor_pad->canvas.outer_region.y1 + GST_VIDEO_INFO_HEIGHT(info);
+	else
+		compositor_pad->canvas.outer_region.y2 = compositor_pad->canvas.outer_region.y1 + compositor_pad->height;
+
+	GST_DEBUG_OBJECT(compositor_pad, "computed outer region: (%d %d) - (%d %d)", compositor_pad->canvas.outer_region.x1, compositor_pad->canvas.outer_region.y1, compositor_pad->canvas.outer_region.x2, compositor_pad->canvas.outer_region.y2);
 }
 
 
@@ -272,25 +283,29 @@ static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, 
 
 	switch (prop_id)
 	{
-		case PROP_PAD_X1:
+		case PROP_PAD_XPOS:
+			compositor_pad->xpos = g_value_get_int(value);
 			compositor_pad->canvas.outer_region.x1 = g_value_get_int(value);
 			compositor_pad->canvas_needs_update = TRUE;
 			compositor->overall_region_valid = FALSE;
 			break;
 
-		case PROP_PAD_X2:
-			compositor_pad->canvas.outer_region.x2 = g_value_get_int(value);
-			compositor_pad->canvas_needs_update = TRUE;
-			compositor->overall_region_valid = FALSE;
-			break;
-
-		case PROP_PAD_Y1:
+		case PROP_PAD_YPOS:
+			compositor_pad->ypos = g_value_get_int(value);
 			compositor_pad->canvas.outer_region.y1 = g_value_get_int(value);
 			compositor_pad->canvas_needs_update = TRUE;
 			compositor->overall_region_valid = FALSE;
 			break;
 
-		case PROP_PAD_Y2:
+		case PROP_PAD_WIDTH:
+			compositor_pad->width = g_value_get_int(value);
+			compositor_pad->canvas.outer_region.x2 = g_value_get_int(value);
+			compositor_pad->canvas_needs_update = TRUE;
+			compositor->overall_region_valid = FALSE;
+			break;
+
+		case PROP_PAD_HEIGHT:
+			compositor_pad->height = g_value_get_int(value);
 			compositor_pad->canvas.outer_region.y2 = g_value_get_int(value);
 			compositor_pad->canvas_needs_update = TRUE;
 			compositor->overall_region_valid = FALSE;
@@ -327,7 +342,7 @@ static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, 
 			break;
 
 		case PROP_PAD_ALPHA:
-			compositor_pad->alpha = g_value_get_uint(value);
+			compositor_pad->alpha = g_value_get_double(value);
 			break;
 
 		case PROP_PAD_FILL_COLOR:
@@ -349,20 +364,20 @@ static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, 
 
 	switch (prop_id)
 	{
-		case PROP_PAD_X1:
-			g_value_set_int(value, compositor_pad->canvas.outer_region.x1);
+		case PROP_PAD_XPOS:
+			g_value_set_int(value, compositor_pad->xpos);
 			break;
 
-		case PROP_PAD_X2:
-			g_value_set_int(value, compositor_pad->canvas.outer_region.x2);
+		case PROP_PAD_YPOS:
+			g_value_set_int(value, compositor_pad->ypos);
 			break;
 
-		case PROP_PAD_Y1:
-			g_value_set_int(value, compositor_pad->canvas.outer_region.y1);
+		case PROP_PAD_WIDTH:
+			g_value_set_int(value, compositor_pad->width);
 			break;
 
-		case PROP_PAD_Y2:
-			g_value_set_int(value, compositor_pad->canvas.outer_region.y2);
+		case PROP_PAD_HEIGHT:
+			g_value_set_int(value, compositor_pad->height);
 			break;
 
 		case PROP_PAD_LEFT_MARGIN:
@@ -390,7 +405,7 @@ static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, 
 			break;
 
 		case PROP_PAD_ALPHA:
-			g_value_set_uint(value, compositor_pad->alpha);
+			g_value_set_double(value, compositor_pad->alpha);
 			break;
 
 		case PROP_PAD_FILL_COLOR:
@@ -719,7 +734,7 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 				&(compositor_pad->source_subset),
 				&(compositor_pad->canvas),
 				videoaggregator_pad->buffer,
-				compositor_pad->alpha
+				(guint8)(compositor_pad->alpha * 255.0)
 			))
 			{
 				GST_ERROR_OBJECT(compositor, "error while drawing composition frame");
@@ -908,7 +923,7 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 		{
 			/* disable filling if this outer region is opaque
 			 * (because it will completely cover the overall region) */
-			compositor->region_fill_necessary = (compositor_pad->alpha != 255);
+			compositor->region_fill_necessary = (compositor_pad->alpha < 1.0);
 			break;
 		}
 

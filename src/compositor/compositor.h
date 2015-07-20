@@ -97,7 +97,8 @@ struct _GstImxCompositorPad
 	gboolean canvas_needs_update;
 	GstImxCanvas canvas;
 	GstImxRegion source_subset;
-	guint8 alpha;
+	gdouble alpha;
+	gint xpos, ypos, width, height;
 };
 
 
