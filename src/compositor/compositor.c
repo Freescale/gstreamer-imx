@@ -217,6 +217,8 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 
 static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
 {
+	GstImxCompositor *compositor;
+
 	memset(&(compositor_pad->canvas), 0, sizeof(GstImxCanvas));
 	compositor_pad->canvas.inner_rotation = DEFAULT_PAD_ROTATION;
 	compositor_pad->canvas.keep_aspect_ratio = DEFAULT_PAD_KEEP_ASPECT_RATIO;
@@ -227,6 +229,7 @@ static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
 	compositor_pad->ypos = DEFAULT_PAD_YPOS;
 	compositor_pad->width = DEFAULT_PAD_WIDTH;
 	compositor_pad->height = DEFAULT_PAD_HEIGHT;
+	compositor_pad->need_to_invalid_overall_region = TRUE;
 }
 
 
@@ -269,6 +272,12 @@ static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor
 	);
 
 	compositor_pad->canvas_needs_update = FALSE;
+
+	if (compositor_pad->need_to_invalid_overall_region)
+	{
+		compositor_pad->need_to_invalid_overall_region = FALSE;
+		compositor->overall_region_valid = FALSE;
+	}
 
 	gst_object_unref(GST_OBJECT(compositor));
 }
@@ -637,7 +646,7 @@ static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, Gs
 
 		case GST_QUERY_ACCEPT_CAPS:
 		{
-			GstCaps *accept_caps, *template_caps;
+			GstCaps *accept_caps = NULL, *template_caps = NULL;
 			gboolean ret;
 
 			gst_query_parse_accept_caps(query, &accept_caps);
@@ -897,6 +906,8 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 		}
 		else
 			gst_imx_region_merge(&(compositor->overall_region), &(compositor->overall_region), outer_region);
+
+		GST_DEBUG_OBJECT(compositor, "current outer region: %" GST_IMX_REGION_FORMAT "  merged overall region: %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(outer_region), GST_IMX_REGION_ARGS(&(compositor->overall_region)));
 
 		walk = g_list_next(walk);
 	}
