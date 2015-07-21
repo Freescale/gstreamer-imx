@@ -722,23 +722,23 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 			GstImxBPVideoAggregatorPad *videoaggregator_pad = walk->data;
 			GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(videoaggregator_pad);
 
-			if (videoaggregator_pad->buffer == NULL)
-				continue;
-
-			gst_imx_compositor_pad_update_canvas(compositor_pad);
-
-			if (!klass->draw_frame(
-				compositor,
-				&(videoaggregator_pad->info),
-				&(compositor_pad->source_subset),
-				&(compositor_pad->canvas),
-				videoaggregator_pad->buffer,
-				(guint8)(compositor_pad->alpha * 255.0)
-			))
+			if (videoaggregator_pad->buffer != NULL)
 			{
-				GST_ERROR_OBJECT(compositor, "error while drawing composition frame");
-				ret = GST_FLOW_ERROR;
-				break;
+				gst_imx_compositor_pad_update_canvas(compositor_pad);
+
+				if (!klass->draw_frame(
+					compositor,
+					&(videoaggregator_pad->info),
+					&(compositor_pad->source_subset),
+					&(compositor_pad->canvas),
+					videoaggregator_pad->buffer,
+					(guint8)(compositor_pad->alpha * 255.0)
+				))
+				{
+					GST_ERROR_OBJECT(compositor, "error while drawing composition frame");
+					ret = GST_FLOW_ERROR;
+					break;
+				}
 			}
 
 			walk = g_list_next(walk);
