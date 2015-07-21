@@ -39,6 +39,12 @@ struct _GstImxRegion
 };
 
 
+/* Helper macros for using printf-style format strings to output region coordinates */
+#define GST_IMX_REGION_FORMAT "d,%d-%d,%d"
+#define GST_IMX_REGION_ARGS(region) (region)->x1,(region)->y1,(region)->x2,(region)->y2
+
+
+
 /* Checks if (and to what degree) second_region contains first_region.
  *
  * Regions can be contains fully, partially, or not at all.

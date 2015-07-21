@@ -244,7 +244,7 @@ static void gst_imx_compositor_pad_check_outer_region(GstImxCompositorPad *compo
 	else
 		compositor_pad->canvas.outer_region.y2 = compositor_pad->canvas.outer_region.y1 + compositor_pad->height;
 
-	GST_DEBUG_OBJECT(compositor_pad, "computed outer region: (%d %d) - (%d %d)", compositor_pad->canvas.outer_region.x1, compositor_pad->canvas.outer_region.y1, compositor_pad->canvas.outer_region.x2, compositor_pad->canvas.outer_region.y2);
+	GST_DEBUG_OBJECT(compositor_pad, "computed outer region: %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(&(compositor_pad->canvas.outer_region)));
 }
 
 
