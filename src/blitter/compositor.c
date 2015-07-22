@@ -47,6 +47,8 @@ static void gst_imx_blitter_compositor_class_init(GstImxBlitterCompositorClass *
 	parent_class->fill_region            = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_fill_region);
 	parent_class->draw_frame             = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_draw_frame);
 
+	klass->start          = NULL;
+	klass->stop           = NULL;
 	klass->create_blitter = NULL;
 }
 
@@ -83,6 +85,12 @@ static GstStateChangeReturn gst_imx_blitter_compositor_change_state(GstElement *
 	{
 		case GST_STATE_CHANGE_NULL_TO_READY:
 		{
+			if ((klass->start != NULL) && !(klass->start(blitter_compositor)))
+			{
+				GST_ERROR_OBJECT(blitter_compositor, "start() failed");
+				return GST_STATE_CHANGE_FAILURE;
+			}
+
 			if ((blitter_compositor->blitter = klass->create_blitter(blitter_compositor)) == NULL)
 			{
 				GST_ERROR_OBJECT(blitter_compositor, "could not get blitter");
@@ -104,6 +112,9 @@ static GstStateChangeReturn gst_imx_blitter_compositor_change_state(GstElement *
 	{
 		case GST_STATE_CHANGE_READY_TO_NULL:
 		{
+			if ((klass->stop != NULL) && !(klass->stop(blitter_compositor)))
+				GST_ERROR_OBJECT(blitter_compositor, "stop() failed");
+
 			if (blitter_compositor->blitter != NULL)
 			{
 				gst_object_unref(blitter_compositor->blitter);

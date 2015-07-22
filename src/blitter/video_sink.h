@@ -94,7 +94,7 @@ struct _GstImxBlitterVideoSink2
  * acquires a blitter by calling @create_blitter in the NULL->READY state change, and
  * unrefs that blitter in the READY->NULL state change.
  *
- * @parent_class:           The parent class structure
+ * @parent_class:   The parent class structure
  * @start:          Optional.
  *                  Called during the NULL->READY state change. Note that this is
  *                  called before @create_blitter.

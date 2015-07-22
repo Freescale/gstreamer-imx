@@ -27,9 +27,34 @@ struct _GstImxBlitterCompositor
 };
 
 
+/**
+ * GstImxBlitterCompositorClass:
+ *
+ * Blitter-based implementation of compositor vfuncs. The class takes care of
+ * setting the blitter's input/output frames, video infos, regions, canvases etc.
+ * Subclasses only need to create a blitter that this class can use.
+ *
+ * @parent_class:   The parent class structure
+ * @start:          Optional.
+ *                  Called during the NULL->READY state change. Note that this is
+ *                  called before @create_blitter.
+ *                  If this returns FALSE, then the state change is considered to
+ *                  have failed, and the sink's change_state function will return
+ *                  GST_STATE_CHANGE_FAILURE.
+ * @stop:           Optional.
+ *                  Called during the READY->NULL state change.
+ *                  Returns FALSE if stopping failed, TRUE otherwise.
+ * @create_blitter: Required.
+ *                  Instructs the subclass to create a new blitter instance and
+ *                  return it. If the subclass is supposed to create the blitter
+ *                  only once, then create it in @start, ref it here, and then
+ *                  return it. It will be unref'd in the READY->NULL state change.
+ */
 struct _GstImxBlitterCompositorClass
 {
 	GstImxCompositorClass parent_class;
+	gboolean (*start)(GstImxBlitterCompositor *blitter_video_sink_2);
+	gboolean (*stop)(GstImxBlitterCompositor *blitter_video_sink_2);
 	GstImxBlitter* (*create_blitter)(GstImxBlitterCompositor *blitter_compositor);
 };
 
