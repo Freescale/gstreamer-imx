@@ -45,7 +45,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 G_DEFINE_TYPE(GstImxIpuCompositor, gst_imx_ipu_compositor, GST_TYPE_IMX_BLITTER_COMPOSITOR)
 
 
-static GstImxBlitter* gst_imx_ipu_compositor_get_blitter(GstImxBlitterCompositor *blitter_compositor);
+static GstImxBlitter* gst_imx_ipu_compositor_create_blitter(GstImxBlitterCompositor *blitter_compositor);
 
 
 
@@ -71,7 +71,7 @@ static void gst_imx_ipu_compositor_class_init(GstImxIpuCompositorClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
-	base_class->get_blitter = GST_DEBUG_FUNCPTR(gst_imx_ipu_compositor_get_blitter);
+	base_class->create_blitter = GST_DEBUG_FUNCPTR(gst_imx_ipu_compositor_create_blitter);
 }
 
 
@@ -83,7 +83,7 @@ static void gst_imx_ipu_compositor_init(GstImxIpuCompositor *ipu_compositor)
 
 
 
-static GstImxBlitter* gst_imx_ipu_compositor_get_blitter(GstImxBlitterCompositor *blitter_compositor)
+static GstImxBlitter* gst_imx_ipu_compositor_create_blitter(GstImxBlitterCompositor *blitter_compositor)
 {
 	GstImxIpuCompositor *ipu_compositor = GST_IMX_IPU_COMPOSITOR(blitter_compositor);
 	if (ipu_compositor->blitter == NULL)

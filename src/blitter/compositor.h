@@ -30,7 +30,7 @@ struct _GstImxBlitterCompositor
 struct _GstImxBlitterCompositorClass
 {
 	GstImxCompositorClass parent_class;
-	GstImxBlitter* (*get_blitter)(GstImxBlitterCompositor *blitter_compositor);
+	GstImxBlitter* (*create_blitter)(GstImxBlitterCompositor *blitter_compositor);
 };
 
 

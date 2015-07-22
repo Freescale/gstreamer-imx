@@ -45,7 +45,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 G_DEFINE_TYPE(GstImxG2DCompositor, gst_imx_g2d_compositor, GST_TYPE_IMX_BLITTER_COMPOSITOR)
 
 
-static GstImxBlitter* gst_imx_g2d_compositor_get_blitter(GstImxBlitterCompositor *blitter_compositor);
+static GstImxBlitter* gst_imx_g2d_compositor_create_blitter(GstImxBlitterCompositor *blitter_compositor);
 
 
 
@@ -71,7 +71,7 @@ static void gst_imx_g2d_compositor_class_init(GstImxG2DCompositorClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
-	base_class->get_blitter = GST_DEBUG_FUNCPTR(gst_imx_g2d_compositor_get_blitter);
+	base_class->create_blitter = GST_DEBUG_FUNCPTR(gst_imx_g2d_compositor_create_blitter);
 }
 
 
@@ -83,7 +83,7 @@ static void gst_imx_g2d_compositor_init(GstImxG2DCompositor *g2d_compositor)
 
 
 
-static GstImxBlitter* gst_imx_g2d_compositor_get_blitter(GstImxBlitterCompositor *blitter_compositor)
+static GstImxBlitter* gst_imx_g2d_compositor_create_blitter(GstImxBlitterCompositor *blitter_compositor)
 {
 	GstImxG2DCompositor *g2d_compositor = GST_IMX_G2D_COMPOSITOR(blitter_compositor);
 	if (g2d_compositor->blitter == NULL)
