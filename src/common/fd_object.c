@@ -54,9 +54,9 @@ GstImxFDObject* gst_fd_object_new(int fd)
 	GstImxFDObject *obj;
 
 	obj = g_slice_new(GstImxFDObject);
-	GST_LOG("new %p with FD %d", (gpointer)obj, fd);
-
 	gst_fd_object_init(obj, fd);
+
+	GST_LOG("new %p with FD %d", (gpointer)obj, fd);
 
 	return GST_IMX_FD_OBJECT_CAST(obj);
 }
