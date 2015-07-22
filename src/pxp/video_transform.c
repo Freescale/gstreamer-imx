@@ -46,9 +46,9 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 G_DEFINE_TYPE(GstImxPxPVideoTransform, gst_imx_pxp_video_transform, GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM)
 
 
-static GstImxBlitter* gst_imx_pxp_video_transform_create_blitter(GstImxBlitterVideoTransform2 *blitter_video_transform_2);
+static GstImxBlitter* gst_imx_pxp_video_transform_create_blitter(GstImxBlitterVideoTransform *blitter_video_transform);
 
-gboolean gst_imx_pxp_video_transform_are_video_infos_equal(GstImxBlitterVideoTransform2 *blitter_video_transform_2, GstVideoInfo const *in_info, GstVideoInfo const *out_info);
+gboolean gst_imx_pxp_video_transform_are_video_infos_equal(GstImxBlitterVideoTransform *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info);
 
 
 
@@ -57,7 +57,7 @@ gboolean gst_imx_pxp_video_transform_are_video_infos_equal(GstImxBlitterVideoTra
 
 static void gst_imx_pxp_video_transform_class_init(GstImxPxPVideoTransformClass *klass)
 {
-	GstImxBlitterVideoTransform2Class *base_class;
+	GstImxBlitterVideoTransformClass *base_class;
 	GstElementClass *element_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_pxp_video_transform_debug, "imxpxpvideotransform", 0, "Freescale i.MX PxP video transform");
@@ -88,17 +88,17 @@ void gst_imx_pxp_video_transform_init(G_GNUC_UNUSED GstImxPxPVideoTransform *pxp
 
 
 
-static GstImxBlitter* gst_imx_pxp_video_transform_create_blitter(GstImxBlitterVideoTransform2 *blitter_video_transform_2)
+static GstImxBlitter* gst_imx_pxp_video_transform_create_blitter(GstImxBlitterVideoTransform *blitter_video_transform)
 {
 	GstImxPxPBlitter *blitter = gst_imx_pxp_blitter_new();
 	if (blitter == NULL)
-		GST_ERROR_OBJECT(blitter_video_transform_2, "could not create PxP blitter");
+		GST_ERROR_OBJECT(blitter_video_transform, "could not create PxP blitter");
 
 	return (GstImxBlitter *)blitter;
 }
 
 
-gboolean gst_imx_pxp_video_transform_are_video_infos_equal(G_GNUC_UNUSED GstImxBlitterVideoTransform2 *blitter_video_transform_2, GstVideoInfo const *in_info, GstVideoInfo const *out_info)
+gboolean gst_imx_pxp_video_transform_are_video_infos_equal(G_GNUC_UNUSED GstImxBlitterVideoTransform *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info)
 {
 	return
 		(GST_VIDEO_INFO_WIDTH(in_info) == GST_VIDEO_INFO_WIDTH(out_info)) &&

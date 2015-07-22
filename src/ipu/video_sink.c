@@ -48,9 +48,9 @@ G_DEFINE_TYPE(GstImxIpuVideoSink, gst_imx_ipu_video_sink, GST_TYPE_IMX_BLITTER_V
 static void gst_imx_ipu_video_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_ipu_video_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
-static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink2 *blitter_video_sink_2);
-static gboolean gst_imx_ipu_video_sink_stop(GstImxBlitterVideoSink2 *blitter_video_sink_2);
-static GstImxBlitter* gst_imx_ipu_video_sink_create_blitter(GstImxBlitterVideoSink2 *blitter_video_sink_2);
+static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_video_sink);
+static gboolean gst_imx_ipu_video_sink_stop(GstImxBlitterVideoSink *blitter_video_sink);
+static GstImxBlitter* gst_imx_ipu_video_sink_create_blitter(GstImxBlitterVideoSink *blitter_video_sink);
 
 
 
@@ -60,7 +60,7 @@ static GstImxBlitter* gst_imx_ipu_video_sink_create_blitter(GstImxBlitterVideoSi
 void gst_imx_ipu_video_sink_class_init(GstImxIpuVideoSinkClass *klass)
 {
 	GObjectClass *object_class;
-	GstImxBlitterVideoSink2Class *base_class;
+	GstImxBlitterVideoSinkClass *base_class;
 	GstElementClass *element_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_ipu_video_sink_debug, "imxipuvideosink", 0, "Freescale i.MX IPU video sink");
@@ -149,14 +149,14 @@ static void gst_imx_ipu_video_sink_get_property(GObject *object, guint prop_id, 
 	}
 }
 
-static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_video_sink)
 {
-	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink_2);
+	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink);
 	GstImxIpuBlitter *blitter;
 
 	if ((blitter = gst_imx_ipu_blitter_new()) == NULL)
 	{
-		GST_ERROR_OBJECT(blitter_video_sink_2, "could not create IPU blitter");
+		GST_ERROR_OBJECT(blitter_video_sink, "could not create IPU blitter");
 		return FALSE;
 	}
 
@@ -167,16 +167,16 @@ static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink2 *blitter_vi
 }
 
 
-static gboolean gst_imx_ipu_video_sink_stop(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static gboolean gst_imx_ipu_video_sink_stop(GstImxBlitterVideoSink *blitter_video_sink)
 {
-	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink_2);
+	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink);
 	gst_object_unref(ipu_video_sink->blitter);
 	return TRUE;
 }
 
 
-static GstImxBlitter* gst_imx_ipu_video_sink_create_blitter(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static GstImxBlitter* gst_imx_ipu_video_sink_create_blitter(GstImxBlitterVideoSink *blitter_video_sink)
 {
-	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink_2);
+	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink);
 	return ipu_video_sink->blitter;
 }

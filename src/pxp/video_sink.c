@@ -38,7 +38,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 G_DEFINE_TYPE(GstImxPxPVideoSink, gst_imx_pxp_video_sink, GST_TYPE_IMX_BLITTER_VIDEO_SINK)
 
 
-static GstImxBlitter* gst_imx_pxp_video_sink_create_blitter(GstImxBlitterVideoSink2 *blitter_video_sink_2);
+static GstImxBlitter* gst_imx_pxp_video_sink_create_blitter(GstImxBlitterVideoSink *blitter_video_sink);
 
 
 
@@ -47,7 +47,7 @@ static GstImxBlitter* gst_imx_pxp_video_sink_create_blitter(GstImxBlitterVideoSi
 
 static void gst_imx_pxp_video_sink_class_init(GstImxPxPVideoSinkClass *klass)
 {
-	GstImxBlitterVideoSink2Class *base_class;
+	GstImxBlitterVideoSinkClass *base_class;
 	GstElementClass *element_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_pxp_video_sink_debug, "imxpxpvideosink", 0, "Freescale i.MX PxP video sink");
@@ -77,11 +77,11 @@ static void gst_imx_pxp_video_sink_init(G_GNUC_UNUSED GstImxPxPVideoSink *pxp_vi
 
 /* base class functions */
 
-static GstImxBlitter* gst_imx_pxp_video_sink_create_blitter(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static GstImxBlitter* gst_imx_pxp_video_sink_create_blitter(GstImxBlitterVideoSink *blitter_video_sink)
 {
 	GstImxPxPBlitter *blitter = gst_imx_pxp_blitter_new();
 	if (blitter == NULL)
-		GST_ERROR_OBJECT(blitter_video_sink_2, "could not create PxP blitter");
+		GST_ERROR_OBJECT(blitter_video_sink, "could not create PxP blitter");
 
 	return (GstImxBlitter *)blitter;
 }

@@ -35,8 +35,8 @@
 
 
 
-GST_DEBUG_CATEGORY_STATIC(imx_blitter_video_sink_2_debug);
-#define GST_CAT_DEFAULT imx_blitter_video_sink_2_debug
+GST_DEBUG_CATEGORY_STATIC(imx_blitter_video_sink_debug);
+#define GST_CAT_DEFAULT imx_blitter_video_sink_debug
 
 
 enum
@@ -69,51 +69,51 @@ enum
 #define DEFAULT_BOTTOM_MARGIN 0
 
 
-G_DEFINE_ABSTRACT_TYPE(GstImxBlitterVideoSink2, gst_imx_blitter_video_sink_2, GST_TYPE_VIDEO_SINK)
+G_DEFINE_ABSTRACT_TYPE(GstImxBlitterVideoSink, gst_imx_blitter_video_sink, GST_TYPE_VIDEO_SINK)
 
 
-static void gst_imx_blitter_video_sink_2_dispose(GObject *object);
-static void gst_imx_blitter_video_sink_2_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
-static void gst_imx_blitter_video_sink_2_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
-static GstStateChangeReturn gst_imx_blitter_video_sink_2_change_state(GstElement *element, GstStateChange transition);
-static gboolean gst_imx_blitter_video_sink_2_set_caps(GstBaseSink *sink, GstCaps *caps);
-static gboolean gst_imx_blitter_video_sink_2_event(GstBaseSink *sink, GstEvent *event);
-static gboolean gst_imx_blitter_video_sink_2_propose_allocation(GstBaseSink *sink, GstQuery *query);
-static GstFlowReturn gst_imx_blitter_video_sink_2_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
+static void gst_imx_blitter_video_sink_dispose(GObject *object);
+static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *element, GstStateChange transition);
+static gboolean gst_imx_blitter_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
+static gboolean gst_imx_blitter_video_sink_event(GstBaseSink *sink, GstEvent *event);
+static gboolean gst_imx_blitter_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query);
+static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 
-static gboolean gst_imx_blitter_video_sink_2_open_framebuffer_device(GstImxBlitterVideoSink2 *blitter_video_sink_2);
-static void gst_imx_blitter_video_sink_2_close_framebuffer_device(GstImxBlitterVideoSink2 *blitter_video_sink_2);
-static GstVideoFormat gst_imx_blitter_video_sink_2_get_format_from_fb(GstImxBlitterVideoSink2 *blitter_video_sink_2, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
-static void gst_imx_blitter_video_sink_2_update_canvas(GstImxBlitterVideoSink2 *blitter_video_sink_2);
-static gboolean gst_imx_blitter_video_sink_2_acquire_blitter(GstImxBlitterVideoSink2 *blitter_video_sink_2);
+static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink);
+static void gst_imx_blitter_video_sink_close_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink);
+static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitterVideoSink *blitter_video_sink, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
+static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *blitter_video_sink);
+static gboolean gst_imx_blitter_video_sink_acquire_blitter(GstImxBlitterVideoSink *blitter_video_sink);
 
 
 
 
 /* functions declared by G_DEFINE_ABSTRACT_TYPE */
 
-static void gst_imx_blitter_video_sink_2_class_init(GstImxBlitterVideoSink2Class *klass)
+static void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *klass)
 {
 	GObjectClass *object_class;
 	GstBaseSinkClass *base_class;
 	GstVideoSinkClass *parent_class;
 	GstElementClass *element_class;
 
-	GST_DEBUG_CATEGORY_INIT(imx_blitter_video_sink_2_debug, "imxblittervideosink2", 0, "Freescale i.MX blitter sink base class");
+	GST_DEBUG_CATEGORY_INIT(imx_blitter_video_sink_debug, "imxblittervideosink", 0, "Freescale i.MX blitter sink base class");
 
 	object_class = G_OBJECT_CLASS(klass);
 	base_class = GST_BASE_SINK_CLASS(klass);
 	parent_class = GST_VIDEO_SINK_CLASS(klass);
 	element_class = GST_ELEMENT_CLASS(klass);
 
-	object_class->dispose          = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_2_dispose);
-	object_class->set_property     = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_2_set_property);
-	object_class->get_property     = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_2_get_property);
-	element_class->change_state    = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_2_change_state);
-	base_class->set_caps           = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_2_set_caps);
-	base_class->event              = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_2_event);
-	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_2_propose_allocation);
-	parent_class->show_frame       = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_2_show_frame);
+	object_class->dispose          = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_dispose);
+	object_class->set_property     = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_set_property);
+	object_class->get_property     = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_get_property);
+	element_class->change_state    = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_change_state);
+	base_class->set_caps           = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_set_caps);
+	base_class->event              = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_event);
+	base_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_propose_allocation);
+	parent_class->show_frame       = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_show_frame);
 
 	klass->start          = NULL;
 	klass->stop           = NULL;
@@ -252,58 +252,58 @@ static void gst_imx_blitter_video_sink_2_class_init(GstImxBlitterVideoSink2Class
 }
 
 
-static void gst_imx_blitter_video_sink_2_init(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_video_sink)
 {
-	blitter_video_sink_2->blitter = NULL;
-	blitter_video_sink_2->framebuffer_name = g_strdup(DEFAULT_FBDEV_NAME);
-	blitter_video_sink_2->framebuffer = NULL;
-	blitter_video_sink_2->framebuffer_fd = -1;
+	blitter_video_sink->blitter = NULL;
+	blitter_video_sink->framebuffer_name = g_strdup(DEFAULT_FBDEV_NAME);
+	blitter_video_sink->framebuffer = NULL;
+	blitter_video_sink->framebuffer_fd = -1;
 
-	gst_video_info_init(&(blitter_video_sink_2->input_video_info));
-	gst_video_info_init(&(blitter_video_sink_2->output_video_info));
+	gst_video_info_init(&(blitter_video_sink->input_video_info));
+	gst_video_info_init(&(blitter_video_sink->output_video_info));
 
-	blitter_video_sink_2->is_paused = FALSE;
+	blitter_video_sink->is_paused = FALSE;
 
-	memset(&(blitter_video_sink_2->canvas), 0, sizeof(GstImxCanvas));
-	blitter_video_sink_2->canvas.keep_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
-	blitter_video_sink_2->canvas_needs_update = TRUE;
-	blitter_video_sink_2->canvas.fill_color = 0xFF000000;
+	memset(&(blitter_video_sink->canvas), 0, sizeof(GstImxCanvas));
+	blitter_video_sink->canvas.keep_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
+	blitter_video_sink->canvas_needs_update = TRUE;
+	blitter_video_sink->canvas.fill_color = 0xFF000000;
 
-	g_mutex_init(&(blitter_video_sink_2->mutex));
+	g_mutex_init(&(blitter_video_sink->mutex));
 }
 
 
-static void gst_imx_blitter_video_sink_2_dispose(GObject *object)
+static void gst_imx_blitter_video_sink_dispose(GObject *object)
 {
-	GstImxBlitterVideoSink2 *blitter_video_sink_2 = GST_IMX_BLITTER_VIDEO_SINK(object);
+	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK(object);
 
-	if (blitter_video_sink_2->framebuffer_name != NULL)
+	if (blitter_video_sink->framebuffer_name != NULL)
 	{
-		g_free(blitter_video_sink_2->framebuffer_name);
-		blitter_video_sink_2->framebuffer_name = NULL;
+		g_free(blitter_video_sink->framebuffer_name);
+		blitter_video_sink->framebuffer_name = NULL;
 	}
 
-	if (blitter_video_sink_2->framebuffer_fd != -1)
+	if (blitter_video_sink->framebuffer_fd != -1)
 	{
-		close(blitter_video_sink_2->framebuffer_fd);
-		blitter_video_sink_2->framebuffer_fd = -1;
+		close(blitter_video_sink->framebuffer_fd);
+		blitter_video_sink->framebuffer_fd = -1;
 	}
 
-	if (blitter_video_sink_2->blitter != NULL)
+	if (blitter_video_sink->blitter != NULL)
 	{
-		gst_object_unref(blitter_video_sink_2->blitter);
-		blitter_video_sink_2->blitter = NULL;
+		gst_object_unref(blitter_video_sink->blitter);
+		blitter_video_sink->blitter = NULL;
 	}
 
-	g_mutex_clear(&(blitter_video_sink_2->mutex));
+	g_mutex_clear(&(blitter_video_sink->mutex));
 
-	G_OBJECT_CLASS(gst_imx_blitter_video_sink_2_parent_class)->dispose(object);
+	G_OBJECT_CLASS(gst_imx_blitter_video_sink_parent_class)->dispose(object);
 }
 
 
-static void gst_imx_blitter_video_sink_2_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
-	GstImxBlitterVideoSink2 *blitter_video_sink_2 = GST_IMX_BLITTER_VIDEO_SINK(object);
+	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK(object);
 
 	switch (prop_id)
 	{
@@ -311,13 +311,13 @@ static void gst_imx_blitter_video_sink_2_set_property(GObject *object, guint pro
 		{
 			gboolean b = g_value_get_boolean(value);
 
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			if (blitter_video_sink_2->canvas.keep_aspect_ratio != b)
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			if (blitter_video_sink->canvas.keep_aspect_ratio != b)
 			{
-				blitter_video_sink_2->canvas_needs_update = TRUE;
-				blitter_video_sink_2->canvas.keep_aspect_ratio = b;
+				blitter_video_sink->canvas_needs_update = TRUE;
+				blitter_video_sink->canvas.keep_aspect_ratio = b;
 			}
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
@@ -329,97 +329,97 @@ static void gst_imx_blitter_video_sink_2_set_property(GObject *object, guint pro
 
 			/* Use mutex lock to ensure the Linux framebuffer switch doesn't
 			 * interfere with any concurrent blitting operation */
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 
-			g_free(blitter_video_sink_2->framebuffer_name);
-			blitter_video_sink_2->framebuffer_name = g_strdup(new_framebuffer_name);
+			g_free(blitter_video_sink->framebuffer_name);
+			blitter_video_sink->framebuffer_name = g_strdup(new_framebuffer_name);
 
-			if (!gst_imx_blitter_video_sink_2_open_framebuffer_device(blitter_video_sink_2))
-				GST_ELEMENT_ERROR(blitter_video_sink_2, RESOURCE, OPEN_READ_WRITE, ("reopening framebuffer failed"), (NULL));
+			if (!gst_imx_blitter_video_sink_open_framebuffer_device(blitter_video_sink))
+				GST_ELEMENT_ERROR(blitter_video_sink, RESOURCE, OPEN_READ_WRITE, ("reopening framebuffer failed"), (NULL));
 
-			blitter_video_sink_2->canvas_needs_update = TRUE;
+			blitter_video_sink->canvas_needs_update = TRUE;
 
 			/* Done; now unlock */
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
 
 		case PROP_OUTPUT_ROTATION:
 		{
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->canvas.inner_rotation = g_value_get_enum(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->canvas.inner_rotation = g_value_get_enum(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 		}
 
 		case PROP_WINDOW_X_COORD:
 		{
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->window_x_coord = g_value_get_int(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->window_x_coord = g_value_get_int(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
 
 		case PROP_WINDOW_Y_COORD:
 		{
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->window_y_coord = g_value_get_int(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->window_y_coord = g_value_get_int(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
 
 		case PROP_WINDOW_WIDTH:
 		{
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->window_width = g_value_get_uint(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->window_width = g_value_get_uint(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
 
 		case PROP_WINDOW_HEIGHT:
 		{
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->window_height = g_value_get_uint(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->window_height = g_value_get_uint(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
 
 		case PROP_LEFT_MARGIN:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->canvas.margin_left = g_value_get_uint(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->canvas.margin_left = g_value_get_uint(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_TOP_MARGIN:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->canvas.margin_top = g_value_get_uint(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->canvas.margin_top = g_value_get_uint(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_RIGHT_MARGIN:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->canvas.margin_right = g_value_get_uint(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->canvas.margin_right = g_value_get_uint(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_BOTTOM_MARGIN:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->canvas.margin_bottom = g_value_get_uint(value);
-			blitter_video_sink_2->canvas_needs_update = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->canvas.margin_bottom = g_value_get_uint(value);
+			blitter_video_sink->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		default:
@@ -429,76 +429,76 @@ static void gst_imx_blitter_video_sink_2_set_property(GObject *object, guint pro
 }
 
 
-static void gst_imx_blitter_video_sink_2_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
-	GstImxBlitterVideoSink2 *blitter_video_sink_2 = GST_IMX_BLITTER_VIDEO_SINK(object);
+	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK(object);
 
 	switch (prop_id)
 	{
 		case PROP_FORCE_ASPECT_RATIO:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_boolean(value, blitter_video_sink_2->canvas.keep_aspect_ratio);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_boolean(value, blitter_video_sink->canvas.keep_aspect_ratio);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_FBDEV_NAME:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_string(value, blitter_video_sink_2->framebuffer_name);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_string(value, blitter_video_sink->framebuffer_name);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_OUTPUT_ROTATION:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_enum(value, blitter_video_sink_2->canvas.inner_rotation);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_enum(value, blitter_video_sink->canvas.inner_rotation);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_WINDOW_X_COORD:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_int(value, blitter_video_sink_2->window_x_coord);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_int(value, blitter_video_sink->window_x_coord);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_WINDOW_Y_COORD:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_int(value, blitter_video_sink_2->window_y_coord);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_int(value, blitter_video_sink->window_y_coord);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_WINDOW_WIDTH:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_uint(value, blitter_video_sink_2->window_width);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_uint(value, blitter_video_sink->window_width);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_WINDOW_HEIGHT:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_uint(value, blitter_video_sink_2->window_height);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_uint(value, blitter_video_sink->window_height);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_LEFT_MARGIN:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_uint(value, blitter_video_sink_2->canvas.margin_left);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_uint(value, blitter_video_sink->canvas.margin_left);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_TOP_MARGIN:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_uint(value, blitter_video_sink_2->canvas.margin_top);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_uint(value, blitter_video_sink->canvas.margin_top);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_RIGHT_MARGIN:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_uint(value, blitter_video_sink_2->canvas.margin_right);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_uint(value, blitter_video_sink->canvas.margin_right);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case PROP_BOTTOM_MARGIN:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			g_value_set_uint(value, blitter_video_sink_2->canvas.margin_bottom);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_uint(value, blitter_video_sink->canvas.margin_bottom);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		default:
@@ -508,90 +508,90 @@ static void gst_imx_blitter_video_sink_2_get_property(GObject *object, guint pro
 }
 
 
-static GstStateChangeReturn gst_imx_blitter_video_sink_2_change_state(GstElement *element, GstStateChange transition)
+static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *element, GstStateChange transition)
 {
-	GstImxBlitterVideoSink2 *blitter_video_sink_2 = GST_IMX_BLITTER_VIDEO_SINK(element);
-	GstImxBlitterVideoSink2Class *klass = GST_IMX_BLITTER_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(element));
+	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK(element);
+	GstImxBlitterVideoSinkClass *klass = GST_IMX_BLITTER_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(element));
 	GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
 
-	g_assert(blitter_video_sink_2 != NULL);
+	g_assert(blitter_video_sink != NULL);
 
 	switch (transition)
 	{
 		case GST_STATE_CHANGE_NULL_TO_READY:
 		{
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 
-			if (!gst_imx_blitter_video_sink_2_open_framebuffer_device(blitter_video_sink_2))
+			if (!gst_imx_blitter_video_sink_open_framebuffer_device(blitter_video_sink))
 			{
-				GST_ERROR_OBJECT(blitter_video_sink_2, "opening framebuffer device failed");
-				GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+				GST_ERROR_OBJECT(blitter_video_sink, "opening framebuffer device failed");
+				GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 				return GST_STATE_CHANGE_FAILURE;
 			}
 
-			if ((klass->start != NULL) && !(klass->start(blitter_video_sink_2)))
+			if ((klass->start != NULL) && !(klass->start(blitter_video_sink)))
 			{
-				GST_ERROR_OBJECT(blitter_video_sink_2, "start() failed");
-				GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+				GST_ERROR_OBJECT(blitter_video_sink, "start() failed");
+				GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 				return GST_STATE_CHANGE_FAILURE;
 			}
 
-			if (!gst_imx_blitter_video_sink_2_acquire_blitter(blitter_video_sink_2))
+			if (!gst_imx_blitter_video_sink_acquire_blitter(blitter_video_sink))
 			{
-				GST_ERROR_OBJECT(blitter_video_sink_2, "acquiring blitter failed");
-				GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+				GST_ERROR_OBJECT(blitter_video_sink, "acquiring blitter failed");
+				GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 				return GST_STATE_CHANGE_FAILURE;
 			}
 
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
 
 		case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->is_paused = FALSE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->is_paused = FALSE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		default:
 			break;
 	}
 
-	ret = GST_ELEMENT_CLASS(gst_imx_blitter_video_sink_2_parent_class)->change_state(element, transition);
+	ret = GST_ELEMENT_CLASS(gst_imx_blitter_video_sink_parent_class)->change_state(element, transition);
 	if (ret == GST_STATE_CHANGE_FAILURE)
 		return ret;
 
 	switch (transition)
 	{
 		case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->is_paused = TRUE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->is_paused = TRUE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case GST_STATE_CHANGE_PAUSED_TO_READY:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			blitter_video_sink_2->is_paused = FALSE;
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->is_paused = FALSE;
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
 		case GST_STATE_CHANGE_READY_TO_NULL:
 		{
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 
-			if ((klass->stop != NULL) && !(klass->stop(blitter_video_sink_2)))
-				GST_ERROR_OBJECT(blitter_video_sink_2, "stop() failed");
+			if ((klass->stop != NULL) && !(klass->stop(blitter_video_sink)))
+				GST_ERROR_OBJECT(blitter_video_sink, "stop() failed");
 
-			if (blitter_video_sink_2->blitter != NULL)
+			if (blitter_video_sink->blitter != NULL)
 			{
-				gst_object_unref(blitter_video_sink_2->blitter);
-				blitter_video_sink_2->blitter = NULL;
+				gst_object_unref(blitter_video_sink->blitter);
+				blitter_video_sink->blitter = NULL;
 			}
 
-			gst_imx_blitter_video_sink_2_close_framebuffer_device(blitter_video_sink_2);
+			gst_imx_blitter_video_sink_close_framebuffer_device(blitter_video_sink);
 
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
@@ -604,52 +604,52 @@ static GstStateChangeReturn gst_imx_blitter_video_sink_2_change_state(GstElement
 }
 
 
-static gboolean gst_imx_blitter_video_sink_2_set_caps(GstBaseSink *sink, GstCaps *caps)
+static gboolean gst_imx_blitter_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 {
 	gboolean ret;
 	GstVideoInfo video_info;
-	GstImxBlitterVideoSink2 *blitter_video_sink_2 = GST_IMX_BLITTER_VIDEO_SINK(sink);
+	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK(sink);
 
-	g_assert(blitter_video_sink_2 != NULL);
-	g_assert(blitter_video_sink_2->blitter != NULL);
+	g_assert(blitter_video_sink != NULL);
+	g_assert(blitter_video_sink->blitter != NULL);
 
-	GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
+	GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 
 	gst_video_info_init(&video_info);
 	if (!gst_video_info_from_caps(&video_info, caps))
 	{
-		GST_ERROR_OBJECT(blitter_video_sink_2, "could not set caps %" GST_PTR_FORMAT, (gpointer)caps);
+		GST_ERROR_OBJECT(blitter_video_sink, "could not set caps %" GST_PTR_FORMAT, (gpointer)caps);
 		ret = FALSE;
 	}
 	else
 	{
-		blitter_video_sink_2->input_video_info = video_info;
-		blitter_video_sink_2->canvas_needs_update = TRUE;
+		blitter_video_sink->input_video_info = video_info;
+		blitter_video_sink->canvas_needs_update = TRUE;
 
-		if (blitter_video_sink_2->blitter != NULL)
-			gst_imx_blitter_set_input_video_info(blitter_video_sink_2->blitter, &video_info);
+		if (blitter_video_sink->blitter != NULL)
+			gst_imx_blitter_set_input_video_info(blitter_video_sink->blitter, &video_info);
 
 		ret = TRUE;
 	}
 
-	GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+	GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 	return ret;
 }
 
 
-static gboolean gst_imx_blitter_video_sink_2_event(GstBaseSink *sink, GstEvent *event)
+static gboolean gst_imx_blitter_video_sink_event(GstBaseSink *sink, GstEvent *event)
 {
-	GstImxBlitterVideoSink2 *blitter_video_sink_2 = GST_IMX_BLITTER_VIDEO_SINK(sink);
+	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK(sink);
 
 	switch (GST_EVENT_TYPE(event))
 	{
 		case GST_EVENT_FLUSH_STOP:
 		{
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
-			if (blitter_video_sink_2->blitter != NULL)
-				gst_imx_blitter_flush(blitter_video_sink_2->blitter);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			if (blitter_video_sink->blitter != NULL)
+				gst_imx_blitter_flush(blitter_video_sink->blitter);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
 		}
@@ -658,11 +658,11 @@ static gboolean gst_imx_blitter_video_sink_2_event(GstBaseSink *sink, GstEvent *
 			break;
 	}
 
-	return GST_BASE_SINK_CLASS(gst_imx_blitter_video_sink_2_parent_class)->event(sink, event);
+	return GST_BASE_SINK_CLASS(gst_imx_blitter_video_sink_parent_class)->event(sink, event);
 }
 
 
-static gboolean gst_imx_blitter_video_sink_2_propose_allocation(GstBaseSink *sink, GstQuery *query)
+static gboolean gst_imx_blitter_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query)
 {
 	GstCaps *caps;
 	GstVideoInfo info;
@@ -724,32 +724,32 @@ static gboolean gst_imx_blitter_video_sink_2_propose_allocation(GstBaseSink *sin
 }
 
 
-static GstFlowReturn gst_imx_blitter_video_sink_2_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
+static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
-	GstImxBlitterVideoSink2 *blitter_video_sink_2 = GST_IMX_BLITTER_VIDEO_SINK_CAST(video_sink);
+	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK_CAST(video_sink);
 
-	GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink_2);
+	GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 
 	/* Update canvas and input region if necessary */
-	if (blitter_video_sink_2->canvas_needs_update)
-		gst_imx_blitter_video_sink_2_update_canvas(blitter_video_sink_2);
+	if (blitter_video_sink->canvas_needs_update)
+		gst_imx_blitter_video_sink_update_canvas(blitter_video_sink);
 
-	if (blitter_video_sink_2->canvas.visibility_mask == 0)
+	if (blitter_video_sink->canvas.visibility_mask == 0)
 	{
-		GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+		GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 		return GST_FLOW_OK;
 	}
 
-	gst_imx_blitter_set_input_frame(blitter_video_sink_2->blitter, buf);
-	gst_imx_blitter_blit(blitter_video_sink_2->blitter, 255);
+	gst_imx_blitter_set_input_frame(blitter_video_sink->blitter, buf);
+	gst_imx_blitter_blit(blitter_video_sink->blitter, 255);
 
-	GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink_2);
+	GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 	return GST_FLOW_OK;
 }
 
 
-static gboolean gst_imx_blitter_video_sink_2_open_framebuffer_device(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink)
 {
 	/* must be called with lock held */
 
@@ -761,42 +761,42 @@ static gboolean gst_imx_blitter_video_sink_2_open_framebuffer_device(GstImxBlitt
 	struct fb_var_screeninfo fb_var;
 	struct fb_fix_screeninfo fb_fix;
 
-	g_assert(blitter_video_sink_2 != NULL);
-	g_assert(blitter_video_sink_2->framebuffer_name != NULL);
+	g_assert(blitter_video_sink != NULL);
+	g_assert(blitter_video_sink->framebuffer_name != NULL);
 
-	if (blitter_video_sink_2->framebuffer_fd != -1)
-		gst_imx_blitter_video_sink_2_close_framebuffer_device(blitter_video_sink_2);
+	if (blitter_video_sink->framebuffer_fd != -1)
+		gst_imx_blitter_video_sink_close_framebuffer_device(blitter_video_sink);
 
-	GST_INFO_OBJECT(blitter_video_sink_2, "opening framebuffer %s", blitter_video_sink_2->framebuffer_name);
+	GST_INFO_OBJECT(blitter_video_sink, "opening framebuffer %s", blitter_video_sink->framebuffer_name);
 
-	fd = open(blitter_video_sink_2->framebuffer_name, O_RDWR, 0);
+	fd = open(blitter_video_sink->framebuffer_name, O_RDWR, 0);
 	if (fd < 0)
 	{
-		GST_ELEMENT_ERROR(blitter_video_sink_2, RESOURCE, OPEN_READ_WRITE, ("could not open %s: %s", blitter_video_sink_2->framebuffer_name, strerror(errno)), (NULL));
+		GST_ELEMENT_ERROR(blitter_video_sink, RESOURCE, OPEN_READ_WRITE, ("could not open %s: %s", blitter_video_sink->framebuffer_name, strerror(errno)), (NULL));
 		return FALSE;
 	}
 
 	if (ioctl(fd, FBIOGET_FSCREENINFO, &fb_fix) == -1)
 	{
 		close(fd);
-		GST_ERROR_OBJECT(blitter_video_sink_2, "could not open get fixed screen info: %s", strerror(errno));
+		GST_ERROR_OBJECT(blitter_video_sink, "could not open get fixed screen info: %s", strerror(errno));
 		return FALSE;
 	}
 
 	if (ioctl(fd, FBIOGET_VSCREENINFO, &fb_var) == -1)
 	{
 		close(fd);
-		GST_ERROR_OBJECT(blitter_video_sink_2, "could not open get variable screen info: %s", strerror(errno));
+		GST_ERROR_OBJECT(blitter_video_sink, "could not open get variable screen info: %s", strerror(errno));
 		return FALSE;
 	}
 
-	blitter_video_sink_2->framebuffer_fd = fd;
+	blitter_video_sink->framebuffer_fd = fd;
 
 	fb_width = fb_var.xres;
 	fb_height = fb_var.yres;
-	fb_format = gst_imx_blitter_video_sink_2_get_format_from_fb(blitter_video_sink_2, &fb_var, &fb_fix);
+	fb_format = gst_imx_blitter_video_sink_get_format_from_fb(blitter_video_sink, &fb_var, &fb_fix);
 
-	GST_INFO_OBJECT(blitter_video_sink_2, "framebuffer resolution is %u x %u", fb_width, fb_height);
+	GST_INFO_OBJECT(blitter_video_sink, "framebuffer resolution is %u x %u", fb_width, fb_height);
 
 	buffer = gst_buffer_new();
 	gst_buffer_add_video_meta(buffer, GST_VIDEO_FRAME_FLAG_NONE, fb_format, fb_width, fb_height);
@@ -804,50 +804,50 @@ static gboolean gst_imx_blitter_video_sink_2_open_framebuffer_device(GstImxBlitt
 	phys_mem_meta = GST_IMX_PHYS_MEM_META_ADD(buffer);
 	phys_mem_meta->phys_addr = (gst_imx_phys_addr_t)(fb_fix.smem_start);
 
-	blitter_video_sink_2->framebuffer = buffer;
-	blitter_video_sink_2->framebuffer_fd = fd;
-	blitter_video_sink_2->framebuffer_region.x1 = 0;
-	blitter_video_sink_2->framebuffer_region.y1 = 0;
-	blitter_video_sink_2->framebuffer_region.x2 = fb_width;
-	blitter_video_sink_2->framebuffer_region.y2 = fb_height;
-	GST_INFO_OBJECT(blitter_video_sink_2, "framebuffer FD is %d", blitter_video_sink_2->framebuffer_fd);
+	blitter_video_sink->framebuffer = buffer;
+	blitter_video_sink->framebuffer_fd = fd;
+	blitter_video_sink->framebuffer_region.x1 = 0;
+	blitter_video_sink->framebuffer_region.y1 = 0;
+	blitter_video_sink->framebuffer_region.x2 = fb_width;
+	blitter_video_sink->framebuffer_region.y2 = fb_height;
+	GST_INFO_OBJECT(blitter_video_sink, "framebuffer FD is %d", blitter_video_sink->framebuffer_fd);
 
-	gst_video_info_set_format(&(blitter_video_sink_2->output_video_info), fb_format, fb_width, fb_height);
+	gst_video_info_set_format(&(blitter_video_sink->output_video_info), fb_format, fb_width, fb_height);
 
-	blitter_video_sink_2->canvas_needs_update = TRUE;
+	blitter_video_sink->canvas_needs_update = TRUE;
 
-	if (blitter_video_sink_2->blitter != NULL)
+	if (blitter_video_sink->blitter != NULL)
 	{
-		gst_imx_blitter_set_output_video_info(blitter_video_sink_2->blitter, &(blitter_video_sink_2->output_video_info));
-		gst_imx_blitter_set_output_frame(blitter_video_sink_2->blitter, blitter_video_sink_2->framebuffer);
+		gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info));
+		gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer);
 	}
 
 	return TRUE;
 }
 
 
-static void gst_imx_blitter_video_sink_2_close_framebuffer_device(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static void gst_imx_blitter_video_sink_close_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink)
 {
 	/* must be called with lock held */
 
-	g_assert(blitter_video_sink_2 != NULL);
+	g_assert(blitter_video_sink != NULL);
 
-	if (blitter_video_sink_2->framebuffer_fd == -1)
+	if (blitter_video_sink->framebuffer_fd == -1)
 		return;
 
-	GST_INFO_OBJECT(blitter_video_sink_2, "closing framebuffer %s with FD %d", blitter_video_sink_2->framebuffer_name, blitter_video_sink_2->framebuffer_fd);
+	GST_INFO_OBJECT(blitter_video_sink, "closing framebuffer %s with FD %d", blitter_video_sink->framebuffer_name, blitter_video_sink->framebuffer_fd);
 
-	if (blitter_video_sink_2->blitter != NULL)
-		gst_imx_blitter_flush(blitter_video_sink_2->blitter);
+	if (blitter_video_sink->blitter != NULL)
+		gst_imx_blitter_flush(blitter_video_sink->blitter);
 
-	gst_buffer_unref(blitter_video_sink_2->framebuffer);
-	close(blitter_video_sink_2->framebuffer_fd);
-	blitter_video_sink_2->framebuffer = NULL;
-	blitter_video_sink_2->framebuffer_fd = -1;
+	gst_buffer_unref(blitter_video_sink->framebuffer);
+	close(blitter_video_sink->framebuffer_fd);
+	blitter_video_sink->framebuffer = NULL;
+	blitter_video_sink->framebuffer_fd = -1;
 }
 
 
-static GstVideoFormat gst_imx_blitter_video_sink_2_get_format_from_fb(GstImxBlitterVideoSink2 *blitter_video_sink_2, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix)
+static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitterVideoSink *blitter_video_sink, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix)
 {
 	GstVideoFormat fmt = GST_VIDEO_FORMAT_UNKNOWN;
 	guint rlen = fb_var->red.length, glen = fb_var->green.length, blen = fb_var->blue.length, alen = fb_var->transp.length;
@@ -855,7 +855,7 @@ static GstVideoFormat gst_imx_blitter_video_sink_2_get_format_from_fb(GstImxBlit
 
 	if (fb_fix->type != FB_TYPE_PACKED_PIXELS)
 	{
-		GST_DEBUG_OBJECT(blitter_video_sink_2, "unknown framebuffer type %d", fb_fix->type);
+		GST_DEBUG_OBJECT(blitter_video_sink, "unknown framebuffer type %d", fb_fix->type);
 		return fmt;
 	}
 
@@ -904,7 +904,7 @@ static GstVideoFormat gst_imx_blitter_video_sink_2_get_format_from_fb(GstImxBlit
 	}
 
 	GST_INFO_OBJECT(
-		blitter_video_sink_2,
+		blitter_video_sink,
 		"framebuffer uses %u bpp (sizes: r %u g %u b %u  offsets: r %u g %u b %u) => format %s",
 		fb_var->bits_per_pixel,
 		rlen, glen, blen,
@@ -916,65 +916,65 @@ static GstVideoFormat gst_imx_blitter_video_sink_2_get_format_from_fb(GstImxBlit
 }
 
 
-static void gst_imx_blitter_video_sink_2_update_canvas(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *blitter_video_sink)
 {
 	/* must be called with lock held */
 
-	GstImxRegion *outer_region = &(blitter_video_sink_2->canvas.outer_region);
+	GstImxRegion *outer_region = &(blitter_video_sink->canvas.outer_region);
 	GstImxRegion source_subset;
 
 	/* Define the outer region */
-	if ((blitter_video_sink_2->window_width == 0) || (blitter_video_sink_2->window_height == 0))
+	if ((blitter_video_sink->window_width == 0) || (blitter_video_sink->window_height == 0))
 	{
 		/* If either window_width or window_height is 0, then just use the
 		 * entire framebuffer as the outer region */
-		*outer_region = blitter_video_sink_2->framebuffer_region;
+		*outer_region = blitter_video_sink->framebuffer_region;
 	}
 	else
 	{
 		/* Use the defined window as the outer region */
-		outer_region->x1 = blitter_video_sink_2->window_x_coord;
-		outer_region->y1 = blitter_video_sink_2->window_y_coord;
-		outer_region->x2 = blitter_video_sink_2->window_x_coord + blitter_video_sink_2->window_width;
-		outer_region->y2 = blitter_video_sink_2->window_y_coord + blitter_video_sink_2->window_height;
+		outer_region->x1 = blitter_video_sink->window_x_coord;
+		outer_region->y1 = blitter_video_sink->window_y_coord;
+		outer_region->x2 = blitter_video_sink->window_x_coord + blitter_video_sink->window_width;
+		outer_region->y2 = blitter_video_sink->window_y_coord + blitter_video_sink->window_height;
 	}
 
-	gst_imx_canvas_calculate_inner_region(&(blitter_video_sink_2->canvas), &(blitter_video_sink_2->input_video_info));
+	gst_imx_canvas_calculate_inner_region(&(blitter_video_sink->canvas), &(blitter_video_sink->input_video_info));
 	gst_imx_canvas_clip(
-		&(blitter_video_sink_2->canvas),
-		&(blitter_video_sink_2->framebuffer_region),
-		&(blitter_video_sink_2->input_video_info),
+		&(blitter_video_sink->canvas),
+		&(blitter_video_sink->framebuffer_region),
+		&(blitter_video_sink->input_video_info),
 		&source_subset
 	);
 
-	gst_imx_blitter_set_input_region(blitter_video_sink_2->blitter, &source_subset);
-	gst_imx_blitter_set_output_canvas(blitter_video_sink_2->blitter, &(blitter_video_sink_2->canvas));
+	gst_imx_blitter_set_input_region(blitter_video_sink->blitter, &source_subset);
+	gst_imx_blitter_set_output_canvas(blitter_video_sink->blitter, &(blitter_video_sink->canvas));
 
-	blitter_video_sink_2->canvas_needs_update = FALSE;
+	blitter_video_sink->canvas_needs_update = FALSE;
 }
 
 
-static gboolean gst_imx_blitter_video_sink_2_acquire_blitter(GstImxBlitterVideoSink2 *blitter_video_sink_2)
+static gboolean gst_imx_blitter_video_sink_acquire_blitter(GstImxBlitterVideoSink *blitter_video_sink)
 {
 	/* must be called with lock held */
 
-	GstImxBlitterVideoSink2Class *klass = GST_IMX_BLITTER_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(blitter_video_sink_2));
+	GstImxBlitterVideoSinkClass *klass = GST_IMX_BLITTER_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(blitter_video_sink));
 
-	g_assert(blitter_video_sink_2 != NULL);
-	g_assert(blitter_video_sink_2->framebuffer != NULL);
+	g_assert(blitter_video_sink != NULL);
+	g_assert(blitter_video_sink->framebuffer != NULL);
 	g_assert(klass->create_blitter != NULL);
 
 	/* Do nothing if the blitter is already acquired */
-	if (blitter_video_sink_2->blitter != NULL)
+	if (blitter_video_sink->blitter != NULL)
 		return TRUE;
 
-	if ((blitter_video_sink_2->blitter = klass->create_blitter(blitter_video_sink_2)) == NULL)
+	if ((blitter_video_sink->blitter = klass->create_blitter(blitter_video_sink)) == NULL)
 	{
-		GST_ERROR_OBJECT(blitter_video_sink_2, "could not acquire blitter");
+		GST_ERROR_OBJECT(blitter_video_sink, "could not acquire blitter");
 		return FALSE;
 	}
 
-	return gst_imx_blitter_set_output_frame(blitter_video_sink_2->blitter, blitter_video_sink_2->framebuffer) &&
-	       gst_imx_blitter_set_output_canvas(blitter_video_sink_2->blitter, &(blitter_video_sink_2->canvas)) &&
-	       gst_imx_blitter_set_output_video_info(blitter_video_sink_2->blitter, &(blitter_video_sink_2->output_video_info));
+	return gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer) &&
+	       gst_imx_blitter_set_output_canvas(blitter_video_sink->blitter, &(blitter_video_sink->canvas)) &&
+	       gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info));
 }

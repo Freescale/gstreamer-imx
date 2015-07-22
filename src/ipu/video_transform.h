@@ -41,7 +41,7 @@ typedef struct _GstImxIpuVideoTransformClass GstImxIpuVideoTransformClass;
 
 struct _GstImxIpuVideoTransform
 {
-	GstImxBlitterVideoTransform2 parent;
+	GstImxBlitterVideoTransform parent;
 
 	GstImxBlitter *blitter;
 	gboolean deinterlacing_enabled;
@@ -50,7 +50,7 @@ struct _GstImxIpuVideoTransform
 
 struct _GstImxIpuVideoTransformClass
 {
-	GstImxBlitterVideoTransform2Class parent_class;
+	GstImxBlitterVideoTransformClass parent_class;
 };
 
 

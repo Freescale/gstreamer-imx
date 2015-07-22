@@ -92,12 +92,12 @@ struct _GstImxBlitter
  *
  * @parent_class:           The parent class structure
  * @set_input_video_info:   Optional.
- *                          Called when @gst_imx_base_blitter_set_input_video_info is called.
+ *                          Called when @gst_imx_blitter_set_input_video_info is called.
  *                          This gives derived blitters the chance to update any internal state
  *                          related to the video info.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
  * @set_output_video_info:  Optional.
- *                          Called when @gst_imx_base_blitter_set_output_video_info is called.
+ *                          Called when @gst_imx_blitter_set_output_video_info is called.
  *                          This gives derived blitters the chance to update any internal state
  *                          related to the video info.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.

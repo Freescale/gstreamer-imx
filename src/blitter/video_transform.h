@@ -30,36 +30,36 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstImxBlitterVideoTransform2 GstImxBlitterVideoTransform2;
-typedef struct _GstImxBlitterVideoTransform2Class GstImxBlitterVideoTransform2Class;
-typedef struct _GstImxBlitterVideoTransform2Private GstImxBlitterVideoTransform2Private;
+typedef struct _GstImxBlitterVideoTransform GstImxBlitterVideoTransform;
+typedef struct _GstImxBlitterVideoTransformClass GstImxBlitterVideoTransformClass;
+typedef struct _GstImxBlitterVideoTransformPrivate GstImxBlitterVideoTransformPrivate;
 
 
-#define GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM             (gst_imx_blitter_video_transform_2_get_type())
-#define GST_IMX_BLITTER_VIDEO_TRANSFORM(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM, GstImxBlitterVideoTransform2))
-#define GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM, GstImxBlitterVideoTransform2Class))
+#define GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM             (gst_imx_blitter_video_transform_get_type())
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM, GstImxBlitterVideoTransform))
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM, GstImxBlitterVideoTransformClass))
 #define GST_IS_IMX_BLITTER_VIDEO_TRANSFORM(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM))
 #define GST_IS_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_BLITTER_VIDEO_TRANSFORM))
-#define GST_IMX_BLITTER_VIDEO_TRANSFORM_CAST(obj)        ((GstImxBlitterVideoTransform2*)(obj))
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM_CAST(obj)        ((GstImxBlitterVideoTransform*)(obj))
 
 
 /* Macros for locking/unlocking the blitter video transform's mutex.
  * These should always be used when a property is set that affects
  * the blit operation. */
-#define GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(obj) do { g_mutex_lock(&(((GstImxBlitterVideoTransform2*)(obj))->mutex)); } while (0)
-#define GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(obj) do { g_mutex_unlock(&(((GstImxBlitterVideoTransform2*)(obj))->mutex)); } while (0)
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(obj) do { g_mutex_lock(&(((GstImxBlitterVideoTransform*)(obj))->mutex)); } while (0)
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(obj) do { g_mutex_unlock(&(((GstImxBlitterVideoTransform*)(obj))->mutex)); } while (0)
 
 
-#define GST_IMX_BLITTER_VIDEO_TRANSFORM_INPUT_INFO(obj)  (&(((GstImxBlitterVideoTransform2*)(obj))->input_video_info))
-#define GST_IMX_BLITTER_VIDEO_TRANSFORM_OUTPUT_INFO(obj) (&(((GstImxBlitterVideoTransform2*)(obj))->output_video_info))
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM_INPUT_INFO(obj)  (&(((GstImxBlitterVideoTransform*)(obj))->input_video_info))
+#define GST_IMX_BLITTER_VIDEO_TRANSFORM_OUTPUT_INFO(obj) (&(((GstImxBlitterVideoTransform*)(obj))->output_video_info))
 
 
 /**
- * GstImxBlitterVideoTransform2:
+ * GstImxBlitterVideoTransform:
  *
- * The opaque #GstImxBlitterVideoTransform2 data structure.
+ * The opaque #GstImxBlitterVideoTransform data structure.
  */
-struct _GstImxBlitterVideoTransform2
+struct _GstImxBlitterVideoTransform
 {
 	GstBaseTransform parent;
 
@@ -91,7 +91,7 @@ struct _GstImxBlitterVideoTransform2
 
 
 /**
- * GstImxBlitterVideoTransform2Class
+ * GstImxBlitterVideoTransformClass
  * @parent_class:             The parent class structure
  * @start:                    Optional.
  *                            Called during the NULL->READY state change. Note that this is
@@ -129,22 +129,22 @@ struct _GstImxBlitterVideoTransform2
  * related to the blitter, these must surround the modifications with mutex locks. Use
  * @GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK and @GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK for this.
  */
-struct _GstImxBlitterVideoTransform2Class
+struct _GstImxBlitterVideoTransformClass
 {
 	GstBaseTransformClass parent_class;
 
-	gboolean (*start)(GstImxBlitterVideoTransform2 *blitter_video_transform_2);
-	gboolean (*stop)(GstImxBlitterVideoTransform2 *blitter_video_transform_2);
+	gboolean (*start)(GstImxBlitterVideoTransform *blitter_video_transform);
+	gboolean (*stop)(GstImxBlitterVideoTransform *blitter_video_transform);
 
-	gboolean (*are_video_infos_equal)(GstImxBlitterVideoTransform2 *blitter_video_transform_2, GstVideoInfo const *in_info, GstVideoInfo const *out_info);
+	gboolean (*are_video_infos_equal)(GstImxBlitterVideoTransform *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info);
 
-	gboolean (*are_transforms_necessary)(GstImxBlitterVideoTransform2 *blitter_video_transform_2, GstBuffer *input);
+	gboolean (*are_transforms_necessary)(GstImxBlitterVideoTransform *blitter_video_transform, GstBuffer *input);
 
-	GstImxBlitter* (*create_blitter)(GstImxBlitterVideoTransform2 *blitter_video_transform_2);
+	GstImxBlitter* (*create_blitter)(GstImxBlitterVideoTransform *blitter_video_transform);
 };
 
 
-GType gst_imx_blitter_video_transform_2_get_type(void);
+GType gst_imx_blitter_video_transform_get_type(void);
 
 
 G_END_DECLS

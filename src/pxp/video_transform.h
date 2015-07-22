@@ -41,13 +41,13 @@ typedef struct _GstImxPxPVideoTransformClass GstImxPxPVideoTransformClass;
 
 struct _GstImxPxPVideoTransform
 {
-	GstImxBlitterVideoTransform2 parent;
+	GstImxBlitterVideoTransform parent;
 };
 
 
 struct _GstImxPxPVideoTransformClass
 {
-	GstImxBlitterVideoTransform2Class parent_class;
+	GstImxBlitterVideoTransformClass parent_class;
 };
 
 

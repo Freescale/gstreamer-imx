@@ -58,11 +58,11 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 
 static GstCaps* gst_imx_ipu_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
 
-static gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform2 *blitter_video_transform_2);
-static gboolean gst_imx_ipu_video_transform_stop(GstImxBlitterVideoTransform2 *blitter_video_transform_2);
-static GstImxBlitter* gst_imx_ipu_video_transform_create_blitter(GstImxBlitterVideoTransform2 *blitter_video_transform_2);
-gboolean gst_imx_ipu_video_transform_are_video_infos_equal(GstImxBlitterVideoTransform2 *blitter_video_transform_2, GstVideoInfo const *in_info, GstVideoInfo const *out_info);
-gboolean gst_imx_ipu_video_transform_are_transforms_necessary(GstImxBlitterVideoTransform2 *blitter_video_transform, GstBuffer *input);
+static gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform *blitter_video_transform);
+static gboolean gst_imx_ipu_video_transform_stop(GstImxBlitterVideoTransform *blitter_video_transform);
+static GstImxBlitter* gst_imx_ipu_video_transform_create_blitter(GstImxBlitterVideoTransform *blitter_video_transform);
+gboolean gst_imx_ipu_video_transform_are_video_infos_equal(GstImxBlitterVideoTransform *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info);
+gboolean gst_imx_ipu_video_transform_are_transforms_necessary(GstImxBlitterVideoTransform *blitter_video_transform, GstBuffer *input);
 
 
 
@@ -73,7 +73,7 @@ static void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass 
 {
 	GObjectClass *object_class;
 	GstBaseTransformClass *base_transform_class;
-	GstImxBlitterVideoTransform2Class *base_class;
+	GstImxBlitterVideoTransformClass *base_class;
 	GstElementClass *element_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_ipu_video_transform_debug, "imxipuvideotransform", 0, "Freescale i.MX IPU video transform");
@@ -167,14 +167,14 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 }
 
 
-static gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform2 *blitter_video_transform_2)
+static gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform *blitter_video_transform)
 {
-	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform_2);
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
 	GstImxIpuBlitter *blitter;
 
 	if ((blitter = gst_imx_ipu_blitter_new()) == NULL)
 	{
-		GST_ERROR_OBJECT(blitter_video_transform_2, "could not create IPU blitter");
+		GST_ERROR_OBJECT(blitter_video_transform, "could not create IPU blitter");
 		return FALSE;
 	}
 
@@ -185,17 +185,17 @@ static gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform2 *
 }
 
 
-static gboolean gst_imx_ipu_video_transform_stop(GstImxBlitterVideoTransform2 *blitter_video_transform_2)
+static gboolean gst_imx_ipu_video_transform_stop(GstImxBlitterVideoTransform *blitter_video_transform)
 {
-	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform_2);
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
 	gst_object_unref(ipu_video_transform->blitter);
 	return TRUE;
 }
 
 
-static GstImxBlitter* gst_imx_ipu_video_transform_create_blitter(GstImxBlitterVideoTransform2 *blitter_video_transform_2)
+static GstImxBlitter* gst_imx_ipu_video_transform_create_blitter(GstImxBlitterVideoTransform *blitter_video_transform)
 {
-	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform_2);
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
 	return ipu_video_transform->blitter;
 }
 
@@ -234,7 +234,7 @@ static GstCaps* gst_imx_ipu_video_transform_fixate_caps(GstBaseTransform *transf
 }
 
 
-gboolean gst_imx_ipu_video_transform_are_video_infos_equal(G_GNUC_UNUSED GstImxBlitterVideoTransform2 *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info)
+gboolean gst_imx_ipu_video_transform_are_video_infos_equal(G_GNUC_UNUSED GstImxBlitterVideoTransform *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info)
 {
 	return
 		(GST_VIDEO_INFO_WIDTH(in_info) == GST_VIDEO_INFO_WIDTH(out_info)) &&
@@ -244,7 +244,7 @@ gboolean gst_imx_ipu_video_transform_are_video_infos_equal(G_GNUC_UNUSED GstImxB
 }
 
 
-gboolean gst_imx_ipu_video_transform_are_transforms_necessary(GstImxBlitterVideoTransform2 *blitter_video_transform, GstBuffer *input)
+gboolean gst_imx_ipu_video_transform_are_transforms_necessary(GstImxBlitterVideoTransform *blitter_video_transform, GstBuffer *input)
 {
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
 

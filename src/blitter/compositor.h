@@ -53,8 +53,8 @@ struct _GstImxBlitterCompositor
 struct _GstImxBlitterCompositorClass
 {
 	GstImxCompositorClass parent_class;
-	gboolean (*start)(GstImxBlitterCompositor *blitter_video_sink_2);
-	gboolean (*stop)(GstImxBlitterCompositor *blitter_video_sink_2);
+	gboolean (*start)(GstImxBlitterCompositor *blitter_video_sink);
+	gboolean (*stop)(GstImxBlitterCompositor *blitter_video_sink);
 	GstImxBlitter* (*create_blitter)(GstImxBlitterCompositor *blitter_compositor);
 };
 

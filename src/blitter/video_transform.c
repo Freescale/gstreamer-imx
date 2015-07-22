@@ -24,75 +24,75 @@
 #include "../common/phys_mem_meta.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(imx_blitter_video_transform_2_debug);
-#define GST_CAT_DEFAULT imx_blitter_video_transform_2_debug
+GST_DEBUG_CATEGORY_STATIC(imx_blitter_video_transform_debug);
+#define GST_CAT_DEFAULT imx_blitter_video_transform_debug
 
 
-G_DEFINE_ABSTRACT_TYPE(GstImxBlitterVideoTransform2, gst_imx_blitter_video_transform_2, GST_TYPE_BASE_TRANSFORM)
+G_DEFINE_ABSTRACT_TYPE(GstImxBlitterVideoTransform, gst_imx_blitter_video_transform, GST_TYPE_BASE_TRANSFORM)
 
 
 /* general element operations */
-static void gst_imx_blitter_video_transform_2_finalize(GObject *object);
-static GstStateChangeReturn gst_imx_blitter_video_transform_2_change_state(GstElement *element, GstStateChange transition);
-static gboolean gst_imx_blitter_video_transform_2_sink_event(GstBaseTransform *transform, GstEvent *event);
-static gboolean gst_imx_blitter_video_transform_2_src_event(GstBaseTransform *transform, GstEvent *event);
+static void gst_imx_blitter_video_transform_finalize(GObject *object);
+static GstStateChangeReturn gst_imx_blitter_video_transform_change_state(GstElement *element, GstStateChange transition);
+static gboolean gst_imx_blitter_video_transform_sink_event(GstBaseTransform *transform, GstEvent *event);
+static gboolean gst_imx_blitter_video_transform_src_event(GstBaseTransform *transform, GstEvent *event);
 
 /* caps handling */
-static GstCaps* gst_imx_blitter_video_transform_2_transform_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *filter);
-static GstCaps* gst_imx_blitter_video_transform_2_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
-static GstCaps* gst_imx_blitter_video_transform_2_fixate_size_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
-static void gst_imx_blitter_video_transform_2_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps);
-static gboolean gst_imx_blitter_video_transform_2_set_caps(GstBaseTransform *transform, GstCaps *in, GstCaps *out);
+static GstCaps* gst_imx_blitter_video_transform_transform_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *filter);
+static GstCaps* gst_imx_blitter_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
+static GstCaps* gst_imx_blitter_video_transform_fixate_size_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
+static void gst_imx_blitter_video_transform_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps);
+static gboolean gst_imx_blitter_video_transform_set_caps(GstBaseTransform *transform, GstCaps *in, GstCaps *out);
 
 /* allocator */
-static gboolean gst_imx_blitter_video_transform_2_propose_allocation(GstBaseTransform *transform, GstQuery *decide_query, GstQuery *query);
-static gboolean gst_imx_blitter_video_transform_2_decide_allocation(GstBaseTransform *transform, GstQuery *query);
+static gboolean gst_imx_blitter_video_transform_propose_allocation(GstBaseTransform *transform, GstQuery *decide_query, GstQuery *query);
+static gboolean gst_imx_blitter_video_transform_decide_allocation(GstBaseTransform *transform, GstQuery *query);
 
 /* frame output */
-static GstFlowReturn gst_imx_blitter_video_transform_2_prepare_output_buffer(GstBaseTransform *transform, GstBuffer *input, GstBuffer **outbuf);
-static GstFlowReturn gst_imx_blitter_video_transform_2_transform_frame(GstBaseTransform *transform, GstBuffer *in, GstBuffer *out);
-static gboolean gst_imx_blitter_video_transform_2_transform_size(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, gsize size, GstCaps *othercaps, gsize *othersize);
+static GstFlowReturn gst_imx_blitter_video_transform_prepare_output_buffer(GstBaseTransform *transform, GstBuffer *input, GstBuffer **outbuf);
+static GstFlowReturn gst_imx_blitter_video_transform_transform_frame(GstBaseTransform *transform, GstBuffer *in, GstBuffer *out);
+static gboolean gst_imx_blitter_video_transform_transform_size(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, gsize size, GstCaps *othercaps, gsize *othersize);
 
 /* metadata and meta information */
-static gboolean gst_imx_blitter_video_transform_2_transform_meta(GstBaseTransform *trans, GstBuffer *inbuf, GstMeta *meta, GstBuffer *outbuf);
-static gboolean gst_imx_blitter_video_transform_2_get_unit_size(GstBaseTransform *transform, GstCaps *caps, gsize *size);
-static gboolean gst_imx_blitter_video_transform_2_copy_metadata(GstBaseTransform *trans, GstBuffer *input, GstBuffer *outbuf);
+static gboolean gst_imx_blitter_video_transform_transform_meta(GstBaseTransform *trans, GstBuffer *inbuf, GstMeta *meta, GstBuffer *outbuf);
+static gboolean gst_imx_blitter_video_transform_get_unit_size(GstBaseTransform *transform, GstCaps *caps, gsize *size);
+static gboolean gst_imx_blitter_video_transform_copy_metadata(GstBaseTransform *trans, GstBuffer *input, GstBuffer *outbuf);
 
 /* misc */
-static gboolean gst_imx_blitter_video_transform_2_acquire_blitter(GstImxBlitterVideoTransform2 *blitter_video_transform_2);
+static gboolean gst_imx_blitter_video_transform_acquire_blitter(GstImxBlitterVideoTransform *blitter_video_transform);
 
 
 
 
 /* functions declared by G_DEFINE_ABSTRACT_TYPE */
 
-void gst_imx_blitter_video_transform_2_class_init(GstImxBlitterVideoTransform2Class *klass)
+void gst_imx_blitter_video_transform_class_init(GstImxBlitterVideoTransformClass *klass)
 {
 	GObjectClass *object_class;
 	GstBaseTransformClass *base_transform_class;
 	GstElementClass *element_class;
 
-	GST_DEBUG_CATEGORY_INIT(imx_blitter_video_transform_2_debug, "imxblittervideotransform", 0, "Freescale i.MX blitter video transform base class");
+	GST_DEBUG_CATEGORY_INIT(imx_blitter_video_transform_debug, "imxblittervideotransform", 0, "Freescale i.MX blitter video transform base class");
 
 	object_class = G_OBJECT_CLASS(klass);
 	base_transform_class = GST_BASE_TRANSFORM_CLASS(klass);
 	element_class = GST_ELEMENT_CLASS(klass);
 
-	element_class->change_state                 = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_change_state);
-	object_class->finalize                      = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_finalize);
-	base_transform_class->sink_event            = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_sink_event);
-	base_transform_class->src_event             = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_src_event);
-	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_transform_caps);
-	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_fixate_caps);
-	base_transform_class->propose_allocation    = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_propose_allocation);
-	base_transform_class->decide_allocation     = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_decide_allocation);
-	base_transform_class->set_caps              = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_set_caps);
-	base_transform_class->prepare_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_prepare_output_buffer);
-	base_transform_class->transform             = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_transform_frame);
-	base_transform_class->transform_size        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_transform_size);
-	base_transform_class->transform_meta        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_transform_meta);
-	base_transform_class->get_unit_size         = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_get_unit_size);
-	base_transform_class->copy_metadata         = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_2_copy_metadata);
+	element_class->change_state                 = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_change_state);
+	object_class->finalize                      = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_finalize);
+	base_transform_class->sink_event            = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_sink_event);
+	base_transform_class->src_event             = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_src_event);
+	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_transform_caps);
+	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_fixate_caps);
+	base_transform_class->propose_allocation    = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_propose_allocation);
+	base_transform_class->decide_allocation     = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_decide_allocation);
+	base_transform_class->set_caps              = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_set_caps);
+	base_transform_class->prepare_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_prepare_output_buffer);
+	base_transform_class->transform             = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_transform_frame);
+	base_transform_class->transform_size        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_transform_size);
+	base_transform_class->transform_meta        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_transform_meta);
+	base_transform_class->get_unit_size         = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_get_unit_size);
+	base_transform_class->copy_metadata         = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_transform_copy_metadata);
 
 	base_transform_class->passthrough_on_same_caps = FALSE;
 
@@ -107,20 +107,20 @@ void gst_imx_blitter_video_transform_2_class_init(GstImxBlitterVideoTransform2Cl
 }
 
 
-void gst_imx_blitter_video_transform_2_init(GstImxBlitterVideoTransform2 *blitter_video_transform_2)
+void gst_imx_blitter_video_transform_init(GstImxBlitterVideoTransform *blitter_video_transform)
 {
-	GstBaseTransform *base_transform = GST_BASE_TRANSFORM(blitter_video_transform_2);
+	GstBaseTransform *base_transform = GST_BASE_TRANSFORM(blitter_video_transform);
 
-	blitter_video_transform_2->initialized = FALSE;
+	blitter_video_transform->initialized = FALSE;
 
-	blitter_video_transform_2->inout_info_equal = FALSE;
-	blitter_video_transform_2->inout_info_set = FALSE;
-	gst_video_info_init(&(blitter_video_transform_2->input_video_info));
-	gst_video_info_init(&(blitter_video_transform_2->output_video_info));
+	blitter_video_transform->inout_info_equal = FALSE;
+	blitter_video_transform->inout_info_set = FALSE;
+	gst_video_info_init(&(blitter_video_transform->input_video_info));
+	gst_video_info_init(&(blitter_video_transform->output_video_info));
 
-	blitter_video_transform_2->blitter = NULL;
+	blitter_video_transform->blitter = NULL;
 
-	g_mutex_init(&(blitter_video_transform_2->mutex));
+	g_mutex_init(&(blitter_video_transform->mutex));
 
 	/* Set passthrough initially to FALSE ; passthrough will later be
 	 * enabled/disabled on a per-frame basis */
@@ -134,48 +134,48 @@ void gst_imx_blitter_video_transform_2_init(GstImxBlitterVideoTransform2 *blitte
 
 /* general element operations */
 
-static void gst_imx_blitter_video_transform_2_finalize(GObject *object)
+static void gst_imx_blitter_video_transform_finalize(GObject *object)
 {
-	GstImxBlitterVideoTransform2 *blitter_video_transform_2 = GST_IMX_BLITTER_VIDEO_TRANSFORM(object);
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(object);
 
-	g_mutex_clear(&(blitter_video_transform_2->mutex));
+	g_mutex_clear(&(blitter_video_transform->mutex));
 
-	G_OBJECT_CLASS(gst_imx_blitter_video_transform_2_parent_class)->finalize(object);
+	G_OBJECT_CLASS(gst_imx_blitter_video_transform_parent_class)->finalize(object);
 }
 
 
-static GstStateChangeReturn gst_imx_blitter_video_transform_2_change_state(GstElement *element, GstStateChange transition)
+static GstStateChangeReturn gst_imx_blitter_video_transform_change_state(GstElement *element, GstStateChange transition)
 {
-	GstImxBlitterVideoTransform2 *blitter_video_transform_2 = GST_IMX_BLITTER_VIDEO_TRANSFORM(element);
-	GstImxBlitterVideoTransform2Class *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(element));
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(element);
+	GstImxBlitterVideoTransformClass *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(element));
 	GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
 
-	g_assert(blitter_video_transform_2 != NULL);
+	g_assert(blitter_video_transform != NULL);
 
 	switch (transition)
 	{
 		case GST_STATE_CHANGE_NULL_TO_READY:
 		{
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform_2);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
 
-			blitter_video_transform_2->initialized = TRUE;
+			blitter_video_transform->initialized = TRUE;
 
-			if ((klass->start != NULL) && !(klass->start(blitter_video_transform_2)))
+			if ((klass->start != NULL) && !(klass->start(blitter_video_transform)))
 			{
-				GST_ERROR_OBJECT(blitter_video_transform_2, "start() failed");
-				blitter_video_transform_2->initialized = FALSE;
-				GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform_2);
+				GST_ERROR_OBJECT(blitter_video_transform, "start() failed");
+				blitter_video_transform->initialized = FALSE;
+				GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 				return GST_STATE_CHANGE_FAILURE;
 			}
 
-			if (!gst_imx_blitter_video_transform_2_acquire_blitter(blitter_video_transform_2))
+			if (!gst_imx_blitter_video_transform_acquire_blitter(blitter_video_transform))
 			{
-				GST_ERROR_OBJECT(blitter_video_transform_2, "acquiring blitter failed");
-				GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform_2);
+				GST_ERROR_OBJECT(blitter_video_transform, "acquiring blitter failed");
+				GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 				return GST_STATE_CHANGE_FAILURE;
 			}
 
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform_2);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 
 			break;
 		}
@@ -184,7 +184,7 @@ static GstStateChangeReturn gst_imx_blitter_video_transform_2_change_state(GstEl
 			break;
 	}
 
-	ret = GST_ELEMENT_CLASS(gst_imx_blitter_video_transform_2_parent_class)->change_state(element, transition);
+	ret = GST_ELEMENT_CLASS(gst_imx_blitter_video_transform_parent_class)->change_state(element, transition);
 	if (ret == GST_STATE_CHANGE_FAILURE)
 		return ret;
 
@@ -192,20 +192,20 @@ static GstStateChangeReturn gst_imx_blitter_video_transform_2_change_state(GstEl
 	{
 		case GST_STATE_CHANGE_READY_TO_NULL:
 		{
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform_2);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
 
-			blitter_video_transform_2->initialized = FALSE;
+			blitter_video_transform->initialized = FALSE;
 
-			if ((klass->stop != NULL) && !(klass->stop(blitter_video_transform_2)))
-				GST_ERROR_OBJECT(blitter_video_transform_2, "stop() failed");
+			if ((klass->stop != NULL) && !(klass->stop(blitter_video_transform)))
+				GST_ERROR_OBJECT(blitter_video_transform, "stop() failed");
 
-			if (blitter_video_transform_2->blitter != NULL)
+			if (blitter_video_transform->blitter != NULL)
 			{
-				gst_object_unref(GST_OBJECT(blitter_video_transform_2->blitter));
-				blitter_video_transform_2->blitter = NULL;
+				gst_object_unref(GST_OBJECT(blitter_video_transform->blitter));
+				blitter_video_transform->blitter = NULL;
 			}
 
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform_2);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 
 			break;
 		}
@@ -218,18 +218,18 @@ static GstStateChangeReturn gst_imx_blitter_video_transform_2_change_state(GstEl
 }
 
 
-static gboolean gst_imx_blitter_video_transform_2_sink_event(GstBaseTransform *transform, GstEvent *event)
+static gboolean gst_imx_blitter_video_transform_sink_event(GstBaseTransform *transform, GstEvent *event)
 {
-	GstImxBlitterVideoTransform2 *blitter_video_transform_2 = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
 
 	switch (GST_EVENT_TYPE(event))
 	{
 		case GST_EVENT_FLUSH_STOP:
 		{
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform_2);
-			if (blitter_video_transform_2->blitter != NULL)
-				gst_imx_blitter_flush(blitter_video_transform_2->blitter);
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform_2);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
+			if (blitter_video_transform->blitter != NULL)
+				gst_imx_blitter_flush(blitter_video_transform->blitter);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 
 			break;
 		}
@@ -238,15 +238,15 @@ static gboolean gst_imx_blitter_video_transform_2_sink_event(GstBaseTransform *t
 			break;
 	}
 
-	return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_2_parent_class)->sink_event(transform, event);
+	return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_parent_class)->sink_event(transform, event);
 }
 
 
-static gboolean gst_imx_blitter_video_transform_2_src_event(GstBaseTransform *transform, GstEvent *event)
+static gboolean gst_imx_blitter_video_transform_src_event(GstBaseTransform *transform, GstEvent *event)
 {
 	gdouble a;
 	GstStructure *structure;
-	GstImxBlitterVideoTransform2 *blitter_video_transform_2 = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
 
 	GST_DEBUG_OBJECT(transform, "handling %s event", GST_EVENT_TYPE_NAME(event));
 
@@ -254,10 +254,10 @@ static gboolean gst_imx_blitter_video_transform_2_src_event(GstBaseTransform *tr
 	{
 		case GST_EVENT_NAVIGATION:
 		{
-			gint in_w = GST_VIDEO_INFO_WIDTH(&(blitter_video_transform_2->input_video_info));
-			gint in_h = GST_VIDEO_INFO_HEIGHT(&(blitter_video_transform_2->input_video_info));
-			gint out_w = GST_VIDEO_INFO_WIDTH(&(blitter_video_transform_2->output_video_info));
-			gint out_h = GST_VIDEO_INFO_HEIGHT(&(blitter_video_transform_2->output_video_info));
+			gint in_w = GST_VIDEO_INFO_WIDTH(&(blitter_video_transform->input_video_info));
+			gint in_h = GST_VIDEO_INFO_HEIGHT(&(blitter_video_transform->input_video_info));
+			gint out_w = GST_VIDEO_INFO_WIDTH(&(blitter_video_transform->output_video_info));
+			gint out_h = GST_VIDEO_INFO_HEIGHT(&(blitter_video_transform->output_video_info));
 			if ((in_w != out_w) || (in_h != out_h))
 			{
 				event = GST_EVENT(gst_mini_object_make_writable(GST_MINI_OBJECT(event)));
@@ -291,7 +291,7 @@ static gboolean gst_imx_blitter_video_transform_2_src_event(GstBaseTransform *tr
 			break;
 	}
 
-	return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_2_parent_class)->src_event(transform, event);
+	return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_parent_class)->src_event(transform, event);
 }
 
 
@@ -299,7 +299,7 @@ static gboolean gst_imx_blitter_video_transform_2_src_event(GstBaseTransform *tr
 
 /* caps handling */
 
-static GstCaps* gst_imx_blitter_video_transform_2_transform_caps(GstBaseTransform *transform, G_GNUC_UNUSED GstPadDirection direction, GstCaps *caps, GstCaps *filter)
+static GstCaps* gst_imx_blitter_video_transform_transform_caps(GstBaseTransform *transform, G_GNUC_UNUSED GstPadDirection direction, GstCaps *caps, GstCaps *filter)
 {
 	GstCaps *tmpcaps1, *tmpcaps2, *result;
 	GstStructure *structure;
@@ -354,21 +354,21 @@ static GstCaps* gst_imx_blitter_video_transform_2_transform_caps(GstBaseTransfor
 }
 
 
-static GstCaps* gst_imx_blitter_video_transform_2_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
+static GstCaps* gst_imx_blitter_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
 {
 	othercaps = gst_caps_truncate(othercaps);
 	othercaps = gst_caps_make_writable(othercaps);
 
 	GST_DEBUG_OBJECT(transform, "trying to fixate othercaps %" GST_PTR_FORMAT " based on caps %" GST_PTR_FORMAT, (gpointer)othercaps, (gpointer)caps);
 
-	othercaps = gst_imx_blitter_video_transform_2_fixate_size_caps(transform, direction, caps, othercaps);
-	gst_imx_blitter_video_transform_2_fixate_format_caps(transform, caps, othercaps);
+	othercaps = gst_imx_blitter_video_transform_fixate_size_caps(transform, direction, caps, othercaps);
+	gst_imx_blitter_video_transform_fixate_format_caps(transform, caps, othercaps);
 
 	return othercaps;
 }
 
 
-static GstCaps* gst_imx_blitter_video_transform_2_fixate_size_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
+static GstCaps* gst_imx_blitter_video_transform_fixate_size_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
 {
 	GstStructure *ins, *outs;
 	GValue const *from_par, *to_par;
@@ -767,7 +767,7 @@ static GstCaps* gst_imx_blitter_video_transform_2_fixate_size_caps(GstBaseTransf
 	}
 
 done:
-	gst_imx_blitter_video_transform_2_fixate_format_caps(transform, caps, othercaps);
+	gst_imx_blitter_video_transform_fixate_format_caps(transform, caps, othercaps);
 
 	GST_DEBUG_OBJECT(transform, "fixated othercaps to %" GST_PTR_FORMAT, (gpointer)othercaps);
 
@@ -856,7 +856,7 @@ static void score_value(GstBaseTransform * base, const GstVideoFormatInfo * in_i
 }
 
 
-static void gst_imx_blitter_video_transform_2_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps)
+static void gst_imx_blitter_video_transform_fixate_format_caps(GstBaseTransform *transform, GstCaps *caps, GstCaps *othercaps)
 {
 	GstStructure *ins, *outs;
 	const gchar *in_format;
@@ -916,34 +916,34 @@ static void gst_imx_blitter_video_transform_2_fixate_format_caps(GstBaseTransfor
 }
 
 
-static gboolean gst_imx_blitter_video_transform_2_set_caps(GstBaseTransform *transform, GstCaps *in, GstCaps *out)
+static gboolean gst_imx_blitter_video_transform_set_caps(GstBaseTransform *transform, GstCaps *in, GstCaps *out)
 {
 	gboolean inout_info_equal;
 	GstVideoInfo in_info, out_info;
-	GstImxBlitterVideoTransform2 *blitter_video_transform_2 = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
-	GstImxBlitterVideoTransform2Class *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(transform));
-	GstImxCanvas *canvas = &(blitter_video_transform_2->canvas);
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
+	GstImxBlitterVideoTransformClass *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(transform));
+	GstImxCanvas *canvas = &(blitter_video_transform->canvas);
 	GstImxRegion source_subset;
 
 	g_assert(klass->are_video_infos_equal != NULL);
-	g_assert(blitter_video_transform_2->blitter != NULL);
+	g_assert(blitter_video_transform->blitter != NULL);
 
 	if (!gst_video_info_from_caps(&in_info, in) || !gst_video_info_from_caps(&out_info, out))
 	{
 		GST_ERROR_OBJECT(transform, "caps are invalid");
-		blitter_video_transform_2->inout_info_set = FALSE;
+		blitter_video_transform->inout_info_set = FALSE;
 		return FALSE;
 	}
 
-	inout_info_equal = klass->are_video_infos_equal(blitter_video_transform_2, &in_info, &out_info);
+	inout_info_equal = klass->are_video_infos_equal(blitter_video_transform, &in_info, &out_info);
 
 	if (inout_info_equal)
 		GST_DEBUG_OBJECT(transform, "input and output caps are equal");
 	else
 		GST_DEBUG_OBJECT(transform, "input and output caps are not equal:  input: %" GST_PTR_FORMAT "  output: %" GST_PTR_FORMAT, (gpointer)in, (gpointer)out);
 
-	gst_imx_blitter_set_input_video_info(blitter_video_transform_2->blitter, &in_info);
-	gst_imx_blitter_set_output_video_info(blitter_video_transform_2->blitter, &out_info);
+	gst_imx_blitter_set_input_video_info(blitter_video_transform->blitter, &in_info);
+	gst_imx_blitter_set_output_video_info(blitter_video_transform->blitter, &out_info);
 
 	canvas->outer_region.x1 = 0;
 	canvas->outer_region.y1 = 0;
@@ -953,13 +953,13 @@ static gboolean gst_imx_blitter_video_transform_2_set_caps(GstBaseTransform *tra
 	gst_imx_canvas_calculate_inner_region(canvas, &in_info);
 	gst_imx_canvas_clip(canvas, &(canvas->outer_region), &in_info, &source_subset);
 
-	gst_imx_blitter_set_input_region(blitter_video_transform_2->blitter, &source_subset);
-	gst_imx_blitter_set_output_canvas(blitter_video_transform_2->blitter, canvas);
+	gst_imx_blitter_set_input_region(blitter_video_transform->blitter, &source_subset);
+	gst_imx_blitter_set_output_canvas(blitter_video_transform->blitter, canvas);
 
-	blitter_video_transform_2->input_video_info = in_info;
-	blitter_video_transform_2->output_video_info = out_info;
-	blitter_video_transform_2->inout_info_equal = inout_info_equal;
-	blitter_video_transform_2->inout_info_set = TRUE;
+	blitter_video_transform->input_video_info = in_info;
+	blitter_video_transform->output_video_info = out_info;
+	blitter_video_transform->inout_info_equal = inout_info_equal;
+	blitter_video_transform->inout_info_set = TRUE;
 
 	return TRUE;
 }
@@ -969,15 +969,15 @@ static gboolean gst_imx_blitter_video_transform_2_set_caps(GstBaseTransform *tra
 
 /* allocator */
 
-static gboolean gst_imx_blitter_video_transform_2_propose_allocation(GstBaseTransform *transform, G_GNUC_UNUSED GstQuery *decide_query, GstQuery *query)
+static gboolean gst_imx_blitter_video_transform_propose_allocation(GstBaseTransform *transform, G_GNUC_UNUSED GstQuery *decide_query, GstQuery *query)
 {
 	return gst_pad_peer_query(GST_BASE_TRANSFORM_SRC_PAD(transform), query);
 }
 
 
-static gboolean gst_imx_blitter_video_transform_2_decide_allocation(GstBaseTransform *transform, GstQuery *query)
+static gboolean gst_imx_blitter_video_transform_decide_allocation(GstBaseTransform *transform, GstQuery *query)
 {
-	GstImxBlitterVideoTransform2 *blitter_video_transform_2 = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
 	GstCaps *outcaps;
 	GstBufferPool *pool = NULL;
 	guint size, min = 0, max = 0;
@@ -985,13 +985,13 @@ static gboolean gst_imx_blitter_video_transform_2_decide_allocation(GstBaseTrans
 	GstVideoInfo vinfo;
 	gboolean update_pool;
 
-	g_assert(blitter_video_transform_2->blitter != NULL);
+	g_assert(blitter_video_transform->blitter != NULL);
 
 	gst_query_parse_allocation(query, &outcaps, NULL);
 	gst_video_info_init(&vinfo);
 	gst_video_info_from_caps(&vinfo, outcaps);
 
-	GST_DEBUG_OBJECT(blitter_video_transform_2, "num allocation pools: %d", gst_query_get_n_allocation_pools(query));
+	GST_DEBUG_OBJECT(blitter_video_transform, "num allocation pools: %d", gst_query_get_n_allocation_pools(query));
 
 	/* Look for an allocator which can allocate physical memory buffers */
 	if (gst_query_get_n_allocation_pools(query) > 0)
@@ -1019,10 +1019,10 @@ static gboolean gst_imx_blitter_video_transform_2_decide_allocation(GstBaseTrans
 	if ((pool == NULL) || !gst_buffer_pool_has_option(pool, GST_BUFFER_POOL_OPTION_IMX_PHYS_MEM))
 	{
 		if (pool == NULL)
-			GST_DEBUG_OBJECT(blitter_video_transform_2, "no pool present; creating new pool");
+			GST_DEBUG_OBJECT(blitter_video_transform, "no pool present; creating new pool");
 		else
-			GST_DEBUG_OBJECT(blitter_video_transform_2, "no pool supports physical memory buffers; creating new pool");
-		pool = gst_imx_blitter_create_bufferpool(blitter_video_transform_2->blitter, outcaps, size, min, max, NULL, NULL);
+			GST_DEBUG_OBJECT(blitter_video_transform, "no pool supports physical memory buffers; creating new pool");
+		pool = gst_imx_blitter_create_bufferpool(blitter_video_transform->blitter, outcaps, size, min, max, NULL, NULL);
 	}
 	else
 	{
@@ -1034,7 +1034,7 @@ static gboolean gst_imx_blitter_video_transform_2_decide_allocation(GstBaseTrans
 	}
 
 	GST_DEBUG_OBJECT(
-		blitter_video_transform_2,
+		blitter_video_transform,
 		"pool config:  outcaps: %" GST_PTR_FORMAT "  size: %u  min buffers: %u  max buffers: %u",
 		(gpointer)outcaps,
 		size,
@@ -1058,32 +1058,32 @@ static gboolean gst_imx_blitter_video_transform_2_decide_allocation(GstBaseTrans
 
 /* frame output */
 
-static GstFlowReturn gst_imx_blitter_video_transform_2_prepare_output_buffer(GstBaseTransform *transform, GstBuffer *input, GstBuffer **outbuf)
+static GstFlowReturn gst_imx_blitter_video_transform_prepare_output_buffer(GstBaseTransform *transform, GstBuffer *input, GstBuffer **outbuf)
 {
 	gboolean passthrough = FALSE;
-	GstImxBlitterVideoTransform2 *blitter_video_transform_2 = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
-	GstImxBlitterVideoTransform2Class *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(transform));
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
+	GstImxBlitterVideoTransformClass *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(transform));
 
-	GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform_2);
+	GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
 
 	/* Test if passthrough should be enabled */
-	if ((input != NULL) && blitter_video_transform_2->inout_info_equal)
+	if ((input != NULL) && blitter_video_transform->inout_info_equal)
 	{
 		/* if there is an input buffer and the input/output caps are equal,
 		 * assume passthrough should be used, and test for exceptions where
 		 * passthrough must not be enabled; such exceptions are transforms
 		 * like rotation, deinterlacing ... */
-		passthrough = (blitter_video_transform_2->canvas.inner_rotation == GST_IMX_CANVAS_INNER_ROTATION_NONE);
+		passthrough = (blitter_video_transform->canvas.inner_rotation == GST_IMX_CANVAS_INNER_ROTATION_NONE);
 		passthrough = passthrough &&
 		              (klass->are_transforms_necessary != NULL) &&
-		              !(klass->are_transforms_necessary(blitter_video_transform_2, input));
+		              !(klass->are_transforms_necessary(blitter_video_transform, input));
 	}
-	else if (!blitter_video_transform_2->inout_info_equal)
+	else if (!blitter_video_transform->inout_info_equal)
 		GST_LOG_OBJECT(transform, "input and output caps are not equal");
 	else if (input == NULL)
 		GST_LOG_OBJECT(transform, "input buffer is NULL");
 
-	GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform_2);
+	GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 
 	GST_LOG_OBJECT(transform, "passthrough: %s", passthrough ? "yes" : "no");
 
@@ -1093,17 +1093,17 @@ static GstFlowReturn gst_imx_blitter_video_transform_2_prepare_output_buffer(Gst
 		return GST_FLOW_OK;
 	}
 	else
-		return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_2_parent_class)->prepare_output_buffer(transform, input, outbuf);
+		return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_parent_class)->prepare_output_buffer(transform, input, outbuf);
 }
 
 
-static GstFlowReturn gst_imx_blitter_video_transform_2_transform_frame(GstBaseTransform *transform, GstBuffer *in, GstBuffer *out)
+static GstFlowReturn gst_imx_blitter_video_transform_transform_frame(GstBaseTransform *transform, GstBuffer *in, GstBuffer *out)
 {
-	GstImxBlitterVideoTransform2 *blitter_video_transform_2 = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
+	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
 
-	g_assert(blitter_video_transform_2->blitter != NULL);
+	g_assert(blitter_video_transform->blitter != NULL);
 
-	if (!blitter_video_transform_2->inout_info_set)
+	if (!blitter_video_transform->inout_info_set)
 	{
 		GST_ELEMENT_ERROR(transform, CORE, NOT_IMPLEMENTED, (NULL), ("unknown format"));
 		return GST_FLOW_NOT_NEGOTIATED;
@@ -1115,20 +1115,20 @@ static GstFlowReturn gst_imx_blitter_video_transform_2_transform_frame(GstBaseTr
 		return GST_FLOW_OK;
 	}
 
-	GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform_2);
+	GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
 
-	gst_imx_blitter_set_input_frame(blitter_video_transform_2->blitter, in);
-	gst_imx_blitter_set_output_frame(blitter_video_transform_2->blitter, out);
-	gst_imx_blitter_blit(blitter_video_transform_2->blitter, 255);
-	gst_imx_blitter_set_output_frame(blitter_video_transform_2->blitter, NULL);
+	gst_imx_blitter_set_input_frame(blitter_video_transform->blitter, in);
+	gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, out);
+	gst_imx_blitter_blit(blitter_video_transform->blitter, 255);
+	gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, NULL);
 
-	GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform_2);
+	GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 
 	return GST_FLOW_OK;
 }
 
 
-static gboolean gst_imx_blitter_video_transform_2_transform_size(G_GNUC_UNUSED GstBaseTransform *transform, G_GNUC_UNUSED GstPadDirection direction, G_GNUC_UNUSED GstCaps *caps, gsize size, GstCaps *othercaps, gsize *othersize)
+static gboolean gst_imx_blitter_video_transform_transform_size(G_GNUC_UNUSED GstBaseTransform *transform, G_GNUC_UNUSED GstPadDirection direction, G_GNUC_UNUSED GstCaps *caps, gsize size, GstCaps *othercaps, gsize *othersize)
 {
 	gboolean ret = TRUE;
 	GstVideoInfo info;
@@ -1147,7 +1147,7 @@ static gboolean gst_imx_blitter_video_transform_2_transform_size(G_GNUC_UNUSED G
 
 /* metadata and meta information */
 
-static gboolean gst_imx_blitter_video_transform_2_transform_meta(GstBaseTransform *trans, GstBuffer *inbuf, GstMeta *meta, GstBuffer *outbuf)
+static gboolean gst_imx_blitter_video_transform_transform_meta(GstBaseTransform *trans, GstBuffer *inbuf, GstMeta *meta, GstBuffer *outbuf)
 {
 	GstMetaInfo const *info = meta->info;
 	gchar const * const *tags;
@@ -1161,11 +1161,11 @@ static gboolean gst_imx_blitter_video_transform_2_transform_meta(GstBaseTransfor
 	)
 		return TRUE;
 
-	return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_2_parent_class)->transform_meta(trans, inbuf, meta, outbuf);
+	return GST_BASE_TRANSFORM_CLASS(gst_imx_blitter_video_transform_parent_class)->transform_meta(trans, inbuf, meta, outbuf);
 }
 
 
-static gboolean gst_imx_blitter_video_transform_2_get_unit_size(GstBaseTransform *transform, GstCaps *caps, gsize *size)
+static gboolean gst_imx_blitter_video_transform_get_unit_size(GstBaseTransform *transform, GstCaps *caps, gsize *size)
 {
 	GstVideoInfo info;
 
@@ -1183,7 +1183,7 @@ static gboolean gst_imx_blitter_video_transform_2_get_unit_size(GstBaseTransform
 }
 
 
-static gboolean gst_imx_blitter_video_transform_2_copy_metadata(G_GNUC_UNUSED GstBaseTransform *trans, GstBuffer *input, GstBuffer *outbuf)
+static gboolean gst_imx_blitter_video_transform_copy_metadata(G_GNUC_UNUSED GstBaseTransform *trans, GstBuffer *input, GstBuffer *outbuf)
 {
 	/* Only copy timestamps; the rest of the metadata must not be copied */
 	GST_BUFFER_DTS(outbuf) = GST_BUFFER_DTS(input);
@@ -1202,22 +1202,22 @@ static gboolean gst_imx_blitter_video_transform_2_copy_metadata(G_GNUC_UNUSED Gs
 
 
 
-static gboolean gst_imx_blitter_video_transform_2_acquire_blitter(GstImxBlitterVideoTransform2 *blitter_video_transform_2)
+static gboolean gst_imx_blitter_video_transform_acquire_blitter(GstImxBlitterVideoTransform *blitter_video_transform)
 {
 	/* must be called with lock held */
 
-	GstImxBlitterVideoTransform2Class *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(blitter_video_transform_2));
+	GstImxBlitterVideoTransformClass *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(blitter_video_transform));
 
-	g_assert(blitter_video_transform_2 != NULL);
+	g_assert(blitter_video_transform != NULL);
 	g_assert(klass->create_blitter != NULL);
 
 	/* Do nothing if the blitter is already acquired */
-	if (blitter_video_transform_2->blitter != NULL)
+	if (blitter_video_transform->blitter != NULL)
 		return TRUE;
 
-	if ((blitter_video_transform_2->blitter = klass->create_blitter(blitter_video_transform_2)) == NULL)
+	if ((blitter_video_transform->blitter = klass->create_blitter(blitter_video_transform)) == NULL)
 	{
-		GST_ERROR_OBJECT(blitter_video_transform_2, "could not acquire blitter");
+		GST_ERROR_OBJECT(blitter_video_transform, "could not acquire blitter");
 		return FALSE;
 	}
 

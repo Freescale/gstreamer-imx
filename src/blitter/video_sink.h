@@ -31,14 +31,14 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstImxBlitterVideoSink2 GstImxBlitterVideoSink2;
-typedef struct _GstImxBlitterVideoSink2Class GstImxBlitterVideoSink2Class;
+typedef struct _GstImxBlitterVideoSink GstImxBlitterVideoSink;
+typedef struct _GstImxBlitterVideoSinkClass GstImxBlitterVideoSinkClass;
 
 
-#define GST_TYPE_IMX_BLITTER_VIDEO_SINK             (gst_imx_blitter_video_sink_2_get_type())
-#define GST_IMX_BLITTER_VIDEO_SINK(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_BLITTER_VIDEO_SINK, GstImxBlitterVideoSink2))
-#define GST_IMX_BLITTER_VIDEO_SINK_CAST(obj)        ((GstImxBlitterVideoSink2 *)(obj))
-#define GST_IMX_BLITTER_VIDEO_SINK_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_BLITTER_VIDEO_SINK, GstImxBlitterVideoSink2Class))
+#define GST_TYPE_IMX_BLITTER_VIDEO_SINK             (gst_imx_blitter_video_sink_get_type())
+#define GST_IMX_BLITTER_VIDEO_SINK(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_BLITTER_VIDEO_SINK, GstImxBlitterVideoSink))
+#define GST_IMX_BLITTER_VIDEO_SINK_CAST(obj)        ((GstImxBlitterVideoSink *)(obj))
+#define GST_IMX_BLITTER_VIDEO_SINK_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_BLITTER_VIDEO_SINK, GstImxBlitterVideoSinkClass))
 #define GST_IS_IMX_BLITTER_VIDEO_SINK(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_BLITTER_VIDEO_SINK))
 #define GST_IS_IMX_BLITTER_VIDEO_SINK_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_BLITTER_VIDEO_SINK))
 
@@ -46,11 +46,11 @@ typedef struct _GstImxBlitterVideoSink2Class GstImxBlitterVideoSink2Class;
 /* Macros for locking/unlocking the blitter video sink's mutex.
  * These should always be used when a property is set that affects
  * the blit operation. */
-#define GST_IMX_BLITTER_VIDEO_SINK_LOCK(obj) do { g_mutex_lock(&(((GstImxBlitterVideoSink2*)(obj))->mutex)); } while (0)
-#define GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(obj) do { g_mutex_unlock(&(((GstImxBlitterVideoSink2*)(obj))->mutex)); } while (0)
+#define GST_IMX_BLITTER_VIDEO_SINK_LOCK(obj) do { g_mutex_lock(&(((GstImxBlitterVideoSink*)(obj))->mutex)); } while (0)
+#define GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(obj) do { g_mutex_unlock(&(((GstImxBlitterVideoSink*)(obj))->mutex)); } while (0)
 
 
-struct _GstImxBlitterVideoSink2
+struct _GstImxBlitterVideoSink
 {
 	GstVideoSink parent;
 
@@ -85,12 +85,12 @@ struct _GstImxBlitterVideoSink2
 
 
 /**
- * GstImxBlitterVideoSink2Class:
+ * GstImxBlitterVideoSinkClass:
  *
  * This is a base class for blitter-based video sinks. It takes care of drawing video
  * frames on the Linux framebuffer by using a blitter. All a derived class has to do
  * is to create a blitter in the @create_blitter vfunc. The derived class does not
- * have to concern itself with keeping the blitter alive. GstImxBlitterVideoSink2Class
+ * have to concern itself with keeping the blitter alive. GstImxBlitterVideoSinkClass
  * acquires a blitter by calling @create_blitter in the NULL->READY state change, and
  * unrefs that blitter in the READY->NULL state change.
  *
@@ -114,17 +114,17 @@ struct _GstImxBlitterVideoSink2
  * related to the blitter, these must surround the modifications with mutex locks. Use
  * @GST_IMX_BLITTER_VIDEO_SINK_LOCK and @GST_IMX_BLITTER_VIDEO_SINK_UNLOCK for this.
  */
-struct _GstImxBlitterVideoSink2Class
+struct _GstImxBlitterVideoSinkClass
 {
 	GstVideoSinkClass parent_class;
 
-	gboolean (*start)(GstImxBlitterVideoSink2 *blitter_video_sink_2);
-	gboolean (*stop)(GstImxBlitterVideoSink2 *blitter_video_sink_2);
-	GstImxBlitter* (*create_blitter)(GstImxBlitterVideoSink2 *blitter_video_sink_2);
+	gboolean (*start)(GstImxBlitterVideoSink *blitter_video_sink);
+	gboolean (*stop)(GstImxBlitterVideoSink *blitter_video_sink);
+	GstImxBlitter* (*create_blitter)(GstImxBlitterVideoSink *blitter_video_sink);
 };
 
 
-GType gst_imx_blitter_video_sink_2_get_type(void);
+GType gst_imx_blitter_video_sink_get_type(void);
 
 
 #endif

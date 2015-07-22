@@ -40,13 +40,13 @@ typedef struct _GstImxG2DVideoSinkClass GstImxG2DVideoSinkClass;
 
 struct _GstImxG2DVideoSink
 {
-	GstImxBlitterVideoSink2 parent;
+	GstImxBlitterVideoSink parent;
 };
 
 
 struct _GstImxG2DVideoSinkClass
 {
-	GstImxBlitterVideoSink2Class parent_class;
+	GstImxBlitterVideoSinkClass parent_class;
 };
 
 

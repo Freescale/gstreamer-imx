@@ -42,7 +42,7 @@ typedef struct _GstImxIpuVideoSinkPrivate GstImxIpuVideoSinkPrivate;
 
 struct _GstImxIpuVideoSink
 {
-	GstImxBlitterVideoSink2 parent;
+	GstImxBlitterVideoSink parent;
 
 	GstImxBlitter *blitter;
 	gboolean deinterlacing_enabled;
@@ -51,7 +51,7 @@ struct _GstImxIpuVideoSink
 
 struct _GstImxIpuVideoSinkClass
 {
-	GstImxBlitterVideoSink2Class parent_class;
+	GstImxBlitterVideoSinkClass parent_class;
 };
 
 
