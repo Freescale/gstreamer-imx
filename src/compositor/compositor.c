@@ -50,6 +50,9 @@ enum
 G_DEFINE_TYPE(GstImxCompositorPad, gst_imx_compositor_pad, GST_TYPE_VIDEO_AGGREGATOR_PAD)
 
 
+static void gst_imx_compositor_pad_compute_outer_region(GstImxCompositorPad *compositor_pad);
+static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor_pad);
+
 static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
@@ -217,8 +220,6 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 
 static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
 {
-	GstImxCompositor *compositor;
-
 	memset(&(compositor_pad->canvas), 0, sizeof(GstImxCanvas));
 	compositor_pad->canvas.inner_rotation = DEFAULT_PAD_ROTATION;
 	compositor_pad->canvas.keep_aspect_ratio = DEFAULT_PAD_KEEP_ASPECT_RATIO;
@@ -229,23 +230,25 @@ static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
 	compositor_pad->ypos = DEFAULT_PAD_YPOS;
 	compositor_pad->width = DEFAULT_PAD_WIDTH;
 	compositor_pad->height = DEFAULT_PAD_HEIGHT;
-	compositor_pad->need_to_invalid_overall_region = TRUE;
+	compositor_pad->pad_is_new = TRUE;
 }
 
 
-static void gst_imx_compositor_pad_check_outer_region(GstImxCompositorPad *compositor_pad)
+static void gst_imx_compositor_pad_compute_outer_region(GstImxCompositorPad *compositor_pad)
 {
 	GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
 
+	/* Check if width and/or height are 0. 0 means "use the video width/height". */
+
 	if (compositor_pad->width == 0)
-		compositor_pad->canvas.outer_region.x2 = compositor_pad->canvas.outer_region.x1 + GST_VIDEO_INFO_WIDTH(info);
+		compositor_pad->canvas.outer_region.x2 = compositor_pad->xpos + GST_VIDEO_INFO_WIDTH(info);
 	else
-		compositor_pad->canvas.outer_region.x2 = compositor_pad->canvas.outer_region.x1 + compositor_pad->width;
+		compositor_pad->canvas.outer_region.x2 = compositor_pad->xpos + compositor_pad->width;
 
 	if (compositor_pad->height == 0)
-		compositor_pad->canvas.outer_region.y2 = compositor_pad->canvas.outer_region.y1 + GST_VIDEO_INFO_HEIGHT(info);
+		compositor_pad->canvas.outer_region.y2 = compositor_pad->ypos + GST_VIDEO_INFO_HEIGHT(info);
 	else
-		compositor_pad->canvas.outer_region.y2 = compositor_pad->canvas.outer_region.y1 + compositor_pad->height;
+		compositor_pad->canvas.outer_region.y2 = compositor_pad->ypos + compositor_pad->height;
 
 	GST_DEBUG_OBJECT(compositor_pad, "computed outer region: %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(&(compositor_pad->canvas.outer_region)));
 }
@@ -256,14 +259,22 @@ static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor
 	GstImxCompositor *compositor;
 	GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
 
+	/* Catch redundant calls */
 	if (!(compositor_pad->canvas_needs_update))
 		return;
 
 	compositor = GST_IMX_COMPOSITOR(gst_pad_get_parent_element(GST_PAD(compositor_pad)));
 
-	gst_imx_compositor_pad_check_outer_region(compositor_pad);
+	/* (Re)compute the outer region */
+	gst_imx_compositor_pad_compute_outer_region(compositor_pad);
 
+	/* (Re)computer the inner region */
 	gst_imx_canvas_calculate_inner_region(&(compositor_pad->canvas), info);
+
+	/* Next, clip the canvas against the overall region,
+	 * which describes the output frame's size
+	 * This way, it is ensured that only the parts that are "within"
+	 * the output frame are blit */
 	gst_imx_canvas_clip(
 		&(compositor_pad->canvas),
 		&(compositor->overall_region),
@@ -271,13 +282,8 @@ static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor
 		&(compositor_pad->source_subset)
 	);
 
+	/* Canvas updated, mark it as such */
 	compositor_pad->canvas_needs_update = FALSE;
-
-	if (compositor_pad->need_to_invalid_overall_region)
-	{
-		compositor_pad->need_to_invalid_overall_region = FALSE;
-		compositor->overall_region_valid = FALSE;
-	}
 
 	gst_object_unref(GST_OBJECT(compositor));
 }
@@ -294,28 +300,24 @@ static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, 
 	{
 		case PROP_PAD_XPOS:
 			compositor_pad->xpos = g_value_get_int(value);
-			compositor_pad->canvas.outer_region.x1 = g_value_get_int(value);
 			compositor_pad->canvas_needs_update = TRUE;
 			compositor->overall_region_valid = FALSE;
 			break;
 
 		case PROP_PAD_YPOS:
 			compositor_pad->ypos = g_value_get_int(value);
-			compositor_pad->canvas.outer_region.y1 = g_value_get_int(value);
 			compositor_pad->canvas_needs_update = TRUE;
 			compositor->overall_region_valid = FALSE;
 			break;
 
 		case PROP_PAD_WIDTH:
 			compositor_pad->width = g_value_get_int(value);
-			compositor_pad->canvas.outer_region.x2 = g_value_get_int(value);
 			compositor_pad->canvas_needs_update = TRUE;
 			compositor->overall_region_valid = FALSE;
 			break;
 
 		case PROP_PAD_HEIGHT:
 			compositor_pad->height = g_value_get_int(value);
-			compositor_pad->canvas.outer_region.y2 = g_value_get_int(value);
 			compositor_pad->canvas_needs_update = TRUE;
 			compositor->overall_region_valid = FALSE;
 			break;
@@ -435,13 +437,9 @@ static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, 
 enum
 {
 	PROP_0,
-	PROP_OVERALL_WIDTH,
-	PROP_OVERALL_HEIGHT,
 	PROP_BACKGROUND_COLOR
 };
 
-#define DEFAULT_OVERALL_WIDTH 0
-#define DEFAULT_OVERALL_HEIGHT 0
 #define DEFAULT_BACKGROUND_COLOR 0x00000000
 
 
@@ -457,11 +455,9 @@ static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GVal
 static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstQuery *query);
 static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstEvent *event);
 
-static GstCaps* gst_imx_compositor_update_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps);
 static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer);
 static GstFlowReturn gst_imx_compositor_get_output_buffer(GstImxBPVideoAggregator *videoaggregator, GstBuffer **outbuffer);
 static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps);
-static void gst_imx_compositor_find_best_format(GstImxBPVideoAggregator *videoaggregator, GstCaps *downstream_caps, GstVideoInfo *best_info, gboolean *at_least_one_alpha);
 
 static GstBufferPool* gst_imx_compositor_create_bufferpool(GstImxCompositor *compositor, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params);
 static void gst_imx_compositor_update_overall_region(GstImxCompositor *compositor);
@@ -487,43 +483,15 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 	aggregator_class->sink_event    = GST_DEBUG_FUNCPTR(gst_imx_compositor_sink_event);
 	aggregator_class->sinkpads_type = gst_imx_compositor_pad_get_type();
 
-	video_aggregator_class->update_caps       = GST_DEBUG_FUNCPTR(gst_imx_compositor_update_caps);
 	video_aggregator_class->aggregate_frames  = GST_DEBUG_FUNCPTR(gst_imx_compositor_aggregate_frames);
 	video_aggregator_class->get_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_compositor_get_output_buffer);
 	video_aggregator_class->negotiated_caps   = GST_DEBUG_FUNCPTR(gst_imx_compositor_negotiated_caps);
-	video_aggregator_class->find_best_format  = GST_DEBUG_FUNCPTR(gst_imx_compositor_find_best_format);
 	video_aggregator_class->preserve_update_caps_result = FALSE;
 
 	klass->get_phys_mem_allocator = NULL;
 	klass->set_output_video_info = NULL;
 	klass->draw_frame = NULL;
 
-	g_object_class_install_property(
-		object_class,
-		PROP_OVERALL_WIDTH,
-		g_param_spec_uint(
-			"overall-width",
-			"Overall width",
-			"Width of the overall frame (0 = adapts to width of input frames)",
-			0,
-			G_MAXUINT,
-			DEFAULT_OVERALL_WIDTH,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
-	g_object_class_install_property(
-		object_class,
-		PROP_OVERALL_HEIGHT,
-		g_param_spec_uint(
-			"overall-height",
-			"Overall height",
-			"Height of the overall frame (0 = adapts to height of input frames)",
-			0,
-			G_MAXUINT,
-			DEFAULT_OVERALL_HEIGHT,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
 	g_object_class_install_property(
 		object_class,
 		PROP_BACKGROUND_COLOR,
@@ -542,8 +510,8 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 
 static void gst_imx_compositor_init(GstImxCompositor *compositor)
 {
-	compositor->overall_width = DEFAULT_OVERALL_WIDTH;
-	compositor->overall_height = DEFAULT_OVERALL_HEIGHT;
+	compositor->overall_width = 0;
+	compositor->overall_height = 0;
 	compositor->dma_bufferpool = NULL;
 	compositor->overall_region_valid = FALSE;
 	compositor->region_fill_necessary = TRUE;
@@ -571,16 +539,6 @@ static void gst_imx_compositor_set_property(GObject *object, guint prop_id, GVal
 
 	switch (prop_id)
 	{
-		case PROP_OVERALL_WIDTH:
-			compositor->overall_width = g_value_get_uint(value);
-			compositor->overall_region_valid = FALSE;
-			break;
-
-		case PROP_OVERALL_HEIGHT:
-			compositor->overall_height = g_value_get_uint(value);
-			compositor->overall_region_valid = FALSE;
-			break;
-
 		case PROP_BACKGROUND_COLOR:
 			compositor->background_color = g_value_get_uint(value);
 			break;
@@ -598,14 +556,6 @@ static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GVal
 
 	switch (prop_id)
 	{
-		case PROP_OVERALL_WIDTH:
-			g_value_set_uint(value, compositor->overall_width);
-			break;
-
-		case PROP_OVERALL_HEIGHT:
-			g_value_set_uint(value, compositor->overall_height);
-			break;
-
 		case PROP_BACKGROUND_COLOR:
 			g_value_set_uint(value, compositor->background_color);
 			break;
@@ -623,6 +573,12 @@ static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, Gs
 	{
 		case GST_QUERY_CAPS:
 		{
+			/* Custom caps query response. Take the sinkpad template caps,
+			 * optionally filter them, and return them as the result.
+			 * This ensures that the caps that the derived class supports
+			 * for input data are actually used (by default, the aggregator
+			 * base classes try to keep input and output caps equal) */
+
 			GstCaps *filter, *caps;
 
 			gst_query_parse_caps(query, &filter);
@@ -646,6 +602,11 @@ static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, Gs
 
 		case GST_QUERY_ACCEPT_CAPS:
 		{
+			/* Custom accept_caps query response. Simply check if
+			 * the supplied caps are a valid subset of the sinkpad's
+			 * template caps. This is done for the same reasons
+			 * as the caps query response above. */
+
 			GstCaps *accept_caps = NULL, *template_caps = NULL;
 			gboolean ret;
 
@@ -669,6 +630,12 @@ static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, Gs
 {
 	gboolean ret = GST_IMXBP_AGGREGATOR_CLASS(gst_imx_compositor_parent_class)->sink_event(aggregator, pad, event);
 
+	/* If new caps came in one of the sinkpads, this pad's canvas might
+	 * need to be changed now (for example, if the new caps have different
+	 * width or height). Request an update by raising the canvas_needs_update
+	 * flag. This is done *after* the base class handled events, to make
+	 * sure the flag is only raised if the base class didn't have problems
+	 * processing the event (ret is FALSE in that case). */
 	if (ret && (GST_EVENT_TYPE(event) == GST_EVENT_CAPS))
 	{
 		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD(pad);
@@ -676,27 +643,6 @@ static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, Gs
 	}
 
 	return ret;
-}
-
-
-static GstCaps* gst_imx_compositor_update_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps)
-{
-	GstCaps *out_caps;
-	GstStructure *s;
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
-
-	gst_imx_compositor_update_overall_region(compositor);
-
-	out_caps = gst_caps_copy(caps);
-	s = gst_caps_get_structure(out_caps, 0);
-	gst_structure_set(
-		s,
-		"width", G_TYPE_INT, (gint)(compositor->overall_region.x2 - compositor->overall_region.x1),
-		"height", G_TYPE_INT, (gint)(compositor->overall_region.y2 - compositor->overall_region.y1),
-		NULL
-	);
-
-	return out_caps;
 }
 
 
@@ -711,29 +657,95 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 	g_assert(klass->fill_region != NULL);
 	g_assert(klass->draw_frame != NULL);
 
+	/* This function is the heart of the compositor. Here, input frames
+	 * are drawn on the output frame, with their specific parameters. */
+
+	/* Set the output buffer */
 	if (!(klass->set_output_frame(compositor, outbuffer)))
 	{
 		GST_ERROR_OBJECT(compositor, "could not set the output frame");
 		return GST_FLOW_ERROR;
 	}
 
+	/* TODO: are the update_overall_region calls here necessary?
+	 * If the video aggregator calls update_caps when a pad is added/removed,
+	 * there is no need for these calls */
+
+	/* Update the overall region first if necessary to ensure that it is valid
+	 * and that the region_fill_necessary flag is set to the proper value */
 	gst_imx_compositor_update_overall_region(compositor);
 
-	GST_LOG_OBJECT(compositor, "region_fill_necessary: %d", (gint)(compositor->region_fill_necessary));
+	GST_LOG_OBJECT(compositor, "aggregating frames, region_fill_necessary: %d", (gint)(compositor->region_fill_necessary));
 
+	/* Check if the overall region needs to be filled. This is the case if none
+	 * of the input frames completely cover the overall region with 100% alpha
+	 * (this is determined by gst_imx_compositor_update_overall_region() ) */
 	if (!(compositor->region_fill_necessary) || klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color))
 	{
+		/* Lock object to ensure nothing is changed during composition */
 		GST_OBJECT_LOCK(compositor);
 
+		/* First walk: check if there is a new pad. If so, recompute the
+		 * overall region, since it might need to be expanded to encompass
+		 * the new additional input frames */
+		walk = GST_ELEMENT(videoaggregator)->sinkpads;
+		while (walk != NULL)
+		{
+			GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
+
+			if (compositor_pad->pad_is_new)
+			{
+				GST_DEBUG_OBJECT(compositor, "there is a new pad; invalidate overall region");
+
+				compositor_pad->pad_is_new = FALSE;
+				compositor->overall_region_valid = FALSE;
+
+				/* While this call might seem redundant, there is one
+				 * benefit in calling this function apparently twice
+				 * (once above, and once here): the earlier call
+				 * happens outside of the object lock. New pads are less
+				 * common than overall region changes, so it is good
+				 * if most update calls happen outside of the object
+				 * lock (the overall_region_valid flag ensures redundant
+				 * calls don't compute anything). */
+				gst_imx_compositor_update_overall_region(compositor);
+
+				break;
+			}
+
+			/* Move to next pad */
+			walk = g_list_next(walk);
+		}
+
+		/* Second walk: draw the input frames on the output frame */
 		walk = GST_ELEMENT(videoaggregator)->sinkpads;
 		while (walk != NULL)
 		{
 			GstImxBPVideoAggregatorPad *videoaggregator_pad = walk->data;
 			GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(videoaggregator_pad);
 
+			/* If there actually is a buffer, draw it
+			 * Sometimes, pads don't deliver data right from the start;
+			 * in these cases, their buffers will be NULL
+			 * Just skip to the next pad in that case */
 			if (videoaggregator_pad->buffer != NULL)
 			{
+				/* Update the pad's canvas if necessary,
+				 * to ensure there is a valid canvas to draw to */
 				gst_imx_compositor_pad_update_canvas(compositor_pad);
+
+				GST_LOG_OBJECT(
+					compositor,
+					"pad %p  frame %p  format: %s  width/height: %d/%d  regions: outer %" GST_IMX_REGION_FORMAT "  inner %" GST_IMX_REGION_FORMAT "  source subset %" GST_IMX_REGION_FORMAT,
+					(gpointer)(videoaggregator_pad),
+					(gpointer)(videoaggregator_pad->buffer),
+					gst_video_format_to_string(GST_VIDEO_INFO_FORMAT(&(videoaggregator_pad->info))),
+					GST_VIDEO_INFO_WIDTH(&(videoaggregator_pad->info)),
+					GST_VIDEO_INFO_HEIGHT(&(videoaggregator_pad->info)),
+					GST_IMX_REGION_ARGS(&(compositor_pad->canvas.outer_region)),
+					GST_IMX_REGION_ARGS(&(compositor_pad->canvas.inner_region)),
+					GST_IMX_REGION_ARGS(&(compositor_pad->source_subset))
+				);
 
 				if (!klass->draw_frame(
 					compositor,
@@ -749,13 +761,20 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 					break;
 				}
 			}
+			else
+			{
+				GST_LOG_OBJECT(compositor, "pad %p  buffer is NULL, no frame to aggregate - skipping to next pad", (gpointer)(videoaggregator_pad));
+			}
 
+			/* Move to next pad */
 			walk = g_list_next(walk);
 		}
 
 		GST_OBJECT_UNLOCK(compositor);
 	}
 
+	/* Release the output buffer, since we don't need it anymore, and
+	 * there is no reason to retain it */
 	klass->set_output_frame(compositor, NULL);
 
 	return ret;
@@ -766,6 +785,9 @@ static GstFlowReturn gst_imx_compositor_get_output_buffer(GstImxBPVideoAggregato
 {
 	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
 	GstBufferPool *pool = compositor->dma_bufferpool;
+
+	/* Return a DMA buffer from the pool. The output buffers produced by
+	 * the video aggregator base class will use this function to allocate. */
 
 	if (!gst_buffer_pool_is_active(pool))
 		gst_buffer_pool_set_active(pool, TRUE);
@@ -779,21 +801,37 @@ static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *vide
 	GstVideoInfo info;
 	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
 
+	/* Output caps have been negotiated. Set up a suitable DMA buffer pool
+	 * (cleaning up any old buffer pool first) and inform subclass about
+	 * the new output caps. */
+
 	if (!gst_video_info_from_caps(&info, caps))
 	{
 		GST_ERROR_OBJECT(compositor, "could not get video info from negotiated caps");
 		return FALSE;
 	}
 
+	/* Get the new overall width/height from video info */
+	compositor->overall_width = GST_VIDEO_INFO_WIDTH(&info);
+	compositor->overall_height = GST_VIDEO_INFO_HEIGHT(&info);
+
+	GST_DEBUG_OBJECT(videoaggregator, "negotiated width/height: %u/%u", compositor->overall_width, compositor->overall_height);
+
+	/* Update the overall region based on the new overall width/height */
+	gst_imx_compositor_update_overall_region(compositor);
+
+	/* Cleanup old buffer pool */
 	if (compositor->dma_bufferpool != NULL)
 		gst_object_unref(GST_OBJECT(compositor->dma_bufferpool));
 
+	/* And get the new one */
 	compositor->dma_bufferpool = gst_imx_compositor_create_bufferpool(compositor, caps, 0, 0, 0, NULL, NULL);
 
 	if (compositor->dma_bufferpool != NULL)
 	{
 		GstImxCompositorClass *klass = GST_IMX_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(compositor));
 
+		/* Inform subclass about the new output video info */
 		if (klass->set_output_video_info != NULL)
 			return klass->set_output_video_info(compositor, &info);
 		else
@@ -801,22 +839,6 @@ static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *vide
 	}
 	else
 		return FALSE;
-}
-
-
-static void gst_imx_compositor_find_best_format(GstImxBPVideoAggregator *videoaggregator, GstCaps *downstream_caps, GstVideoInfo *best_info, gboolean *at_least_one_alpha)
-{
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
-
-	downstream_caps = gst_caps_fixate(downstream_caps);
-	gst_video_info_from_caps(best_info, downstream_caps);
-
-	gst_imx_compositor_update_overall_region(compositor);
-
-	GST_VIDEO_INFO_WIDTH(best_info) = compositor->overall_region.x2 - compositor->overall_region.x1;
-	GST_VIDEO_INFO_HEIGHT(best_info) = compositor->overall_region.y2 - compositor->overall_region.y1;
-
-	*at_least_one_alpha = FALSE;
 }
 
 
@@ -870,57 +892,72 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 	GList *walk;
 	gboolean first = TRUE;
 
-	if ((compositor->overall_width != 0) && (compositor->overall_height != 0))
-	{
-		compositor->overall_region.x1 = 0;
-		compositor->overall_region.y1 = 0;
-		compositor->overall_region.x2 = compositor->overall_width;
-		compositor->overall_region.y2 = compositor->overall_height;
-		compositor->region_fill_necessary = TRUE;
-		return;
-	}
-
+	/* Catch redundant calls */
 	if (compositor->overall_region_valid)
 		return;
 
-	/* Walk through all pads and merge their outer canvas regions together */
-	walk = GST_ELEMENT(compositor)->sinkpads;
-	while (walk != NULL)
+	if ((compositor->overall_width != 0) && (compositor->overall_height != 0))
 	{
-		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
-		GstImxRegion *outer_region = &(compositor_pad->canvas.outer_region);
+		/* If the width and height of the overall region are fixed to specific
+		 * values by the caller, use these, and don't look at the canvases
+		 * in the input pads. */
 
-		/* The outer region might not be defined. Check for this, and if necessary,
-		 * set the outer region to be of the same size as the input frame. */
-		gst_imx_compositor_pad_check_outer_region(compositor_pad);
+		compositor->overall_region.x2 = compositor->overall_width;
+		compositor->overall_region.y2 = compositor->overall_height;
+	}
+	else
+	{
+		/* Overall width and/or height are set to 0. This means the caller wants
+		 * the overall region to adapt to the sizes of the input canvases. The
+		 * overall region must encompass and show all of them (exception:
+		 * pads with negative xpos/ypos coordinates can have their canvas lie
+		 * either partially or fully outside of the overall region).
+		 * To compute this overall region, walk through all pads and merge their
+		 * outer canvas regions together. */
 
-		/* NOTE: *not* updating the pad canvas here, since the overall region is being
-		 * constructed in these iterations, and the canvas updates require a valid
-		 * overall region; furthermore, only the outer region is needed, which anyway
-		 * needs to exist prior to any canvas updates */
-
-		if (first)
+		walk = GST_ELEMENT(compositor)->sinkpads;
+		while (walk != NULL)
 		{
-			compositor->overall_region = *outer_region;
-			first = FALSE;
+			GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
+			GstImxRegion *outer_region = &(compositor_pad->canvas.outer_region);
+
+			/* Update the outer region, since the xpos/ypos/width/height pad properties
+			 * might have changed */
+			gst_imx_compositor_pad_compute_outer_region(compositor_pad);
+
+			/* The pad canvasses are *not* updated here. This is because in order for
+			 * these updates to be done, a valid overall region needs to exist first.
+			 * And the whole point of this loop is to compute said region.
+			 * Furthermore, canvas updates anyway are unnecessary here. They'll be
+			 * done later, during frame aggregation, when necessary. The only
+			 * value that is needed here from the canvas is the outer region, and
+			 * this one is already computed above. */
+
+			if (first)
+			{
+				/* This is the first visited pad, so just copy its outer region */
+				compositor->overall_region = *outer_region;
+				first = FALSE;
+			}
+			else
+				gst_imx_region_merge(&(compositor->overall_region), &(compositor->overall_region), outer_region);
+
+			GST_DEBUG_OBJECT(compositor, "current outer region: %" GST_IMX_REGION_FORMAT "  merged overall region: %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(outer_region), GST_IMX_REGION_ARGS(&(compositor->overall_region)));
+
+			/* Move to next pad */
+			walk = g_list_next(walk);
 		}
-		else
-			gst_imx_region_merge(&(compositor->overall_region), &(compositor->overall_region), outer_region);
-
-		GST_DEBUG_OBJECT(compositor, "current outer region: %" GST_IMX_REGION_FORMAT "  merged overall region: %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(outer_region), GST_IMX_REGION_ARGS(&(compositor->overall_region)));
-
-		walk = g_list_next(walk);
 	}
 
 	/* Make sure the overall region starts at (0,0), since any other topleft
-	 * coordinate makes little sense */
+	 * coordinates make little sense */
 	compositor->overall_region.x1 = 0;
 	compositor->overall_region.y1 = 0;
 
 	/* Now that the overall region is computed, walk through the individual
 	 * outer regions, and check if any of them completely cover the overall region
-	 * If so, the compositor does not have to clear the frame first, thus
-	 * saving bandwidth */
+	 * If so, the compositor does not have to clear the frame first (= filling
+	 * the overall region with fill_region), thus saving bandwidth */
 	compositor->region_fill_necessary = TRUE;
 	walk = GST_ELEMENT(compositor)->sinkpads;
 	while (walk != NULL)

@@ -104,8 +104,9 @@ struct _GstImxCompositorClass
 struct _GstImxCompositorPad
 {
 	GstImxBPVideoAggregatorPad parent;
+
 	gboolean canvas_needs_update;
-	gboolean need_to_invalid_overall_region;
+	gboolean pad_is_new;
 	GstImxCanvas canvas;
 	GstImxRegion source_subset;
 	gdouble alpha;
