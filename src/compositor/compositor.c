@@ -209,7 +209,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 		g_param_spec_uint(
 			"fill-color",
 			"Fill color",
-			"Fill color (format: 0xRRGGBBAA)",
+			"Fill color (format: 0xAABBGGRR)",
 			0, 0xFFFFFFFF,
 			DEFAULT_PAD_FILL_COLOR,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
@@ -498,7 +498,7 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 		g_param_spec_uint(
 			"background-color",
 			"Background color",
-			"Background color (format: 0xRRGGBB)",
+			"Background color (format: 0xBBGGRR)",
 			0,
 			0xFFFFFF,
 			DEFAULT_BACKGROUND_COLOR,

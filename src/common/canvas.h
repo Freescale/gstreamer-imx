@@ -68,7 +68,7 @@ GstImxCanvasInnerRotation;
  * The outer region contains all the other ones fully. Any pixels that
  * lie in the outer but not the inner region is in one of the empty
  * regions. Blitters are supposed to paint the empty regions with the
- * fill_color, which is a 32-bit RGBA tuple, in format: 0xRRGGBBAA.
+ * fill_color, which is a 32-bit RGBA tuple, in format: 0xAABBGGRR.
  * The inner region contains the actual video frame.
  * The visibility mask describes what regions are visible.
  * The margin values determine margin sizes in pixels between inner and

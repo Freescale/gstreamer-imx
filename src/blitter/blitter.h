@@ -135,7 +135,7 @@ struct _GstImxBlitter
  *                          longer needed.
  *                          If something went wrong, it returns NULL.
  * @fill_region:            Required.
- *                          The color is specified in this format: 0xRRGGBB (the MSB are not used).
+ *                          The color is specified in this format: 0xBBGGRR (the MSB are not used).
  *                          The region must be fully within the output frame.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
  * @blit:                   Required.

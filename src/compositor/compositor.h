@@ -81,7 +81,7 @@ struct _GstImxCompositor
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
  * @fill_region:            Required.
  *                          Fills a given region in the output frame with the given color.
- *                          The color is specified as an unsigned 32-bit integer in format: 0x00RRGGBB.
+ *                          The color is specified as an unsigned 32-bit integer in format: 0x00BBGGRR.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
  * @draw_frame:             Required.
  *                          Draws a given input frame on the output frame, using the given
