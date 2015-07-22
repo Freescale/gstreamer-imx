@@ -44,7 +44,11 @@ typedef struct _GstImxBlitterClass GstImxBlitterClass;
 struct _GstImxBlitter
 {
 	GstObject parent;
+
+	/* buffer pool used for temporary internal input frames
+	 * (in case upstream doesn't deliver DMA buffers already) */
 	GstBufferPool *dma_bufferpool;
+
 	GstVideoInfo input_video_info;
 };
 

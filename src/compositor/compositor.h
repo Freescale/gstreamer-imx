@@ -46,6 +46,16 @@ struct _GstImxCompositor
 /**
  * GstImxCompositorClass:
  *
+ * The compositor base class takes N input video streams and composes them into
+ * one output video stream. Input video streams can have different sizes, formats,
+ * framerates etc. The output video stream's caps are determined by the srcpad
+ * template caps and by what downstream supports. Since all i.MX blitters support
+ * color space conversion, scaling, rotation etc. in one step, it is possible
+ * for the compositor to compose such streams without having to rely on explicit
+ * conversion elements.
+ *
+ * The compositor also supports alpha blending and filling regions with one solid color.
+ *
  * @parent_class: The parent class structure
  *
  * @get_phys_mem_allocator: Required.

@@ -44,6 +44,11 @@ typedef enum
 GstImxCanvasVisibilityFlags;
 
 
+/**
+ * GstImxCanvasInnerRotation:
+ *
+ * Modes for rotating blitter output, in 90-degree steps, and for horizontal/vertical flipping.
+ */
 typedef enum
 {
 	GST_IMX_CANVAS_INNER_ROTATION_NONE,
@@ -92,10 +97,54 @@ struct _GstImxCanvas
 GType gst_imx_canvas_inner_rotation_get_type(void);
 
 
+/* Determines if the given rotation mode would transpose the frame.
+ *
+ * Here, transposing refers to swapping X and Y axes.
+ *
+ * @param rotation Rotation mode to check
+ * @return true if the rotation mode is 90 or 270 degrees, false otherwise
+ */
 gboolean gst_imx_canvas_does_rotation_transpose(GstImxCanvasInnerRotation rotation);
+/* Given a canvas, calculate its inner region.
+ *
+ * Internally, this makes a copy of the outer region, shrinks it by the
+ * defined margin, and then calls gst_imx_region_calculate_inner_region().
+ *
+ * It does not fill the empty region fields.
+ *
+ * @param canvas canvas with filled outer_region, keep_aspect_ratio, margin,
+ *               and inner_rotation fields
+ * @param info input video information
+ */
 void gst_imx_canvas_calculate_inner_region(GstImxCanvas *canvas, GstVideoInfo const *info);
+/* Given a canvas, calculate its clipped region, and empty region fields.
+ *
+ * This function clips both inner and outer region against screen_region, defines the
+ * empty regions, and sets the visibility_mask.
+ *
+ * The canvas will be clipped by writing to the visibility_mask, empty region,
+ * inner region, and clipped region fields. The other fields are left unmodified.
+ *
+ * It requires the canvas' outer_region, inner_region, keep_aspect_ratio, margin, and
+ * inner_rotation fields to be set. Using gst_imx_canvas_calculate_inner_region() to
+ * compute the inner_region field is recommended.
+ *
+ * This is useful for determining which parts of the canvas are actually visible.
+ * Also, it determines which parts of the source video are visible, and passes this
+ * region to source_subset. This way, all a blitter has to do is to copy pixels
+ * from the source_subset on the input video frames to the clipped-inner_region on
+ * the output frame, and then fill the empty regions on the output frame with a solid
+ * color. All of the required canvas/region calculations are done in this function.
+ *
+ * @param canvas canvas to clip
+ * @param screen_region region on the output frame representing the screen (or the
+ *        subset of the screen where painting shall occur)
+ * @param info input video information
+ * @param source_subset region value which will be filled with values describing a
+ *        region on the input video frames which will be visible on the output
+ *        frame
+ */
 void gst_imx_canvas_clip(GstImxCanvas *canvas, GstImxRegion const *screen_region, GstVideoInfo const *info, GstImxRegion *source_subset);
-
 
 
 G_END_DECLS

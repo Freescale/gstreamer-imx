@@ -75,6 +75,9 @@ struct _GstImxBlitterVideoSink2
 
 	gboolean is_paused;
 
+	/* The canvas encompasses the visible screen, or the window
+	 * defined by the window_* values above
+	 * It is updated only on-demand */
 	GstImxCanvas canvas;
 	GstImxRegion input_region;
 	gboolean canvas_needs_update;
