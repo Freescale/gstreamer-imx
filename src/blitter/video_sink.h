@@ -24,6 +24,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideosink.h>
+#include <linux/fb.h>
 
 #include "blitter.h"
 
@@ -60,6 +61,9 @@ struct _GstImxBlitterVideoSink
 
 	GstImxBlitter *blitter;
 
+	struct fb_var_screeninfo fb_var;
+	struct fb_fix_screeninfo fb_fix;
+
 	/* Device name of the Linux framebuffer */
 	gchar *framebuffer_name;
 	/* GstBuffer encapsulating the Linux framebuffer memory */
@@ -67,6 +71,9 @@ struct _GstImxBlitterVideoSink
 	/* File descriptor of the Linux framebuffer */
 	int framebuffer_fd;
 	GstImxRegion framebuffer_region;
+	/* Pages for page flipping and vsync */
+	guint current_fb_page, num_fb_pages;
+	gboolean use_vsync;
 
 	gint window_x_coord, window_y_coord;
 	guint window_width, window_height;
