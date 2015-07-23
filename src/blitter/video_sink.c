@@ -45,7 +45,6 @@ enum
 	PROP_FORCE_ASPECT_RATIO,
 	PROP_FBDEV_NAME,
 	PROP_USE_VSYNC,
-	PROP_NUM_FB_PAGES,
 	PROP_OUTPUT_ROTATION,
 	PROP_WINDOW_X_COORD,
 	PROP_WINDOW_Y_COORD,
@@ -61,7 +60,6 @@ enum
 #define DEFAULT_FORCE_ASPECT_RATIO TRUE
 #define DEFAULT_FBDEV_NAME "/dev/fb0"
 #define DEFAULT_USE_VSYNC FALSE
-#define DEFAULT_NUM_FB_PAGES 3
 #define DEFAULT_OUTPUT_ROTATION GST_IMX_CANVAS_INNER_ROTATION_NONE
 #define DEFAULT_WINDOW_X_COORD 0
 #define DEFAULT_WINDOW_Y_COORD 0
@@ -159,18 +157,6 @@ static void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *k
 			"Use VSync",
 			"Enable and use verticeal synchronization to eliminate tearing",
 			DEFAULT_USE_VSYNC,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
-	g_object_class_install_property(
-		object_class,
-		PROP_NUM_FB_PAGES,
-		g_param_spec_uint(
-			"num-fb-pages",
-			"Number of framebuffer pages",
-			"How many pages to prepare for page flipping. 1 = no page flipping, just one buffer (implies no vsync). 0 = use the existing framebuffer configuration, don't change it.",
-			0, G_MAXUINT,
-			DEFAULT_NUM_FB_PAGES,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -292,8 +278,6 @@ static void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_vide
 	blitter_video_sink->framebuffer = NULL;
 	blitter_video_sink->framebuffer_fd = -1;
 	blitter_video_sink->current_fb_page = 0;
-	blitter_video_sink->num_fb_pages = 0;
-	blitter_video_sink->actual_num_fb_pages = 0;
 	blitter_video_sink->use_vsync = DEFAULT_USE_VSYNC;
 
 	gst_video_info_init(&(blitter_video_sink->input_video_info));
@@ -394,23 +378,6 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 				gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, 0);
 				gst_imx_blitter_video_sink_flip_to_selected_fb_page(blitter_video_sink);
 			}
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
-
-			break;
-		}
-
-		case PROP_NUM_FB_PAGES:
-		{
-			guint new_num = g_value_get_uint(value);
-
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
-			if (blitter_video_sink->framebuffer_fd == -1)
-			{
-				blitter_video_sink->num_fb_pages = new_num;
-				blitter_video_sink->actual_num_fb_pages = new_num;
-			}
-			else
-				GST_ELEMENT_WARNING(blitter_video_sink, RESOURCE, SETTINGS, ("cannot set number of pages after framebuffer has been opened"), (NULL));
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
 			break;
@@ -521,12 +488,6 @@ static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_
 		case PROP_USE_VSYNC:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			g_value_set_boolean(value, blitter_video_sink->use_vsync);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
-			break;
-
-		case PROP_NUM_FB_PAGES:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
-			g_value_set_uint(value, blitter_video_sink->num_fb_pages);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
@@ -674,24 +635,13 @@ static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *
 			if ((klass->stop != NULL) && !(klass->stop(blitter_video_sink)))
 				GST_ERROR_OBJECT(blitter_video_sink, "stop() failed");
 
-			/* switch back to the first page if vsync was used */
-			if (blitter_video_sink->use_vsync && (blitter_video_sink->actual_num_fb_pages >= 2))
-			{
-				GST_DEBUG_OBJECT(blitter_video_sink, "cleaning up page flipping by flipping to page 0");
-				gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, 0);
-				gst_imx_blitter_video_sink_flip_to_selected_fb_page(blitter_video_sink);
-
-				if (blitter_video_sink->num_fb_pages != 0)
-					gst_imx_blitter_video_sink_restore_original_fb_config(blitter_video_sink);
-			}
+			gst_imx_blitter_video_sink_close_framebuffer_device(blitter_video_sink);
 
 			if (blitter_video_sink->blitter != NULL)
 			{
 				gst_object_unref(blitter_video_sink->blitter);
 				blitter_video_sink->blitter = NULL;
 			}
-
-			gst_imx_blitter_video_sink_close_framebuffer_device(blitter_video_sink);
 
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
@@ -849,19 +799,18 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	 * The flipping is done by scrolling in Y direction
 	 * by the same number of rows as there are on screen
 	 * The scrolling is implicitely vsync'ed */
-	if ((blitter_video_sink->actual_num_fb_pages >= 2) && blitter_video_sink->use_vsync)
+	if (blitter_video_sink->use_vsync)
 	{
 		/* Select which page to write/blit to */
 		gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, blitter_video_sink->current_fb_page);
-		blitter_video_sink->current_fb_page++;
-		if (blitter_video_sink->current_fb_page >= blitter_video_sink->actual_num_fb_pages)
-			blitter_video_sink->current_fb_page = 0;
 
 		/* The actual blitting */
 		gst_imx_blitter_blit(blitter_video_sink->blitter, 255);
 
 		/* Flip pages now */
 		gst_imx_blitter_video_sink_flip_to_selected_fb_page(blitter_video_sink);
+
+		blitter_video_sink->current_fb_page = 1 - blitter_video_sink->current_fb_page;
 	}
 	else
 	{
@@ -961,16 +910,16 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 
 
 	/* Set up vsync (vsync is done via page flipping) */
-	blitter_video_sink->current_fb_page = 0;
-	if (blitter_video_sink->actual_num_fb_pages == 0)
+	if (blitter_video_sink->use_vsync)
 	{
-		blitter_video_sink->actual_num_fb_pages = fb_var.yres_virtual / fb_var.yres;
-		GST_INFO_OBJECT(blitter_video_sink, "reusing existing framebuffer configuration:  resolution is %u x %u , virtual %u x %u => %u page(s)", fb_width, fb_height, fb_var.xres_virtual, fb_var.yres_virtual, blitter_video_sink->actual_num_fb_pages);
-	}
-	else
-	{
-		gst_imx_blitter_video_sink_reconfigure_fb(blitter_video_sink, blitter_video_sink->actual_num_fb_pages);
-		fb_var = blitter_video_sink->fb_var;
+		guint cur_num_pages = fb_var.yres_virtual / fb_var.yres;
+		if (cur_num_pages < 2)
+		{
+			GST_INFO_OBJECT(blitter_video_sink, "framebuffer configuration:  resolution is %u x %u , virtual %u x %u => need to reconfigure virtual height", fb_width, fb_height, fb_var.xres_virtual, fb_var.yres_virtual);
+			gst_imx_blitter_video_sink_reconfigure_fb(blitter_video_sink, 2);
+		}
+		else
+			GST_INFO_OBJECT(blitter_video_sink, "framebuffer configuration:  resolution is %u x %u , virtual %u x %u => don't need to reconfigure virtual height", fb_width, fb_height, fb_var.xres_virtual, fb_var.yres_virtual);
 	}
 
 
@@ -999,7 +948,20 @@ static void gst_imx_blitter_video_sink_close_framebuffer_device(GstImxBlitterVid
 	GST_INFO_OBJECT(blitter_video_sink, "closing framebuffer %s with FD %d", blitter_video_sink->framebuffer_name, blitter_video_sink->framebuffer_fd);
 
 	if (blitter_video_sink->blitter != NULL)
+	{
+		/* switch back to the first page if vsync was used */
+		if (blitter_video_sink->use_vsync)
+		{
+			GST_DEBUG_OBJECT(blitter_video_sink, "cleaning up page flipping by flipping to page 0");
+			gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, 0);
+			gst_imx_blitter_video_sink_flip_to_selected_fb_page(blitter_video_sink);
+
+			if (blitter_video_sink->original_fb_virt_height != 0)
+				gst_imx_blitter_video_sink_restore_original_fb_config(blitter_video_sink);
+		}
+
 		gst_imx_blitter_flush(blitter_video_sink->blitter);
+	}
 
 	gst_buffer_unref(blitter_video_sink->framebuffer);
 	close(blitter_video_sink->framebuffer_fd);
@@ -1046,10 +1008,11 @@ static gboolean gst_imx_blitter_video_sink_set_virtual_fb_height(GstImxBlitterVi
 
 static gboolean gst_imx_blitter_video_sink_reconfigure_fb(GstImxBlitterVideoSink *blitter_video_sink, guint num_pages)
 {
-	blitter_video_sink->original_fb_virt_height = blitter_video_sink->fb_var.yres_virtual;
 	guint new_virtual_height = blitter_video_sink->fb_var.yres * num_pages;
 
-	GST_INFO_OBJECT(blitter_video_sink, "setting new configuration: %u page(s); original virtual height: %u new virtual height: %u", blitter_video_sink->actual_num_fb_pages, blitter_video_sink->original_fb_virt_height, new_virtual_height);
+	blitter_video_sink->original_fb_virt_height = blitter_video_sink->fb_var.yres_virtual;
+
+	GST_INFO_OBJECT(blitter_video_sink, "setting new configuration: original virtual height: %u new virtual height: %u", blitter_video_sink->original_fb_virt_height, new_virtual_height);
 
 	return gst_imx_blitter_video_sink_set_virtual_fb_height(blitter_video_sink, new_virtual_height);
 }
@@ -1057,8 +1020,14 @@ static gboolean gst_imx_blitter_video_sink_reconfigure_fb(GstImxBlitterVideoSink
 
 static gboolean gst_imx_blitter_video_sink_restore_original_fb_config(GstImxBlitterVideoSink *blitter_video_sink)
 {
+	gboolean ret;
+
 	GST_INFO_OBJECT(blitter_video_sink, "restoring configuration: virtual height %u", blitter_video_sink->original_fb_virt_height);
-	return gst_imx_blitter_video_sink_set_virtual_fb_height(blitter_video_sink, blitter_video_sink->original_fb_virt_height);
+
+	ret = gst_imx_blitter_video_sink_set_virtual_fb_height(blitter_video_sink, blitter_video_sink->original_fb_virt_height);
+	blitter_video_sink->original_fb_virt_height = 0;
+
+	return ret;
 }
 
 
