@@ -238,6 +238,11 @@ static void gst_imx_compositor_pad_compute_outer_region(GstImxCompositorPad *com
 {
 	GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
 
+	/* Set the outer region's top left corner */
+
+	compositor_pad->canvas.outer_region.x1 = compositor_pad->xpos;
+	compositor_pad->canvas.outer_region.y1 = compositor_pad->ypos;
+
 	/* Check if width and/or height are 0. 0 means "use the video width/height". */
 
 	if (compositor_pad->width == 0)
