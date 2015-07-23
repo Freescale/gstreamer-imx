@@ -1,5 +1,5 @@
 /* IPU-based i.MX video transform class
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -22,8 +22,7 @@
 
 
 #include <gst/gst.h>
-#include "../common/blitter_video_transform.h"
-#include "blitter.h"
+#include "../blitter/video_transform.h"
 
 
 G_BEGIN_DECLS
@@ -31,7 +30,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxIpuVideoTransform GstImxIpuVideoTransform;
 typedef struct _GstImxIpuVideoTransformClass GstImxIpuVideoTransformClass;
-typedef struct _GstImxIpuVideoTransformPrivate GstImxIpuVideoTransformPrivate;
 
 
 #define GST_TYPE_IMX_IPU_VIDEO_TRANSFORM             (gst_imx_ipu_video_transform_get_type())
@@ -44,9 +42,9 @@ typedef struct _GstImxIpuVideoTransformPrivate GstImxIpuVideoTransformPrivate;
 struct _GstImxIpuVideoTransform
 {
 	GstImxBlitterVideoTransform parent;
-	GstImxIpuBlitter *blitter;
-	GstImxIpuBlitterRotationMode output_rotation;
-	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
+
+	GstImxBlitter *blitter;
+	gboolean deinterlacing_enabled;
 };
 
 

@@ -1,5 +1,5 @@
 /* IPU-based i.MX video sink class
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,7 +21,7 @@
 #define GST_IMX_IPU_SINK_H
 
 #include <gst/gst.h>
-#include "../common/blitter_video_sink.h"
+#include "../blitter/video_sink.h"
 #include "blitter.h"
 
 
@@ -43,9 +43,9 @@ typedef struct _GstImxIpuVideoSinkPrivate GstImxIpuVideoSinkPrivate;
 struct _GstImxIpuVideoSink
 {
 	GstImxBlitterVideoSink parent;
-	GstImxIpuBlitter *blitter;
-	GstImxIpuBlitterRotationMode output_rotation;
-	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
+
+	GstImxBlitter *blitter;
+	gboolean deinterlacing_enabled;
 };
 
 

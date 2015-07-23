@@ -305,9 +305,9 @@ static void gst_imx_egl_viv_sink_video_overlay_init(GstVideoOverlayInterface *if
 }
 
 
-static void gst_imx_egl_viv_sink_navigation_send_event(GstNavigation *navigation, GstStructure *structure)
+static void gst_imx_egl_viv_sink_navigation_send_event(G_GNUC_UNUSED GstNavigation *navigation, G_GNUC_UNUSED GstStructure *structure)
 {
-	GstImxEglVivSink *egl_viv_sink = GST_IMX_EGL_VIV_SINK(navigation);
+	/* TODO: navigation support in eglvivsink */
 }
 
 

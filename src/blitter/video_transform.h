@@ -24,7 +24,7 @@
 #include <gst/base/gstbasetransform.h>
 #include <gst/video/video.h>
 
-#include "base_blitter.h"
+#include "blitter.h"
 
 
 G_BEGIN_DECLS
@@ -70,7 +70,7 @@ struct _GstImxBlitterVideoTransform
 	GMutex mutex;
 
 	/* The blitter to be used; is unref'd in the READY->NULL state change */
-	GstImxBaseBlitter *blitter;
+	GstImxBlitter *blitter;
 
 	/* Flag to indicate initialization status; FALSE if
 	 * the transform element is in the NULL state, TRUE otherwise */
@@ -85,36 +85,45 @@ struct _GstImxBlitterVideoTransform
 	/* Copy of the GstVideoInfo structure generated from the output caps */
 	GstVideoInfo output_video_info;
 
-	/* Flag to indicate if the videocrop meta metadata shall be applied */
-	gboolean input_crop;
+	/* Output canvas. Aspect ratio is *not* kept. */
+	GstImxCanvas canvas;
 };
 
 
 /**
  * GstImxBlitterVideoTransformClass
  * @parent_class:             The parent class structure
- * @start:                    Required.
- *                            Called during the NULL->READY state change. Call
- *                            @gst_imx_blitter_video_transform_set_blitter in here.
- *                            (This function must be called in @start.)
+ * @start:                    Optional.
+ *                            Called during the NULL->READY state change. Note that this is
+ *                            called before @create_blitter.
+ *                            If this returns FALSE, then the state change is considered to
+ *                            have failed, and the transform's change_state function will return
+ *                            GST_STATE_CHANGE_FAILURE.
  * @stop:                     Optional.
  *                            Called during the READY->NULL state change.
+ *                            Returns FALSE if stopping failed, TRUE otherwise.
  * @are_video_infos_equal:    Required.
  *                            Checks if in_info and out_info are equal. If they are,
  *                            return TRUE, otherwise FALSE.
- * @are_transforms_necessary: Required.
+ * @are_transforms_necessary: Optional.
  *                            Checks if the blit must happen, even if in- and output
  *                            have the exact same format. This is necessary for
  *                            example when rotations are enabled, or deinterlacing etc.
  *                            Returns TRUE if the frame shall always be copied by blitting,
  *                            FALSE if the frame copy shall be done only if the in- and
  *                            output formats are different.
+ *                            If this is NULL, the element behaves as if this function
+ *                            always returned FALSE.
+ * @create_blitter:           Required.
+ *                            Instructs the subclass to create a new blitter instance and
+ *                            return it. If the subclass is supposed to create the blitter
+ *                            only once, then create it in @start, ref it here, and then
+ *                            return it. It will be unref'd in the READY->NULL state change.
  *
  * The blitter video transform is an abstract base class for defining blitter-based video transform
  * elements (for colorspace conversion, rotation, deinterlacing etc.)
- * It uses a blitter specified with @gst_imx_blitter_video_transform_set_blitter. Derived classes
- * must implement at the @start, the @are_video_infos_equal, and the @are_transforms_necessary
- * functions. @start must internally call @gst_imx_blitter_video_transform_set_blitter.
+ * It uses a blitter that is created by @create_blitter. Derived classes must implement at least the
+ * @create_blitter, the @are_video_infos_equal, and the @are_transforms_necessary functions.
  *
  * If derived classes implement @set_property/@get_property functions, and these modify states
  * related to the blitter, these must surround the modifications with mutex locks. Use
@@ -130,23 +139,12 @@ struct _GstImxBlitterVideoTransformClass
 	gboolean (*are_video_infos_equal)(GstImxBlitterVideoTransform *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info);
 
 	gboolean (*are_transforms_necessary)(GstImxBlitterVideoTransform *blitter_video_transform, GstBuffer *input);
+
+	GstImxBlitter* (*create_blitter)(GstImxBlitterVideoTransform *blitter_video_transform);
 };
 
 
 GType gst_imx_blitter_video_transform_get_type(void);
-
-
-/* Sets the blitter the video transform uses for blitting video frames to the
- * output buffer. The blitter is ref'd. If a pointer to another blitter
- * was set previously, this older blitter is first unref'd. If the new and
- * the old blitter pointer are the same, this function does nothing. This
- * function can be called anytime, but must be called at least once inside @start.
- * If something goes wrong, it returns FALSE, otherwise TRUE. (The blitter is
- * ref'd even if it returns FALSE.)
- * NOTE: This function must be called with a mutex lock. Surround this call
- * with GST_IS_IMX_BLITTER_VIDEO_TRANSFORM_LOCK/UNLOCK calls.
- */
-gboolean gst_imx_blitter_video_transform_set_blitter(GstImxBlitterVideoTransform *blitter_video_transform, GstImxBaseBlitter *blitter);
 
 
 G_END_DECLS

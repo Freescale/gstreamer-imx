@@ -1,5 +1,5 @@
 /* IPU-based i.MX video sink class
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,7 +17,7 @@
  */
 
 
-#include "sink.h"
+#include "video_sink.h"
 #include "blitter.h"
 
 
@@ -30,8 +30,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_ipu_video_sink_debug);
 enum
 {
 	PROP_0,
-	PROP_OUTPUT_ROTATION,
-	PROP_DEINTERLACE_MODE
+	PROP_DEINTERLACE
 };
 
 
@@ -51,8 +50,7 @@ static void gst_imx_ipu_video_sink_get_property(GObject *object, guint prop_id, 
 
 static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_video_sink);
 static gboolean gst_imx_ipu_video_sink_stop(GstImxBlitterVideoSink *blitter_video_sink);
-
-static void gst_imx_ipu_video_sink_set_transpose_flag(GstImxIpuVideoSink *ipu_video_sink);
+static GstImxBlitter* gst_imx_ipu_video_sink_create_blitter(GstImxBlitterVideoSink *blitter_video_sink);
 
 
 
@@ -84,29 +82,17 @@ void gst_imx_ipu_video_sink_class_init(GstImxIpuVideoSinkClass *klass)
 	object_class->set_property = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_sink_set_property);
 	object_class->get_property = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_sink_get_property);
 
-	base_class->start = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_sink_start);
-	base_class->stop  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_sink_stop);
+	base_class->start          = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_sink_start);
+	base_class->stop           = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_sink_stop);
+	base_class->create_blitter = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_sink_create_blitter);
 
 	g_object_class_install_property(
 		object_class,
-		PROP_OUTPUT_ROTATION,
-		g_param_spec_enum(
-			"output-rotation",
-			"Output rotation",
-			"Rotation that shall be applied to output frames",
-			gst_imx_ipu_blitter_rotation_mode_get_type(),
-			GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
-	g_object_class_install_property(
-		object_class,
-		PROP_DEINTERLACE_MODE,
-		g_param_spec_enum(
-			"deinterlace-mode",
-			"Deinterlace mode",
-			"Deinterlacing mode to be used for incoming frames (ignored if frames are not interlaced)",
-			gst_imx_ipu_blitter_deinterlace_mode_get_type(),
+		PROP_DEINTERLACE,
+		g_param_spec_boolean(
+			"deinterlace",
+			"Deinterlace",
+			"Whether or not to enable deinterlacing",
 			GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
@@ -114,10 +100,10 @@ void gst_imx_ipu_video_sink_class_init(GstImxIpuVideoSinkClass *klass)
 }
 
 
-void gst_imx_ipu_video_sink_init(GstImxIpuVideoSink *ipu_video_sink)
+void gst_imx_ipu_video_sink_init(G_GNUC_UNUSED GstImxIpuVideoSink *ipu_video_sink)
 {
-	ipu_video_sink->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
-	ipu_video_sink->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
+	ipu_video_sink->blitter = NULL;
+	ipu_video_sink->deinterlacing_enabled = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 }
 
 
@@ -130,22 +116,11 @@ static void gst_imx_ipu_video_sink_set_property(GObject *object, guint prop_id, 
 
 	switch (prop_id)
 	{
-		case PROP_OUTPUT_ROTATION:
+		case PROP_DEINTERLACE:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
-			ipu_video_sink->output_rotation = g_value_get_enum(value);
+			ipu_video_sink->deinterlacing_enabled = g_value_get_boolean(value);
 			if (ipu_video_sink->blitter != NULL)
-			{
-				gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_sink->blitter, ipu_video_sink->output_rotation);
-				gst_imx_ipu_video_sink_set_transpose_flag(ipu_video_sink);
-			}
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
-			break;
-
-		case PROP_DEINTERLACE_MODE:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
-			ipu_video_sink->deinterlace_mode = g_value_get_enum(value);
-			if (ipu_video_sink->blitter != NULL)
-				gst_imx_ipu_blitter_set_deinterlace_mode(ipu_video_sink->blitter, ipu_video_sink->deinterlace_mode);
+				gst_imx_ipu_blitter_enable_deinterlacing((GstImxIpuBlitter *)(ipu_video_sink->blitter), ipu_video_sink->deinterlacing_enabled);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
 			break;
 
@@ -162,15 +137,9 @@ static void gst_imx_ipu_video_sink_get_property(GObject *object, guint prop_id, 
 
 	switch (prop_id)
 	{
-		case PROP_OUTPUT_ROTATION:
+		case PROP_DEINTERLACE:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
-			g_value_set_enum(value, ipu_video_sink->output_rotation);
-			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
-			break;
-
-		case PROP_DEINTERLACE_MODE:
-			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
-			g_value_set_enum(value, ipu_video_sink->deinterlace_mode);
+			g_value_set_boolean(value, ipu_video_sink->deinterlacing_enabled);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
 			break;
 
@@ -180,52 +149,34 @@ static void gst_imx_ipu_video_sink_get_property(GObject *object, guint prop_id, 
 	}
 }
 
-
 static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_video_sink)
 {
 	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink);
+	GstImxIpuBlitter *blitter;
 
-	GstImxIpuBlitter *blitter = gst_imx_ipu_blitter_new();
-	if (blitter == NULL)
+	if ((blitter = gst_imx_ipu_blitter_new()) == NULL)
 	{
 		GST_ERROR_OBJECT(blitter_video_sink, "could not create IPU blitter");
 		return FALSE;
 	}
 
-	gst_imx_ipu_blitter_set_output_rotation_mode(blitter, ipu_video_sink->output_rotation);
-	gst_imx_ipu_blitter_set_deinterlace_mode(blitter, ipu_video_sink->deinterlace_mode);
-
-	gst_imx_blitter_video_sink_set_blitter(blitter_video_sink, GST_IMX_BASE_BLITTER(blitter));
-	gst_imx_ipu_video_sink_set_transpose_flag(ipu_video_sink);
-
-	gst_object_unref(GST_OBJECT(blitter));
-
-	/* no ref necessary, since the base class will clean up *after* any
-	 * activity that might use the blitter has been shut down at that point */
-	ipu_video_sink->blitter = blitter;
+	ipu_video_sink->blitter = (GstImxBlitter *)gst_object_ref(blitter);
+	gst_imx_ipu_blitter_enable_deinterlacing((GstImxIpuBlitter *)(ipu_video_sink->blitter), ipu_video_sink->deinterlacing_enabled);
 
 	return TRUE;
 }
 
 
-static gboolean gst_imx_ipu_video_sink_stop(G_GNUC_UNUSED GstImxBlitterVideoSink *blitter_video_sink)
+static gboolean gst_imx_ipu_video_sink_stop(GstImxBlitterVideoSink *blitter_video_sink)
 {
+	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink);
+	gst_object_unref(ipu_video_sink->blitter);
 	return TRUE;
 }
 
 
-static void gst_imx_ipu_video_sink_set_transpose_flag(GstImxIpuVideoSink *ipu_video_sink)
+static GstImxBlitter* gst_imx_ipu_video_sink_create_blitter(GstImxBlitterVideoSink *blitter_video_sink)
 {
-	switch (ipu_video_sink->output_rotation)
-	{
-		case GST_IMX_IPU_BLITTER_ROTATION_90CW:
-		case GST_IMX_IPU_BLITTER_ROTATION_90CW_HFLIP:
-		case GST_IMX_IPU_BLITTER_ROTATION_90CW_VFLIP:
-		case GST_IMX_IPU_BLITTER_ROTATION_90CCW:
-			gst_imx_blitter_video_sink_transpose_frames(GST_IMX_BLITTER_VIDEO_SINK(ipu_video_sink), TRUE);
-			break;
-		default:
-			gst_imx_blitter_video_sink_transpose_frames(GST_IMX_BLITTER_VIDEO_SINK(ipu_video_sink), FALSE);
-	}
+	GstImxIpuVideoSink *ipu_video_sink = GST_IMX_IPU_VIDEO_SINK(blitter_video_sink);
+	return ipu_video_sink->blitter;
 }
-

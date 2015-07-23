@@ -1,5 +1,5 @@
 /* Freescale IPU GStreamer 1.0 plugin definition
- * Copyright (C) 2013  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -19,8 +19,9 @@
 
 #include <config.h>
 #include <gst/gst.h>
-#include "sink.h"
-#include "videotransform.h"
+#include "video_sink.h"
+#include "video_transform.h"
+#include "compositor.h"
 
 
 GST_DEBUG_CATEGORY(imx_ipu_device_debug);
@@ -35,6 +36,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 
 	ret = ret && gst_element_register(plugin, "imxipuvideotransform", GST_RANK_NONE, gst_imx_ipu_video_transform_get_type());
 	ret = ret && gst_element_register(plugin, "imxipuvideosink", GST_RANK_PRIMARY + 1, gst_imx_ipu_video_sink_get_type());
+	ret = ret && gst_element_register(plugin, "imxipucompositor", GST_RANK_NONE, gst_imx_ipu_compositor_get_type());
 
 	return ret;
 }

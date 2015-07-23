@@ -1,5 +1,5 @@
 /* PxP-based i.MX video sink class
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -21,8 +21,7 @@
 #define GST_IMX_PXP_SINK_H
 
 #include <gst/gst.h>
-#include "../common/blitter_video_sink.h"
-#include "blitter.h"
+#include "../blitter/video_sink.h"
 
 
 G_BEGIN_DECLS
@@ -30,7 +29,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxPxPVideoSink GstImxPxPVideoSink;
 typedef struct _GstImxPxPVideoSinkClass GstImxPxPVideoSinkClass;
-typedef struct _GstImxPxPVideoSinkPrivate GstImxPxPVideoSinkPrivate;
 
 
 #define GST_TYPE_IMX_PXP_VIDEO_SINK             (gst_imx_pxp_video_sink_get_type())
@@ -43,8 +41,6 @@ typedef struct _GstImxPxPVideoSinkPrivate GstImxPxPVideoSinkPrivate;
 struct _GstImxPxPVideoSink
 {
 	GstImxBlitterVideoSink parent;
-	GstImxPxPBlitter *blitter;
-	GstImxPxPBlitterRotationMode output_rotation;
 };
 
 

@@ -22,7 +22,7 @@
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
-#include "../common/base_blitter.h"
+#include "../blitter/blitter.h"
 
 
 G_BEGIN_DECLS
@@ -35,6 +35,7 @@ typedef struct _GstImxIpuBlitterPrivate GstImxIpuBlitterPrivate;
 
 #define GST_TYPE_IMX_IPU_BLITTER             (gst_imx_ipu_blitter_get_type())
 #define GST_IMX_IPU_BLITTER(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_IPU_BLITTER, GstImxIpuBlitter))
+#define GST_IMX_IPU_BLITTER_CAST(obj)        ((GstImxIpuBlitter *)(obj))
 #define GST_IMX_IPU_BLITTER_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_IPU_BLITTER, GstImxIpuBlitterClass))
 #define GST_IMX_IPU_BLITTER_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS((obj), GST_TYPE_IMX_IPU_BLITTER, GstImxIpuBlitterClass))
 #define GST_IS_IMX_IPU_BLITTER(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_IPU_BLITTER))
@@ -73,74 +74,41 @@ typedef struct _GstImxIpuBlitterPrivate GstImxIpuBlitterPrivate;
 #define GST_IMX_IPU_BLITTER_SRC_CAPS GST_IMX_IPU_BLITTER_SINK_CAPS
 
 
-typedef enum
-{
-	GST_IMX_IPU_BLITTER_ROTATION_NONE,
-	GST_IMX_IPU_BLITTER_ROTATION_HFLIP,
-	GST_IMX_IPU_BLITTER_ROTATION_VFLIP,
-	GST_IMX_IPU_BLITTER_ROTATION_180,
-	GST_IMX_IPU_BLITTER_ROTATION_90CW,
-	GST_IMX_IPU_BLITTER_ROTATION_90CW_HFLIP,
-	GST_IMX_IPU_BLITTER_ROTATION_90CW_VFLIP,
-	GST_IMX_IPU_BLITTER_ROTATION_90CCW
-}
-GstImxIpuBlitterRotationMode;
-
-
-typedef enum
-{
-	GST_IMX_IPU_BLITTER_DEINTERLACE_NONE,
-	GST_IMX_IPU_BLITTER_DEINTERLACE_SLOW_MOTION,
-	GST_IMX_IPU_BLITTER_DEINTERLACE_FAST_MOTION
-}
-GstImxIpuBlitterDeinterlaceMode;
-
-
-#define GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT  GST_IMX_IPU_BLITTER_ROTATION_NONE
-#define GST_IMX_IPU_BLITTER_CROP_DEFAULT  FALSE
-#define GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT  GST_IMX_IPU_BLITTER_DEINTERLACE_NONE
+#define GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT  FALSE
 
 
 struct _GstImxIpuBlitter
 {
-	GstImxBaseBlitter parent;
-	GstImxIpuBlitterPrivate *priv;
+	GstImxBlitter parent;
 
-	GstVideoInfo input_video_info;
-
-	GstBuffer *current_frame, *previous_frame; /* used for deinterlacing */
-
-	GstImxIpuBlitterDeinterlaceMode deinterlace_mode;
-
-	GstImxBaseBlitterRegion output_region;
-
-	gboolean output_region_uptodate;
-	GstBuffer *dummy_black_buffer;
-
+	GstVideoInfo input_video_info, output_video_info;
 	GstAllocator *allocator;
+	GstBuffer *input_frame, *output_frame, *fill_frame;
+	gboolean use_entire_input_frame;
+
+	GstImxIpuBlitterPrivate *priv;
+	guint8 visibility_mask;
+	guint32 fill_color;
+	GstImxRegion empty_regions[4];
+	guint num_empty_regions;
+	GstImxRegion clipped_outer_region;
+	gboolean clipped_outer_region_updated;
+
+	gboolean deinterlacing_enabled;
 };
 
 
 struct _GstImxIpuBlitterClass
 {
-	GstImxBaseBlitterClass parent_class;
+	GstImxBlitterClass parent_class;
 };
-
-
-GType gst_imx_ipu_blitter_rotation_mode_get_type(void);
-GType gst_imx_ipu_blitter_deinterlace_mode_get_type(void);
 
 
 GType gst_imx_ipu_blitter_get_type(void);
 
-
 GstImxIpuBlitter* gst_imx_ipu_blitter_new(void);
 
-void gst_imx_ipu_blitter_set_output_rotation_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterRotationMode rotation_mode);
-GstImxIpuBlitterRotationMode gst_imx_ipu_blitter_get_output_rotation_mode(GstImxIpuBlitter *ipu_blitter);
-
-void gst_imx_ipu_blitter_set_deinterlace_mode(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterDeinterlaceMode deinterlace_mode);
-GstImxIpuBlitterDeinterlaceMode gst_imx_ipu_blitter_get_deinterlace_mode(GstImxIpuBlitter *ipu_blitter);
+void gst_imx_ipu_blitter_enable_deinterlacing(GstImxIpuBlitter *ipu_blitter, gboolean enable);
 
 
 G_END_DECLS

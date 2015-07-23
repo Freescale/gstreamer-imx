@@ -1,5 +1,5 @@
 /* IPU-based i.MX video transform class
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,7 +17,7 @@
  */
 
 
-#include "videotransform.h"
+#include "video_transform.h"
 #include "blitter.h"
 
 
@@ -30,8 +30,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_ipu_video_transform_debug);
 enum
 {
 	PROP_0,
-	PROP_OUTPUT_ROTATION,
-	PROP_DEINTERLACE_MODE
+	PROP_DEINTERLACE
 };
 
 
@@ -59,11 +58,10 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 
 static GstCaps* gst_imx_ipu_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps);
 
-gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform *blitter_video_transform);
-gboolean gst_imx_ipu_video_transform_stop(GstImxBlitterVideoTransform *blitter_video_transform);
-
+static gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform *blitter_video_transform);
+static gboolean gst_imx_ipu_video_transform_stop(GstImxBlitterVideoTransform *blitter_video_transform);
+static GstImxBlitter* gst_imx_ipu_video_transform_create_blitter(GstImxBlitterVideoTransform *blitter_video_transform);
 gboolean gst_imx_ipu_video_transform_are_video_infos_equal(GstImxBlitterVideoTransform *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info);
-
 gboolean gst_imx_ipu_video_transform_are_transforms_necessary(GstImxBlitterVideoTransform *blitter_video_transform, GstBuffer *input);
 
 
@@ -71,7 +69,7 @@ gboolean gst_imx_ipu_video_transform_are_transforms_necessary(GstImxBlitterVideo
 
 /* required functions declared by G_DEFINE_TYPE */
 
-void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
+static void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 {
 	GObjectClass *object_class;
 	GstBaseTransformClass *base_transform_class;
@@ -96,38 +94,24 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
-	object_class->set_property = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_property);
-	object_class->get_property = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_get_property);
+	object_class->set_property           = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_set_property);
+	object_class->get_property           = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_get_property);
 
-	base_transform_class->fixate_caps = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_fixate_caps);
+	base_transform_class->fixate_caps    = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_fixate_caps);
 
-	base_class->start = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_start);
-	base_class->stop  = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_stop);
-
-	base_class->are_video_infos_equal = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_are_video_infos_equal);
-	
+	base_class->start                    = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_start);
+	base_class->stop                     = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_stop);
+	base_class->create_blitter           = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_create_blitter);
+	base_class->are_video_infos_equal    = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_are_video_infos_equal);
 	base_class->are_transforms_necessary = GST_DEBUG_FUNCPTR(gst_imx_ipu_video_transform_are_transforms_necessary);
 
 	g_object_class_install_property(
 		object_class,
-		PROP_OUTPUT_ROTATION,
-		g_param_spec_enum(
-			"output-rotation",
-			"Output rotation",
-			"Rotation that shall be applied to output frames",
-			gst_imx_ipu_blitter_rotation_mode_get_type(),
-			GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
-	g_object_class_install_property(
-		object_class,
-		PROP_DEINTERLACE_MODE,
-		g_param_spec_enum(
-			"deinterlace-mode",
-			"Deinterlace mode",
-			"Deinterlacing mode to be used for incoming frames (ignored if frames are not interlaced)",
-			gst_imx_ipu_blitter_deinterlace_mode_get_type(),
+		PROP_DEINTERLACE,
+		g_param_spec_boolean(
+			"deinterlace",
+			"Deinterlace",
+			"Whether or not to enable deinterlacing",
 			GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
@@ -135,12 +119,11 @@ void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass *klass)
 }
 
 
-void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transform)
+static void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_transform)
 {
-	ipu_video_transform->output_rotation = GST_IMX_IPU_BLITTER_OUTPUT_ROTATION_DEFAULT;
-	ipu_video_transform->deinterlace_mode = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
+	ipu_video_transform->blitter = NULL;
+	ipu_video_transform->deinterlacing_enabled = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 }
-
 
 
 
@@ -150,19 +133,11 @@ static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop
 
 	switch (prop_id)
 	{
-		case PROP_OUTPUT_ROTATION:
+		case PROP_DEINTERLACE:
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
-			ipu_video_transform->output_rotation = g_value_get_enum(value);
+			ipu_video_transform->deinterlacing_enabled = g_value_get_boolean(value);
 			if (ipu_video_transform->blitter != NULL)
-				gst_imx_ipu_blitter_set_output_rotation_mode(ipu_video_transform->blitter, ipu_video_transform->output_rotation);
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
-			break;
-
-		case PROP_DEINTERLACE_MODE:
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
-			ipu_video_transform->deinterlace_mode = g_value_get_enum(value);
-			if (ipu_video_transform->blitter != NULL)
-				gst_imx_ipu_blitter_set_deinterlace_mode(ipu_video_transform->blitter, ipu_video_transform->deinterlace_mode);
+				gst_imx_ipu_blitter_enable_deinterlacing((GstImxIpuBlitter *)(ipu_video_transform->blitter), ipu_video_transform->deinterlacing_enabled);
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
 			break;
 
@@ -179,23 +154,49 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 
 	switch (prop_id)
 	{
-		case PROP_OUTPUT_ROTATION:
+		case PROP_DEINTERLACE:
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
-			g_value_set_enum(value, ipu_video_transform->output_rotation);
+			g_value_set_boolean(value, ipu_video_transform->deinterlacing_enabled);
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
-			break;
-
-		case PROP_DEINTERLACE_MODE:
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
-			g_value_set_enum(value, ipu_video_transform->deinterlace_mode);
-			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
-			gst_base_transform_reconfigure_src(GST_BASE_TRANSFORM(object));
 			break;
 
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
 	}
+}
+
+
+static gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform *blitter_video_transform)
+{
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
+	GstImxIpuBlitter *blitter;
+
+	if ((blitter = gst_imx_ipu_blitter_new()) == NULL)
+	{
+		GST_ERROR_OBJECT(blitter_video_transform, "could not create IPU blitter");
+		return FALSE;
+	}
+
+	ipu_video_transform->blitter = (GstImxBlitter *)gst_object_ref(blitter);
+	gst_imx_ipu_blitter_enable_deinterlacing((GstImxIpuBlitter *)(ipu_video_transform->blitter), ipu_video_transform->deinterlacing_enabled);
+
+	return TRUE;
+}
+
+
+static gboolean gst_imx_ipu_video_transform_stop(GstImxBlitterVideoTransform *blitter_video_transform)
+{
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
+	gst_object_unref(ipu_video_transform->blitter);
+	return TRUE;
+}
+
+
+static GstImxBlitter* gst_imx_ipu_video_transform_create_blitter(GstImxBlitterVideoTransform *blitter_video_transform)
+{
+	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
+	return ipu_video_transform->blitter;
 }
 
 
@@ -209,7 +210,7 @@ static GstCaps* gst_imx_ipu_video_transform_fixate_caps(GstBaseTransform *transf
 	if (direction == GST_PAD_SINK)
 	{
 		GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
-		no_interlacing = (ipu_video_transform->deinterlace_mode == GST_IMX_IPU_BLITTER_DEINTERLACE_NONE);
+		no_interlacing = !(ipu_video_transform->deinterlacing_enabled);
 		GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
 
 		if (no_interlacing)
@@ -233,38 +234,6 @@ static GstCaps* gst_imx_ipu_video_transform_fixate_caps(GstBaseTransform *transf
 }
 
 
-gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform *blitter_video_transform)
-{
-	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
-	
-	GstImxIpuBlitter *blitter = gst_imx_ipu_blitter_new();
-	if (blitter == NULL)
-	{
-		GST_ERROR_OBJECT(blitter_video_transform, "could not create IPU blitter");
-		return FALSE;
-	}
-
-	gst_imx_ipu_blitter_set_output_rotation_mode(blitter, ipu_video_transform->output_rotation);
-	gst_imx_ipu_blitter_set_deinterlace_mode(blitter, ipu_video_transform->deinterlace_mode);
-
-	gst_imx_blitter_video_transform_set_blitter(blitter_video_transform, GST_IMX_BASE_BLITTER(blitter));
-
-	gst_object_unref(GST_OBJECT(blitter));
-
-	/* no ref necessary, since the base class will clean up *after* any
-	 * activity that might use the blitter has been shut down at that point */
-	ipu_video_transform->blitter = blitter;
-
-	return TRUE;
-}
-
-
-gboolean gst_imx_ipu_video_transform_stop(G_GNUC_UNUSED GstImxBlitterVideoTransform *blitter_video_transform)
-{
-	return TRUE;
-}
-
-
 gboolean gst_imx_ipu_video_transform_are_video_infos_equal(G_GNUC_UNUSED GstImxBlitterVideoTransform *blitter_video_transform, GstVideoInfo const *in_info, GstVideoInfo const *out_info)
 {
 	return
@@ -279,13 +248,7 @@ gboolean gst_imx_ipu_video_transform_are_transforms_necessary(GstImxBlitterVideo
 {
 	GstImxIpuVideoTransform *ipu_video_transform = GST_IMX_IPU_VIDEO_TRANSFORM(blitter_video_transform);
 
-	if (gst_imx_ipu_blitter_get_output_rotation_mode(ipu_video_transform->blitter) != GST_IMX_IPU_BLITTER_ROTATION_NONE)
-	{
-		GST_DEBUG_OBJECT(blitter_video_transform, "rotation is enabled");
-		return TRUE;
-	}
-
-	if (ipu_video_transform->deinterlace_mode != GST_IMX_IPU_BLITTER_DEINTERLACE_NONE)
+	if (ipu_video_transform->deinterlacing_enabled)
 	{
 		switch (GST_VIDEO_INFO_INTERLACE_MODE(GST_IMX_BLITTER_VIDEO_TRANSFORM_INPUT_INFO(ipu_video_transform)))
 		{

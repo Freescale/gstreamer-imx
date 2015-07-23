@@ -1,0 +1,17 @@
+#!/usr/bin/env python
+
+
+def build(bld):
+	import os
+	bld(
+		features = ['c', bld.env['CLIBTYPE']],
+		includes = ['.', '../..', '../common'],
+		uselib = bld.env['COMMON_USELIB'],
+		use = ['gstimxcommon'],
+		target = 'gstimxblitter',
+		vnum = bld.env['GSTIMX_VERSION'],
+		source = bld.path.ant_glob('*.c'),
+		defines = ['HAVE_CONFIG_H'],
+		install_path = os.path.join(bld.env['PREFIX'], 'lib')
+	)
+

@@ -1,5 +1,5 @@
 /* G2D-based i.MX video transform class
- * Copyright (C) 2014  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,13 +17,12 @@
  */
 
 
-#ifndef GST_IMX_G2D_VIDEOTRANSFORM_H
-#define GST_IMX_G2D_VIDEOTRANSFORM_H
+#ifndef GST_IMX_G2D_VIDEO_TRANSFORM_H
+#define GST_IMX_G2D_VIDEO_TRANSFORM_H
 
 
 #include <gst/gst.h>
-#include "../common/blitter_video_transform.h"
-#include "blitter.h"
+#include "../blitter/video_transform.h"
 
 
 G_BEGIN_DECLS
@@ -31,7 +30,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxG2DVideoTransform GstImxG2DVideoTransform;
 typedef struct _GstImxG2DVideoTransformClass GstImxG2DVideoTransformClass;
-typedef struct _GstImxG2DVideoTransformPrivate GstImxG2DVideoTransformPrivate;
 
 
 #define GST_TYPE_IMX_G2D_VIDEO_TRANSFORM             (gst_imx_g2d_video_transform_get_type())
@@ -44,8 +42,6 @@ typedef struct _GstImxG2DVideoTransformPrivate GstImxG2DVideoTransformPrivate;
 struct _GstImxG2DVideoTransform
 {
 	GstImxBlitterVideoTransform parent;
-	GstImxG2DBlitter *blitter;
-	GstImxG2DBlitterRotationMode output_rotation;
 };
 
 
