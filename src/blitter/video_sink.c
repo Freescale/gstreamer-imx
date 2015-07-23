@@ -849,7 +849,7 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	 * The flipping is done by scrolling in Y direction
 	 * by the same number of rows as there are on screen
 	 * The scrolling is implicitely vsync'ed */
-	if ((blitter_video_sink->num_fb_pages >= 2) && blitter_video_sink->use_vsync)
+	if ((blitter_video_sink->actual_num_fb_pages >= 2) && blitter_video_sink->use_vsync)
 	{
 		/* Select which page to write/blit to */
 		gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, blitter_video_sink->current_fb_page);
