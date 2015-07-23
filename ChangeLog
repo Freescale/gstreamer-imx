@@ -1,3 +1,36 @@
+==== version 0.11.0 (2015-07-23) ====
+
+* new common codebase for rectangular regions and video canvases
+
+* new blitter-based video sink with full support for vsync to eliminate tearing
+
+* complete rewrite of blitter base code to better support aspect ratio correction,
+  rotation, empty region filling, and compositing
+
+* new compositor elements, API compatible with the upstream GStreamer compositor
+  These new elements allow for combining N input video streams into one output
+  stream with alpha blending, scaling, rotation, color space conversions etc.
+  and hardware accelerated via G2D, IPU, PxP
+
+* vpu: decoder: Memory leaks fixed
+  Decoder is now drained when stopping
+  Fixed incorrect gst_allocator_free() call
+  GstImxPhysMemory slices weren't being freed properly
+  VPU allocator instances are now instantiated per-decoder
+
+* vpu: encoder: Bitrate can now be set on the fly
+
+* eglvivsink: In Wayland, window x/y coordinates are now supported
+
+* several v4l2src fixes:
+  Removed experimental and deprectated WITH_CHIP_IDENTIFICATION ioctl
+  Use pixelformat reported by the driver instead of hardcoding I420
+  The format fourcc is now read properly (not just as a string)
+  Call VIDIOC_QUERYBUF twice to get a physical address (important for zerocopy)
+  Add interlace-mode to src caps to allow for deinterlacing camera feeds
+  If possible, the actual frame rate is retrieved
+
+
 ==== version 0.10.2 (2015-06-02) ====
 
 * uniaudio: Create correct config header even if no codecs were found
