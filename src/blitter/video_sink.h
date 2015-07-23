@@ -71,8 +71,9 @@ struct _GstImxBlitterVideoSink
 	/* File descriptor of the Linux framebuffer */
 	int framebuffer_fd;
 	GstImxRegion framebuffer_region;
+	guint32 original_fb_virt_height;
 	/* Pages for page flipping and vsync */
-	guint current_fb_page, num_fb_pages;
+	guint current_fb_page, num_fb_pages, actual_num_fb_pages;
 	gboolean use_vsync;
 
 	gint window_x_coord, window_y_coord;
