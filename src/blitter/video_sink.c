@@ -355,10 +355,15 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			g_free(blitter_video_sink->framebuffer_name);
 			blitter_video_sink->framebuffer_name = g_strdup(new_framebuffer_name);
 
-			if (!gst_imx_blitter_video_sink_open_framebuffer_device(blitter_video_sink))
-				GST_ELEMENT_ERROR(blitter_video_sink, RESOURCE, OPEN_READ_WRITE, ("reopening framebuffer failed"), (NULL));
+			/* If the framebuffer is already open, reopen it to make use
+			 * of the new device name */
+			if (blitter_video_sink->framebuffer_fd != -1)
+			{
+				if (!gst_imx_blitter_video_sink_open_framebuffer_device(blitter_video_sink))
+					GST_ELEMENT_ERROR(blitter_video_sink, RESOURCE, OPEN_READ_WRITE, ("reopening framebuffer failed"), (NULL));
 
-			blitter_video_sink->canvas_needs_update = TRUE;
+				blitter_video_sink->canvas_needs_update = TRUE;
+			}
 
 			/* Done; now unlock */
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
