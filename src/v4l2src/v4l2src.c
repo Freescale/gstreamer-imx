@@ -299,6 +299,9 @@ static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 	case V4L2_PIX_FMT_YUV420: /* Special Case for handling YU12 */
 		pixel_format = "I420";
 		break;
+	case V4L2_PIX_FMT_YUYV: /* Special Case for handling YUYV */
+		pixel_format = "YUY2";
+		break;
 	default:
 		gst_fmt = gst_video_format_from_fourcc(fmt.fmt.pix.pixelformat);
 		pixel_format = gst_video_format_to_string(gst_fmt);
