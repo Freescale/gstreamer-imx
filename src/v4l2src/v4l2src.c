@@ -281,8 +281,8 @@ static gboolean gst_imx_v4l2src_negotiate(GstBaseSrc *src)
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
 	GstVideoFormat gst_fmt;
-	const char *pixel_format = NULL;
-	const char *interlace_mode = "progressive";
+	const gchar *pixel_format = NULL;
+	const gchar *interlace_mode = "progressive";
 	struct v4l2_format fmt;
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -323,8 +323,8 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 {
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
-	const char *pixel_format = "I420";
-	const char *interlace_mode = "progressive";
+	const gchar *pixel_format = "I420";
+	const gchar *interlace_mode = "progressive";
 
 	GST_INFO_OBJECT(v4l2src, "get caps filter %" GST_PTR_FORMAT, (gpointer)filter);
 
