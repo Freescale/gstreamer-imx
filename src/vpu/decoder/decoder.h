@@ -81,7 +81,7 @@ struct _GstImxVpuDec
 
 	GSList *virt_dec_mem_blocks, *phys_dec_mem_blocks;
 
-	GHashTable *frame_table;
+	GHashTable *frame_table, *gst_frame_table;
 };
 
 

@@ -214,6 +214,9 @@ static gboolean gst_imx_vpu_dec_alloc_dec_mem_blocks(GstImxVpuDec *vpu_dec);
 static gboolean gst_imx_vpu_dec_free_dec_mem_blocks(GstImxVpuDec *vpu_dec);
 static gboolean gst_imx_vpu_dec_fill_param_set(GstImxVpuDec *vpu_dec, GstVideoCodecState *state, VpuDecOpenParam *open_param, GstBuffer **codec_data);
 static void gst_imx_vpu_dec_close_decoder(GstImxVpuDec *vpu_dec);
+static void gst_imx_vpu_dec_add_gst_frame(GstImxVpuDec *vpu_dec, GstVideoCodecFrame *frame);
+static void gst_imx_vpu_dec_remove_gst_frame(GstImxVpuDec *vpu_dec, GstVideoCodecFrame *frame);
+static void gst_imx_vpu_dec_clear_gst_frames(GstImxVpuDec *vpu_dec);
 
 /* functions for the base class */
 static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder);
@@ -652,6 +655,38 @@ static void gst_imx_vpu_dec_close_decoder(GstImxVpuDec *vpu_dec)
 }
 
 
+static void gst_imx_vpu_dec_add_gst_frame(GstImxVpuDec *vpu_dec, GstVideoCodecFrame *frame)
+{
+	g_assert(vpu_dec->gst_frame_table != NULL);
+	g_hash_table_add(vpu_dec->gst_frame_table, frame);
+}
+
+
+static void gst_imx_vpu_dec_remove_gst_frame(GstImxVpuDec *vpu_dec, GstVideoCodecFrame *frame)
+{
+	g_assert(vpu_dec->gst_frame_table != NULL);
+	g_hash_table_remove(vpu_dec->gst_frame_table, frame);
+}
+
+
+static void gst_imx_vpu_dec_clear_gst_frames(GstImxVpuDec *vpu_dec)
+{
+	GHashTableIter iter;
+	gpointer key;
+
+	GST_DEBUG_OBJECT(vpu_dec, "clearing %u frames", g_hash_table_size(vpu_dec->gst_frame_table));
+
+	g_hash_table_iter_init(&iter, vpu_dec->gst_frame_table);
+	while (g_hash_table_iter_next (&iter, &key, NULL))
+	{
+		GstVideoCodecFrame *frame = (GstVideoCodecFrame *)key;
+		gst_video_decoder_release_frame(GST_VIDEO_DECODER_CAST(vpu_dec), frame);
+	}
+
+	g_hash_table_remove_all(vpu_dec->gst_frame_table);
+}
+
+
 
 
 /********************************/
@@ -680,6 +715,7 @@ static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder)
 	}
 
 	vpu_dec->frame_table = g_hash_table_new(NULL, NULL);
+	vpu_dec->gst_frame_table = g_hash_table_new(NULL, NULL);
 
 	vpu_dec->allocator = gst_imx_vpu_dec_allocator_new();
 
@@ -708,9 +744,12 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 
 	vpu_dec = GST_IMX_VPU_DEC(decoder);
 
-	/* Output frames that are already decoded but not yet displayed */
-	GST_INFO_OBJECT(decoder, "draining remaining frames from decoder");
-	gst_imx_vpu_dec_finish(decoder);
+	if (vpu_dec->gst_frame_table != NULL)
+	{
+		gst_imx_vpu_dec_clear_gst_frames(vpu_dec);
+		g_hash_table_destroy(vpu_dec->gst_frame_table);
+		vpu_dec->gst_frame_table = NULL;
+	}
 
 	if (vpu_dec->current_framebuffers != NULL)
 	{
@@ -887,6 +926,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	GstImxVpuDec *vpu_dec;
 
 	vpu_dec = GST_IMX_VPU_DEC(decoder);
+
+	gst_imx_vpu_dec_add_gst_frame(vpu_dec, cur_frame);
 
 	memset(&in_data, 0, sizeof(in_data));
 
@@ -1152,6 +1193,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			 * are not supposed to be shown, only decoded */
 
 			GST_VIDEO_CODEC_FRAME_SET_DECODE_ONLY(cur_frame);
+			gst_imx_vpu_dec_remove_gst_frame(vpu_dec, cur_frame);
 			gst_video_decoder_finish_frame(decoder, cur_frame);
 
 			/* not unref'ing cur_frame here, since it hasn't been
@@ -1291,6 +1333,8 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 		if (out_frame != NULL)
 		{
+			gst_imx_vpu_dec_remove_gst_frame(vpu_dec, out_frame);
+
 			/* Unref output frame, since get_frame() and get_oldest_frame() ref it */
 			gst_video_codec_frame_unref(out_frame);
 
@@ -1335,6 +1379,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	else if (buffer_ret_code & VPU_DEC_OUTPUT_DROPPED)
 	{
 		GstVideoCodecFrame *out_frame = gst_video_decoder_get_oldest_frame(decoder);
+		gst_imx_vpu_dec_remove_gst_frame(vpu_dec, out_frame);
 		gst_video_codec_frame_unref(out_frame);
 		gst_video_decoder_drop_frame(decoder, out_frame);
 
@@ -1350,6 +1395,7 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 	if ((cur_frame != NULL) && !(buffer_ret_code & (VPU_DEC_ONE_FRM_CONSUMED | VPU_DEC_INPUT_USED)))
 	{
 		GST_DEBUG_OBJECT(vpu_dec, "VPU did not use input frame, and no consumed frame info available -> drop input frame");
+		gst_imx_vpu_dec_remove_gst_frame(vpu_dec, cur_frame);
 		gst_video_decoder_drop_frame(decoder, cur_frame);
 	}
 
@@ -1403,6 +1449,8 @@ static gboolean gst_imx_vpu_dec_flush(GstVideoDecoder *decoder)
 			return FALSE;
 		}
 	}
+
+	gst_imx_vpu_dec_clear_gst_frames(vpu_dec);
 
 	return TRUE;
 }
