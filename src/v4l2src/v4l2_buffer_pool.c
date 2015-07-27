@@ -137,6 +137,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	GstImxV4l2Meta *meta;
 	GstImxPhysMemMeta *phys_mem_meta;
 	GstVideoInfo *info;
+	GstVideoCropMeta *meta_crop;
 
 	buf = gst_buffer_new();
 	if (buf == NULL)
@@ -194,6 +195,14 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 				info->offset,
 				info->stride
 				);
+	}
+
+	if (pool->metaCropX || pool->metaCropY || pool->metaCropWidth || pool->metaCropHeight) {
+		meta_crop = gst_buffer_add_video_crop_meta(buf);
+		meta_crop->x = pool->metaCropX;
+		meta_crop->y = pool->metaCropY;
+		meta_crop->width = pool->metaCropWidth;
+		meta_crop->height = pool->metaCropHeight;
 	}
 
 	pool->num_allocated++;
@@ -347,6 +356,10 @@ static void gst_imx_v4l2_buffer_pool_init(GstImxV4l2BufferPool *pool)
 {
 	GST_DEBUG_OBJECT(pool, "initializing V4L2 buffer pool");
 	pool->fd_obj_v4l = NULL;
+	pool->metaCropX = 0;
+	pool->metaCropY = 0;
+	pool->metaCropWidth = 0;
+	pool->metaCropHeight = 0;
 }
 
 static void gst_imx_v4l2_buffer_pool_finalize(GObject *object)
@@ -382,12 +395,17 @@ static void gst_imx_v4l2_buffer_pool_class_init(GstImxV4l2BufferPoolClass *klass
 	parent_class->release_buffer = GST_DEBUG_FUNCPTR(gst_imx_v4l2_buffer_pool_release_buffer);
 }
 
-GstBufferPool *gst_imx_v4l2_buffer_pool_new(GstImxFDObject *fd_obj_v4l)
+GstBufferPool *gst_imx_v4l2_buffer_pool_new(GstImxFDObject *fd_obj_v4l, guint metaCropX,
+					    guint metaCropY, guint metaCropWidth, guint metaCropHeight)
 {
 	GstImxV4l2BufferPool *pool;
 
 	pool = g_object_new(gst_imx_v4l2_buffer_pool_get_type(), NULL);
 	pool->fd_obj_v4l = gst_imx_fd_object_ref(fd_obj_v4l);
+	pool->metaCropX = metaCropX;
+	pool->metaCropY = metaCropY;
+	pool->metaCropWidth = metaCropWidth;
+	pool->metaCropHeight = metaCropHeight;
 
 	return GST_BUFFER_POOL_CAST(pool);
 }
