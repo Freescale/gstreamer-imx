@@ -680,7 +680,8 @@ static void gst_imx_vpu_dec_clear_gst_frames(GstImxVpuDec *vpu_dec)
 	while (g_hash_table_iter_next (&iter, &key, NULL))
 	{
 		GstVideoCodecFrame *frame = (GstVideoCodecFrame *)key;
-		gst_video_decoder_release_frame(GST_VIDEO_DECODER(vpu_dec), frame);
+		if (frame != NULL)
+			gst_video_decoder_release_frame(GST_VIDEO_DECODER(vpu_dec), frame);
 	}
 
 	g_hash_table_remove_all(vpu_dec->gst_frame_table);
