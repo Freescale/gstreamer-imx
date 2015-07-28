@@ -304,12 +304,6 @@ static void gst_imx_blitter_video_sink_dispose(GObject *object)
 		blitter_video_sink->framebuffer_name = NULL;
 	}
 
-	if (blitter_video_sink->framebuffer_fd != -1)
-	{
-		close(blitter_video_sink->framebuffer_fd);
-		blitter_video_sink->framebuffer_fd = -1;
-	}
-
 	if (blitter_video_sink->blitter != NULL)
 	{
 		gst_object_unref(blitter_video_sink->blitter);
