@@ -65,8 +65,12 @@ GST_DEBUG_CATEGORY_STATIC(gst_imx_v4l2src_debug_category);
 	GST_DEBUG_CATEGORY_INIT(gst_imx_v4l2src_debug_category, \
 			"imxv4l2videosrc", 0, "V4L2 CSI video source");
 
-G_DEFINE_TYPE_WITH_CODE(GstImxV4l2VideoSrc, gst_imx_v4l2src,
-	GST_TYPE_PUSH_SRC, DEBUG_INIT)
+static void gst_imx_v4l2src_uri_handler_init(gpointer g_iface,
+	gpointer iface_data);
+
+G_DEFINE_TYPE_WITH_CODE(GstImxV4l2VideoSrc, gst_imx_v4l2src, GST_TYPE_PUSH_SRC,
+	G_IMPLEMENT_INTERFACE(GST_TYPE_URI_HANDLER, gst_imx_v4l2src_uri_handler_init);
+	DEBUG_INIT)
 
 static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 {
@@ -502,6 +506,54 @@ static void gst_imx_v4l2src_class_init(GstImxV4l2VideoSrcClass *klass)
 			gst_static_pad_template_get(&src_template));
 
 	return;
+}
+
+/* GstURIHandler interface */
+static GstURIType gst_imx_v4l2src_uri_get_type(GType type)
+{
+	return GST_URI_SRC;
+}
+
+static const gchar *const * gst_imx_v4l2src_uri_get_protocols(GType type)
+{
+	static const gchar *protocols[] = { "imxv4l2", NULL };
+
+	return protocols;
+}
+
+static gchar * gst_imx_v4l2src_uri_get_uri(GstURIHandler * handler)
+{
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(handler);
+
+	if (v4l2src->devicename != NULL) {
+		return g_strdup_printf("imxv4l2://%s", v4l2src->devicename);
+	}
+
+	return g_strdup ("imxv4l2://");
+}
+
+static gboolean gst_imx_v4l2src_uri_set_uri(GstURIHandler * handler,
+		const gchar * uri, GError ** error)
+{
+	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(handler);
+	const gchar *device = "/dev/video0";
+
+	if (strcmp (uri, "imxv4l2://") != 0) {
+		device = uri + 10;
+	}
+	g_object_set(v4l2src, "device", device, NULL);
+
+	return TRUE;
+}
+
+static void gst_imx_v4l2src_uri_handler_init(gpointer g_iface, gpointer iface_data)
+{
+	GstURIHandlerInterface *iface = (GstURIHandlerInterface *) g_iface;
+
+	iface->get_type = gst_imx_v4l2src_uri_get_type;
+	iface->get_protocols = gst_imx_v4l2src_uri_get_protocols;
+	iface->get_uri = gst_imx_v4l2src_uri_get_uri;
+	iface->set_uri = gst_imx_v4l2src_uri_set_uri;
 }
 
 static gboolean plugin_init(GstPlugin *plugin)
