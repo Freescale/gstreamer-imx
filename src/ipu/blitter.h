@@ -91,8 +91,10 @@ struct _GstImxIpuBlitter
 	guint32 fill_color;
 	GstImxRegion empty_regions[4];
 	guint num_empty_regions;
+
 	GstImxRegion clipped_outer_region;
 	gboolean clipped_outer_region_updated;
+	guint num_output_pages, num_cleared_output_pages;
 
 	gboolean deinterlacing_enabled;
 };

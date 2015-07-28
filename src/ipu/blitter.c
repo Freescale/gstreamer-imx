@@ -53,6 +53,7 @@ static gboolean gst_imx_ipu_blitter_set_output_video_info(GstImxBlitter *blitter
 
 static gboolean gst_imx_ipu_blitter_set_input_region(GstImxBlitter *blitter, GstImxRegion const *input_region);
 static gboolean gst_imx_ipu_blitter_set_output_canvas(GstImxBlitter *blitter, GstImxCanvas const *output_canvas);
+static gboolean gst_imx_ipu_blitter_set_num_output_pages(GstImxBlitter *blitter, guint num_output_pages);
 
 static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *input_frame);
 static gboolean gst_imx_ipu_blitter_set_output_frame(GstImxBlitter *blitter, GstBuffer *output_frame);
@@ -87,6 +88,7 @@ static void gst_imx_ipu_blitter_class_init(GstImxIpuBlitterClass *klass)
 	base_class->set_output_canvas      = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_output_canvas);
 	base_class->set_input_frame        = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_input_frame);
 	base_class->set_output_frame       = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_output_frame);
+	base_class->set_num_output_pages   = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_set_num_output_pages);
 	base_class->get_phys_mem_allocator = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_get_phys_mem_allocator);
 	base_class->fill_region            = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_fill_region);
 	base_class->blit                   = GST_DEBUG_FUNCPTR(gst_imx_ipu_blitter_blit);
@@ -116,6 +118,10 @@ static void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 	ipu_blitter->visibility_mask = 0;
 	ipu_blitter->fill_color = 0xFF000000;
 	ipu_blitter->num_empty_regions = 0;
+
+	ipu_blitter->clipped_outer_region_updated = FALSE;
+	ipu_blitter->num_output_pages = 1;
+	ipu_blitter->num_cleared_output_pages = 0;
 
 	ipu_blitter->deinterlacing_enabled = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
 }
@@ -221,6 +227,7 @@ static gboolean gst_imx_ipu_blitter_set_output_canvas(GstImxBlitter *blitter, Gs
 
 	ipu_blitter->clipped_outer_region = output_canvas->clipped_outer_region;
 	ipu_blitter->clipped_outer_region_updated = TRUE;
+	ipu_blitter->num_cleared_output_pages = 0;
 
 	ipu_blitter->visibility_mask = output_canvas->visibility_mask;
 	ipu_blitter->fill_color = output_canvas->fill_color;
@@ -236,6 +243,18 @@ static gboolean gst_imx_ipu_blitter_set_output_canvas(GstImxBlitter *blitter, Gs
 	}
 
 	gst_imx_ipu_blitter_set_output_rotation(ipu_blitter, output_canvas->inner_rotation);
+
+	return TRUE;
+}
+
+
+static gboolean gst_imx_ipu_blitter_set_num_output_pages(GstImxBlitter *blitter, guint num_output_pages)
+{
+	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(blitter);
+
+	ipu_blitter->clipped_outer_region_updated = TRUE;
+	ipu_blitter->num_cleared_output_pages = 0;
+	ipu_blitter->num_output_pages = num_output_pages;
 
 	return TRUE;
 }
@@ -401,10 +420,14 @@ static gboolean gst_imx_ipu_blitter_blit(GstImxBlitter *blitter, guint8 alpha)
 
 	if (ipu_blitter->clipped_outer_region_updated)
 	{
+		GST_DEBUG_OBJECT(ipu_blitter, "cleared page %u of %u", ipu_blitter->num_cleared_output_pages, ipu_blitter->num_output_pages);
+
 		if (!gst_imx_ipu_blitter_fill_region(blitter, &(ipu_blitter->clipped_outer_region), ipu_blitter->fill_color | 0xFF000000))
 			return FALSE;
 
-		ipu_blitter->clipped_outer_region_updated = FALSE;
+		ipu_blitter->num_cleared_output_pages++;
+		if (ipu_blitter->num_cleared_output_pages >= ipu_blitter->num_output_pages)
+			ipu_blitter->clipped_outer_region_updated = FALSE;
 	}
 
 	if (ret && (ipu_blitter->visibility_mask & GST_IMX_CANVAS_VISIBILITY_FLAG_REGION_INNER))
