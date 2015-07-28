@@ -376,6 +376,7 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 				blitter_video_sink->current_fb_page = 0;
 				gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, 0);
 				gst_imx_blitter_video_sink_flip_to_selected_fb_page(blitter_video_sink);
+				gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, b ? 2 : 1);
 			}
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
@@ -961,6 +962,7 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 	{
 		gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info));
 		gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer);
+		gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 2 : 1);
 	}
 
 
@@ -1196,5 +1198,6 @@ static gboolean gst_imx_blitter_video_sink_acquire_blitter(GstImxBlitterVideoSin
 
 	return gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer) &&
 	       gst_imx_blitter_set_output_canvas(blitter_video_sink->blitter, &(blitter_video_sink->canvas)) &&
-	       gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info));
+	       gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info)) &&
+	       gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 2 : 1);
 }

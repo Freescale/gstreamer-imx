@@ -48,6 +48,7 @@ void gst_imx_blitter_class_init(GstImxBlitterClass *klass)
 	klass->set_output_video_info  = NULL;
 	klass->set_input_region       = NULL;
 	klass->set_output_canvas      = NULL;
+	klass->set_num_output_pages   = NULL;
 	klass->set_input_frame        = NULL;
 	klass->set_output_frame       = NULL;
 	klass->get_phys_mem_allocator = NULL;
@@ -151,6 +152,20 @@ gboolean gst_imx_blitter_set_output_canvas(GstImxBlitter *blitter, GstImxCanvas 
 
 	if (klass->set_output_canvas != NULL)
 		return klass->set_output_canvas(blitter, output_canvas);
+	else
+		return TRUE;
+}
+
+
+gboolean gst_imx_blitter_set_num_output_pages(GstImxBlitter *blitter, guint num_output_pages)
+{
+	GstImxBlitterClass *klass;
+	g_assert(blitter != NULL);
+	g_assert(num_output_pages >= 1);
+	klass = GST_IMX_BLITTER_CLASS(G_OBJECT_GET_CLASS(blitter));
+
+	if (klass->set_num_output_pages != NULL)
+		return klass->set_num_output_pages(blitter, num_output_pages);
 	else
 		return TRUE;
 }

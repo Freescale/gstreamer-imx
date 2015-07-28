@@ -111,6 +111,16 @@ struct _GstImxBlitter
  *                          Use @gst_imx_canvas_calculate_inner_region and @gst_imx_canvas_clip
  *                          for this purpose.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
+ * @set_num_output_pages:   Optional.
+ *                          If a blitter clears the empty regions only once, this information is useful,
+ *                          since a num_output_pages larger than 1 means the caller will instruct the
+ *                          blitter to blit to multiple output pages as part of a page flipping process.
+ *                          The blitter therefore has to clear the empty regions once for each page.
+ *                          Blitters which update the empty regions every time can ignore this.
+ *                          A page count of 0 is invalid.
+ *                          If this is not called, or if this vfunc is not defined, then the blitter
+ *                          behaves as if the vfunc was called with a page count of 1.
+ *                          Returns TRUE if it successfully completed, FALSE otherwise.
  * @set_input_frame:        Required.
  *                          Sets the blitter's input frame. This may or may not be the frame set by
  *                          @gst_imx_blitter_set_input_frame . It depends on whether or not the
@@ -163,6 +173,7 @@ struct _GstImxBlitterClass
 
 	gboolean (*set_input_region)(GstImxBlitter *blitter, GstImxRegion const *input_region);
 	gboolean (*set_output_canvas)(GstImxBlitter *blitter, GstImxCanvas const *output_canvas);
+	gboolean (*set_num_output_pages)(GstImxBlitter *blitter, guint num_output_pages);
 
 	gboolean (*set_input_frame)(GstImxBlitter *blitter, GstBuffer *frame);
 	gboolean (*set_output_frame)(GstImxBlitter *blitter, GstBuffer *frame);
@@ -210,6 +221,13 @@ gboolean gst_imx_blitter_set_input_region(GstImxBlitter *blitter, GstImxRegion c
  * is NULL, and returns FALSE otherwise.
  */
 gboolean gst_imx_blitter_set_output_canvas(GstImxBlitter *blitter, GstImxCanvas const *output_canvas);
+/* Sets the number of output pages.
+ *
+ * @set_num_output_pages is called if this vfunc is defined.
+ * Returns TRUE if @set_num_output_pages returned TRUE, or if @set_num_output_pages
+ * is NULL, and returns FALSE otherwise.
+ */
+gboolean gst_imx_blitter_set_num_output_pages(GstImxBlitter *blitter, guint num_output_pages);
 
 /* Sets the input frame.
  *
