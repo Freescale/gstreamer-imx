@@ -868,12 +868,59 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 		return FALSE;
 	}
 
+
+	/* Copy FD, variable and fixed screen information structs
+	 * These are also needed during the vsync setup below*/
 	blitter_video_sink->framebuffer_fd = fd;
-
-
-	/* Copy variable and fixed screen information structs */
 	blitter_video_sink->fb_var = fb_var;
 	blitter_video_sink->fb_fix = fb_fix;
+
+
+	/* Set up vsync (vsync is done via page flipping) */
+	if (blitter_video_sink->use_vsync)
+	{
+		/* Check how many pages can currently be used. If this number is
+		 * less than 2, reconfigure the framebuffer to allow for 2 pages. */
+
+		guint cur_num_pages = fb_var.yres_virtual / fb_var.yres;
+		if (cur_num_pages < 2)
+		{
+			GST_INFO_OBJECT(
+				blitter_video_sink,
+				"framebuffer configuration:  resolution is %u x %u , virtual %u x %u => need to reconfigure virtual height",
+				fb_var.xres, fb_var.yres,
+				fb_var.xres_virtual, fb_var.yres_virtual
+			);
+			if (!gst_imx_blitter_video_sink_reconfigure_fb(blitter_video_sink, 2))
+			{
+				GST_ERROR_OBJECT(blitter_video_sink, "could not reconfigure framebuffer");
+				close(fd);
+				blitter_video_sink->framebuffer_fd = -1;
+				return FALSE;
+			}
+		}
+		else
+		{
+			GST_INFO_OBJECT(
+				blitter_video_sink,
+				"framebuffer configuration:  resolution is %u x %u , virtual %u x %u => don't need to reconfigure virtual height",
+				fb_var.xres, fb_var.yres,
+				fb_var.xres_virtual, fb_var.yres_virtual
+			);
+		}
+
+		/* Fetch fixed screen info again in case it changed after the FB reconfiguration */
+		if (ioctl(fd, FBIOGET_FSCREENINFO, &fb_fix) == -1)
+		{
+			GST_ERROR_OBJECT(blitter_video_sink, "could not open get fixed screen info: %s", strerror(errno));
+			close(fd);
+			blitter_video_sink->framebuffer_fd = -1;
+			return FALSE;
+		}
+
+		/* Update the fixed screen info copy */
+		blitter_video_sink->fb_fix = fb_fix;
+	}
 
 
 	/* Get width, height, format for framebuffer */
@@ -906,20 +953,6 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 
 	/* New framebuffer means the canvas most likely changed -> update */
 	blitter_video_sink->canvas_needs_update = TRUE;
-
-
-	/* Set up vsync (vsync is done via page flipping) */
-	if (blitter_video_sink->use_vsync)
-	{
-		guint cur_num_pages = fb_var.yres_virtual / fb_var.yres;
-		if (cur_num_pages < 2)
-		{
-			GST_INFO_OBJECT(blitter_video_sink, "framebuffer configuration:  resolution is %u x %u , virtual %u x %u => need to reconfigure virtual height", fb_width, fb_height, fb_var.xres_virtual, fb_var.yres_virtual);
-			gst_imx_blitter_video_sink_reconfigure_fb(blitter_video_sink, 2);
-		}
-		else
-			GST_INFO_OBJECT(blitter_video_sink, "framebuffer configuration:  resolution is %u x %u , virtual %u x %u => don't need to reconfigure virtual height", fb_width, fb_height, fb_var.xres_virtual, fb_var.yres_virtual);
-	}
 
 
 	/* If a blitter is present, set its output video info
@@ -997,7 +1030,7 @@ static gboolean gst_imx_blitter_video_sink_set_virtual_fb_height(GstImxBlitterVi
 
 	if (ioctl(blitter_video_sink->framebuffer_fd, FBIOPUT_VSCREENINFO, &(blitter_video_sink->fb_var)) == -1)
 	{
-		GST_ERROR_OBJECT(blitter_video_sink, "could not open set variable screen info with updates virtual y resolution: %s", strerror(errno));
+		GST_ERROR_OBJECT(blitter_video_sink, "could not set variable screen info with updated virtual y resolution: %s", strerror(errno));
 		return FALSE;
 	}
 	else
@@ -1007,8 +1040,10 @@ static gboolean gst_imx_blitter_video_sink_set_virtual_fb_height(GstImxBlitterVi
 
 static gboolean gst_imx_blitter_video_sink_reconfigure_fb(GstImxBlitterVideoSink *blitter_video_sink, guint num_pages)
 {
+	/* Make room for an integer number of pages by adjusting the virtual height */
 	guint new_virtual_height = blitter_video_sink->fb_var.yres * num_pages;
 
+	/* Save the original virtual height to be able to restore it later */
 	blitter_video_sink->original_fb_virt_height = blitter_video_sink->fb_var.yres_virtual;
 
 	GST_INFO_OBJECT(blitter_video_sink, "setting new configuration: original virtual height: %u new virtual height: %u", blitter_video_sink->original_fb_virt_height, new_virtual_height);
@@ -1024,6 +1059,8 @@ static gboolean gst_imx_blitter_video_sink_restore_original_fb_config(GstImxBlit
 	GST_INFO_OBJECT(blitter_video_sink, "restoring configuration: virtual height %u", blitter_video_sink->original_fb_virt_height);
 
 	ret = gst_imx_blitter_video_sink_set_virtual_fb_height(blitter_video_sink, blitter_video_sink->original_fb_virt_height);
+	/* After restoring, reset original_fb_virt_height to 0, indicating
+	 * that there is no longer any original virtual height to restore */
 	blitter_video_sink->original_fb_virt_height = 0;
 
 	return ret;
