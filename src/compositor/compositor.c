@@ -284,6 +284,7 @@ static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor
 		&(compositor_pad->canvas),
 		&(compositor->overall_region),
 		info,
+		NULL,
 		&(compositor_pad->source_subset)
 	);
 

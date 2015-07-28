@@ -1166,6 +1166,7 @@ static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *bli
 		&(blitter_video_sink->canvas),
 		&(blitter_video_sink->framebuffer_region),
 		&(blitter_video_sink->input_video_info),
+		NULL,
 		&source_subset
 	);
 

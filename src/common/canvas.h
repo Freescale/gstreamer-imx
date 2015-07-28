@@ -120,31 +120,37 @@ void gst_imx_canvas_calculate_inner_region(GstImxCanvas *canvas, GstVideoInfo co
 /* Given a canvas, calculate its clipped region, and empty region fields.
  *
  * This function clips both inner and outer region against screen_region, defines the
- * empty regions, and sets the visibility_mask.
+ * empty regions, and sets the visibility_mask. This is useful for determining which
+ * parts of the canvas are actually visible.
  *
- * The canvas will be clipped by writing to the visibility_mask, empty region,
+ * The canvas will be updated by writing to the visibility_mask, empty region,
  * inner region, and clipped region fields. The other fields are left unmodified.
  *
  * It requires the canvas' outer_region, inner_region, keep_aspect_ratio, margin, and
  * inner_rotation fields to be set. Using gst_imx_canvas_calculate_inner_region() to
  * compute the inner_region field is recommended.
  *
- * This is useful for determining which parts of the canvas are actually visible.
  * Also, it determines which parts of the source video are visible, and passes this
  * region to source_subset. This way, all a blitter has to do is to copy pixels
  * from the source_subset on the input video frames to the clipped-inner_region on
  * the output frame, and then fill the empty regions on the output frame with a solid
  * color. All of the required canvas/region calculations are done in this function.
+ * source_subset is a subset of the "source region", which is either the entire
+ * input frame is source_region is NULL, or exactly the region described by
+ * source_region.
  *
  * @param canvas canvas to clip
  * @param screen_region region on the output frame representing the screen (or the
  *        subset of the screen where painting shall occur)
  * @param info input video information
+ * @param source_region region on the input video frame which is what can maximally
+ *        be blitted from that frame. If this is NULL, the source region contains
+ *        the entire frame. Otherwise, this region must be fully contained within the
+ *        input video frame. This is useful for cropping.
  * @param source_subset region value which will be filled with values describing a
- *        region on the input video frames which will be visible on the output
- *        frame
+ *        subset of the source region which will be visible on the output frame
  */
-void gst_imx_canvas_clip(GstImxCanvas *canvas, GstImxRegion const *screen_region, GstVideoInfo const *info, GstImxRegion *source_subset);
+void gst_imx_canvas_clip(GstImxCanvas *canvas, GstImxRegion const *screen_region, GstVideoInfo const *info, GstImxRegion const *source_region, GstImxRegion *source_subset);
 
 
 G_END_DECLS

@@ -951,7 +951,7 @@ static gboolean gst_imx_blitter_video_transform_set_caps(GstBaseTransform *trans
 	canvas->outer_region.y2 = GST_VIDEO_INFO_HEIGHT(&out_info);
 
 	gst_imx_canvas_calculate_inner_region(canvas, &in_info);
-	gst_imx_canvas_clip(canvas, &(canvas->outer_region), &in_info, &source_subset);
+	gst_imx_canvas_clip(canvas, &(canvas->outer_region), &in_info, NULL, &source_subset);
 
 	gst_imx_blitter_set_input_region(blitter_video_transform->blitter, &source_subset);
 	gst_imx_blitter_set_output_canvas(blitter_video_transform->blitter, canvas);

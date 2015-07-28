@@ -66,11 +66,11 @@ void gst_imx_canvas_calculate_inner_region(GstImxCanvas *canvas, GstVideoInfo co
 }
 
 
-void gst_imx_canvas_clip(GstImxCanvas *canvas, GstImxRegion const *screen_region, GstVideoInfo const *info, GstImxRegion *source_subset)
+void gst_imx_canvas_clip(GstImxCanvas *canvas, GstImxRegion const *screen_region, GstVideoInfo const *info, GstImxRegion const *source_region, GstImxRegion *source_subset)
 {
 	GstImxRegion *clipped_outer_region;
 	GstImxRegion *clipped_inner_region;
-	GstImxRegion source_region;
+	GstImxRegion actual_source_region;
 	GstImxRegionContains contains;
 
 	g_assert(canvas != NULL);
@@ -98,21 +98,30 @@ void gst_imx_canvas_clip(GstImxCanvas *canvas, GstImxRegion const *screen_region
 		*clipped_outer_region = canvas->outer_region;
 
 	/* Check the visibility of the inner region. Clip it if necessary.
-	 * Also calculate the visible subset of the source region.
-	 * The source region is the rectangle that encompasses the entire input
-	 * video frame, in input video frame coordinates. This is needed by blitters
-	 * to define what subset of the source frame to blit. */
-	source_region.x1 = 0;
-	source_region.y1 = 0;
-	source_region.x2 = GST_VIDEO_INFO_WIDTH(info);
-	source_region.y2 = GST_VIDEO_INFO_HEIGHT(info);
+	 * Also calculate the visible subset of the source region. */
+	if (source_region == NULL)
+	{
+		actual_source_region.x1 = 0;
+		actual_source_region.y1 = 0;
+		actual_source_region.x2 = GST_VIDEO_INFO_WIDTH(info);
+		actual_source_region.y2 = GST_VIDEO_INFO_HEIGHT(info);
+	}
+	else
+	{
+		actual_source_region = *source_region;
+		g_assert(actual_source_region.x1 <= actual_source_region.x2);
+		g_assert(actual_source_region.y1 <= actual_source_region.y2);
+		g_assert(actual_source_region.x2 <= GST_VIDEO_INFO_WIDTH(info));
+		g_assert(actual_source_region.y2 <= GST_VIDEO_INFO_HEIGHT(info));
+	}
+
 	switch (gst_imx_region_contains(&(canvas->inner_region), screen_region))
 	{
 		case GST_IMX_REGION_CONTAINS_FULL:
 		{
 			/* Inner region is fully visible. The entire source region is
 			 * used for the blit operation. */
-			*source_subset = source_region;
+			*source_subset = actual_source_region;
 			*clipped_inner_region = canvas->inner_region;
 			canvas->visibility_mask |= GST_IMX_CANVAS_VISIBILITY_FLAG_REGION_INNER;
 			break;
@@ -129,17 +138,18 @@ void gst_imx_canvas_clip(GstImxCanvas *canvas, GstImxRegion const *screen_region
 			GstImxRegion *full_inner_region = &(canvas->inner_region);
 			gst_imx_region_intersect(clipped_inner_region, full_inner_region, screen_region);
 
-			src_w = source_region.x2 - source_region.x1;
-			src_h = source_region.y2 - source_region.y1;
+			src_w = actual_source_region.x2 - actual_source_region.x1;
+			src_h = actual_source_region.y2 - actual_source_region.y1;
 			inner_w = full_inner_region->x2 - full_inner_region->x1;
 			inner_h = full_inner_region->y2 - full_inner_region->y1;
 
 			/* The source subset uses the same coordinate space as the source region,
-			 * so the intersection region's offsets must be scaled appropriately. */
-			source_subset->x1 = (clipped_inner_region->x1 - full_inner_region->x1) * src_w / inner_w;
-			source_subset->y1 = (clipped_inner_region->y1 - full_inner_region->y1) * src_h / inner_h;
-			source_subset->x2 = (clipped_inner_region->x2 - full_inner_region->x1) * src_w / inner_w;
-			source_subset->y2 = (clipped_inner_region->y2 - full_inner_region->y1) * src_h / inner_h;
+			 * so the intersection region's offsets must be scaled appropriately,
+			 * and the resulting coordinates must retain the original x/y offset. */
+			source_subset->x1 = (clipped_inner_region->x1 - full_inner_region->x1) * src_w / inner_w + actual_source_region.x1;
+			source_subset->y1 = (clipped_inner_region->y1 - full_inner_region->y1) * src_h / inner_h + actual_source_region.y1;
+			source_subset->x2 = (clipped_inner_region->x2 - full_inner_region->x1) * src_w / inner_w + actual_source_region.x1;
+			source_subset->y2 = (clipped_inner_region->y2 - full_inner_region->y1) * src_h / inner_h + actual_source_region.y1;
 
 			canvas->visibility_mask |= GST_IMX_CANVAS_VISIBILITY_FLAG_REGION_INNER;
 			break;
