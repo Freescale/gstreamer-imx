@@ -1,3 +1,25 @@
+==== version 0.11.1 (2015-07-29) ====
+
+* vpu: decoder: Keep track of unfinished gstvideo frames
+  This was causing pipeline errors and memory leaks with GStreamer 1.4
+
+* blitter fixes and enhancements:
+  * Fix vsync setup in video sink base class
+  * Cropping reintroduced in video sinks and transform elements
+  * videotransform: offset, offset-end, and duration of input buffers are now
+    copied
+
+* ipu: All pages are now cleared when page flipping is used (needed for vsync),
+  not just the first one
+
+* compositor: Added support for cropping input streams
+
+* imxv4l2src fixes and enhancements:
+  * Use GLib gchar instead of char
+  * Add support for imxv4l2://<devicename> URIs via the GstUriHandler
+  * Add special case to support YUYV data (GStreamer expects YUY2 in its place)
+
+
 ==== version 0.11.0 (2015-07-23) ====
 
 * new common codebase for rectangular regions and video canvases

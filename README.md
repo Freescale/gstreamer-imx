@@ -45,7 +45,9 @@ Features
   Command lines which use that compositor can make use of hardware-accelerated compositing simply by
   replacing "compositor" with "imxg2dcompositor", for example. Furthermore, the imx compositor elements
   also allow for 90-degree step rotations, alpha blending, aspect ratio correction, and empty region filling.
-* Video4Linux source element with i.MX specific enhancements for zerocopy
+* Video4Linux source element with i.MX specific enhancements for zerocopy; can also be controlled via the
+  GstUriHandler interface, making it possible to show camera feeds directly with uridecodebin and playbin
+  simply by specifying a `imxv4l2src://<camera device name>` URI
 * G2D/IPU/PxP video sinks support tearing-free vsync output via page flipping
 
 
