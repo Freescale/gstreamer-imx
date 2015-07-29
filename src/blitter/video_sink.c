@@ -651,6 +651,7 @@ static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			blitter_video_sink->is_paused = FALSE;
 			blitter_video_sink->last_frame_with_cropdata = FALSE;
+			blitter_video_sink->canvas_needs_update = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
@@ -811,7 +812,7 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 
 	if (blitter_video_sink->input_crop && ((video_crop_meta = gst_buffer_get_video_crop_meta(buf)) != NULL))
 	{
-		/* Crop metdata present. Reconfigure canvas. */
+		/* Crop metadata present. Reconfigure canvas. */
 
 		GstImxRegion source_region;
 		source_region.x1 = video_crop_meta->x;
