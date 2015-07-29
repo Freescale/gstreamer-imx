@@ -3,7 +3,7 @@ This has been done to avoid a dependency on GStreamer >= 1.5. Right now it is to
 The classes and functions were renamed to use the prefix "GstImxBP" instead of just "Gst", to avoid name collisions if anybody uses gstreamer-imx
 with GStreamer >= 1.5. (The "BP" in "ImxBP" mean "backport.")
 
-Taken from gst-plugins-bad git head 6125ea7e9778f52cf36f5a797bf6429c7a61a4da .
+Taken from gst-plugins-bad git head 730b5c8aa240162f6b1cd7ac4db67b00a58f0073 .
 
 The other modifications are:
 * Added a couple of G_GNUC_UNUSED macros to suppress redundant warnings
