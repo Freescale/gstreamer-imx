@@ -90,6 +90,8 @@ In addition, the imx compositor pads have these properties:
 * `bottom-margin` : Bottom margin in pixels, defining an empty space at the bottom side between the border of the outer frame and the actual inner video frame
 * `rotation` : 90-degree step rotation mode for the inner video frame
 * `keep-aspect-ratio` : If true, the aspect ratio of the inner video frame is maintained, potentially creating empty regions
+* `input-crop` : If true, [GstVideoCropMeta](http://gstreamer.freedesktop.org/data/doc/gstreamer/head/gst-plugins-base-libs/html/gst-plugins-base-libs-gstvideometa.html#GstVideoCropMeta)
+                 data in input video frames will be supported; instead of blitting from the entire input video frame it then blits from the rectangle specified by this meta
 * `fill-color` : What color to use to fill the aforementioned empty regions, specified as a 32-bit ABGR color value
 
 The compositors have the notion of "inner" and "outer" frames. The "inner" frame is the actual video frame,

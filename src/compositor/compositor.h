@@ -110,6 +110,9 @@ struct _GstImxCompositorPad
 	GstImxCanvas canvas;
 	GstImxRegion source_subset;
 	gdouble alpha;
+	gboolean input_crop;
+	gboolean last_frame_with_cropdata;
+	GstImxRegion last_source_region;
 	gint xpos, ypos, width, height;
 };
 

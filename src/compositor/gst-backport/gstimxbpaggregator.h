@@ -92,7 +92,9 @@ struct _GstImxBPAggregatorPadClass
 {
   GstPadClass   parent_class;
 
-  GstFlowReturn (*flush)     (GstImxBPAggregatorPad * aggpad, GstImxBPAggregator * aggregator);
+  /* NOTE: return value changed from GstFlowReturn to gboolean for gstreamer-imx
+   * to avoid incorrect return values (bug in upstream?) */
+  gboolean (*flush)     (GstImxBPAggregatorPad * aggpad, GstImxBPAggregator * aggregator);
 
   /*< private >*/
   gpointer      _gst_reserved[GST_PADDING_LARGE];

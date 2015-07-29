@@ -29,6 +29,7 @@ enum
 	PROP_PAD_BOTTOM_MARGIN,
 	PROP_PAD_ROTATION,
 	PROP_PAD_KEEP_ASPECT_RATIO,
+	PROP_PAD_INPUT_CROP,
 	PROP_PAD_ALPHA,
 	PROP_PAD_FILL_COLOR
 };
@@ -43,6 +44,7 @@ enum
 #define DEFAULT_PAD_BOTTOM_MARGIN 0
 #define DEFAULT_PAD_ROTATION GST_IMX_CANVAS_INNER_ROTATION_NONE
 #define DEFAULT_PAD_KEEP_ASPECT_RATIO TRUE
+#define DEFAULT_PAD_INPUT_CROP TRUE
 #define DEFAULT_PAD_ALPHA 1.0
 #define DEFAULT_PAD_FILL_COLOR (0xFF000000)
 
@@ -51,7 +53,9 @@ G_DEFINE_TYPE(GstImxCompositorPad, gst_imx_compositor_pad, GST_TYPE_VIDEO_AGGREG
 
 
 static void gst_imx_compositor_pad_compute_outer_region(GstImxCompositorPad *compositor_pad);
-static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor_pad);
+static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor_pad, GstImxRegion const *source_region);
+
+static gboolean gst_imx_compositor_pad_flush(GstImxBPAggregatorPad *aggpad, GstImxBPAggregator *aggregator);
 
 static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
@@ -60,14 +64,22 @@ static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, 
 static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 {
 	GObjectClass *object_class;
+	GstImxBPAggregatorPadClass *aggregator_pad_class;
 	GstImxBPVideoAggregatorPadClass *videoaggregator_pad_class;
 
 	object_class = G_OBJECT_CLASS(klass);
+	aggregator_pad_class = GST_IMXBP_AGGREGATOR_PAD_CLASS(klass);
 	videoaggregator_pad_class = GST_IMXBP_VIDEO_AGGREGATOR_PAD_CLASS(klass);
 
 	object_class->set_property  = GST_DEBUG_FUNCPTR(gst_imx_compositor_pad_set_property);
 	object_class->get_property  = GST_DEBUG_FUNCPTR(gst_imx_compositor_pad_get_property);
 
+	aggregator_pad_class->flush = GST_DEBUG_FUNCPTR(gst_imx_compositor_pad_flush);
+
+	/* Explicitely set these to NULL to force the base class
+	 * to not try any software-based colorspace conversions
+	 * Subclasses use i.MX blitters, which are capable of
+	 * hardware-accelerated colorspace conversions */
 	videoaggregator_pad_class->set_info      = NULL;
 	videoaggregator_pad_class->prepare_frame = NULL;
 	videoaggregator_pad_class->clean_frame   = NULL;
@@ -193,6 +205,17 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 	);
 	g_object_class_install_property(
 		object_class,
+		PROP_PAD_INPUT_CROP,
+		g_param_spec_boolean(
+			"input-crop",
+			"Input crop",
+			"Whether or not to crop input frames based on their video crop metadata",
+			DEFAULT_PAD_INPUT_CROP,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
 		PROP_PAD_ALPHA,
 		g_param_spec_double(
 			"alpha",
@@ -230,6 +253,8 @@ static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
 	compositor_pad->ypos = DEFAULT_PAD_YPOS;
 	compositor_pad->width = DEFAULT_PAD_WIDTH;
 	compositor_pad->height = DEFAULT_PAD_HEIGHT;
+	compositor_pad->input_crop = DEFAULT_PAD_INPUT_CROP;
+	compositor_pad->last_frame_with_cropdata = FALSE;
 	compositor_pad->pad_is_new = TRUE;
 }
 
@@ -259,7 +284,7 @@ static void gst_imx_compositor_pad_compute_outer_region(GstImxCompositorPad *com
 }
 
 
-static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor_pad)
+static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor_pad, GstImxRegion const *source_region)
 {
 	GstImxCompositor *compositor;
 	GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
@@ -284,7 +309,7 @@ static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor
 		&(compositor_pad->canvas),
 		&(compositor->overall_region),
 		info,
-		NULL,
+		source_region,
 		&(compositor_pad->source_subset)
 	);
 
@@ -292,6 +317,16 @@ static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor
 	compositor_pad->canvas_needs_update = FALSE;
 
 	gst_object_unref(GST_OBJECT(compositor));
+}
+
+
+static gboolean gst_imx_compositor_pad_flush(GstImxBPAggregatorPad *aggpad, GstImxBPAggregator *aggregator)
+{
+	GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD(aggpad);
+	GST_DEBUG_OBJECT(aggregator, "resetting internal compositor pad flags");
+	compositor_pad->last_frame_with_cropdata = TRUE;
+	compositor_pad->canvas_needs_update = TRUE;
+	return TRUE;
 }
 
 
@@ -358,6 +393,10 @@ static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, 
 			compositor_pad->canvas_needs_update = TRUE;
 			break;
 
+		case PROP_PAD_INPUT_CROP:
+			compositor_pad->input_crop = g_value_get_boolean(value);
+			break;
+
 		case PROP_PAD_ALPHA:
 			compositor_pad->alpha = g_value_get_double(value);
 			break;
@@ -421,6 +460,10 @@ static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, 
 			g_value_set_boolean(value, compositor_pad->canvas.keep_aspect_ratio);
 			break;
 
+		case PROP_PAD_INPUT_CROP:
+			g_value_set_boolean(value, compositor_pad->input_crop);
+			break;
+
 		case PROP_PAD_ALPHA:
 			g_value_set_double(value, compositor_pad->alpha);
 			break;
@@ -460,6 +503,7 @@ static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GVal
 
 static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstQuery *query);
 static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstEvent *event);
+//static gboolean gst_imx_compositor_stop(GstImxBPAggregator *aggregator);
 
 static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer);
 static GstFlowReturn gst_imx_compositor_get_output_buffer(GstImxBPVideoAggregator *videoaggregator, GstBuffer **outbuffer);
@@ -487,6 +531,7 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 
 	aggregator_class->sink_query    = GST_DEBUG_FUNCPTR(gst_imx_compositor_sink_query);
 	aggregator_class->sink_event    = GST_DEBUG_FUNCPTR(gst_imx_compositor_sink_event);
+//	aggregator_class->stop          = GST_DEBUG_FUNCPTR(gst_imx_compositor_stop);
 	aggregator_class->sinkpads_type = gst_imx_compositor_pad_get_type();
 
 	video_aggregator_class->aggregate_frames  = GST_DEBUG_FUNCPTR(gst_imx_compositor_aggregate_frames);
@@ -652,6 +697,23 @@ static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, Gs
 }
 
 
+#if 0
+static gboolean gst_imx_compositor_stop(GstImxBPAggregator *aggregator)
+{
+	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
+
+	walk = GST_ELEMENT(videoaggregator)->sinkpads;
+	while (walk != NULL)
+	{
+		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
+		compositor_pad->last_frame_with_cropdata = TRUE;
+		compositor_pad->canvas_needs_update = TRUE;
+		walk = g_list_next(walk);
+	}
+}
+#endif
+
+
 static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer)
 {
 	GstFlowReturn ret = GST_FLOW_OK;
@@ -736,9 +798,55 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 			 * Just skip to the next pad in that case */
 			if (videoaggregator_pad->buffer != NULL)
 			{
-				/* Update the pad's canvas if necessary,
-				 * to ensure there is a valid canvas to draw to */
-				gst_imx_compositor_pad_update_canvas(compositor_pad);
+				GstVideoCropMeta *video_crop_meta;
+				if (compositor_pad->input_crop && ((video_crop_meta = gst_buffer_get_video_crop_meta(videoaggregator_pad->buffer)) != NULL))
+				{
+					/* Crop metadata present. Reconfigure canvas. */
+
+					GstVideoInfo *info = &(videoaggregator_pad->info);
+
+					GstImxRegion source_region;
+					source_region.x1 = video_crop_meta->x;
+					source_region.y1 = video_crop_meta->y;
+					source_region.x2 = video_crop_meta->x + video_crop_meta->width;
+					source_region.y2 = video_crop_meta->y + video_crop_meta->height;
+
+					/* Make sure the source region does not exceed valid bounds */
+					source_region.x1 = MAX(0, source_region.x1);
+					source_region.y1 = MAX(0, source_region.y1);
+					source_region.x2 = MIN(GST_VIDEO_INFO_WIDTH(info), source_region.x2);
+					source_region.y2 = MIN(GST_VIDEO_INFO_HEIGHT(info), source_region.y2);
+
+					GST_LOG_OBJECT(compositor, "retrieved crop rectangle %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(&source_region));
+
+
+					/* Canvas needs to be updated if either one of these applies:
+					 * - the current frame has crop metadata, the last one didn't
+					 * - the new crop rectangle and the last are different */
+					if (!(compositor_pad->last_frame_with_cropdata) || !gst_imx_region_equal(&source_region, &(compositor_pad->last_source_region)))
+					{
+						GST_LOG_OBJECT(compositor, "using new crop rectangle %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(&source_region));
+						compositor_pad->last_source_region = source_region;
+						compositor_pad->canvas_needs_update = TRUE;
+					}
+
+					compositor_pad->last_frame_with_cropdata = TRUE;
+
+					/* Update canvas and input region if necessary */
+					if (compositor_pad->canvas_needs_update)
+						gst_imx_compositor_pad_update_canvas(compositor_pad, &(compositor_pad->last_source_region));
+				}
+				else
+				{
+					/* Force an update if this frame has no crop metadata but the last one did */
+					if (compositor_pad->last_frame_with_cropdata)
+						compositor_pad->canvas_needs_update = TRUE;
+					compositor_pad->last_frame_with_cropdata = FALSE;
+
+					/* Update the pad's canvas if necessary,
+					 * to ensure there is a valid canvas to draw to */
+					gst_imx_compositor_pad_update_canvas(compositor_pad, NULL);
+				}
 
 				GST_LOG_OBJECT(
 					compositor,
