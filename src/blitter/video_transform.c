@@ -328,6 +328,8 @@ static gboolean gst_imx_blitter_video_transform_src_event(GstBaseTransform *tran
 	{
 		case GST_EVENT_NAVIGATION:
 		{
+			/* scale pointer_x/y values in the event if in- and output have different width/height */
+
 			gint in_w = GST_VIDEO_INFO_WIDTH(&(blitter_video_transform->input_video_info));
 			gint in_h = GST_VIDEO_INFO_HEIGHT(&(blitter_video_transform->input_video_info));
 			gint out_w = GST_VIDEO_INFO_WIDTH(&(blitter_video_transform->output_video_info));
@@ -399,6 +401,7 @@ static GstCaps* gst_imx_blitter_video_transform_transform_caps(GstBaseTransform 
 			NULL
 		);
 
+		/* colorimetry is not supported by the videotransform element */
 		gst_structure_remove_fields(structure, "format", "colorimetry", "chroma-site", NULL);
 
 		/* if pixel aspect ratio, make a range of it */
@@ -413,6 +416,7 @@ static GstCaps* gst_imx_blitter_video_transform_transform_caps(GstBaseTransform 
 		gst_caps_append_structure(tmpcaps1, structure);
 	}
 
+	/* filter the resulting caps if necessary */
 	if (filter != NULL)
 	{
 		tmpcaps2 = gst_caps_intersect_full(filter, tmpcaps1, GST_CAPS_INTERSECT_FIRST);
@@ -426,6 +430,14 @@ static GstCaps* gst_imx_blitter_video_transform_transform_caps(GstBaseTransform 
 
 	return result;
 }
+
+
+/* NOTE: these following functions are taken almost 1:1 from the upstream videoconvert element:
+ * gst_imx_blitter_video_transform_fixate_caps
+ * gst_imx_blitter_video_transform_fixate_size_caps
+ * score_value
+ * gst_imx_blitter_video_transform_fixate_format_caps
+ * */
 
 
 static GstCaps* gst_imx_blitter_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
@@ -1019,8 +1031,14 @@ static gboolean gst_imx_blitter_video_transform_set_caps(GstBaseTransform *trans
 	gst_imx_blitter_set_input_video_info(blitter_video_transform->blitter, &in_info);
 	gst_imx_blitter_set_output_video_info(blitter_video_transform->blitter, &out_info);
 
+	/* setting new caps changes the canvas, so recalculate it
+	 * the recalculation here is done without any input cropping, so set
+	 * last_frame_with_cropdata to FALSE, in case subsequent frames do
+	 * contain crop metadata */
+
 	blitter_video_transform->last_frame_with_cropdata = FALSE;
 
+	/* the canvas always encompasses the entire output frame */
 	canvas->outer_region.x1 = 0;
 	canvas->outer_region.y1 = 0;
 	canvas->outer_region.x2 = GST_VIDEO_INFO_WIDTH(&out_info);
@@ -1212,14 +1230,11 @@ static GstFlowReturn gst_imx_blitter_video_transform_prepare_output_buffer(GstBa
 		gst_imx_blitter_set_output_canvas(blitter_video_transform->blitter, canvas);
 	}
 
-	/* Test if passthrough should be enabled */
 	if ((input != NULL) && passthrough)
 	{
-		/* test for additional special cases where passthrough
-		 * must not be enabled; such exceptions are transforms
-		 * like rotation, deinterlacing ... */
-		passthrough = passthrough && (blitter_video_transform->canvas.inner_rotation == GST_IMX_CANVAS_INNER_ROTATION_NONE);
-		passthrough = passthrough &&
+		/* test for additional special cases for passthrough must not be enabled
+		 * such case are transforms like rotation, deinterlacing ... */
+		passthrough = passthrough && (blitter_video_transform->canvas.inner_rotation == GST_IMX_CANVAS_INNER_ROTATION_NONE) &&
 		              (klass->are_transforms_necessary != NULL) &&
 		              !(klass->are_transforms_necessary(blitter_video_transform, input));
 	}
@@ -1236,6 +1251,9 @@ static GstFlowReturn gst_imx_blitter_video_transform_prepare_output_buffer(GstBa
 
 	if (passthrough)
 	{
+		/* This instructs the base class to not allocate a new buffer for
+		 * the output, and instead pass the input buffer as the output
+		 * (this is used in the fransform_frame function below) */
 		*outbuf = input;
 		return GST_FLOW_OK;
 	}
@@ -1332,9 +1350,13 @@ static gboolean gst_imx_blitter_video_transform_get_unit_size(GstBaseTransform *
 
 static gboolean gst_imx_blitter_video_transform_copy_metadata(G_GNUC_UNUSED GstBaseTransform *trans, GstBuffer *input, GstBuffer *outbuf)
 {
-	/* Only copy timestamps; the rest of the metadata must not be copied */
+	/* Copy PTS, DTS, duration, offset, offset-end
+	 * These do not change in the videotransform operation */
 	GST_BUFFER_DTS(outbuf) = GST_BUFFER_DTS(input);
 	GST_BUFFER_PTS(outbuf) = GST_BUFFER_PTS(input);
+	GST_BUFFER_DURATION(outbuf) = GST_BUFFER_DURATION(input);
+	GST_BUFFER_OFFSET(outbuf) = GST_BUFFER_OFFSET(input);
+	GST_BUFFER_OFFSET_END(outbuf) = GST_BUFFER_OFFSET_END(input);
 
 	/* For GStreamer 1.3.1 and newer, make sure the GST_BUFFER_FLAG_TAG_MEMORY flag
 	 * isn't copied, otherwise the output buffer will be reallocated all the time */
