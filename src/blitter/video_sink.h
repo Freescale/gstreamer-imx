@@ -75,6 +75,8 @@ struct _GstImxBlitterVideoSink
 	/* Pages for page flipping and vsync */
 	guint current_fb_page;
 	gboolean use_vsync;
+	gboolean input_crop;
+	gboolean last_frame_with_cropdata;
 
 	gint window_x_coord, window_y_coord;
 	guint window_width, window_height;
@@ -88,6 +90,7 @@ struct _GstImxBlitterVideoSink
 	 * It is updated only on-demand */
 	GstImxCanvas canvas;
 	GstImxRegion input_region;
+	GstImxRegion last_source_region;
 	gboolean canvas_needs_update;
 };
 

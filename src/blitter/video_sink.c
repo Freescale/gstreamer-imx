@@ -45,6 +45,7 @@ enum
 	PROP_FORCE_ASPECT_RATIO,
 	PROP_FBDEV_NAME,
 	PROP_USE_VSYNC,
+	PROP_INPUT_CROP,
 	PROP_OUTPUT_ROTATION,
 	PROP_WINDOW_X_COORD,
 	PROP_WINDOW_Y_COORD,
@@ -60,6 +61,7 @@ enum
 #define DEFAULT_FORCE_ASPECT_RATIO TRUE
 #define DEFAULT_FBDEV_NAME "/dev/fb0"
 #define DEFAULT_USE_VSYNC FALSE
+#define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_OUTPUT_ROTATION GST_IMX_CANVAS_INNER_ROTATION_NONE
 #define DEFAULT_WINDOW_X_COORD 0
 #define DEFAULT_WINDOW_Y_COORD 0
@@ -92,7 +94,7 @@ static gboolean gst_imx_blitter_video_sink_reconfigure_fb(GstImxBlitterVideoSink
 static gboolean gst_imx_blitter_video_sink_restore_original_fb_config(GstImxBlitterVideoSink *blitter_video_sink);
 static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitterVideoSink *blitter_video_sink, struct fb_var_screeninfo *fb_var, struct fb_fix_screeninfo *fb_fix);
 
-static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *blitter_video_sink);
+static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *blitter_video_sink, GstImxRegion const *source_region);
 static gboolean gst_imx_blitter_video_sink_acquire_blitter(GstImxBlitterVideoSink *blitter_video_sink);
 
 
@@ -157,6 +159,17 @@ static void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *k
 			"Use VSync",
 			"Enable and use verticeal synchronization to eliminate tearing",
 			DEFAULT_USE_VSYNC,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_INPUT_CROP,
+		g_param_spec_boolean(
+			"input-crop",
+			"Input crop",
+			"Whether or not to crop input frames based on their video crop metadata",
+			DEFAULT_INPUT_CROP,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -279,6 +292,8 @@ static void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_vide
 	blitter_video_sink->framebuffer_fd = -1;
 	blitter_video_sink->current_fb_page = 0;
 	blitter_video_sink->use_vsync = DEFAULT_USE_VSYNC;
+	blitter_video_sink->input_crop = DEFAULT_INPUT_CROP;
+	blitter_video_sink->last_frame_with_cropdata = FALSE;
 
 	gst_video_info_init(&(blitter_video_sink->input_video_info));
 	gst_video_info_init(&(blitter_video_sink->output_video_info));
@@ -383,6 +398,14 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			break;
 		}
 
+		case PROP_INPUT_CROP:
+		{
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->input_crop = g_value_get_boolean(value);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
+			break;
+		}
+
 		case PROP_OUTPUT_ROTATION:
 		{
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
@@ -398,7 +421,6 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			blitter_video_sink->window_x_coord = g_value_get_int(value);
 			blitter_video_sink->canvas_needs_update = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
-
 			break;
 		}
 
@@ -408,7 +430,6 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			blitter_video_sink->window_y_coord = g_value_get_int(value);
 			blitter_video_sink->canvas_needs_update = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
-
 			break;
 		}
 
@@ -418,7 +439,6 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			blitter_video_sink->window_width = g_value_get_uint(value);
 			blitter_video_sink->canvas_needs_update = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
-
 			break;
 		}
 
@@ -428,7 +448,6 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			blitter_video_sink->window_height = g_value_get_uint(value);
 			blitter_video_sink->canvas_needs_update = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
-
 			break;
 		}
 
@@ -488,6 +507,12 @@ static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_
 		case PROP_USE_VSYNC:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			g_value_set_boolean(value, blitter_video_sink->use_vsync);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
+			break;
+
+		case PROP_INPUT_CROP:
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_boolean(value, blitter_video_sink->input_crop);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
@@ -625,6 +650,7 @@ static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *
 		case GST_STATE_CHANGE_PAUSED_TO_READY:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			blitter_video_sink->is_paused = FALSE;
+			blitter_video_sink->last_frame_with_cropdata = FALSE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
@@ -779,12 +805,55 @@ static gboolean gst_imx_blitter_video_sink_propose_allocation(GstBaseSink *sink,
 static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
 	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK_CAST(video_sink);
+	GstVideoCropMeta *video_crop_meta;
 
 	GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 
-	/* Update canvas and input region if necessary */
-	if (blitter_video_sink->canvas_needs_update)
-		gst_imx_blitter_video_sink_update_canvas(blitter_video_sink);
+	if (blitter_video_sink->input_crop && ((video_crop_meta = gst_buffer_get_video_crop_meta(buf)) != NULL))
+	{
+		/* Crop metdata present. Reconfigure canvas. */
+
+		GstImxRegion source_region;
+		source_region.x1 = video_crop_meta->x;
+		source_region.y1 = video_crop_meta->y;
+		source_region.x2 = video_crop_meta->x + video_crop_meta->width;
+		source_region.y2 = video_crop_meta->y + video_crop_meta->height;
+
+		/* Make sure the source region does not exceed valid bounds */
+		source_region.x1 = MAX(0, source_region.x1);
+		source_region.y1 = MAX(0, source_region.y1);
+		source_region.x2 = MIN(GST_VIDEO_INFO_WIDTH(&(blitter_video_sink->input_video_info)), source_region.x2);
+		source_region.y2 = MIN(GST_VIDEO_INFO_HEIGHT(&(blitter_video_sink->input_video_info)), source_region.y2);
+
+		GST_LOG_OBJECT(blitter_video_sink, "retrieved crop rectangle %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(&source_region));
+
+		/* Canvas needs to be updated if either one of these applies:
+		 * - the current frame has crop metadata, the last one didn't
+		 * - the new crop rectangle and the last are different */
+		if (!(blitter_video_sink->last_frame_with_cropdata) || !gst_imx_region_equal(&source_region, &(blitter_video_sink->last_source_region)))
+		{
+			GST_LOG_OBJECT(blitter_video_sink, "using new crop rectangle %" GST_IMX_REGION_FORMAT, GST_IMX_REGION_ARGS(&source_region));
+			blitter_video_sink->last_source_region = source_region;
+			blitter_video_sink->canvas_needs_update = TRUE;
+		}
+
+		blitter_video_sink->last_frame_with_cropdata = TRUE;
+
+		/* Update canvas and input region if necessary */
+		if (blitter_video_sink->canvas_needs_update)
+			gst_imx_blitter_video_sink_update_canvas(blitter_video_sink, &(blitter_video_sink->last_source_region));
+	}
+	else
+	{
+		/* Force an update if this frame has no crop metadata but the last one did */
+		if (blitter_video_sink->last_frame_with_cropdata)
+			blitter_video_sink->canvas_needs_update = TRUE;
+		blitter_video_sink->last_frame_with_cropdata = FALSE;
+
+		/* Update canvas and input region if necessary */
+		if (blitter_video_sink->canvas_needs_update)
+			gst_imx_blitter_video_sink_update_canvas(blitter_video_sink, NULL);
+	}
 
 	if (blitter_video_sink->canvas.visibility_mask == 0)
 	{
@@ -1138,7 +1207,7 @@ static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitte
 }
 
 
-static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *blitter_video_sink)
+static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *blitter_video_sink, GstImxRegion const *source_region)
 {
 	/* must be called with lock held */
 
@@ -1166,7 +1235,7 @@ static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *bli
 		&(blitter_video_sink->canvas),
 		&(blitter_video_sink->framebuffer_region),
 		&(blitter_video_sink->input_video_info),
-		NULL,
+		source_region,
 		&source_subset
 	);
 

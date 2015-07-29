@@ -87,6 +87,14 @@ struct _GstImxBlitterVideoTransform
 
 	/* Output canvas. Aspect ratio is *not* kept. */
 	GstImxCanvas canvas;
+
+	/* If true, crop rectangles in videocrop metas will be supported */
+	gboolean input_crop;
+	/* If true, then the last frame contained crop metadata */
+	gboolean last_frame_with_cropdata;
+
+	/* Last seen source region (used for cropping) */
+	GstImxRegion last_source_region;
 };
 
 
