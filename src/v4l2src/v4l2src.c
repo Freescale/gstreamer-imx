@@ -38,6 +38,10 @@
 #define DEFAULT_INPUT 1
 #define DEFAULT_DEVICE "/dev/video0"
 #define DEFAULT_QUEUE_SIZE 6
+#define DEFAULT_CROP_META_X 0
+#define DEFAULT_CROP_META_Y 0
+#define DEFAULT_CROP_META_WIDTH 0
+#define DEFAULT_CROP_META_HEIGHT 0
 
 enum
 {
@@ -47,6 +51,10 @@ enum
 	IMX_V4L2SRC_INPUT,
 	IMX_V4L2SRC_DEVICE,
 	IMX_V4L2SRC_QUEUE_SIZE,
+	IMX_V4L2SRC_CROP_META_X,
+	IMX_V4L2SRC_CROP_META_Y,
+	IMX_V4L2SRC_CROP_META_WIDTH,
+	IMX_V4L2SRC_CROP_META_HEIGHT,
 };
 
 static GstStaticPadTemplate src_template = GST_STATIC_PAD_TEMPLATE(
@@ -244,7 +252,9 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 	/* no repooling; leads to stream off situation due to pool start/stop */
 	pool = gst_base_src_get_buffer_pool(bsrc);
 	if (!pool) {
-		pool = gst_imx_v4l2_buffer_pool_new(v4l2src->fd_obj_v4l);
+		pool = gst_imx_v4l2_buffer_pool_new(v4l2src->fd_obj_v4l, v4l2src->metaCropX,
+						    v4l2src->metaCropY, v4l2src->metaCropWidth,
+						    v4l2src->metaCropHeight);
 		config = gst_buffer_pool_get_config(pool);
 		gst_buffer_pool_config_set_params(config, caps, size, min, max);
 		gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
@@ -387,6 +397,22 @@ static void gst_imx_v4l2src_set_property(GObject *object, guint prop_id,
 			v4l2src->queue_size = g_value_get_int(value);
 			break;
 
+		case IMX_V4L2SRC_CROP_META_X:
+			v4l2src->metaCropX = g_value_get_int(value);
+			break;
+
+		case IMX_V4L2SRC_CROP_META_Y:
+			v4l2src->metaCropY = g_value_get_int(value);
+			break;
+
+		case IMX_V4L2SRC_CROP_META_WIDTH:
+			v4l2src->metaCropWidth = g_value_get_int(value);
+			break;
+
+		case IMX_V4L2SRC_CROP_META_HEIGHT:
+			v4l2src->metaCropHeight = g_value_get_int(value);
+			break;
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -420,6 +446,22 @@ static void gst_imx_v4l2src_get_property(GObject *object, guint prop_id,
 			g_value_set_int(value, v4l2src->queue_size);
 			break;
 
+		case IMX_V4L2SRC_CROP_META_X:
+			g_value_set_int(value, v4l2src->metaCropX);
+			break;
+
+		case IMX_V4L2SRC_CROP_META_Y:
+			g_value_set_int(value, v4l2src->metaCropY);
+			break;
+
+		case IMX_V4L2SRC_CROP_META_WIDTH:
+			g_value_set_int(value, v4l2src->metaCropWidth);
+			break;
+
+		case IMX_V4L2SRC_CROP_META_HEIGHT:
+			g_value_set_int(value, v4l2src->metaCropHeight);
+			break;
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -435,6 +477,10 @@ static void gst_imx_v4l2src_init(GstImxV4l2VideoSrc *v4l2src)
 	v4l2src->devicename = g_strdup(DEFAULT_DEVICE);
 	v4l2src->queue_size = DEFAULT_QUEUE_SIZE;
 	v4l2src->fd_obj_v4l = NULL;
+	v4l2src->metaCropX = DEFAULT_CROP_META_X;
+	v4l2src->metaCropY = DEFAULT_CROP_META_Y;
+	v4l2src->metaCropWidth = DEFAULT_CROP_META_WIDTH;
+	v4l2src->metaCropHeight = DEFAULT_CROP_META_HEIGHT;
 
 	gst_base_src_set_format(GST_BASE_SRC(v4l2src), GST_FORMAT_TIME);
 	gst_base_src_set_live(GST_BASE_SRC(v4l2src), TRUE);
@@ -489,6 +535,30 @@ static void gst_imx_v4l2src_class_init(GstImxV4l2VideoSrcClass *klass)
 			g_param_spec_int("queue-size", "Queue size",
 				"Number of V4L2 buffers to request",
 				0, G_MAXINT, DEFAULT_QUEUE_SIZE,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property(gobject_class, IMX_V4L2SRC_CROP_META_X,
+			g_param_spec_int("crop-meta-x", "Crop meta X",
+				"X value for crop metadata",
+				0, G_MAXINT, DEFAULT_CROP_META_X,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property(gobject_class, IMX_V4L2SRC_CROP_META_Y,
+			g_param_spec_int("crop-meta-y", "Crop meta Y",
+				"Y value for crop metadata",
+				0, G_MAXINT, DEFAULT_CROP_META_Y,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property(gobject_class, IMX_V4L2SRC_CROP_META_WIDTH,
+			g_param_spec_int("crop-meta-width", "Crop meta WIDTH",
+				"WIDTH value for crop metadata",
+				0, G_MAXINT, DEFAULT_CROP_META_WIDTH,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property(gobject_class, IMX_V4L2SRC_CROP_META_HEIGHT,
+			g_param_spec_int("crop-meta-height", "Crop meta HEIGHT",
+				"HEIGHT value for crop metadata",
+				0, G_MAXINT, DEFAULT_CROP_META_HEIGHT,
 				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 	basesrc_class->negotiate = gst_imx_v4l2src_negotiate;

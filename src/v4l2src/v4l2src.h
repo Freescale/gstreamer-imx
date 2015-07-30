@@ -58,6 +58,10 @@ struct _GstImxV4l2VideoSrc
 	gint input;
 	char *devicename;
 	int queue_size;
+	guint metaCropX;
+	guint metaCropY;
+	guint metaCropWidth;
+	guint metaCropHeight;
 };
 
 struct _GstImxV4l2VideoSrcClass
