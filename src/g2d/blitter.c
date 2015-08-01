@@ -525,11 +525,11 @@ static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_bli
 	}
 
 	surface->format = fmt_details->format;
-	surface->width = width;
-	surface->height = height;
+	surface->width = width + phys_mem_meta->x_padding;
+	surface->height = height + phys_mem_meta->y_padding;
 	surface->stride = stride * 8 / fmt_details->bits_per_pixel;
 
-	GST_DEBUG_OBJECT(g2d_blitter, "surface stride: %d pixels  width: %d pixels", surface->stride, surface->width);
+	GST_DEBUG_OBJECT(g2d_blitter, "surface stride: %d pixels  width: %d pixels height: %d pixels", surface->stride, surface->width, surface->height);
 
 	return TRUE;
 }
