@@ -41,7 +41,7 @@ struct _GstImxIpuBlitterPrivate
 };
 
 
-static guint const fill_frame_width = 8;
+static guint const fill_frame_width = 64;
 static guint const fill_frame_height = 8;
 static GstVideoFormat const format = GST_VIDEO_FORMAT_RGBx;
 
