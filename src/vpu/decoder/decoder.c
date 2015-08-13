@@ -1092,11 +1092,14 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 
 	if (buffer_ret_code & VPU_DEC_NO_ENOUGH_INBUF)
 	{
-		/* Not dropping frame here on purpose; the next input frame may
-		 * complete the input */
-		GST_DEBUG_OBJECT(vpu_dec, "need more input");
-		if ((cur_frame != NULL) && vpu_dec->delay_sys_frame_numbers)
-			vpu_dec->last_sys_frame_number = cur_frame->system_frame_number;
+		GST_LOG_OBJECT(vpu_dec, "VPU reports that input codecframe %p with system frame number %u is incomplete - releasing and removing it from lists", (gpointer)cur_frame, cur_frame->system_frame_number);
+
+		/* This is an incomplete frame. The next frames will complete it.
+		 * Either way, this particular GstVideoCodecFrame will never be
+		 * finished, so discard it here. */
+		gst_imx_vpu_dec_remove_gst_frame(vpu_dec, cur_frame);
+		gst_video_decoder_release_frame(decoder, cur_frame);
+
 		return GST_FLOW_OK;
 	}
 
