@@ -1,5 +1,5 @@
 /* Freescale VPU GStreamer 1.0 plugin definition
- * Copyright (C) 2013  Carlos Rafael Giani
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -19,22 +19,22 @@
 
 #include <config.h>
 #include <gst/gst.h>
-#include "decoder/decoder.h"
-#include "encoder/encoder_h263.h"
-#include "encoder/encoder_h264.h"
-#include "encoder/encoder_mpeg4.h"
-#include "encoder/encoder_mjpeg.h"
+#include "decoder.h"
+#include "encoder_h263.h"
+#include "encoder_h264.h"
+#include "encoder_mpeg4.h"
+#include "encoder_mjpeg.h"
 
 
 
 static gboolean plugin_init(GstPlugin *plugin)
 {
 	gboolean ret = TRUE;
-	ret = ret && gst_element_register(plugin, "imxvpudec", GST_RANK_PRIMARY + 1, gst_imx_vpu_dec_get_type());
-	ret = ret && gst_element_register(plugin, "imxvpuenc_h263", GST_RANK_PRIMARY + 1, gst_imx_vpu_h263_enc_get_type());
-	ret = ret && gst_element_register(plugin, "imxvpuenc_h264", GST_RANK_PRIMARY + 1, gst_imx_vpu_h264_enc_get_type());
-	ret = ret && gst_element_register(plugin, "imxvpuenc_mpeg4", GST_RANK_PRIMARY + 1, gst_imx_vpu_mpeg4_enc_get_type());
-	ret = ret && gst_element_register(plugin, "imxvpuenc_mjpeg", GST_RANK_PRIMARY + 1, gst_imx_vpu_mjpeg_enc_get_type());
+	ret = ret && gst_element_register(plugin, "imxvpudec", GST_RANK_PRIMARY + 1, gst_imx_vpu_decoder_get_type());
+	ret = ret && gst_element_register(plugin, "imxvpuenc_h263", GST_RANK_PRIMARY + 1, gst_imx_vpu_encoder_h263_get_type());
+	ret = ret && gst_element_register(plugin, "imxvpuenc_h264", GST_RANK_PRIMARY + 1, gst_imx_vpu_encoder_h264_get_type());
+	ret = ret && gst_element_register(plugin, "imxvpuenc_mpeg4", GST_RANK_PRIMARY + 1, gst_imx_vpu_encoder_mpeg4_get_type());
+	ret = ret && gst_element_register(plugin, "imxvpuenc_mjpeg", GST_RANK_PRIMARY + 1, gst_imx_vpu_encoder_mjpeg_get_type());
 	return ret;
 }
 
