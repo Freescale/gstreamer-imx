@@ -7,13 +7,13 @@ def configure(conf):
 
 def build(bld):
 	import os
-	bld(
+	obj = bld(
 		features = ['c', bld.env['CLIBTYPE']],
 		includes = ['.', '../..'],
 		uselib = bld.env['COMMON_USELIB'],
 		target = 'gstimxcommon',
 		vnum = bld.env['GSTIMX_VERSION'],
-		source = bld.path.ant_glob('*.c'),
-		install_path = os.path.join(bld.env['PREFIX'], 'lib')
+		source = bld.path.ant_glob('*.c')
 	)
-
+	if bld.env['BUILD_FOR_ANDROID']:
+		obj.install_path = os.path.join(bld.env['PREFIX'], 'lib')

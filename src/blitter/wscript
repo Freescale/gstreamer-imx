@@ -11,7 +11,7 @@ def build(bld):
 		target = 'gstimxblitter',
 		vnum = bld.env['GSTIMX_VERSION'],
 		source = bld.path.ant_glob('*.c'),
-		defines = ['HAVE_CONFIG_H'],
-		install_path = os.path.join(bld.env['PREFIX'], 'lib')
+		defines = ['HAVE_CONFIG_H']
 	)
-
+	if bld.env['BUILD_FOR_ANDROID']:
+		obj.install_path = os.path.join(bld.env['PREFIX'], 'lib')
