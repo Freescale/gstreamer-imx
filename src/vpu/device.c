@@ -81,8 +81,23 @@ void imx_vpu_setup_logging(void)
 	g_mutex_lock(&load_mutex);
 	if (!logging_set_up)
 	{
+		ImxVpuLogLevel level;
+
 		GST_DEBUG_CATEGORY_INIT(imx_vpu_api_debug, "imxvpuapi", 0, "imxvpuapi library for controlling the Freescale i.MX VPU");
-		imx_vpu_set_logging_threshold(IMX_VPU_LOG_LEVEL_TRACE);
+		GstDebugLevel gst_level = gst_debug_category_get_threshold(imx_vpu_api_debug);
+
+		switch (gst_level)
+		{
+			case GST_LEVEL_ERROR:   level = IMX_VPU_LOG_LEVEL_ERROR;   break;
+			case GST_LEVEL_WARNING: level = IMX_VPU_LOG_LEVEL_WARNING; break;
+			case GST_LEVEL_INFO:    level = IMX_VPU_LOG_LEVEL_INFO;    break;
+			case GST_LEVEL_DEBUG:   level = IMX_VPU_LOG_LEVEL_DEBUG;   break;
+			case GST_LEVEL_TRACE:   level = IMX_VPU_LOG_LEVEL_TRACE;   break;
+			case GST_LEVEL_LOG:     level = IMX_VPU_LOG_LEVEL_LOG;     break;
+			default: level = IMX_VPU_LOG_LEVEL_LOG;
+		}
+
+		imx_vpu_set_logging_threshold(level);
 		imx_vpu_set_logging_function(imx_vpu_logging_func);
 		logging_set_up = TRUE;
 	}
