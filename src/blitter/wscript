@@ -7,7 +7,7 @@ def build(bld):
 		features = ['c', bld.env['CLIBTYPE']],
 		includes = ['.', '../..', '../common'],
 		uselib = bld.env['COMMON_USELIB'],
-		use = ['gstimxcommon'],
+		use = ['gstimxcommon', 'gstimxcompositor'],
 		target = 'gstimxblitter',
 		vnum = bld.env['GSTIMX_VERSION'],
 		source = bld.path.ant_glob('*.c'),
