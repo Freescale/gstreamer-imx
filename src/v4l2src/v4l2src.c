@@ -154,6 +154,8 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	fmt.fmt.pix.bytesperline = 0;
 	fmt.fmt.pix.priv = 0;
 	fmt.fmt.pix.sizeimage = 0;
+	fmt.fmt.pix.width = v4l2src->capture_width;
+	fmt.fmt.pix.height = v4l2src->capture_height;
 	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_FMT failed: %s", strerror(errno));
 		close(fd_v4l);
