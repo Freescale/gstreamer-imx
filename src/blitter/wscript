@@ -3,7 +3,7 @@
 
 def build(bld):
 	import os
-	bld(
+	obj = bld(
 		features = ['c', bld.env['CLIBTYPE']],
 		includes = ['.', '../..', '../common'],
 		uselib = bld.env['COMMON_USELIB'],
