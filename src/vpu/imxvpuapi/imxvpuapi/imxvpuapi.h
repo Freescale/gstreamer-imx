@@ -270,9 +270,14 @@ ImxVpuCodecFormat;
 
 typedef enum
 {
-	IMX_VPU_COLOR_FORMAT_YUV420            = 0, /* also known as I420 */
+	/* planar 4:2:0; if the chroma_interleave parameter is 1, the corresponding format is NV12, otherwise it is I420 */
+	IMX_VPU_COLOR_FORMAT_YUV420            = 0,
+	/* planar 4:2:2; if the chroma_interleave parameter is 1, the corresponding format is NV16 */
 	IMX_VPU_COLOR_FORMAT_YUV422_HORIZONTAL = 1,
-	IMX_VPU_COLOR_FORMAT_YUV422_VERTICAL   = 2, /* 4:2:2 vertical, actually 2:2:4 (according to the VPU docs) */
+	/* 4:2:2 vertical, actually 2:2:4 (according to the VPU docs); no corresponding format known for the chroma_interleave=1 case */
+	/* NOTE: this format is rarely used, and has only been seen in a few JPEG files */
+	IMX_VPU_COLOR_FORMAT_YUV422_VERTICAL   = 2,
+	/* planar 4:4:4; if the chroma_interleave parameter is 1, the corresponding format is NV24 */
 	IMX_VPU_COLOR_FORMAT_YUV444            = 3,
 	IMX_VPU_COLOR_FORMAT_YUV400            = 4  /* 8-bit grayscale */
 }
@@ -400,6 +405,10 @@ typedef struct
 	 * the sizes of all planes, the MvCol data, and extra bytes for alignment and padding.
 	 * This value must be used when allocating DMA buffers for decoder framebuffers. */
 	unsigned int total_size;
+
+	/* This corresponds to the other chroma_interleave values used in imxvpuapi.
+	 * It is stored here to allow other functions to select the correct offsets. */
+	int chroma_interleave;
 }
 ImxVpuFramebufferSizes;
 
@@ -408,8 +417,10 @@ ImxVpuFramebufferSizes;
  * The results are stored in "calculated_sizes". The given frame width and height will be aligned if
  * they aren't already, and the aligned value will be stored in calculated_sizes. Width & height must be
  * nonzero. The calculated_sizes pointer must also be non-NULL. framebuffer_alignment is an alignment
- * value for the sizes of the Y/U/V planes. 0 or 1 mean no alignment. */
-void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int frame_width, unsigned int frame_height, unsigned int framebuffer_alignment, int uses_interlacing, ImxVpuFramebufferSizes *calculated_sizes);
+ * value for the sizes of the Y/U/V planes. 0 or 1 mean no alignment. uses_interlacing is set to 1
+ * if interlacing is to be used, 0 otherwise. chroma_interleave is set to 1 if a shared CbCr chroma
+ * plane is to be used, 0 if Cb and Cr shall use separate planes. */
+void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int frame_width, unsigned int frame_height, unsigned int framebuffer_alignment, int uses_interlacing, int chroma_interleave, ImxVpuFramebufferSizes *calculated_sizes);
 
 /* Convenience function which fills fields of the ImxVpuFramebuffer structure, based on data from "calculated_sizes".
  * The specified DMA buffer and context pointer are also set. */
@@ -548,6 +559,11 @@ typedef struct
 	 * and height in the bitstream. If the format does store them, these
 	 * values can be set to zero. */
 	unsigned int frame_width, frame_height;
+
+	/* If this is 1, then Cb and Cr are interleaved in one shared chroma
+	 * plane, otherwise they are separated in their own planes.
+	 * See the ImxVpuColorFormat documentation for the consequences of this. */
+	int chroma_interleave;
 }
 ImxVpuDecOpenParams;
 

@@ -92,7 +92,7 @@ struct _GstImxVpuDecoderContextClass
  * The return value is a floating GLib reference. See
  * gst_object_ref_sink() for details.
  */
-GstImxVpuDecoderContext* gst_imx_vpu_decoder_context_new(ImxVpuDecoder *decoder, ImxVpuDecInitialInfo *initial_info, GstImxPhysMemAllocator *allocator);
+GstImxVpuDecoderContext* gst_imx_vpu_decoder_context_new(ImxVpuDecoder *decoder, ImxVpuDecInitialInfo *initial_info, gboolean chroma_interleave, GstImxPhysMemAllocator *allocator);
 
 /* Puts the decoder context in the no_wait mode, disabling any waiting.
  *

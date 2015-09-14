@@ -94,7 +94,7 @@ static int initial_info_callback(ImxVpuDecoder *decoder, ImxVpuDecInitialInfo *n
 
 	jpeg_decoder->num_framebuffers = new_initial_info->min_num_required_framebuffers + jpeg_decoder->num_extra_framebuffers;
 
-	imx_vpu_calc_framebuffer_sizes(new_initial_info->color_format, new_initial_info->frame_width, new_initial_info->frame_height, new_initial_info->framebuffer_alignment, new_initial_info->interlacing, &(jpeg_decoder->calculated_sizes));
+	imx_vpu_calc_framebuffer_sizes(new_initial_info->color_format, new_initial_info->frame_width, new_initial_info->frame_height, new_initial_info->framebuffer_alignment, new_initial_info->interlacing, 0, &(jpeg_decoder->calculated_sizes));
 	IMX_VPU_DEBUG(
 		"calculated sizes:  frame width&height: %dx%d  Y stride: %u  CbCr stride: %u  Y size: %u  CbCr size: %u  MvCol size: %u  total size: %u",
 		jpeg_decoder->calculated_sizes.aligned_frame_width, jpeg_decoder->calculated_sizes.aligned_frame_height,

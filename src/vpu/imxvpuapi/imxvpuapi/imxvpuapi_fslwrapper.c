@@ -265,7 +265,7 @@ size_t default_dmabufalloc_get_size(ImxVpuDMABufferAllocator *allocator, ImxVpuD
 #define FRAME_ALIGN 16
 
 
-void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int frame_width, unsigned int frame_height, unsigned int framebuffer_alignment, int uses_interlacing, ImxVpuFramebufferSizes *calculated_sizes)
+void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int frame_width, unsigned int frame_height, unsigned int framebuffer_alignment, int uses_interlacing, int chroma_interleave, ImxVpuFramebufferSizes *calculated_sizes)
 {
 	int alignment;
 
@@ -305,6 +305,18 @@ void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int
 			assert(FALSE);
 	}
 
+	if (chroma_interleave)
+	{
+		/* chroma_interleave != 0 means the Cb and Cr values are interleaved
+		 * and share one plane. The stride values are doubled compared to
+		 * the chroma_interleave == 0 case because the interleaving happens
+		 * horizontally, meaning 2 bytes in the shared chroma plane for the
+		 * chroma information of one pixel. */
+
+		calculated_sizes->cbcr_stride *= 2;
+		calculated_sizes->cbcr_size *= 2;
+	}
+
 	alignment = framebuffer_alignment;
 	if (alignment > 1)
 	{
@@ -313,7 +325,16 @@ void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int
 		calculated_sizes->mvcol_size = IMX_VPU_ALIGN_VAL_TO(calculated_sizes->mvcol_size, alignment);
 	}
 
-	calculated_sizes->total_size = calculated_sizes->y_size + calculated_sizes->cbcr_size + calculated_sizes->cbcr_size + calculated_sizes->mvcol_size + alignment;
+	/* cbcr_size is added twice if chroma_interleave is 0, since in that case,
+	 * there are *two* separate planes for Cb and Cr, each one with cbcr_size bytes,
+	 * while in the chroma_interleave == 1 case, there is one shared chroma plane
+	 * for both Cb and Cr data, with cbcr_size bytes */
+	calculated_sizes->total_size = calculated_sizes->y_size
+	                             + (chroma_interleave ? calculated_sizes->cbcr_size : (calculated_sizes->cbcr_size * 2))
+	                             + calculated_sizes->mvcol_size
+	                             + alignment;
+
+	calculated_sizes->chroma_interleave = chroma_interleave;
 }
 
 
@@ -329,7 +350,7 @@ void imx_vpu_fill_framebuffer_params(ImxVpuFramebuffer *framebuffer, ImxVpuFrame
 	framebuffer->y_offset = 0;
 	framebuffer->cb_offset = calculated_sizes->y_size;
 	framebuffer->cr_offset = calculated_sizes->y_size + calculated_sizes->cbcr_size;
-	framebuffer->mvcol_offset = calculated_sizes->y_size + calculated_sizes->cbcr_size * 2;
+	framebuffer->mvcol_offset = calculated_sizes->y_size + calculated_sizes->cbcr_size * (calculated_sizes->chroma_interleave ? 1 : 2);
 }
 
 
@@ -416,10 +437,11 @@ static void dec_convert_to_wrapper_open_param(ImxVpuDecOpenParams *open_params, 
 {
 	memset(wrapper_open_param, 0, sizeof(VpuDecOpenParam));
 
-	wrapper_open_param->CodecFormat    = convert_to_wrapper_codec_std(open_params->codec_format);
-	wrapper_open_param->nReorderEnable = open_params->enable_frame_reordering;
-	wrapper_open_param->nPicWidth      = open_params->frame_width;
-	wrapper_open_param->nPicHeight     = open_params->frame_height;
+	wrapper_open_param->CodecFormat       = convert_to_wrapper_codec_std(open_params->codec_format);
+	wrapper_open_param->nReorderEnable    = open_params->enable_frame_reordering;
+	wrapper_open_param->nPicWidth         = open_params->frame_width;
+	wrapper_open_param->nPicHeight        = open_params->frame_height;
+	wrapper_open_param->nChromaInterleave = open_params->chroma_interleave;
 }
 
 

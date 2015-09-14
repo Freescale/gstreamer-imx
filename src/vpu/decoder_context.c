@@ -70,7 +70,7 @@ static void gst_imx_vpu_decoder_context_finalize(GObject *object)
 }
 
 
-GstImxVpuDecoderContext* gst_imx_vpu_decoder_context_new(ImxVpuDecoder *decoder, ImxVpuDecInitialInfo *initial_info, GstImxPhysMemAllocator *allocator)
+GstImxVpuDecoderContext* gst_imx_vpu_decoder_context_new(ImxVpuDecoder *decoder, ImxVpuDecInitialInfo *initial_info, gboolean chroma_interleave, GstImxPhysMemAllocator *allocator)
 {
 	ImxVpuDecReturnCodes ret;
 	GstImxVpuDecoderContext *decoder_context;
@@ -80,7 +80,7 @@ GstImxVpuDecoderContext* gst_imx_vpu_decoder_context_new(ImxVpuDecoder *decoder,
 
 	GST_DEBUG_OBJECT(
 		decoder_context,
-		"initial info:  color format: %s  size: %ux%u pixel  rate: %u/%u  min num required framebuffers: %u  interlacing: %d  framebuffer alignment: %u\n",
+		"initial info:  color format: %s  size: %ux%u pixel  rate: %u/%u  min num required framebuffers: %u  interlacing: %d  chroma_interleave: %d  framebuffer alignment: %u",
 		imx_vpu_color_format_string(initial_info->color_format),
 		initial_info->frame_width,
 		initial_info->frame_height,
@@ -88,6 +88,7 @@ GstImxVpuDecoderContext* gst_imx_vpu_decoder_context_new(ImxVpuDecoder *decoder,
 		initial_info->frame_rate_denominator,
 		initial_info->min_num_required_framebuffers,
 		initial_info->interlacing,
+		chroma_interleave,
 		initial_info->framebuffer_alignment
 	);
 
@@ -97,6 +98,7 @@ GstImxVpuDecoderContext* gst_imx_vpu_decoder_context_new(ImxVpuDecoder *decoder,
 		initial_info->frame_height,
 		initial_info->framebuffer_alignment,
 		initial_info->interlacing,
+		chroma_interleave,
 		initial_info->min_num_required_framebuffers,
 		allocator
 	);

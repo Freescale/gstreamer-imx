@@ -94,7 +94,7 @@ static void gst_imx_vpu_framebuffer_array_finalize(GObject *object)
 }
 
 
-GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat color_format, unsigned int frame_width, unsigned int frame_height, unsigned int framebuffer_alignment, gboolean uses_interlacing, unsigned int num_framebuffers, GstImxPhysMemAllocator *phys_mem_allocator)
+GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat color_format, unsigned int frame_width, unsigned int frame_height, unsigned int framebuffer_alignment, gboolean uses_interlacing, gboolean chroma_interleave, unsigned int num_framebuffers, GstImxPhysMemAllocator *phys_mem_allocator)
 {
 	guint i;
 	GstImxVpuFramebufferArray *framebuffer_array = g_object_new(gst_imx_vpu_framebuffer_array_get_type(), NULL);
@@ -107,6 +107,7 @@ GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat 
 		frame_width, frame_height,
 		framebuffer_alignment,
 		uses_interlacing,
+		chroma_interleave,
 		&(framebuffer_array->framebuffer_sizes)
 	);
 

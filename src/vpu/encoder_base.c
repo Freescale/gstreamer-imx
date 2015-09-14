@@ -422,6 +422,7 @@ static gboolean gst_imx_vpu_encoder_base_set_format(GstVideoEncoder *encoder, Gs
 		vpu_encoder_base->open_params.frame_height,
 		vpu_encoder_base->initial_info.framebuffer_alignment,
 		FALSE,
+		FALSE,
 		vpu_encoder_base->initial_info.min_num_required_framebuffers,
 		(GstImxPhysMemAllocator *)(vpu_encoder_base->phys_mem_allocator)
 	);

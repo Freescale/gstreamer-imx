@@ -86,7 +86,7 @@ struct _GstImxVpuFramebufferArrayClass
  * The return value is a floating GLib reference. See
  * gst_object_ref_sink() for details.
  */
-GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat color_format, unsigned int frame_width, unsigned int frame_height, unsigned int framebuffer_alignment, gboolean uses_interlacing, unsigned int num_framebuffers, GstImxPhysMemAllocator *phys_mem_allocator);
+GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat color_format, unsigned int frame_width, unsigned int frame_height, unsigned int framebuffer_alignment, gboolean uses_interlacing, gboolean chroma_interleave, unsigned int num_framebuffers, GstImxPhysMemAllocator *phys_mem_allocator);
 
 /* Returns a GstImxPhysMemory block associated with the given imxvpu framebuffer. */
 GstImxPhysMemory* gst_imx_vpu_framebuffer_array_get_gst_phys_memory(ImxVpuFramebuffer *framebuffer);

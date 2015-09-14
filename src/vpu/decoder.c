@@ -105,7 +105,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
 		"video/x-raw,"
-		"format = (string) { I420, I42B, Y444 }, "
+		"format = (string) { I420, Y42B, Y444, NV12, NV16, NV24 }, "
 		"width = (int) [ 16, MAX ], "
 		"height = (int) [ 16, MAX ], "
 		"framerate = (fraction) [ 0, MAX ], "
@@ -354,6 +354,81 @@ static gboolean gst_imx_vpu_decoder_set_format(GstVideoDecoder *decoder, GstVide
 		GST_ERROR_OBJECT(vpu_decoder, "could not fill open params: state info incompatible");
 		return FALSE;
 	}
+
+	/* Find out what formats downstream supports, to determine the value for chroma_interleave */
+	{
+		GstCaps *allowed_srccaps = gst_pad_get_allowed_caps(GST_VIDEO_DECODER_SRC_PAD(decoder));
+
+		if (allowed_srccaps == NULL)
+		{
+			open_params.chroma_interleave = 0;
+			GST_INFO_OBJECT(vpu_decoder, "srcpad not linked (yet), so no src caps set; using default chroma_interleave value %d", open_params.chroma_interleave);
+		}
+		else if (gst_caps_is_empty(allowed_srccaps))
+		{
+			GST_ERROR_OBJECT(vpu_decoder, "allowed_srccaps structure is empty");
+			gst_caps_unref(allowed_srccaps);
+			return FALSE;
+		}
+		else
+		{
+			gchar const *format_str;
+			GValue const *format_value;
+			GstVideoFormat format;
+
+			/* Look at the sample format values from the first structure */
+			GstStructure *structure = gst_caps_get_structure(allowed_srccaps, 0);
+			format_value = gst_structure_get_value(structure, "format");
+
+			if (format_value == NULL)
+			{
+				gst_caps_unref(allowed_srccaps);
+				return FALSE;
+			}
+			else if (GST_VALUE_HOLDS_LIST(format_value))
+			{
+				/* if value is a format list, pick the first entry */
+				GValue const *fmt_list_value = gst_value_list_get_value(format_value, 0);
+				format_str = g_value_get_string(fmt_list_value);
+			}
+			else if (G_VALUE_HOLDS_STRING(format_value))
+			{
+				/* if value is a string, use it directly */
+				format_str = g_value_get_string(format_value);
+			}
+			else
+			{
+				GST_ERROR_OBJECT(vpu_decoder, "unexpected type for 'format' field in allowed_srccaps structure %" GST_PTR_FORMAT, structure);
+				gst_caps_unref(allowed_srccaps);
+				return FALSE;
+			}
+
+			format = gst_video_format_from_string(format_str);
+			g_assert(format != GST_VIDEO_FORMAT_UNKNOWN);
+
+			switch (format)
+			{
+				case GST_VIDEO_FORMAT_I420:
+				case GST_VIDEO_FORMAT_Y42B:
+				case GST_VIDEO_FORMAT_Y444:
+					open_params.chroma_interleave = 0;
+					break;
+				case GST_VIDEO_FORMAT_NV12:
+				case GST_VIDEO_FORMAT_NV16:
+				case GST_VIDEO_FORMAT_NV24:
+					open_params.chroma_interleave = 1;
+					break;
+				default:
+					g_assert_not_reached();
+			}
+
+			GST_INFO_OBJECT(vpu_decoder, "format %s detected in list of supported srccaps formats => setting chroma_interleave to %d", format_str, open_params.chroma_interleave);
+
+			gst_caps_unref(allowed_srccaps);
+		}
+	}
+
+	vpu_decoder->chroma_interleave = open_params.chroma_interleave;
 
 	if ((ret = imx_vpu_dec_open(&(vpu_decoder->decoder), &open_params, gst_imx_vpu_get_dma_buffer_from(vpu_decoder->bitstream_buffer), gst_imx_vpu_decoder_initial_info_callback, vpu_decoder)) != IMX_VPU_DEC_RETURN_CODE_OK)
 	{
@@ -1133,7 +1208,7 @@ static int gst_imx_vpu_decoder_initial_info_callback(G_GNUC_UNUSED ImxVpuDecoder
 
 	GST_DEBUG_OBJECT(
 		vpu_decoder,
-		"initial info:  color format: %s  size: %ux%u pixel  rate: %u/%u  min num required framebuffers: %u  interlacing: %d  framebuffer alignment: %u\n",
+		"initial info:  color format: %s  size: %ux%u pixel  rate: %u/%u  min num required framebuffers: %u  interlacing: %d  framebuffer alignment: %u",
 		imx_vpu_color_format_string(new_initial_info->color_format),
 		new_initial_info->frame_width,
 		new_initial_info->frame_height,
@@ -1151,7 +1226,7 @@ static int gst_imx_vpu_decoder_initial_info_callback(G_GNUC_UNUSED ImxVpuDecoder
 		gst_imx_vpu_decoder_context_set_decoder_as_gone(vpu_decoder->decoder_context);
 	}
 
-	vpu_decoder->decoder_context = gst_imx_vpu_decoder_context_new(vpu_decoder->decoder, new_initial_info, (GstImxPhysMemAllocator *)(vpu_decoder->phys_mem_allocator));
+	vpu_decoder->decoder_context = gst_imx_vpu_decoder_context_new(vpu_decoder->decoder, new_initial_info, vpu_decoder->chroma_interleave, (GstImxPhysMemAllocator *)(vpu_decoder->phys_mem_allocator));
 
 	if (vpu_decoder->decoder_context == NULL)
 	{
@@ -1164,16 +1239,60 @@ static int gst_imx_vpu_decoder_initial_info_callback(G_GNUC_UNUSED ImxVpuDecoder
 		GstVideoFormat fmt;
 		GstVideoCodecState *state = vpu_decoder->current_output_state;
 
-		switch (new_initial_info->color_format)
+		/* XXX: color format IMX_VPU_COLOR_FORMAT_YUV422_VERTICAL - what is this supposed to be in GStreamer? */
+		if (vpu_decoder->chroma_interleave)
 		{
-			case IMX_VPU_COLOR_FORMAT_YUV420: fmt = GST_VIDEO_FORMAT_I420; break;
-			case IMX_VPU_COLOR_FORMAT_YUV422_HORIZONTAL: fmt = GST_VIDEO_FORMAT_Y42B; break;
-			/* XXX: color format IMX_VPU_COLOR_FORMAT_YUV422_VERTICAL - what is this supposed to be in GStreamer? */
-			case IMX_VPU_COLOR_FORMAT_YUV444: fmt = GST_VIDEO_FORMAT_Y444; break;
-			case IMX_VPU_COLOR_FORMAT_YUV400: fmt = GST_VIDEO_FORMAT_GRAY8; break;
-			default:
-				GST_ERROR_OBJECT(vpu_decoder, "unsupported color format %d", new_initial_info->color_format);
-				return GST_FLOW_ERROR;
+			switch (new_initial_info->color_format)
+			{
+				case IMX_VPU_COLOR_FORMAT_YUV420: fmt = GST_VIDEO_FORMAT_NV12; break;
+				case IMX_VPU_COLOR_FORMAT_YUV422_HORIZONTAL: fmt = GST_VIDEO_FORMAT_NV16; break;
+				case IMX_VPU_COLOR_FORMAT_YUV444: fmt = GST_VIDEO_FORMAT_NV24; break;
+				case IMX_VPU_COLOR_FORMAT_YUV400: fmt = GST_VIDEO_FORMAT_GRAY8; break;
+				default:
+					GST_ERROR_OBJECT(vpu_decoder, "unsupported color format %d", new_initial_info->color_format);
+					return 0;
+			}
+		}
+		else
+		{
+			switch (new_initial_info->color_format)
+			{
+				case IMX_VPU_COLOR_FORMAT_YUV420: fmt = GST_VIDEO_FORMAT_I420; break;
+				case IMX_VPU_COLOR_FORMAT_YUV422_HORIZONTAL: fmt = GST_VIDEO_FORMAT_Y42B; break;
+				case IMX_VPU_COLOR_FORMAT_YUV444: fmt = GST_VIDEO_FORMAT_Y444; break;
+				case IMX_VPU_COLOR_FORMAT_YUV400: fmt = GST_VIDEO_FORMAT_GRAY8; break;
+				default:
+					GST_ERROR_OBJECT(vpu_decoder, "unsupported color format %d", new_initial_info->color_format);
+					return 0;
+			}
+		}
+
+		/* Check if the output format is actually supported by downstream. If not,
+		 * emit an element error and exit. */
+		{
+			gboolean format_supported;
+			gchar const *format_str = gst_video_format_to_string(fmt);
+			GstCaps *fmt_caps = gst_caps_new_simple("video/x-raw", "format", G_TYPE_STRING, format_str, NULL);
+			GstCaps *allowed_srccaps = gst_pad_get_allowed_caps(GST_VIDEO_DECODER_SRC_PAD(vpu_decoder));
+
+			format_supported = gst_caps_can_intersect(fmt_caps, allowed_srccaps);
+
+			if (!format_supported)
+			{
+				GST_ELEMENT_ERROR(
+					vpu_decoder,
+					STREAM,
+					FORMAT,
+					("downstream elements do not support output format"),
+					("output format: %s allowed srccaps: %" GST_PTR_FORMAT, format_str, allowed_srccaps)
+				);
+			}
+
+			gst_caps_unref(allowed_srccaps);
+			gst_caps_unref(fmt_caps);
+
+			if (!format_supported)
+				return 0;
 		}
 
 		/* In some corner cases, width & height are not set in the input caps. If this happens, use the
