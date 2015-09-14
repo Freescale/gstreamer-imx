@@ -2,6 +2,7 @@
 
 
 def build(bld):
+	import os
 	bld(
 		features = ['c'],
 		includes = ['.', '../..', '../common'],
@@ -11,7 +12,7 @@ def build(bld):
 		source = bld.path.ant_glob('gst-backport/*.c'),
 		defines = ['HAVE_CONFIG_H']
 	)
-	bld(
+	obj = bld(
 		features = ['c', bld.env['CLIBTYPE']],
 		includes = ['.', '../..', '../common'],
 		uselib = bld.env['COMMON_USELIB'],
