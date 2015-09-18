@@ -92,9 +92,9 @@ void imx_vpu_setup_logging(void)
 			case GST_LEVEL_WARNING: level = IMX_VPU_LOG_LEVEL_WARNING; break;
 			case GST_LEVEL_INFO:    level = IMX_VPU_LOG_LEVEL_INFO;    break;
 			case GST_LEVEL_DEBUG:   level = IMX_VPU_LOG_LEVEL_DEBUG;   break;
-			case GST_LEVEL_TRACE:   level = IMX_VPU_LOG_LEVEL_TRACE;   break;
 			case GST_LEVEL_LOG:     level = IMX_VPU_LOG_LEVEL_LOG;     break;
-			default: level = IMX_VPU_LOG_LEVEL_LOG;
+			case GST_LEVEL_TRACE:   level = IMX_VPU_LOG_LEVEL_TRACE;   break;
+			default: level = IMX_VPU_LOG_LEVEL_TRACE;
 		}
 
 		imx_vpu_set_logging_threshold(level);
@@ -116,8 +116,9 @@ static void imx_vpu_logging_func(ImxVpuLogLevel level, char const *file, int con
 		case IMX_VPU_LOG_LEVEL_WARNING: gst_level = GST_LEVEL_WARNING; break;
 		case IMX_VPU_LOG_LEVEL_INFO:    gst_level = GST_LEVEL_INFO;    break;
 		case IMX_VPU_LOG_LEVEL_DEBUG:   gst_level = GST_LEVEL_DEBUG;   break;
-		case IMX_VPU_LOG_LEVEL_TRACE:   gst_level = GST_LEVEL_TRACE;   break;
 		case IMX_VPU_LOG_LEVEL_LOG:     gst_level = GST_LEVEL_LOG;     break;
+		case IMX_VPU_LOG_LEVEL_TRACE:   gst_level = GST_LEVEL_TRACE;   break;
+		default: gst_level = GST_LEVEL_LOG;
 	}
 
 	va_start(args, format);
