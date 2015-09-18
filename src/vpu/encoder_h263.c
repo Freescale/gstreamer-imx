@@ -163,6 +163,7 @@ static GstCaps* gst_imx_vpu_encoder_h263_get_output_caps(GstImxVpuEncoderBase *v
 
 	return gst_caps_new_simple(
 		"video/x-h263",
+		"variant", G_TYPE_STRING, "itu",
 		"width", G_TYPE_INT, (gint)(open_params->frame_width),
 		"height", G_TYPE_INT, (gint)(open_params->frame_height),
 		"framerate", GST_TYPE_FRACTION, open_params->frame_rate_numerator, open_params->frame_rate_denominator,
