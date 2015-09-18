@@ -1433,7 +1433,6 @@ static unsigned int enc_convert_outcode(VpuEncBufRetCode code)
 	unsigned int out = 0;
 	if (code & VPU_ENC_INPUT_USED)       out |= IMX_VPU_ENC_OUTPUT_CODE_INPUT_USED;
 	if (code & VPU_ENC_OUTPUT_DIS)       out |= IMX_VPU_ENC_OUTPUT_CODE_ENCODED_FRAME_AVAILABLE;
-	if (code & VPU_ENC_OUTPUT_NODIS)     out |= IMX_VPU_ENC_OUTPUT_CODE_NO_ENCODED_FRAME_AVAILABLE;
 	if (code & VPU_ENC_OUTPUT_SEQHEADER) out |= IMX_VPU_ENC_OUTPUT_CODE_SEQUENCE_HEADER;
 	return out;
 }

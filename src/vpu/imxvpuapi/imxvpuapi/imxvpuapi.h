@@ -373,7 +373,7 @@ typedef struct
 	/* Picture type (I, P, B, ..) ; unused by the encoder */
 	ImxVpuPicType pic_type;
 
-	/* Interlacing field type (top-first, bottom-first..); unusd by the encoder */
+	/* Interlacing field type (top-first, bottom-first..); unused by the encoder */
 	ImxVpuFieldType field_type;
 
 	/* User-defined pointer. The library does not touch this value.
@@ -803,8 +803,7 @@ typedef enum
 {
 	IMX_VPU_ENC_OUTPUT_CODE_INPUT_USED                 = (1UL << 0),
 	IMX_VPU_ENC_OUTPUT_CODE_ENCODED_FRAME_AVAILABLE    = (1UL << 1),
-	IMX_VPU_ENC_OUTPUT_CODE_NO_ENCODED_FRAME_AVAILABLE = (1UL << 2),
-	IMX_VPU_ENC_OUTPUT_CODE_SEQUENCE_HEADER            = (1UL << 3)
+	IMX_VPU_ENC_OUTPUT_CODE_SEQUENCE_HEADER            = (1UL << 2)
 }
 ImxVpuEncOutputCodes;
 
