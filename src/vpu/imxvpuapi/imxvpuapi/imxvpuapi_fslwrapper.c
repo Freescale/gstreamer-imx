@@ -1455,8 +1455,8 @@ static int enc_convert_to_wrapper_open_param(ImxVpuEncOpenParams *open_params, V
 	wrapper_open_param->nLinear2TiledEnable = 1;
 	wrapper_open_param->eColorFormat = convert_to_wrapper_color_format(open_params->color_format);
 
-	wrapper_open_param->nUserQpMin = open_params->user_defined_max_qp;
-	wrapper_open_param->nUserQpMax = open_params->user_defined_min_qp;
+	wrapper_open_param->nUserQpMin = open_params->user_defined_min_qp;
+	wrapper_open_param->nUserQpMax = open_params->user_defined_max_qp;
 	wrapper_open_param->nUserQpMinEnable = open_params->enable_user_defined_min_qp;
 	wrapper_open_param->nUserQpMaxEnable = open_params->enable_user_defined_max_qp;
 
@@ -2011,7 +2011,10 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	enc_enc_param.eFormat = convert_to_wrapper_codec_std(encoder->codec_format);
 	enc_enc_param.nPicWidth = encoder->frame_width;
 	enc_enc_param.nPicHeight = encoder->frame_height;
-	enc_enc_param.nFrameRate = (encoder->frame_rate_numerator & 0xffffUL) | (((encoder->frame_rate_denominator - 1) & 0xffffUL) << 16);
+	/* Unlike with VpuEncOpenParam, the frame rate here has to be an integer
+	 * value, and not a numerator/denominator pair, so calculate an integer
+	 * result out of numerator/denominator, rounding up */
+	enc_enc_param.nFrameRate = (encoder->frame_rate_numerator + (encoder->frame_rate_denominator - 1)) / encoder->frame_rate_denominator;
 	enc_enc_param.nQuantParam = encoding_params->quant_param;
 
 	enc_enc_param.nInPhyOutput = (unsigned int)encoded_frame_phys_addr;
