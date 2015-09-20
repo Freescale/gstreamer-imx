@@ -28,11 +28,11 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_encoder_mjpeg_debug);
 enum
 {
 	PROP_0,
-	PROP_QUANT_PARAM
+	PROP_QUALITY_FACTOR
 };
 
 
-#define DEFAULT_QUANT_PARAM     1
+#define DEFAULT_QUALITY_FACTOR     85
 
 
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
@@ -65,7 +65,6 @@ static void gst_imx_vpu_encoder_mjpeg_get_property(GObject *object, guint prop_i
 
 static gboolean gst_imx_vpu_encoder_mjpeg_set_open_params(GstImxVpuEncoderBase *vpu_encoder_base, GstVideoCodecState *input_state, ImxVpuEncOpenParams *open_params);
 static GstCaps* gst_imx_vpu_encoder_mjpeg_get_output_caps(GstImxVpuEncoderBase *vpu_encoder_base);
-static gboolean gst_imx_vpu_encoder_mjpeg_set_frame_enc_params(GstImxVpuEncoderBase *vpu_encoder_base, ImxVpuEncParams *enc_params);
 
 
 
@@ -89,20 +88,19 @@ static void gst_imx_vpu_encoder_mjpeg_class_init(GstImxVpuEncoderMJPEGClass *kla
 
 	encoder_base_class->set_open_params       = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_mjpeg_set_open_params);
 	encoder_base_class->get_output_caps       = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_mjpeg_get_output_caps);
-	encoder_base_class->set_frame_enc_params  = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_mjpeg_set_frame_enc_params);
 
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
 
 	g_object_class_install_property(
 		object_class,
-		PROP_QUANT_PARAM,
+		PROP_QUALITY_FACTOR,
 		g_param_spec_uint(
-			"quant-param",
-			"Quantization parameter",
-			"Constant quantization quality parameter (ignored if bitrate is set to a nonzero value)",
-			1, 31,
-			DEFAULT_QUANT_PARAM,
+			"quality-factor",
+			"Quality factor",
+			"Quality factor of encoding (1 = worst, 100 = best)",
+			1, 100,
+			DEFAULT_QUALITY_FACTOR,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -119,7 +117,7 @@ static void gst_imx_vpu_encoder_mjpeg_class_init(GstImxVpuEncoderMJPEGClass *kla
 
 static void gst_imx_vpu_encoder_mjpeg_init(GstImxVpuEncoderMJPEG *vpu_encoder_mjpeg)
 {
-	vpu_encoder_mjpeg->quant_param = DEFAULT_QUANT_PARAM;
+	vpu_encoder_mjpeg->quality_factor = DEFAULT_QUALITY_FACTOR;
 }
 
 
@@ -129,8 +127,8 @@ static void gst_imx_vpu_encoder_mjpeg_set_property(GObject *object, guint prop_i
 
 	switch (prop_id)
 	{
-		case PROP_QUANT_PARAM:
-			vpu_encoder_mjpeg->quant_param = g_value_get_uint(value);
+		case PROP_QUALITY_FACTOR:
+			vpu_encoder_mjpeg->quality_factor = g_value_get_uint(value);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -145,8 +143,8 @@ static void gst_imx_vpu_encoder_mjpeg_get_property(GObject *object, guint prop_i
 
 	switch (prop_id)
 	{
-		case PROP_QUANT_PARAM:
-			g_value_set_uint(value, vpu_encoder_mjpeg->quant_param);
+		case PROP_QUALITY_FACTOR:
+			g_value_set_uint(value, vpu_encoder_mjpeg->quality_factor);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -157,6 +155,7 @@ static void gst_imx_vpu_encoder_mjpeg_get_property(GObject *object, guint prop_i
 
 static gboolean gst_imx_vpu_encoder_mjpeg_set_open_params(GstImxVpuEncoderBase *vpu_encoder_base, GstVideoCodecState *input_state, ImxVpuEncOpenParams *open_params)
 {
+	GstImxVpuEncoderMJPEG *vpu_encoder_mjpeg = GST_IMX_VPU_ENCODER_MJPEG(vpu_encoder_base);
 	GstVideoFormat fmt = GST_VIDEO_INFO_FORMAT(&(input_state->info));
 
 	switch (fmt)
@@ -174,8 +173,10 @@ static gboolean gst_imx_vpu_encoder_mjpeg_set_open_params(GstImxVpuEncoderBase *
 			open_params->color_format = IMX_VPU_COLOR_FORMAT_YUV400;
 			break;
 		default:
-			GST_ERROR_OBJECT(vpu_encoder_base, "unsupported video format %s", gst_video_format_to_string(fmt));
+			GST_ERROR_OBJECT(vpu_encoder_mjpeg, "unsupported video format %s", gst_video_format_to_string(fmt));
 	}
+
+	open_params->codec_params.mjpeg_params.quality_factor = vpu_encoder_mjpeg->quality_factor;
 
 	return TRUE;
 }
@@ -192,14 +193,4 @@ static GstCaps* gst_imx_vpu_encoder_mjpeg_get_output_caps(GstImxVpuEncoderBase *
 		"framerate", GST_TYPE_FRACTION, open_params->frame_rate_numerator, open_params->frame_rate_denominator,
 		NULL
 	);
-}
-
-
-static gboolean gst_imx_vpu_encoder_mjpeg_set_frame_enc_params(GstImxVpuEncoderBase *vpu_encoder_base, ImxVpuEncParams *enc_params)
-{
-	GstImxVpuEncoderMJPEG *vpu_encoder_mjpeg = GST_IMX_VPU_ENCODER_MJPEG(vpu_encoder_base);
-
-	enc_params->quant_param = vpu_encoder_mjpeg->quant_param;
-
-	return TRUE;
 }

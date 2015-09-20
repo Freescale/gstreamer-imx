@@ -42,7 +42,7 @@ struct _GstImxVpuEncoderMJPEG
 {
 	GstImxVpuEncoderBase parent;
 
-	guint quant_param;
+	guint quality_factor;
 };
 
 

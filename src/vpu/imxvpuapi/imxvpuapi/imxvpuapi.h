@@ -879,6 +879,13 @@ ImxVpuEncH264Params;
 
 typedef struct
 {
+	unsigned int quality_factor;
+}
+ImxVpuEncMJPEGParams;
+
+
+typedef struct
+{
 	ImxVpuCodecFormat codec_format;
 
 	unsigned int frame_width, frame_height;
@@ -917,6 +924,7 @@ typedef struct
 		ImxVpuEncMPEG4Params mpeg4_params;
 		ImxVpuEncH263Params h263_params;
 		ImxVpuEncH264Params h264_params;
+		ImxVpuEncMJPEGParams mjpeg_params;
 	}
 	codec_params;
 }
