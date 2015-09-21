@@ -2206,6 +2206,8 @@ struct _ImxVpuEncoder
 	unsigned int num_framebuffers;
 	FrameBuffer *internal_framebuffers;
 	ImxVpuFramebuffer *framebuffers;
+
+	BOOL first_frame;
 };
 
 
@@ -2527,6 +2529,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 	/* Set default encoder values */
 	memset(*encoder, 0, sizeof(ImxVpuEncoder));
 	memset(&enc_open_param, 0, sizeof(enc_open_param));
+	(*encoder)->first_frame = TRUE;
 
 
 	/* Map the bitstream buffer. This mapping will persist until the encoder is closed. */
@@ -2757,6 +2760,17 @@ ImxVpuEncReturnCodes imx_vpu_enc_close(ImxVpuEncoder *encoder)
 ImxVpuDMABuffer* imx_vpu_enc_get_bitstream_buffer(ImxVpuEncoder *encoder)
 {
 	return encoder->bitstream_buffer;
+}
+
+
+ImxVpuEncReturnCodes imx_vpu_enc_flush(ImxVpuEncoder *encoder)
+{
+	encoder->first_frame = TRUE;
+
+	/* NOTE: A vpu_SWReset() call would require a re-registering of the
+	 * framebuffers and does not yield any benefits */
+
+	return IMX_VPU_ENC_RETURN_CODE_OK;
 }
 
 
@@ -2995,7 +3009,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 
 	/* Add header(s) if I picture generation is forced, or if the codec
 	 * format is motion JPEG (which needs a JPEG header for every frame) */
-	needs_header = (encoder->codec_format == IMX_VPU_CODEC_FORMAT_MJPEG) || encoding_params->force_I_picture;
+	needs_header = encoder->first_frame || (encoder->codec_format == IMX_VPU_CODEC_FORMAT_MJPEG) || encoding_params->force_I_picture;
 
 	IMX_VPU_LOG("encoding picture with physical address %" IMX_VPU_PHYS_ADDR_FORMAT ", adding header(s): %d", picture_phys_addr, needs_header);
 
@@ -3234,6 +3248,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	 * one output frame */
 	encoded_frame->context = picture->context;
 
+	encoder->first_frame = FALSE;
 finish:
 	imx_vpu_dma_buffer_unmap(encoded_frame->data.dma_buffer);
 

@@ -74,6 +74,7 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 #ifdef ENABLE_PROPOSE_ALLOCATION
 static gboolean gst_imx_vpu_encoder_base_propose_allocation(GstVideoEncoder *encoder, GstQuery *query);
 #endif
+static gboolean gst_imx_vpu_encoder_flush(GstVideoEncoder *encoder);
 
 static void gst_imx_vpu_encoder_base_close(GstImxVpuEncoderBase *vpu_encoder_base);
 static gboolean gst_imx_vpu_encoder_base_set_bitrate(GstImxVpuEncoderBase *vpu_encoder_base);
@@ -104,6 +105,7 @@ static void gst_imx_vpu_encoder_base_class_init(GstImxVpuEncoderBaseClass *klass
 #ifdef ENABLE_PROPOSE_ALLOCATION
 	video_encoder_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_base_propose_allocation);
 #endif
+	video_encoder_class->flush              = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_flush);
 
 	klass->get_output_caps = NULL;
 	klass->set_open_params = NULL;
@@ -779,6 +781,18 @@ static gboolean gst_imx_vpu_encoder_base_propose_allocation(GstVideoEncoder *enc
 	return TRUE;
 }
 #endif
+
+
+static gboolean gst_imx_vpu_encoder_flush(GstVideoEncoder *encoder)
+{
+	ImxVpuEncReturnCodes ret;
+	GstImxVpuEncoderBase *vpu_encoder_base = GST_IMX_VPU_ENCODER_BASE(encoder);
+
+	if ((ret = imx_vpu_enc_flush(vpu_encoder_base->encoder)) != IMX_VPU_ENC_RETURN_CODE_OK)
+		GST_ERROR_OBJECT(vpu_encoder_base, "could not flush encoder: %s", imx_vpu_enc_error_string(ret));
+
+	return ret == IMX_VPU_ENC_RETURN_CODE_OK;
+}
 
 
 static void gst_imx_vpu_encoder_base_close(GstImxVpuEncoderBase *vpu_encoder_base)

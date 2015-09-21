@@ -1862,6 +1862,15 @@ ImxVpuDMABuffer* imx_vpu_enc_get_bitstream_buffer(ImxVpuEncoder *encoder)
 }
 
 
+ImxVpuEncReturnCodes imx_vpu_enc_flush(ImxVpuEncoder *encoder)
+{
+	IMXVPUAPI_UNUSED_PARAM(encoder);
+
+	/* The VPU wrapper does not have any VPU encoder flushing functions */
+	return IMX_VPU_ENC_RETURN_CODE_OK;
+}
+
+
 ImxVpuEncReturnCodes imx_vpu_enc_register_framebuffers(ImxVpuEncoder *encoder, ImxVpuFramebuffer *framebuffers, unsigned int num_framebuffers)
 {
 	unsigned int i;

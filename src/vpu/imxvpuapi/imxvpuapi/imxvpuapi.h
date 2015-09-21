@@ -990,6 +990,9 @@ ImxVpuEncReturnCodes imx_vpu_enc_close(ImxVpuEncoder *encoder);
 /* Returns the bitstream buffer that is used by the encoder */
 ImxVpuDMABuffer* imx_vpu_enc_get_bitstream_buffer(ImxVpuEncoder *encoder);
 
+/* Flushes the encoder. Any internal temporary data is discarded. */
+ImxVpuEncReturnCodes imx_vpu_enc_flush(ImxVpuEncoder *encoder);
+
 /* Registers the specified array of framebuffers with the encoder. These framebuffers are used for temporary
  * values during encoding, unlike the decoder framebuffers. The minimum valid value for "num_framebuffers" is
  * the "min_num_required_framebuffers" field of ImxVpuEncInitialInfo. */
