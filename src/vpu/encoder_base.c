@@ -358,6 +358,23 @@ static gboolean gst_imx_vpu_encoder_base_set_format(GstVideoEncoder *encoder, Gs
 	vpu_encoder_base->open_params.bitrate = vpu_encoder_base->bitrate;
 	vpu_encoder_base->open_params.gop_size = vpu_encoder_base->gop_size;
 
+	/* If the input format has one plane with interleaved chroma data
+	 * (= the input format is NV12/NV16/NV24), set chroma_interleave
+	 * to 1, otherwise set it to 0 */
+	switch (GST_VIDEO_INFO_FORMAT(&(state->info)))
+	{
+		case GST_VIDEO_FORMAT_NV12:
+		case GST_VIDEO_FORMAT_NV16:
+		case GST_VIDEO_FORMAT_NV24:
+			GST_DEBUG_OBJECT(vpu_encoder_base, "input format uses shared chroma plane; enabling chroma interleave");
+			vpu_encoder_base->open_params.chroma_interleave = 1;
+			break;
+
+		default:
+			GST_DEBUG_OBJECT(vpu_encoder_base, "input format uses separate chroma planes; disabling chroma interleave");
+			vpu_encoder_base->open_params.chroma_interleave = 0;
+	}
+
 	GST_INFO_OBJECT(vpu_encoder_base, "setting bitrate to %u kbps and GOP size to %u", vpu_encoder_base->open_params.bitrate, vpu_encoder_base->open_params.gop_size);
 
 	if (vpu_encoder_base->slice_size != 0)
@@ -607,7 +624,7 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 		else
 		{
 			vpu_encoder_base->input_framebuffer.y_stride = GST_VIDEO_INFO_PLANE_STRIDE(&(vpu_encoder_base->video_info), 0);
-			vpu_encoder_base->input_framebuffer.cbcr_stride = GST_VIDEO_INFO_PLANE_STRIDE(&(vpu_encoder_base->video_info), 0);
+			vpu_encoder_base->input_framebuffer.cbcr_stride = GST_VIDEO_INFO_PLANE_STRIDE(&(vpu_encoder_base->video_info), 1);
 
 			vpu_encoder_base->input_framebuffer.y_offset = GST_VIDEO_INFO_PLANE_OFFSET(&(vpu_encoder_base->video_info), 0);
 			vpu_encoder_base->input_framebuffer.cb_offset = GST_VIDEO_INFO_PLANE_OFFSET(&(vpu_encoder_base->video_info), 1);

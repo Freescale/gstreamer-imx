@@ -41,7 +41,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
 		"video/x-raw,"
-		"format = (string) { I420, I42B, Y444, GRAY8 }, "
+		"format = (string) { I420, Y42B, Y444, NV12, NV16, NV24, GRAY8 }, "
 		"width = (int) [ 48, 1920, 8 ], "
 		"height = (int) [ 32, 1080, 8 ], "
 		"framerate = (fraction) [ 0, MAX ]"
@@ -161,12 +161,15 @@ static gboolean gst_imx_vpu_encoder_mjpeg_set_open_params(GstImxVpuEncoderBase *
 	switch (fmt)
 	{
 		case GST_VIDEO_FORMAT_I420:
+		case GST_VIDEO_FORMAT_NV12:
 			open_params->color_format = IMX_VPU_COLOR_FORMAT_YUV420;
 			break;
 		case GST_VIDEO_FORMAT_Y42B:
+		case GST_VIDEO_FORMAT_NV16:
 			open_params->color_format = IMX_VPU_COLOR_FORMAT_YUV422_HORIZONTAL;
 			break;
 		case GST_VIDEO_FORMAT_Y444:
+		case GST_VIDEO_FORMAT_NV24:
 			open_params->color_format = IMX_VPU_COLOR_FORMAT_YUV444;
 			break;
 		case GST_VIDEO_FORMAT_GRAY8:
@@ -174,6 +177,7 @@ static gboolean gst_imx_vpu_encoder_mjpeg_set_open_params(GstImxVpuEncoderBase *
 			break;
 		default:
 			GST_ERROR_OBJECT(vpu_encoder_mjpeg, "unsupported video format %s", gst_video_format_to_string(fmt));
+			return FALSE;
 	}
 
 	open_params->codec_params.mjpeg_params.quality_factor = vpu_encoder_mjpeg->quality_factor;

@@ -2466,6 +2466,7 @@ void imx_vpu_enc_set_default_open_params(ImxVpuCodecFormat codec_format, ImxVpuE
 	open_params->me_search_range = IMX_VPU_ENC_ME_SEARCH_RANGE_256x128;
 	open_params->use_me_zero_pmv = 0;
 	open_params->additional_intra_cost_weight = 0;
+	open_params->chroma_interleave = 0;
 
 	switch (codec_format)
 	{
@@ -2571,6 +2572,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 	enc_open_param.MESearchRange = open_params->me_search_range;
 	enc_open_param.MEUseZeroPmv = open_params->use_me_zero_pmv;
 	enc_open_param.IntraCostWeight = open_params->additional_intra_cost_weight;
+	enc_open_param.chromaInterleave = open_params->chroma_interleave;
 
 	/* Reports are currently not used */
 	enc_open_param.sliceReport = 0;
@@ -2583,9 +2585,6 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 	/* Ring buffer mode isn't needed, so disable it, instructing
 	 * the VPU to use the line buffer mode instead */
 	enc_open_param.ringBufferEnable = 0;
-
-	/* TODO: Add chroma_interleave parameter to ImxVpuEncOpenParams */
-	enc_open_param.chromaInterleave = 0;
 
 	/* Currently, no tiling is supported */
 	enc_open_param.linear2TiledEnable = 1;

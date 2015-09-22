@@ -927,6 +927,11 @@ typedef struct
 		ImxVpuEncMJPEGParams mjpeg_params;
 	}
 	codec_params;
+
+	/* If this is 1, then Cb and Cr are interleaved in one shared chroma
+	 * plane, otherwise they are separated in their own planes.
+	 * See the ImxVpuColorFormat documentation for the consequences of this. */
+	int chroma_interleave;
 }
 ImxVpuEncOpenParams;
 

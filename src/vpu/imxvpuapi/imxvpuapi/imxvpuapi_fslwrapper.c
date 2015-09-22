@@ -1449,7 +1449,7 @@ static int enc_convert_to_wrapper_open_param(ImxVpuEncOpenParams *open_params, V
 	wrapper_open_param->nFrameRate = (open_params->frame_rate_numerator & 0xffffUL) | (((open_params->frame_rate_denominator - 1) & 0xffffUL) << 16);
 	wrapper_open_param->nBitRate = open_params->bitrate;
 	wrapper_open_param->nGOPSize = open_params->gop_size;
-	wrapper_open_param->nChromaInterleave = 0;
+	wrapper_open_param->nChromaInterleave = open_params->chroma_interleave;
 	wrapper_open_param->sMirror = VPU_ENC_MIRDIR_NONE;
 	wrapper_open_param->nMapType = 0;
 	wrapper_open_param->nLinear2TiledEnable = 1;
@@ -1681,6 +1681,7 @@ void imx_vpu_enc_set_default_open_params(ImxVpuCodecFormat codec_format, ImxVpuE
 	open_params->me_search_range = IMX_VPU_ENC_ME_SEARCH_RANGE_256x128;
 	open_params->use_me_zero_pmv = 0;
 	open_params->additional_intra_cost_weight = 0;
+	open_params->chroma_interleave = 0;
 
 	switch (codec_format)
 	{
