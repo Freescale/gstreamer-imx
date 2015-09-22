@@ -464,6 +464,12 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 
 	vpu_decoder = GST_IMX_VPU_DECODER(decoder);
 
+	if (vpu_decoder->decoder == NULL)
+	{
+		GST_ERROR_OBJECT(decoder, "decoder was not created");
+		return GST_FLOW_ERROR;
+	}
+
 	memset(&encoded_frame, 0, sizeof(encoded_frame));
 
 	if (input_frame != NULL)
@@ -624,6 +630,9 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 			GST_LOG_OBJECT(vpu_decoder, "retrieved gstframe %p with number #%" G_GUINT32_FORMAT, (gpointer)out_frame, system_frame_number);
 
 			out_buffer = gst_video_decoder_allocate_output_buffer(decoder);
+			if (out_buffer == NULL)
+				return GST_FLOW_ERROR;
+
 			GST_LOG_OBJECT(vpu_decoder, "output gstbuffer: %p imxvpu framebuffer: %p", out_buffer, decoded_picture.framebuffer);
 
 			gst_imx_vpu_framebuffer_array_set_framebuffer_in_gstbuffer(vpu_decoder->decoder_context->framebuffer_array, out_buffer, decoded_picture.framebuffer);
@@ -825,6 +834,10 @@ static gboolean gst_imx_vpu_decoder_decide_allocation(GstVideoDecoder *decoder, 
 	g_assert(vpu_decoder->decoder_context != NULL);
 
 	gst_query_parse_allocation(query, &outcaps, NULL);
+
+	if (outcaps == NULL)
+		return FALSE;
+
 	gst_video_info_init(&vinfo);
 	gst_video_info_from_caps(&vinfo, outcaps);
 
