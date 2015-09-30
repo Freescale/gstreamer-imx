@@ -254,7 +254,7 @@ static unsigned long vpu_init_inst_counter = 0;
 
 static BOOL imx_vpu_load(void)
 {
-	IMX_VPU_TRACE("VPU init instance counter: %lu", vpu_init_inst_counter);
+	IMX_VPU_LOG("VPU init instance counter: %lu", vpu_init_inst_counter);
 
 	if (vpu_init_inst_counter != 0)
 	{
@@ -265,7 +265,7 @@ static BOOL imx_vpu_load(void)
 	{
 		if (vpu_Init(NULL) == RETCODE_SUCCESS)
 		{
-			IMX_VPU_TRACE("loaded VPU");
+			IMX_VPU_DEBUG("loaded VPU");
 			++vpu_init_inst_counter;
 			return TRUE;
 		}
@@ -281,7 +281,7 @@ static BOOL imx_vpu_load(void)
 
 static BOOL imx_vpu_unload(void)
 {
-	IMX_VPU_TRACE("VPU init instance counter: %lu", vpu_init_inst_counter);
+	IMX_VPU_LOG("VPU init instance counter: %lu", vpu_init_inst_counter);
 
 	if (vpu_init_inst_counter != 0)
 	{
@@ -290,7 +290,7 @@ static BOOL imx_vpu_unload(void)
 		if (vpu_init_inst_counter == 0)
 		{
 			vpu_UnInit();
-			IMX_VPU_TRACE("unloaded VPU");
+			IMX_VPU_DEBUG("unloaded VPU");
 		}
 	}
 
@@ -432,7 +432,7 @@ static ImxVpuDMABuffer* default_dmabufalloc_allocate(ImxVpuDMABufferAllocator *a
 		return NULL;
 	}
 	else
-		IMX_VPU_TRACE("allocated %d bytes of physical memory", size);
+		IMX_VPU_DEBUG("allocated %d bytes of physical memory", size);
 
 	if (IOGetVirtMem(&(dmabuffer->mem_desc)) == RETCODE_FAILURE)
 	{
@@ -442,13 +442,13 @@ static ImxVpuDMABuffer* default_dmabufalloc_allocate(ImxVpuDMABufferAllocator *a
 		return NULL;
 	}
 	else
-		IMX_VPU_TRACE("retrieved virtual address for physical memory");
+		IMX_VPU_DEBUG("retrieved virtual address for physical memory");
 
 	dmabuffer->aligned_virtual_address = (uint8_t *)IMX_VPU_ALIGN_VAL_TO((uint8_t *)(dmabuffer->mem_desc.virt_uaddr), alignment);
 	dmabuffer->aligned_physical_address = (imx_vpu_phys_addr_t)IMX_VPU_ALIGN_VAL_TO((imx_vpu_phys_addr_t)(dmabuffer->mem_desc.phy_addr), alignment);
 
-	IMX_VPU_TRACE("virtual address:  0x%x  aligned: %p", dmabuffer->mem_desc.virt_uaddr, dmabuffer->aligned_virtual_address);
-	IMX_VPU_TRACE("physical address: 0x%x  aligned: %" IMX_VPU_PHYS_ADDR_FORMAT, dmabuffer->mem_desc.phy_addr, dmabuffer->aligned_physical_address);
+	IMX_VPU_DEBUG("virtual address:  0x%x  aligned: %p", dmabuffer->mem_desc.virt_uaddr, dmabuffer->aligned_virtual_address);
+	IMX_VPU_DEBUG("physical address: 0x%x  aligned: %" IMX_VPU_PHYS_ADDR_FORMAT, dmabuffer->mem_desc.phy_addr, dmabuffer->aligned_physical_address);
 
 	return (ImxVpuDMABuffer *)dmabuffer;
 }
@@ -463,7 +463,7 @@ static void default_dmabufalloc_deallocate(ImxVpuDMABufferAllocator *allocator, 
 	if (IOFreePhyMem(&(defaultbuf->mem_desc)) != 0)
 		IMX_VPU_ERROR("deallocating %d bytes of physical memory failed", defaultbuf->size);
 	else
-		IMX_VPU_TRACE("deallocated %d bytes of physical memory", defaultbuf->size);
+		IMX_VPU_DEBUG("deallocated %d bytes of physical memory", defaultbuf->size);
 }
 
 
@@ -868,6 +868,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 	assert(bitstream_buffer != NULL);
 
 
+	IMX_VPU_DEBUG("opening decoder");
+
+
 	/* Check that the allocated bitstream buffer is big enough */
 	assert(imx_vpu_dma_buffer_get_size(bitstream_buffer) >= VPU_DEC_MIN_REQUIRED_BITSTREAM_BUFFER_SIZE);
 
@@ -970,7 +973,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 
 
 	/* Now actually open the decoder instance */
-	IMX_VPU_TRACE("opening decoder, picture size: %u x %u pixel", open_params->frame_width, open_params->frame_height);
+	IMX_VPU_DEBUG("opening decoder, picture size: %u x %u pixel", open_params->frame_width, open_params->frame_height);
 	dec_ret = vpu_DecOpen(&((*decoder)->handle), &dec_open_param);
 	ret = IMX_VPU_DEC_HANDLE_ERROR("could not open decoder", dec_ret);
 	if (ret != IMX_VPU_DEC_RETURN_CODE_OK)
@@ -984,7 +987,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 	/* Finish & cleanup (in case of error) */
 finish:
 	if (ret == IMX_VPU_DEC_RETURN_CODE_OK)
-		IMX_VPU_TRACE("successfully opened decoder");
+		IMX_VPU_DEBUG("successfully opened decoder");
 
 	return ret;
 
@@ -1004,7 +1007,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_close(ImxVpuDecoder *decoder)
 
 	assert(decoder != NULL);
 
-	IMX_VPU_TRACE("closing decoder");
+	IMX_VPU_DEBUG("closing decoder");
 
 
 	// TODO: call vpu_DecGetOutputInfo() for all started frames
@@ -1041,7 +1044,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_close(ImxVpuDecoder *decoder)
 	IMX_VPU_FREE(decoder, sizeof(ImxVpuDecoder));
 
 	if (ret == IMX_VPU_DEC_RETURN_CODE_OK)
-		IMX_VPU_TRACE("closed decoder");
+		IMX_VPU_DEBUG("successfully closed decoder");
 
 	return ret;
 }
@@ -1085,7 +1088,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_flush(ImxVpuDecoder *decoder)
 
 	assert(decoder != NULL);
 
-	IMX_VPU_TRACE("flushing decoder");
+	IMX_VPU_DEBUG("flushing decoder");
 
 	if (decoder->codec_format == IMX_VPU_CODEC_FORMAT_WMV3)
 		return IMX_VPU_DEC_RETURN_CODE_OK;
@@ -1118,6 +1121,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_flush(ImxVpuDecoder *decoder)
 	decoder->num_used_framebuffers = 0;
 
 
+	IMX_VPU_DEBUG("successfully flushed decoder");
+
+
 	return ret;
 }
 
@@ -1133,7 +1139,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, I
 	assert(framebuffers != NULL);
 	assert(num_framebuffers > 0);
 
-	IMX_VPU_TRACE("attempting to register %u framebuffers", num_framebuffers);
+	IMX_VPU_DEBUG("attempting to register %u framebuffers", num_framebuffers);
 
 	if (decoder->codec_format == IMX_VPU_CODEC_FORMAT_MJPEG)
 	{
@@ -1576,7 +1582,7 @@ static ImxVpuDecReturnCodes imx_vpu_dec_push_input_data(ImxVpuDecoder *decoder, 
 	ret = IMX_VPU_DEC_HANDLE_ERROR("could not retrieve bitstream buffer information", dec_ret);
 	if (ret != IMX_VPU_DEC_RETURN_CODE_OK)
 		return ret;
-	IMX_VPU_TRACE("bitstream buffer status:  read ptr 0x%x  write ptr 0x%x  num free bytes %u", read_ptr, write_ptr, num_free_bytes);
+	IMX_VPU_LOG("bitstream buffer status:  read ptr 0x%x  write ptr 0x%x  num free bytes %u", read_ptr, write_ptr, num_free_bytes);
 
 
 	/* The bitstream buffer behaves like a ring buffer. This means that incoming data
@@ -1663,7 +1669,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 	ret = IMX_VPU_DEC_RETURN_CODE_OK;
 
 
-	IMX_VPU_TRACE("input info: %d byte", encoded_frame->data_size);
+	IMX_VPU_LOG("input info: %d byte", encoded_frame->data_size);
 
 
 	/* Handle input data
@@ -1951,7 +1957,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 
 
 		/* Log some information about the decoded frame */
-		IMX_VPU_TRACE(
+		IMX_VPU_LOG(
 			"output info:  indexFrameDisplay %d  indexFrameDecoded %d  NumDecFrameBuf %d  picType %d  numOfErrMBs %d  hScaleFlag %d  vScaleFlag %d  notSufficientPsBuffer %d  notSufficientSliceBuffer %d  decodingSuccess %d  interlacedFrame %d  mp4PackedPBframe %d  h264Npf %d  pictureStructure %d  topFieldFirst %d  repeatFirstField %d  fieldSequence %d  decPicWidth %d  decPicHeight %d",
 			decoder->dec_output_info.indexFrameDisplay,
 			decoder->dec_output_info.indexFrameDecoded,
@@ -2053,7 +2059,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			int idx_display = decoder->dec_output_info.indexFrameDisplay;
 			assert(idx_display < (int)(decoder->num_framebuffers));
 
-			IMX_VPU_TRACE("Decoded and displayable picture available (framebuffer display index: %d  context: %p)", idx_display, decoder->context_for_frames[idx_display]);
+			IMX_VPU_LOG("decoded and displayable picture available (framebuffer display index: %d  context: %p)", idx_display, decoder->context_for_frames[idx_display]);
 
 			decoder->frame_modes[idx_display] = FrameMode_ContainsDisplayablePicture;
 
@@ -2062,13 +2068,13 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		}
 		else if (decoder->dec_output_info.indexFrameDisplay == VPU_DECODER_DISPLAYIDX_ALL_PICTURED_DISPLAYED)
 		{
-			IMX_VPU_TRACE("EOS reached");
+			IMX_VPU_LOG("EOS reached");
 			decoder->available_decoded_pic_idx = -1;
 			*output_code |= IMX_VPU_DEC_OUTPUT_CODE_EOS;
 		}
 		else
 		{
-			IMX_VPU_TRACE("Nothing yet to display ; indexFrameDisplay: %d", decoder->dec_output_info.indexFrameDisplay);
+			IMX_VPU_LOG("nothing yet to display ; indexFrameDisplay: %d", decoder->dec_output_info.indexFrameDisplay);
 		}
 
 	}
@@ -2686,7 +2692,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 
 
 	/* Now actually open the encoder instance */
-	IMX_VPU_TRACE("opening encoder, picture size: %u x %u pixel", open_params->frame_width, open_params->frame_height);
+	IMX_VPU_LOG("opening encoder, picture size: %u x %u pixel", open_params->frame_width, open_params->frame_height);
 	enc_ret = vpu_EncOpen(&((*encoder)->handle), &enc_open_param);
 	ret = IMX_VPU_ENC_HANDLE_ERROR("could not open encoder", enc_ret);
 	if (ret != IMX_VPU_ENC_RETURN_CODE_OK)
@@ -2703,7 +2709,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 
 finish:
 	if (ret == IMX_VPU_ENC_RETURN_CODE_OK)
-		IMX_VPU_TRACE("successfully opened encoder");
+		IMX_VPU_DEBUG("successfully opened encoder");
 
 	return ret;
 
@@ -2723,7 +2729,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_close(ImxVpuEncoder *encoder)
 
 	assert(encoder != NULL);
 
-	IMX_VPU_TRACE("closing encoder");
+	IMX_VPU_DEBUG("closing encoder");
 
 
 	/* Close the encoder handle */
@@ -2750,7 +2756,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_close(ImxVpuEncoder *encoder)
 	IMX_VPU_FREE(encoder, sizeof(ImxVpuEncoder));
 
 	if (ret == IMX_VPU_ENC_RETURN_CODE_OK)
-		IMX_VPU_TRACE("closed encoder");
+		IMX_VPU_DEBUG("successfully closed encoder");
 
 	return ret;
 }
@@ -2787,7 +2793,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_register_framebuffers(ImxVpuEncoder *encoder, I
 	assert(num_framebuffers > VPU_ENC_NUM_EXTRA_SUBSAMPLE_FRAMEBUFFERS);
 	num_framebuffers -= VPU_ENC_NUM_EXTRA_SUBSAMPLE_FRAMEBUFFERS;
 
-	IMX_VPU_TRACE("attempting to register %u framebuffers", num_framebuffers);
+	IMX_VPU_DEBUG("attempting to register %u framebuffers", num_framebuffers);
 
 
 	/* Allocate memory for framebuffer structures */
