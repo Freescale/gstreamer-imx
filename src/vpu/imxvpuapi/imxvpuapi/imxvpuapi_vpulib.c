@@ -1698,11 +1698,11 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		/* Regular mode */
 
 		/* Insert any necessary extra frame headers */
-		if ((ret = imx_vpu_dec_insert_frame_headers(decoder, encoded_frame->codec_data, encoded_frame->codec_data_size, encoded_frame->data.virtual_address, encoded_frame->data_size)) != IMX_VPU_DEC_RETURN_CODE_OK)
+		if ((ret = imx_vpu_dec_insert_frame_headers(decoder, encoded_frame->codec_data, encoded_frame->codec_data_size, encoded_frame->data, encoded_frame->data_size)) != IMX_VPU_DEC_RETURN_CODE_OK)
 			return ret;
 
 		/* Handle main frame data */
-		if ((ret = imx_vpu_dec_push_input_data(decoder, encoded_frame->data.virtual_address, encoded_frame->data_size)) != IMX_VPU_DEC_RETURN_CODE_OK)
+		if ((ret = imx_vpu_dec_push_input_data(decoder, encoded_frame->data, encoded_frame->data_size)) != IMX_VPU_DEC_RETURN_CODE_OK)
 			return ret;
 	}
 
@@ -1718,7 +1718,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		 * If so, invoke the initial_info_callback again.
 		 */
 
-		if (!imx_vpu_parse_jpeg_header(encoded_frame->data.virtual_address, encoded_frame->data_size, &jpeg_width, &jpeg_height, &jpeg_color_format))
+		if (!imx_vpu_parse_jpeg_header(encoded_frame->data, encoded_frame->data_size, &jpeg_width, &jpeg_height, &jpeg_color_format))
 		{
 			IMX_VPU_ERROR("encoded frame is not valid JPEG data");
 			return IMX_VPU_DEC_RETURN_CODE_ERROR;
@@ -2986,7 +2986,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	EncParam enc_param;
 	EncOutputInfo enc_output_info;
 	FrameBuffer source_framebuffer;
-	uint8_t *encoded_frame_virt_addr;
+	uint8_t *encoded_frame_virt_addr, *encoded_frame_virt_addr_end;
 	imx_vpu_phys_addr_t picture_phys_addr;
 	uint8_t *write_ptr;
 	BOOL timeout;
@@ -2996,14 +2996,18 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 
 	assert(encoder != NULL);
 	assert(encoded_frame != NULL);
-	assert(encoded_frame->data.dma_buffer != NULL);
+	assert(encoded_frame->data != NULL);
+	assert(encoded_frame->data_size > 0);
 	assert(encoding_params != NULL);
 	assert(output_code != NULL);
+
+	*output_code = 0;
 
 	/* Get the physical address for the picture that shall be encoded
 	 * and the virtual pointer to the output buffer */
 	picture_phys_addr = imx_vpu_dma_buffer_get_physical_address(picture->framebuffer->dma_buffer);
-	encoded_frame_virt_addr = imx_vpu_dma_buffer_map(encoded_frame->data.dma_buffer, 0);
+	encoded_frame_virt_addr = encoded_frame->data;
+	encoded_frame_virt_addr_end = encoded_frame->data + encoded_frame->data_size;
 	write_ptr = encoded_frame_virt_addr;
 
 	/* Add header(s) if I picture generation is forced, or if the codec
@@ -3012,10 +3016,32 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 
 	IMX_VPU_LOG("encoding picture with physical address %" IMX_VPU_PHYS_ADDR_FORMAT ", adding header(s): %d", picture_phys_addr, needs_header);
 
-	/* TODO: It would make sense to first encode the actual frame, and then
-	 * add headers if it turns out to be an I or an IDR picture. However,
-	 * to do that without having to move memory around, the ring buffer mode
-	 * would probably have to be used instead of the line buffer mode. */
+#define COPY_FRAME_HEADER(COMMAND, HEADER_TYPE, DESCRIPTION) \
+	do \
+	{ \
+		ptrdiff_t available_space; \
+ \
+		enc_header_param.headerType = (HEADER_TYPE); \
+		vpu_EncGiveCommand(encoder->handle, (COMMAND), &enc_header_param); \
+		available_space = encoded_frame_virt_addr_end - write_ptr; \
+ \
+		if (available_space < enc_header_param.size) \
+		{ \
+			IMX_VPU_ERROR( \
+				"output memory block for encoded frame data is not large enough, cannot write %s header (need minimum of %d byte of space, got %td)", \
+				(DESCRIPTION), \
+				enc_header_param.size, \
+				available_space \
+			); \
+			ret = IMX_VPU_ENC_RETURN_CODE_ERROR; \
+			goto finish; \
+		} \
+ \
+		memcpy(write_ptr, GET_BITSTREAM_VIRT_ADDR(enc_header_param.buf), enc_header_param.size); \
+		IMX_VPU_LOG("added %s with %d byte", (DESCRIPTION), enc_header_param.size); \
+		write_ptr += enc_header_param.size; \
+	} \
+	while (0)
 
 	/* Add header information if needed */
 	if (needs_header)
@@ -3027,17 +3053,8 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 				EncHeaderParam enc_header_param;
 				memset(&enc_header_param, 0, sizeof(enc_header_param));
 
-				enc_header_param.headerType = SPS_RBSP;
-				vpu_EncGiveCommand(encoder->handle, ENC_PUT_AVC_HEADER, &enc_header_param);
-				memcpy(write_ptr, GET_BITSTREAM_VIRT_ADDR(enc_header_param.buf), enc_header_param.size);
-				IMX_VPU_LOG("added h.264 SPS with %d byte", enc_header_param.size);
-				write_ptr += enc_header_param.size;
-
-				enc_header_param.headerType = PPS_RBSP;
-				vpu_EncGiveCommand(encoder->handle, ENC_PUT_AVC_HEADER, &enc_header_param);
-				memcpy(write_ptr, GET_BITSTREAM_VIRT_ADDR(enc_header_param.buf), enc_header_param.size);
-				IMX_VPU_LOG("added h.264 PPS with %d byte", enc_header_param.size);
-				write_ptr += enc_header_param.size;
+				COPY_FRAME_HEADER(ENC_PUT_AVC_HEADER, SPS_RBSP, "h.264 SPS");
+				COPY_FRAME_HEADER(ENC_PUT_AVC_HEADER, PPS_RBSP, "h.264 PPS");
 
 				break;
 			}
@@ -3081,23 +3098,9 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 
 				IMX_VPU_LOG("picture size: %u x %u pixel, %u macroblocks per second => MPEG-4 user profile level indication = %d", w, h, num_macroblocks_per_second, enc_header_param.userProfileLevelIndication);
 
-				enc_header_param.headerType = VOS_HEADER;
-				vpu_EncGiveCommand(encoder->handle, ENC_PUT_MP4_HEADER, &enc_header_param);
-				memcpy(write_ptr, GET_BITSTREAM_VIRT_ADDR(enc_header_param.buf), enc_header_param.size);
-				IMX_VPU_LOG("added MPEG-4 VOS header with %d byte", enc_header_param.size);
-				write_ptr += enc_header_param.size;
-
-				enc_header_param.headerType = VIS_HEADER;
-				vpu_EncGiveCommand(encoder->handle, ENC_PUT_MP4_HEADER, &enc_header_param);
-				memcpy(write_ptr, GET_BITSTREAM_VIRT_ADDR(enc_header_param.buf), enc_header_param.size);
-				IMX_VPU_LOG("added MPEG-4 VIS header with %d byte", enc_header_param.size);
-				write_ptr += enc_header_param.size;
-
-				enc_header_param.headerType = VOL_HEADER;
-				vpu_EncGiveCommand(encoder->handle, ENC_PUT_MP4_HEADER, &enc_header_param);
-				memcpy(write_ptr, GET_BITSTREAM_VIRT_ADDR(enc_header_param.buf), enc_header_param.size);
-				IMX_VPU_LOG("added MPEG-4 VOL header with %d byte", enc_header_param.size);
-				write_ptr += enc_header_param.size;
+				COPY_FRAME_HEADER(ENC_PUT_MP4_HEADER, VOS_HEADER, "MPEG-4 VOS header");
+				COPY_FRAME_HEADER(ENC_PUT_MP4_HEADER, VIS_HEADER, "MPEG-4 VIS header");
+				COPY_FRAME_HEADER(ENC_PUT_MP4_HEADER, VOL_HEADER, "MPEG-4 VOL header");
 
 				break;
 			}
@@ -3107,7 +3110,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 				EncParamSet mjpeg_param;
 				memset(&mjpeg_param, 0, sizeof(mjpeg_param));
 
-				mjpeg_param.size = imx_vpu_dma_buffer_get_size(encoded_frame->data.dma_buffer);
+				mjpeg_param.size = encoded_frame_virt_addr_end - write_ptr;
 				mjpeg_param.pParaSet = write_ptr;
 
 				vpu_EncGiveCommand(encoder->handle, ENC_GET_JPEG_HEADER, &mjpeg_param);
@@ -3128,6 +3131,8 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 				goto finish;
 		}
 	}
+
+#undef COPY_FRAME_HEADER
 
 
 	/* Copy over data from the picture into the source_framebuffer
@@ -3223,14 +3228,30 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	);
 
 
-	// TODO: does the output have to use a DMA buffer?
-
 	/* Add this flag since the input picture has been successfully consumed */
-	*output_code = IMX_VPU_ENC_OUTPUT_CODE_INPUT_USED;
+	*output_code |= IMX_VPU_ENC_OUTPUT_CODE_INPUT_USED;
 
+	/* Add contains-header flag if a header was added earlier */
+	if (needs_header)
+		*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
+
+	/* Get the encoded data out of the bitstream buffer into the output buffer */
 	if (enc_output_info.bitstreamBuffer != 0)
 	{
+		ptrdiff_t available_space = encoded_frame_virt_addr_end - write_ptr;
 		uint8_t const *output_data_ptr = GET_BITSTREAM_VIRT_ADDR(enc_output_info.bitstreamBuffer);
+
+		if (available_space < (ptrdiff_t)(enc_output_info.bitstreamSize))
+		{
+			IMX_VPU_ERROR(
+				"insufficient space in output buffer for encoded data: need %u byte, got %td",
+				enc_output_info.bitstreamSize,
+				available_space
+			);
+			ret = IMX_VPU_ENC_RETURN_CODE_ERROR;
+
+			goto finish;
+		}
 
 		memcpy(write_ptr, output_data_ptr, enc_output_info.bitstreamSize);
 		IMX_VPU_LOG("added main encoded frame data with %u byte", enc_output_info.bitstreamSize);
@@ -3239,7 +3260,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 		*output_code |= IMX_VPU_ENC_OUTPUT_CODE_ENCODED_FRAME_AVAILABLE;
 	}
 
-	encoded_frame->data_size = write_ptr - encoded_frame_virt_addr;
+	encoded_frame->data_size = write_ptr - encoded_frame->data;
 
 	/* Since the encoder does not perform any kind of delay
 	 * or reordering, this is appropriate, because in that
@@ -3249,8 +3270,6 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 
 	encoder->first_frame = FALSE;
 finish:
-	imx_vpu_dma_buffer_unmap(encoded_frame->data.dma_buffer);
-
 	return ret;
 
 #undef GET_BITSTREAM_VIRT_ADDR

@@ -80,22 +80,6 @@ struct _GstImxVpuEncoderBase
 	ImxVpuFramebuffer input_framebuffer;
 	ImxVpuWrappedDMABuffer input_dmabuffer;
 
-	/* encoded_data_buffer is a physical memory buffer that the encoder
-	 * writes encoded data into. encoded_data_frame is a structure for
-	 * imxvpuapi. It's dma_buffer field is set to point to the
-	 * ImxVpuDMABuffer inside the encoded_data_buffer. Both of these
-	 * are initialized in gst_imx_vpu_encoder_base_set_format() and
-	 * cleaned up in gst_imx_vpu_encoder_base_close(). */
-	GstBuffer *encoded_data_buffer;
-	ImxVpuEncodedFrame encoded_data_frame;
-	/* This is a helper adapter to handle cases where one encode
-	 * iteration does not fully encode the frame. This typically
-	 * happens when the first frame of a h.264 stream is encoded.
-	 * The VPU then first outputs the SPS/PPS headers, and in the
-	 * next call, actually outputs frames. The adapter makes sure
-	 * they are bundled together. */
-	GstAdapter *encoded_data_adapter;
-
 	/* The VPU encoder needs this framebuffer array as a backing store
 	 * for temporary data during encoding. Unlike with the VPU decoder,
 	 * this array is not used as a framebuffer pool. */

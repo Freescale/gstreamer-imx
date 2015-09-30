@@ -482,7 +482,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 
 		gst_buffer_map(input_frame->input_buffer, &in_map_info, GST_MAP_READ);
 
-		encoded_frame.data.virtual_address = in_map_info.data;
+		encoded_frame.data = in_map_info.data;
 		encoded_frame.data_size = in_map_info.size;
 		/* The system frame number is necessary to correctly associate encoded
 		 * frames and decoded pictures. This is required, because some formats

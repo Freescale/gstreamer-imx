@@ -126,11 +126,13 @@ void imx_vpu_jpeg_dec_get_info(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuJPEGInfo *
 ImxVpuDecReturnCodes imx_vpu_jpeg_dec_picture_finished(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuPicture *picture);
 
 
+// TODO: documentation
+
 typedef struct _ImxVpuJPEGEncoder ImxVpuJPEGEncoder;
 
 ImxVpuEncReturnCodes imx_vpu_jpeg_enc_open(ImxVpuJPEGEncoder **jpeg_encoder, ImxVpuDMABufferAllocator *dma_buffer_allocator, unsigned int frame_width, unsigned int frame_height, unsigned int frame_rate_numerator, unsigned int frame_rate_denominator);
 ImxVpuEncReturnCodes imx_vpu_jpeg_enc_close(ImxVpuJPEGEncoder *jpeg_encoder);
-ImxVpuEncReturnCodes imx_vpu_jpeg_enc_encode(ImxVpuJPEGEncoder *jpeg_encoder, ImxVpuPicture *picture, ImxVpuEncodedFrame *encoded_frame);
+ImxVpuEncReturnCodes imx_vpu_jpeg_enc_encode(ImxVpuJPEGEncoder *jpeg_encoder, ImxVpuPicture *picture, uint8_t *output_data_buffer, size_t *output_data_buffer_size);
 
 
 #ifdef __cplusplus

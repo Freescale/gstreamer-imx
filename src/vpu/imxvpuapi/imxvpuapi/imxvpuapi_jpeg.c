@@ -318,8 +318,6 @@ struct _ImxVpuJPEGEncoder
 
 	ImxVpuEncInitialInfo initial_info;
 
-	ImxVpuDMABuffer *output_dmabuffer;
-
 	ImxVpuFramebuffer *framebuffers;
 	ImxVpuDMABuffer **fb_dmabuffers;
 	unsigned int num_framebuffers;
@@ -411,13 +409,6 @@ ImxVpuEncReturnCodes imx_vpu_jpeg_enc_open(ImxVpuJPEGEncoder **jpeg_encoder, Imx
 		goto error;
 	}
 
-	jpegenc->output_dmabuffer = imx_vpu_dma_buffer_allocate(jpegenc->dma_buffer_allocator, jpegenc->calculated_sizes.total_size, jpegenc->initial_info.framebuffer_alignment, 0);
-	if (jpegenc->output_dmabuffer == NULL)
-	{
-		IMX_VPU_ERROR("could not allocate DMA buffer for encoded output frames");
-		goto error;
-	}
-
 
 	*jpeg_encoder = jpegenc;
 
@@ -442,21 +433,30 @@ ImxVpuEncReturnCodes imx_vpu_jpeg_enc_close(ImxVpuJPEGEncoder *jpeg_encoder)
 }
 
 
-ImxVpuEncReturnCodes imx_vpu_jpeg_enc_encode(ImxVpuJPEGEncoder *jpeg_encoder, ImxVpuPicture *picture, ImxVpuEncodedFrame *encoded_frame)
+ImxVpuEncReturnCodes imx_vpu_jpeg_enc_encode(ImxVpuJPEGEncoder *jpeg_encoder, ImxVpuPicture *picture, uint8_t *output_data_buffer, size_t *output_data_buffer_size)
 {
 	unsigned int output_code;
 	ImxVpuEncParams enc_params;
+	ImxVpuEncodedFrame encoded_frame;
+	ImxVpuEncReturnCodes ret;
 
 	assert(picture != NULL);
-	assert(encoded_frame != NULL);
+	assert(output_data_buffer != NULL);
+	assert(output_data_buffer_size != NULL);
 	assert(jpeg_encoder != NULL);
 	assert(jpeg_encoder->encoder != NULL);
 
 	memset(&enc_params, 0, sizeof(enc_params));
 	enc_params.quant_param = 0;
 
-	memset(encoded_frame, 0, sizeof(ImxVpuEncodedFrame));
-	encoded_frame->data.dma_buffer = jpeg_encoder->output_dmabuffer;
+	memset(&encoded_frame, 0, sizeof(ImxVpuEncodedFrame));
+	encoded_frame.data = output_data_buffer;
+	encoded_frame.data_size = *output_data_buffer_size;
 
-	return imx_vpu_enc_encode(jpeg_encoder->encoder, picture, encoded_frame, &enc_params, &output_code);
+	ret = imx_vpu_enc_encode(jpeg_encoder->encoder, picture, &encoded_frame, &enc_params, &output_code);
+
+	if (ret == IMX_VPU_ENC_RETURN_CODE_OK)
+		*output_data_buffer_size = encoded_frame.data_size;
+
+	return ret;
 }
