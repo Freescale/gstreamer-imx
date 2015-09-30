@@ -375,8 +375,11 @@ typedef struct
 	 * Must always be valid. */
 	ImxVpuFramebuffer *framebuffer;
 
-	/* Picture type (I, P, B, ..) ; unused by the encoder */
-	ImxVpuPicType pic_type;
+	/* Picture types (I, P, B, ..) ; unused by the encoder
+	 * In case of interlaced content, the first picture type corresponds to the
+	 * first field, the second type to the second field. For progressive content,
+	 * both types are set to the same value. */
+	ImxVpuPicType pic_types[2];
 
 	/* Interlacing field type (top-first, bottom-first..); unused by the encoder */
 	ImxVpuFieldType field_type;

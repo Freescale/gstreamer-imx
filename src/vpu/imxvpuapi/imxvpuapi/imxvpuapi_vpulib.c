@@ -298,52 +298,73 @@ static BOOL imx_vpu_unload(void)
 }
 
 
-static ImxVpuPicType convert_pic_type(ImxVpuCodecFormat codec_format, int pic_type)
+static void convert_pic_type(ImxVpuCodecFormat codec_format, int vpu_pic_type, BOOL interlaced, ImxVpuPicType *pic_types)
 {
+	ImxVpuPicType type = IMX_VPU_PIC_TYPE_UNKNOWN;
+
 	switch (codec_format)
 	{
-		case IMX_VPU_CODEC_FORMAT_H264:
-		case IMX_VPU_CODEC_FORMAT_H264_MVC:
-			if ((pic_type & 0x01) == 0)
-				return IMX_VPU_PIC_TYPE_IDR;
+		case IMX_VPU_CODEC_FORMAT_WMV3:
+			switch (vpu_pic_type & 0x07)
+			{
+				case 0: type = IMX_VPU_PIC_TYPE_I; break;
+				case 1: type = IMX_VPU_PIC_TYPE_P; break;
+				case 2: type = IMX_VPU_PIC_TYPE_BI; break;
+				case 3: type = IMX_VPU_PIC_TYPE_B; break;
+				case 4: type = IMX_VPU_PIC_TYPE_SKIP; break;
+				default: break;
+			}
+			pic_types[0] = pic_types[1] = type;
+			break;
+
+		case IMX_VPU_CODEC_FORMAT_WVC1:
+		{
+			int i;
+			int vpu_pic_types[2];
+
+			if (interlaced)
+			{
+				vpu_pic_types[0] = (vpu_pic_type >> 0) & 0x7;
+				vpu_pic_types[1] = (vpu_pic_type >> 3) & 0x7;
+			}
 			else
 			{
-				switch ((pic_type >> 1) & 0x03)
+				vpu_pic_types[0] = (vpu_pic_type >> 0) & 0x7;
+				vpu_pic_types[1] = (vpu_pic_type >> 0) & 0x7;
+			}
+
+			for (i = 0; i < 2; ++i)
+			{
+				switch (vpu_pic_types[i])
 				{
-					case 0: return IMX_VPU_PIC_TYPE_I;
-					case 1: return IMX_VPU_PIC_TYPE_P;
-					case 2: case 3: return IMX_VPU_PIC_TYPE_B;
-					default: break;
+					case 0: pic_types[i] = IMX_VPU_PIC_TYPE_I; break;
+					case 1: pic_types[i] = IMX_VPU_PIC_TYPE_P; break;
+					case 2: pic_types[i] = IMX_VPU_PIC_TYPE_BI; break;
+					case 3: pic_types[i] = IMX_VPU_PIC_TYPE_B; break;
+					case 4: pic_types[i] = IMX_VPU_PIC_TYPE_SKIP; break;
+					default: pic_types[i] = IMX_VPU_PIC_TYPE_UNKNOWN;
 				}
 			}
-			break;
 
-		case IMX_VPU_CODEC_FORMAT_WMV3:
-			switch (pic_type & 0x07)
-			{
-				case 0: return IMX_VPU_PIC_TYPE_I;
-				case 1: return IMX_VPU_PIC_TYPE_P;
-				case 2: return IMX_VPU_PIC_TYPE_BI;
-				case 3: return IMX_VPU_PIC_TYPE_B;
-				case 4: return IMX_VPU_PIC_TYPE_SKIP;
-				default: break;
-			}
 			break;
+		}
 
-		/*case IMX_VPU_CODEC_FORMAT_WVC1: // TODO
-			break;*/
+		/* XXX: the VPU documentation indicates that picType's bit #0 is
+		 * cleared if it is an IDR picture, and set if it is non-IDR, and
+		 * the bits 1..3 indicate if this is an I, P, or B picture.
+		 * However, tests show this to be untrue. picType actually conforms
+		 * to the default case below for h.264 content as well. */
 
 		default:
-			switch (pic_type)
+			switch (vpu_pic_type)
 			{
-				case 0: return IMX_VPU_PIC_TYPE_I;
-				case 1: return IMX_VPU_PIC_TYPE_P;
-				case 2: case 3: return IMX_VPU_PIC_TYPE_B;
+				case 0: type = IMX_VPU_PIC_TYPE_I; break;
+				case 1: type = IMX_VPU_PIC_TYPE_P; break;
+				case 2: case 3: type = IMX_VPU_PIC_TYPE_B; break;
 				default: break;
 			}
+			pic_types[0] = pic_types[1] = type;
 	}
-
-	return IMX_VPU_PIC_TYPE_UNKNOWN;
 }
 
 
@@ -647,6 +668,16 @@ typedef enum
 FrameMode;
 
 
+typedef struct
+{
+	void *context;
+	ImxVpuPicType pic_types[2];
+	ImxVpuFieldType field_type;
+	FrameMode mode;
+}
+ImxVpuDecFrameEntry;
+
+
 struct _ImxVpuDecoder
 {
 	DecHandle handle;
@@ -662,10 +693,13 @@ struct _ImxVpuDecoder
 	ImxVpuColorFormat old_jpeg_color_format;
 
 	unsigned int num_framebuffers, num_used_framebuffers;
+	/* internal_framebuffers and framebuffers are separate from
+	 * frame_entries: internal_framebuffers must be given directly
+	 * to the vpu_DecRegisterFrameBuffer() function, and framebuffers
+	 * is a user-supplied input value */
 	FrameBuffer *internal_framebuffers;
 	ImxVpuFramebuffer *framebuffers;
-	void **context_for_frames;
-	FrameMode *frame_modes;
+	ImxVpuDecFrameEntry *frame_entries;
 	void *dropped_frame_context;
 
 	BOOL main_header_pushed;
@@ -712,6 +746,8 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 static ImxVpuDecReturnCodes imx_vpu_dec_push_input_data(ImxVpuDecoder *decoder, void *data, size_t data_size);
 
 static int imx_vpu_dec_find_free_framebuffer(ImxVpuDecoder *decoder);
+
+static void imx_vpu_dec_free_internal_arrays(ImxVpuDecoder *decoder);
 
 
 static ImxVpuDecReturnCodes imx_vpu_dec_handle_error_full(char const *fn, int linenr, char const *funcn, char const *msg_start, RetCode ret_code)
@@ -1034,12 +1070,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_close(ImxVpuDecoder *decoder)
 	if (decoder->bitstream_buffer != NULL)
 		imx_vpu_dma_buffer_unmap(decoder->bitstream_buffer);
 
-	if (decoder->internal_framebuffers != NULL)
-		IMX_VPU_FREE(decoder->internal_framebuffers, sizeof(FrameBuffer) * decoder->num_framebuffers);
-	if (decoder->context_for_frames != NULL)
-		IMX_VPU_FREE(decoder->context_for_frames, sizeof(void*) * decoder->num_framebuffers);
-	if (decoder->frame_modes != NULL)
-		IMX_VPU_FREE(decoder->frame_modes, sizeof(FrameMode) * decoder->num_framebuffers);
+	imx_vpu_dec_free_internal_arrays(decoder);
 
 	IMX_VPU_FREE(decoder, sizeof(ImxVpuDecoder));
 
@@ -1098,11 +1129,11 @@ ImxVpuDecReturnCodes imx_vpu_dec_flush(ImxVpuDecoder *decoder)
 	 * are being used for decoding (since flushing will clear them) */
 	for (i = 0; i < decoder->num_framebuffers; ++i)
 	{
-		if (decoder->frame_modes[i] == FrameMode_ReservedForDecoding)
+		if (decoder->frame_entries[i].mode == FrameMode_ReservedForDecoding)
 		{
 			dec_ret = vpu_DecClrDispFlag(decoder->handle, i);
 			IMX_VPU_DEC_HANDLE_ERROR("vpu_DecClrDispFlag failed while flushing", dec_ret);
-			decoder->frame_modes[i] = FrameMode_Free;
+			decoder->frame_entries[i].mode = FrameMode_Free;
 		}
 	}
 
@@ -1116,7 +1147,8 @@ ImxVpuDecReturnCodes imx_vpu_dec_flush(ImxVpuDecoder *decoder)
 
 
 	/* After the flush, any context will be thrown away */
-	memset(decoder->context_for_frames, 0, sizeof(void*) * decoder->num_framebuffers);
+	for (i = 0; i < decoder->num_framebuffers; ++i)
+		decoder->frame_entries[i].context = NULL;
 
 	decoder->num_used_framebuffers = 0;
 
@@ -1143,12 +1175,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, I
 
 	if (decoder->codec_format == IMX_VPU_CODEC_FORMAT_MJPEG)
 	{
-		if (decoder->internal_framebuffers != NULL)
-			IMX_VPU_FREE(decoder->internal_framebuffers, sizeof(FrameBuffer) * decoder->num_framebuffers);
-		if (decoder->context_for_frames != NULL)
-			IMX_VPU_FREE(decoder->context_for_frames, sizeof(void*) * decoder->num_framebuffers);
-		if (decoder->frame_modes != NULL)
-			IMX_VPU_FREE(decoder->frame_modes, sizeof(FrameMode) * decoder->num_framebuffers);
+		imx_vpu_dec_free_internal_arrays(decoder);
 	}
 	else if (decoder->internal_framebuffers != NULL)
 	{
@@ -1163,27 +1190,16 @@ ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, I
 	if (decoder->internal_framebuffers == NULL)
 	{
 		IMX_VPU_ERROR("allocating memory for framebuffers failed");
-		return IMX_VPU_DEC_RETURN_CODE_ERROR;
+		ret = IMX_VPU_DEC_RETURN_CODE_ERROR;
+		goto cleanup;
 	}
 
-	decoder->context_for_frames = IMX_VPU_ALLOC(sizeof(void*) * num_framebuffers);
-	if (decoder->context_for_frames == NULL)
+	decoder->frame_entries = IMX_VPU_ALLOC(sizeof(ImxVpuDecFrameEntry) * num_framebuffers);
+	if (decoder->frame_entries == NULL)
 	{
-		IMX_VPU_ERROR("allocating memory for frame contexts failed");
-		IMX_VPU_FREE(decoder->internal_framebuffers, sizeof(FrameBuffer) * num_framebuffers);
-		decoder->internal_framebuffers = NULL;
-		return IMX_VPU_DEC_RETURN_CODE_ERROR;
-	}
-
-	decoder->frame_modes = IMX_VPU_ALLOC(sizeof(FrameMode) * num_framebuffers);
-	if (decoder->frame_modes == NULL)
-	{
-		IMX_VPU_ERROR("allocating memory for frame context set flags failed");
-		IMX_VPU_FREE(decoder->internal_framebuffers, sizeof(FrameBuffer) * num_framebuffers);
-		IMX_VPU_FREE(decoder->context_for_frames, sizeof(void*) * num_framebuffers);
-		decoder->internal_framebuffers = NULL;
-		decoder->context_for_frames = NULL;
-		return IMX_VPU_DEC_RETURN_CODE_ERROR;
+		IMX_VPU_ERROR("allocating memory for frame entries failed");
+		ret = IMX_VPU_DEC_RETURN_CODE_ERROR;
+		goto cleanup;
 	}
 
 
@@ -1258,18 +1274,19 @@ ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, I
 
 
 	/* Store the pointer to the caller-supplied framebuffer array,
-	 * and set the context pointers to their initial value (0) */
+	 * and set the context pointers to their initial value (NULL) */
 	decoder->framebuffers = framebuffers;
 	decoder->num_framebuffers = num_framebuffers;
-	memset(decoder->context_for_frames, 0, sizeof(void*) * num_framebuffers);
 	for (i = 0; i < num_framebuffers; ++i)
-		decoder->frame_modes[i] = FrameMode_Free;
+	{
+		decoder->frame_entries[i].context = NULL;
+		decoder->frame_entries[i].mode = FrameMode_Free;
+	}
 
 	return IMX_VPU_DEC_RETURN_CODE_OK;
 
 cleanup:
-	IMX_VPU_FREE(decoder->internal_framebuffers, sizeof(FrameBuffer) * num_framebuffers);
-	decoder->internal_framebuffers = NULL;
+	imx_vpu_dec_free_internal_arrays(decoder);
 
 	return ret;
 }
@@ -1646,11 +1663,27 @@ static int imx_vpu_dec_find_free_framebuffer(ImxVpuDecoder *decoder)
 
 	for (i = 0; i < decoder->num_framebuffers; ++i)
 	{
-		if (decoder->frame_modes[i] == FrameMode_Free)
+		if (decoder->frame_entries[i].mode == FrameMode_Free)
 			return (int)i;
 	}
 
 	return -1;
+}
+
+
+static void imx_vpu_dec_free_internal_arrays(ImxVpuDecoder *decoder)
+{
+	if (decoder->internal_framebuffers != NULL)
+	{
+		IMX_VPU_FREE(decoder->internal_framebuffers, sizeof(FrameBuffer) * decoder->num_framebuffers);
+		decoder->internal_framebuffers = NULL;
+	}
+
+	if (decoder->frame_entries != NULL)
+	{
+		IMX_VPU_FREE(decoder->frame_entries, sizeof(ImxVpuDecFrameEntry) * decoder->num_framebuffers);
+		decoder->frame_entries = NULL;
+	}
 }
 
 
@@ -1958,11 +1991,12 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 
 		/* Log some information about the decoded frame */
 		IMX_VPU_LOG(
-			"output info:  indexFrameDisplay %d  indexFrameDecoded %d  NumDecFrameBuf %d  picType %d  numOfErrMBs %d  hScaleFlag %d  vScaleFlag %d  notSufficientPsBuffer %d  notSufficientSliceBuffer %d  decodingSuccess %d  interlacedFrame %d  mp4PackedPBframe %d  h264Npf %d  pictureStructure %d  topFieldFirst %d  repeatFirstField %d  fieldSequence %d  decPicWidth %d  decPicHeight %d",
+			"output info:  indexFrameDisplay %d  indexFrameDecoded %d  NumDecFrameBuf %d  picType %d  idrFlg %d  numOfErrMBs %d  hScaleFlag %d  vScaleFlag %d  notSufficientPsBuffer %d  notSufficientSliceBuffer %d  decodingSuccess %d  interlacedFrame %d  mp4PackedPBframe %d  h264Npf %d  pictureStructure %d  topFieldFirst %d  repeatFirstField %d  fieldSequence %d  decPicWidth %d  decPicHeight %d",
 			decoder->dec_output_info.indexFrameDisplay,
 			decoder->dec_output_info.indexFrameDecoded,
 			decoder->dec_output_info.NumDecFrameBuf,
 			decoder->dec_output_info.picType,
+			decoder->dec_output_info.idrFlg,
 			decoder->dec_output_info.numOfErrMBs,
 			decoder->dec_output_info.hScaleFlag,
 			decoder->dec_output_info.vScaleFlag,
@@ -2032,11 +2066,24 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 
 		if (decoder->dec_output_info.indexFrameDecoded >= 0)
 		{
+			ImxVpuPicType *pic_types;
 			int idx_decoded = decoder->dec_output_info.indexFrameDecoded;
 			assert(idx_decoded < (int)(decoder->num_framebuffers));
 
-			decoder->context_for_frames[idx_decoded] = encoded_frame->context;
-			decoder->frame_modes[idx_decoded] = FrameMode_ReservedForDecoding;
+			decoder->frame_entries[idx_decoded].context = encoded_frame->context;
+			decoder->frame_entries[idx_decoded].mode = FrameMode_ReservedForDecoding;
+			decoder->frame_entries[idx_decoded].field_type = convert_field_type(decoder->codec_format, &(decoder->dec_output_info));
+
+			/* XXX: The VPU documentation seems to be incorrect about IDR types.
+			 * There is an undocumented idrFlg field which is also used by the
+			 * VPU wrapper. If this flag's first bit is set, then this is an IDR
+			 * picture, otherwise it is a non-IDR one. The non-IDR case is then
+			 * handled in the default way (see convert_pic_type() for details). */
+			pic_types = &(decoder->frame_entries[idx_decoded].pic_types[0]);
+			if (((decoder->codec_format == IMX_VPU_CODEC_FORMAT_H264) || (decoder->codec_format == IMX_VPU_CODEC_FORMAT_H264_MVC)) && (decoder->dec_output_info.idrFlg & 0x01))
+				pic_types[0] = pic_types[1] = IMX_VPU_PIC_TYPE_IDR;
+			else
+				convert_pic_type(decoder->codec_format, decoder->dec_output_info.picType, !!(decoder->dec_output_info.interlacedFrame), pic_types);
 
 			decoder->num_used_framebuffers++;			
 		}
@@ -2059,9 +2106,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			int idx_display = decoder->dec_output_info.indexFrameDisplay;
 			assert(idx_display < (int)(decoder->num_framebuffers));
 
-			IMX_VPU_LOG("decoded and displayable picture available (framebuffer display index: %d  context: %p)", idx_display, decoder->context_for_frames[idx_display]);
+			IMX_VPU_LOG("decoded and displayable picture available (framebuffer display index: %d  context: %p)", idx_display, decoder->frame_entries[idx_display].context);
 
-			decoder->frame_modes[idx_display] = FrameMode_ContainsDisplayablePicture;
+			decoder->frame_entries[idx_display].mode = FrameMode_ContainsDisplayablePicture;
 
 			decoder->available_decoded_pic_idx = idx_display;
 			*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE;
@@ -2086,6 +2133,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 
 ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, ImxVpuPicture *decoded_picture)
 {
+	int i;
 	int idx;
 
 	assert(decoder != NULL);
@@ -2109,15 +2157,16 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, Imx
 	 * to FALSE, since it contains a fully decoded and still undisplayed framebuffer */
 	decoded_picture->framebuffer = &(decoder->framebuffers[idx]);
 	decoded_picture->framebuffer->already_marked = FALSE;
-	decoded_picture->pic_type = convert_pic_type(decoder->codec_format, decoder->dec_output_info.picType);
-	decoded_picture->field_type = convert_field_type(decoder->codec_format, &(decoder->dec_output_info));
-	decoded_picture->context = decoder->context_for_frames[idx];
+	decoded_picture->field_type = decoder->frame_entries[idx].field_type;
+	decoded_picture->context = decoder->frame_entries[idx].context;
+	for (i = 0; i < 2; ++i)
+		decoded_picture->pic_types[i] = decoder->frame_entries[idx].pic_types[i];
 
 
 	/* erase the context from context_for_frames after retrieval, and set
 	 * available_decoded_pic_idx to -1 ; this ensures no erroneous
 	 * double-retrieval can occur */
-	decoder->context_for_frames[idx] = NULL;
+	decoder->frame_entries[idx].context = NULL;
 	decoder->available_decoded_pic_idx = -1;
 
 
@@ -2165,7 +2214,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_mark_framebuffer_as_displayed(ImxVpuDecoder *de
 
 
 	/* frame is no longer being used */
-	decoder->frame_modes[idx] = FrameMode_Free;
+	decoder->frame_entries[idx].mode = FrameMode_Free;
 
 
 	/* mark it as displayed in the VPU */

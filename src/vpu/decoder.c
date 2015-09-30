@@ -614,6 +614,24 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 			return GST_FLOW_ERROR;
 		}
 
+		if (vpu_decoder->decoder_context->uses_interlacing)
+		{
+			GST_LOG_OBJECT(
+				vpu_decoder,
+				"picture types for the retrieved frame's fields: %s %s",
+				imx_vpu_picture_type_string(decoded_picture.pic_types[0]),
+				imx_vpu_picture_type_string(decoded_picture.pic_types[1])
+			);
+		}
+		else
+		{
+			GST_LOG_OBJECT(
+				vpu_decoder,
+				"picture type for the retrieved frame: %s",
+				imx_vpu_picture_type_string(decoded_picture.pic_types[0])
+			);
+		}
+
 		/* Retrieve the correct GstVideoCodecFrame for the decoded picture
 		 * based on the decoded picture's context (see the "if (input_frame != NULL)"
 		 * block above for more details) */
