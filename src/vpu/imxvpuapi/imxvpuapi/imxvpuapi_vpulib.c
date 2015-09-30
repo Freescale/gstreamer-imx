@@ -700,16 +700,16 @@ static ImxVpuDecReturnCodes imx_vpu_dec_handle_error_full(char const *fn, int li
 static ImxVpuDecReturnCodes imx_vpu_dec_get_initial_info(ImxVpuDecoder *decoder);
 
 static void imx_vpu_dec_insert_vp8_ivf_main_header(uint8_t *header, unsigned int pic_width, unsigned int pic_height);
-static void imx_vpu_dec_insert_vp8_ivf_frame_header(uint8_t *header, uint32_t main_data_size, uint64_t pts);
+static void imx_vpu_dec_insert_vp8_ivf_frame_header(uint8_t *header, size_t main_data_size, uint64_t pts);
 
-static void imx_vpu_dec_insert_wmv3_sequence_layer_header(uint8_t *header, unsigned int pic_width, unsigned int pic_height, unsigned int main_data_size, uint8_t *codec_data);
-static void imx_vpu_dec_insert_wmv3_frame_layer_header(uint8_t *header, unsigned int main_data_size);
+static void imx_vpu_dec_insert_wmv3_sequence_layer_header(uint8_t *header, unsigned int pic_width, unsigned int pic_height, size_t main_data_size, uint8_t *codec_data);
+static void imx_vpu_dec_insert_wmv3_frame_layer_header(uint8_t *header, size_t main_data_size);
 
-static void imx_vpu_dec_insert_vc1_frame_layer_header(uint8_t *header, uint8_t *main_data, unsigned int *actual_header_length);
+static void imx_vpu_dec_insert_vc1_frame_layer_header(uint8_t *header, uint8_t *main_data, size_t *actual_header_length);
 
-static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *decoder, uint8_t *codec_data, unsigned int codec_data_size, uint8_t *main_data, unsigned int main_data_size);
+static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *decoder, uint8_t *codec_data, size_t codec_data_size, uint8_t *main_data, size_t main_data_size);
 
-static ImxVpuDecReturnCodes imx_vpu_dec_push_input_data(ImxVpuDecoder *decoder, void *data, unsigned int data_size);
+static ImxVpuDecReturnCodes imx_vpu_dec_push_input_data(ImxVpuDecoder *decoder, void *data, size_t data_size);
 
 static int imx_vpu_dec_find_free_framebuffer(ImxVpuDecoder *decoder);
 
@@ -1382,7 +1382,7 @@ static void imx_vpu_dec_insert_vp8_ivf_main_header(uint8_t *header, unsigned int
 }
 
 
-static void imx_vpu_dec_insert_vp8_ivf_frame_header(uint8_t *header, uint32_t main_data_size, uint64_t pts)
+static void imx_vpu_dec_insert_vp8_ivf_frame_header(uint8_t *header, size_t main_data_size, uint64_t pts)
 {
 	int i = 0;
 	WRITE_32BIT_LE_AND_INCR_IDX(header, i, main_data_size);
@@ -1391,7 +1391,7 @@ static void imx_vpu_dec_insert_vp8_ivf_frame_header(uint8_t *header, uint32_t ma
 }
 
 
-static void imx_vpu_dec_insert_wmv3_sequence_layer_header(uint8_t *header, unsigned int pic_width, unsigned int pic_height, unsigned int main_data_size, uint8_t *codec_data)
+static void imx_vpu_dec_insert_wmv3_sequence_layer_header(uint8_t *header, unsigned int pic_width, unsigned int pic_height, size_t main_data_size, uint8_t *codec_data)
 {
 	/* Header as specified in the VC-1 specification, Annex J and L,
 	 * L.2 , Sequence Layer */
@@ -1417,7 +1417,7 @@ static void imx_vpu_dec_insert_wmv3_sequence_layer_header(uint8_t *header, unsig
 }
 
 
-static void imx_vpu_dec_insert_wmv3_frame_layer_header(uint8_t *header, unsigned int main_data_size)
+static void imx_vpu_dec_insert_wmv3_frame_layer_header(uint8_t *header, size_t main_data_size)
 {
 	/* Header as specified in the VC-1 specification, Annex J and L,
 	 * L.3 , Frame Layer */
@@ -1425,7 +1425,7 @@ static void imx_vpu_dec_insert_wmv3_frame_layer_header(uint8_t *header, unsigned
 }
 
 
-static void imx_vpu_dec_insert_vc1_frame_layer_header(uint8_t *header, uint8_t *main_data, unsigned int *actual_header_length)
+static void imx_vpu_dec_insert_vc1_frame_layer_header(uint8_t *header, uint8_t *main_data, size_t *actual_header_length)
 {
 	if (VC1_IS_NOT_NAL(main_data[0]))
 	{
@@ -1439,7 +1439,7 @@ static void imx_vpu_dec_insert_vc1_frame_layer_header(uint8_t *header, uint8_t *
 }
 
 
-static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *decoder, uint8_t *codec_data, unsigned int codec_data_size, uint8_t *main_data, unsigned int main_data_size)
+static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *decoder, uint8_t *codec_data, size_t codec_data_size, uint8_t *main_data, size_t main_data_size)
 {
 	BOOL can_push_codec_data;
 	ImxVpuDecReturnCodes ret = IMX_VPU_DEC_RETURN_CODE_OK;
@@ -1499,7 +1499,7 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 			if (decoder->main_header_pushed)
 			{
 				uint8_t header[VC1_NAL_FRAME_LAYER_MAX_SIZE];
-				unsigned int actual_header_length;
+				size_t actual_header_length;
 				imx_vpu_dec_insert_vc1_frame_layer_header(header, main_data, &actual_header_length);
 				if (actual_header_length > 0)
 					ret = imx_vpu_dec_push_input_data(decoder, header, actual_header_length);
@@ -1516,7 +1516,7 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 			// Perhaps it means raw IVF-contained VP8?
 
 			uint8_t header[VP8_SEQUENCE_HEADER_SIZE + VP8_FRAME_HEADER_SIZE];
-			unsigned int header_size = 0;
+			size_t header_size = 0;
 
 			if (decoder->main_header_pushed)
 			{
@@ -1549,12 +1549,12 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 }
 
 
-static ImxVpuDecReturnCodes imx_vpu_dec_push_input_data(ImxVpuDecoder *decoder, void *data, unsigned int data_size)
+static ImxVpuDecReturnCodes imx_vpu_dec_push_input_data(ImxVpuDecoder *decoder, void *data, size_t data_size)
 {
 	PhysicalAddress read_ptr, write_ptr;
 	Uint32 num_free_bytes;
 	RetCode dec_ret;
-	unsigned int read_offset, write_offset, num_free_bytes_at_end, num_bytes_to_push;
+	size_t read_offset, write_offset, num_free_bytes_at_end, num_bytes_to_push;
 	size_t bbuf_size;
 	int i;
 	ImxVpuDecReturnCodes ret;
@@ -3000,6 +3000,9 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	assert(encoded_frame->data_size > 0);
 	assert(encoding_params != NULL);
 	assert(output_code != NULL);
+ 
+	if (encoded_frame->codec_data != NULL)
+		assert(encoded_frame->codec_data_size > 0);
 
 	*output_code = 0;
 

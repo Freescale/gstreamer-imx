@@ -345,7 +345,7 @@ typedef struct
 	 * uncompressed picture in bytes is a typical and safe choice.
 	 * After the frame got encoded, this contains the number of bytes of
 	 * the actual encoded frame. */
-	unsigned int data_size;
+	size_t data_size;
 
 	/* Pointer to out-of-band codec/header data. If such data exists,
 	 * specify the pointer to the memory block containing the data,
@@ -354,7 +354,7 @@ typedef struct
 	 * If no such data exists or is required, or if drain mode is enabled,
 	 * the pointer must be NULL, the size must be 0. Not used by the encoder. */
 	uint8_t *codec_data;
-	unsigned int codec_data_size;
+	size_t codec_data_size;
 
 	/* User-defined pointer. The library does not touch this value.
 	 * This pointer and the one from the corresponding
@@ -431,7 +431,10 @@ void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int
  * The specified DMA buffer and context pointer are also set. */
 void imx_vpu_fill_framebuffer_params(ImxVpuFramebuffer *framebuffer, ImxVpuFramebufferSizes *calculated_sizes, ImxVpuDMABuffer *fb_dma_buffer, void* context);
 
+/* Returns a human-readable description of the given color format. Useful for logging. */
 char const *imx_vpu_color_format_string(ImxVpuColorFormat color_format);
+/* Returns a human-readable description of the given picture-type. Useful for logging. */
+char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type);
 
 
 
@@ -1025,6 +1028,12 @@ void imx_vpu_enc_configure_min_intra_refresh(ImxVpuEncoder *encoder, unsigned in
  * the open_params in imx_vpu_enc_open() is used. */
 void imx_vpu_enc_configure_intra_qp(ImxVpuEncoder *encoder, int intra_qp);
 
+/* Encodes a given input picture. encoded_frame is filled with information about the encoded output frame.
+ * Some of the encoded_frame's fields must be set by the user before this function is called. See the
+ * ImxVpuEncodedFrame documentation for details.
+ * output_code is a bit mask containing information about the encoding result.
+ * encoding_params specifies additional encoding parameters, which can vary from frame to frame.
+ * None of the arguments may be NULL. */
 ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *picture, ImxVpuEncodedFrame *encoded_frame, ImxVpuEncParams *encoding_params, unsigned int *output_code);
 
 

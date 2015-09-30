@@ -233,3 +233,18 @@ char const *imx_vpu_color_format_string(ImxVpuColorFormat color_format)
 			return "<unknown>";
 	}
 }
+
+
+char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type)
+{
+	switch (picture_type)
+	{
+		case IMX_VPU_PIC_TYPE_I: return "I";
+		case IMX_VPU_PIC_TYPE_P: return "P";
+		case IMX_VPU_PIC_TYPE_B: return "B";
+		case IMX_VPU_PIC_TYPE_IDR: return "IDR";
+		case IMX_VPU_PIC_TYPE_BI: return "BI";
+		case IMX_VPU_PIC_TYPE_SKIP: return "SKIP";
+		default: return "<unknown>";
+	}
+}
