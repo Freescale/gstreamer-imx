@@ -297,7 +297,6 @@ void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int
 			calculated_sizes->cbcr_size = calculated_sizes->mvcol_size = calculated_sizes->y_size;
 			break;
 		case IMX_VPU_COLOR_FORMAT_YUV400:
-			/* TODO: check if this is OK */
 			calculated_sizes->cbcr_stride = 0;
 			calculated_sizes->cbcr_size = calculated_sizes->mvcol_size = 0;
 			break;
@@ -972,9 +971,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 	assert(decoder != NULL);
 	assert(encoded_frame != NULL);
 	assert(output_code != NULL);
-	assert(decoder->drain_mode_enabled || (encoded_frame->data.virtual_address != NULL));
+	assert(decoder->drain_mode_enabled || (encoded_frame->data != NULL));
 
-	node.pVirAddr = encoded_frame->data.virtual_address;
+	node.pVirAddr = encoded_frame->data;
 	node.pPhyAddr = 0; /* encoded data is always read from a regular memory block, not a DMA buffer */
 	node.nSize = encoded_frame->data_size;
 
@@ -1202,7 +1201,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 
 	if (buf_ret_code & VPU_DEC_OUTPUT_NODIS)
 	{
-		if ((encoded_frame->data.virtual_address != NULL) && (decoder->codec_format == IMX_VPU_CODEC_FORMAT_VP8))
+		if ((encoded_frame->data != NULL) && (decoder->codec_format == IMX_VPU_CODEC_FORMAT_VP8))
 			*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DECODE_ONLY;
 	}
 
@@ -1257,7 +1256,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 	 * drop the input frame to make sure timestamps are okay
 	 * (If consumed frame info is present it is still possible it might be used for input-output frame
 	 * associations; unlikely to occur thought) */
-	if ((encoded_frame->data.virtual_address != NULL) && !(buf_ret_code & (VPU_DEC_ONE_FRM_CONSUMED | VPU_DEC_INPUT_USED)))
+	if ((encoded_frame->data != NULL) && !(buf_ret_code & (VPU_DEC_ONE_FRM_CONSUMED | VPU_DEC_INPUT_USED)))
 	{
 		decoder->dropped_frame_context = encoded_frame->context;
 		*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DROPPED;
@@ -1311,7 +1310,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, Imx
 		}
 	}
 
-	decoded_picture->pic_type = convert_from_wrapper_pic_type(out_frame_info.ePicType);
+	decoded_picture->pic_types[0] = decoded_picture->pic_types[1] = convert_from_wrapper_pic_type(out_frame_info.ePicType);
 	decoded_picture->field_type = convert_from_wrapper_field_type(out_frame_info.eFieldType);
 	decoded_picture->context = context;
 
@@ -1425,16 +1424,6 @@ static ImxVpuEncReturnCodes enc_convert_retcode(VpuEncRetCode code)
 
 		default: return IMX_VPU_ENC_RETURN_CODE_ERROR;
 	}
-}
-
-
-static unsigned int enc_convert_outcode(VpuEncBufRetCode code)
-{
-	unsigned int out = 0;
-	if (code & VPU_ENC_INPUT_USED)       out |= IMX_VPU_ENC_OUTPUT_CODE_INPUT_USED;
-	if (code & VPU_ENC_OUTPUT_DIS)       out |= IMX_VPU_ENC_OUTPUT_CODE_ENCODED_FRAME_AVAILABLE;
-	if (code & VPU_ENC_OUTPUT_SEQHEADER) out |= IMX_VPU_ENC_OUTPUT_CODE_SEQUENCE_HEADER;
-	return out;
 }
 
 
@@ -1995,19 +1984,18 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	VpuEncRetCode ret;
 	VpuEncEncParam enc_enc_param;
 	VpuFrameBuffer in_framebuffer;
-	uint8_t *encoded_frame_virt_addr;
-	imx_vpu_phys_addr_t picture_phys_addr, encoded_frame_phys_addr;
+	imx_vpu_phys_addr_t picture_phys_addr;
+	uint8_t *write_ptr;
 
 	assert(encoder != NULL);
 	assert(encoded_frame != NULL);
-	assert(encoded_frame->data.dma_buffer != NULL);
+	assert(encoded_frame->data != NULL);
+	assert(encoded_frame->data_size > 0);
 	assert(encoding_params != NULL);
 	assert(output_code != NULL);
 
+	write_ptr = encoded_frame->data;
 	picture_phys_addr = imx_vpu_dma_buffer_get_physical_address(picture->framebuffer->dma_buffer);
-
-	encoded_frame_virt_addr = imx_vpu_dma_buffer_map(encoded_frame->data.dma_buffer, 0);
-	encoded_frame_phys_addr = imx_vpu_dma_buffer_get_physical_address(encoded_frame->data.dma_buffer);
 
 	memset(&enc_enc_param, 0, sizeof(enc_enc_param));
 
@@ -2027,9 +2015,8 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	enc_enc_param.nFrameRate = (encoder->frame_rate_numerator + (encoder->frame_rate_denominator - 1)) / encoder->frame_rate_denominator;
 	enc_enc_param.nQuantParam = encoding_params->quant_param;
 
-	enc_enc_param.nInPhyOutput = (unsigned int)encoded_frame_phys_addr;
-	enc_enc_param.nInVirtOutput = (unsigned int)encoded_frame_virt_addr;
-	enc_enc_param.nInOutputBufLen = imx_vpu_dma_buffer_get_size(encoded_frame->data.dma_buffer);
+	enc_enc_param.nInPhyOutput = 0; /* This is not used by the VPU wrapper on i.MX6 SoCs */
+	enc_enc_param.nInOutputBufLen = encoded_frame->data_size;
 
 	enc_enc_param.nForceIPicture = encoding_params->force_I_picture;
 	enc_enc_param.nSkipPicture = encoding_params->skip_picture;
@@ -2037,23 +2024,52 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 
 	enc_enc_param.pInFrame = &in_framebuffer;
 
-	ret = VPU_EncEncodeFrame(encoder->handle, &enc_enc_param);
-	IMX_VPU_LOG("VPU_EncEncodeFrame out ret code: 0x%x size: %d", enc_enc_param.eOutRetCode, enc_enc_param.nOutOutputSize);
+	encoded_frame->data_size = 0;
+	*output_code = 0;
 
-	*output_code = enc_convert_outcode(enc_enc_param.eOutRetCode);
-
-	if (ret != VPU_ENC_RET_SUCCESS)
+	/* When encoding h.264 or MPEG4, the VPU wrapper outputs the header separately.
+	 * imxvpuapi however does not. To solve this, gather output data until the
+	 * wrapper sets the VPU_ENC_INPUT_USED output code. This is safe, since the
+	 * wrapper never sets this code until the actual frame is encoded. So, if for
+	 * example h.264 is encoded, then the first VPU_EncEncodeFrame call will
+	 * produce an output code with the VPU_ENC_OUTPUT_SEQHEADER bit but without
+	 * the VPU_ENC_INPUT_USED. The loop continues. In the second iteration, the
+	 * call will return an output code that contains VPU_ENC_INPUT_USED. This
+	 * second call will also produce the actual encoded frame. Loop exits. */
+	while (TRUE)
 	{
-		IMX_VPU_ERROR("encoding frame failed: %s", imx_vpu_enc_error_string(enc_convert_retcode(ret)));
-		return enc_convert_retcode(ret);
+		enc_enc_param.nInVirtOutput = (unsigned int)write_ptr;
+
+		ret = VPU_EncEncodeFrame(encoder->handle, &enc_enc_param);
+		IMX_VPU_LOG("VPU_EncEncodeFrame out ret code: 0x%x size: %d", enc_enc_param.eOutRetCode, enc_enc_param.nOutOutputSize);
+
+		if (ret != VPU_ENC_RET_SUCCESS)
+		{
+			IMX_VPU_ERROR("encoding frame failed: %s", imx_vpu_enc_error_string(enc_convert_retcode(ret)));
+			return enc_convert_retcode(ret);
+		}
+
+		encoded_frame->data_size += enc_enc_param.nOutOutputSize;
+		write_ptr += enc_enc_param.nOutOutputSize;
+
+		if (enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_DIS)
+			*output_code |= IMX_VPU_ENC_OUTPUT_CODE_ENCODED_FRAME_AVAILABLE;
+
+		if (enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_SEQHEADER)
+			*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
+
+		if (enc_enc_param.eOutRetCode & VPU_ENC_INPUT_USED)
+		{
+			*output_code |= IMX_VPU_ENC_OUTPUT_CODE_INPUT_USED;
+			break;
+		}
 	}
 
-	encoded_frame->data_size = enc_enc_param.nOutOutputSize;
-
-	// TODO: check if this really is always the case
+	/* Since the encoder does not perform any kind of delay
+	 * or reordering, this is appropriate, because in that
+	 * case, one input frame always immediately leads to
+	 * one output frame */
 	encoded_frame->context = picture->context;
-
-	imx_vpu_dma_buffer_unmap(encoded_frame->data.dma_buffer);
 
 	return IMX_VPU_DEC_RETURN_CODE_OK;
 }
