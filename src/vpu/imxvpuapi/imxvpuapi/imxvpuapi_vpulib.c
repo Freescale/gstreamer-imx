@@ -587,7 +587,6 @@ void imx_vpu_calc_framebuffer_sizes(ImxVpuColorFormat color_format, unsigned int
 			calculated_sizes->cbcr_size = calculated_sizes->mvcol_size = calculated_sizes->y_size;
 			break;
 		case IMX_VPU_COLOR_FORMAT_YUV400:
-			/* TODO: check if this is OK */
 			calculated_sizes->cbcr_stride = 0;
 			calculated_sizes->cbcr_size = calculated_sizes->mvcol_size = 0;
 			break;
@@ -1836,6 +1835,10 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			case IMX_VPU_DEC_RETURN_CODE_ALREADY_CALLED:
 				IMX_VPU_ERROR("Initial info was already retrieved - duplicate call");
 				return IMX_VPU_DEC_RETURN_CODE_ALREADY_CALLED;
+
+			case IMX_VPU_DEC_RETURN_CODE_ERROR:
+				IMX_VPU_ERROR("Internal error: unspecified error");
+				return IMX_VPU_DEC_RETURN_CODE_ERROR;
 
 			default:
 				/* do not report error; instead, let the caller supply the
