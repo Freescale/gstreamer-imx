@@ -1050,9 +1050,6 @@ ImxVpuDecReturnCodes imx_vpu_dec_close(ImxVpuDecoder *decoder)
 	IMX_VPU_DEBUG("closing decoder");
 
 
-	// TODO: call vpu_DecGetOutputInfo() for all started frames
-
-
 	/* Flush the VPU bit buffer */
 	if (decoder->codec_format != IMX_VPU_CODEC_FORMAT_MJPEG)
 	{
@@ -1936,11 +1933,17 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		/* XXX: currently, iframe search and skip frame modes are not supported */
 
 
-		/* Start frame decoding */
+		/* Start frame decoding
+		 * The error handling code below does dummy vpu_DecGetOutputInfo() calls
+		 * before exiting. This is done because according to the documentation,
+		 * vpu_DecStartOneFrame() "locks out" most VPU calls until
+		 * vpu_DecGetOutputInfo() is called, so this must be called *always*
+		 * after vpu_DecStartOneFrame(), even if an error occurred. */
 		dec_ret = vpu_DecStartOneFrame(decoder->handle, &params);
 
 		if (dec_ret == RETCODE_JPEG_BIT_EMPTY)
 		{
+			vpu_DecGetOutputInfo(decoder->handle, &(decoder->dec_output_info));
 			*output_code |= IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_INPUT_DATA;
 			return IMX_VPU_DEC_RETURN_CODE_OK;
 		}
@@ -1951,7 +1954,10 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		}
 
 		if ((ret = IMX_VPU_DEC_HANDLE_ERROR("could not decode frame", dec_ret)) != IMX_VPU_DEC_RETURN_CODE_OK)
+		{
+			vpu_DecGetOutputInfo(decoder->handle, &(decoder->dec_output_info));
 			return ret;
+		}
 
 
 		/* Wait for frame completion */
