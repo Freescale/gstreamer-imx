@@ -84,7 +84,6 @@
 #define WMV3_RCV_FRAME_LAYER_SIZE    4
 
 #define VC1_NAL_FRAME_LAYER_MAX_SIZE   4
-#define VC1_IS_NOT_NAL(ID)             (( (ID) & 0x00FFFFFF) != 0x00010000)
 
 #define VPU_WAIT_TIMEOUT             500 /* milliseconds to wait for frame completion */
 #define VPU_MAX_TIMEOUT_COUNTS       4   /* how many timeouts are allowed in series */
@@ -305,6 +304,11 @@ static void convert_pic_type(ImxVpuCodecFormat codec_format, int vpu_pic_type, B
 	switch (codec_format)
 	{
 		case IMX_VPU_CODEC_FORMAT_WMV3:
+			/* This assumes progressive content and sets both picture
+			 * types to the same value. WMV3 *does* have support for
+			 * interlacing, but it has never been documented, and was
+			 * deprecated by Microsoft in favor of VC-1, which officially
+			 * has proper interlacing support. */
 			switch (vpu_pic_type & 0x07)
 			{
 				case 0: type = IMX_VPU_PIC_TYPE_I; break;
@@ -1450,11 +1454,17 @@ static void imx_vpu_dec_insert_wmv3_frame_layer_header(uint8_t *header, size_t m
 
 static void imx_vpu_dec_insert_vc1_frame_layer_header(uint8_t *header, uint8_t *main_data, size_t *actual_header_length)
 {
-	if (VC1_IS_NOT_NAL(main_data[0]))
+	static uint8_t const start_code_prefix[3] = { 0x00, 0x00, 0x01 };
+
+	/* Detect if a start code is present; if not, insert one.
+	 * Detection works according to SMPTE 421M Annex E E.2.1:
+	 * If the first two bytes are 0x00, and the third byte is
+	 * 0x01, then this is a start code. Otherwise, it isn't
+	 * one, and a frame start code is inserted. */
+	if (memcmp(main_data, start_code_prefix, 3) != 0)
 	{
-		/* Insert frame start code if necessary (note that it is
-		 * written in little endian order; 0x0D is the last byte) */
-		WRITE_32BIT_LE(header, 0, 0x0D010000);
+		static uint8_t const frame_start_code[4] = { 0x00, 0x00, 0x01, 0x0D };
+		memcpy(header, frame_start_code, 4);
 		*actual_header_length = 4;
 	}
 	else
@@ -1507,6 +1517,7 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 				/* First, push the codec_data (except for its first byte,
 				 * which contains the size of the codec data), since it
 				 * contains the sequence layer header */
+				IMX_VPU_LOG("pushing codec data with %zu byte", codec_data_size - 1);
 				if ((ret = imx_vpu_dec_push_input_data(decoder, codec_data + 1, codec_data_size - 1)) != IMX_VPU_DEC_RETURN_CODE_OK)
 				{
 					IMX_VPU_ERROR("could not push codec data to bitstream buffer");
@@ -1525,7 +1536,10 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 				size_t actual_header_length;
 				imx_vpu_dec_insert_vc1_frame_layer_header(header, main_data, &actual_header_length);
 				if (actual_header_length > 0)
+				{
+					IMX_VPU_LOG("pushing frame layer header with %zu byte", actual_header_length);
 					ret = imx_vpu_dec_push_input_data(decoder, header, actual_header_length);
+				}
 			}
 
 			break;
@@ -1741,6 +1755,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			return ret;
 
 		/* Handle main frame data */
+		IMX_VPU_LOG("pushing main frame data with %zu byte", encoded_frame->data_size);
 		if ((ret = imx_vpu_dec_push_input_data(decoder, encoded_frame->data, encoded_frame->data_size)) != IMX_VPU_DEC_RETURN_CODE_OK)
 			return ret;
 	}
