@@ -51,6 +51,10 @@ struct _GstImxV4l2VideoSrc
 	guint32 count;
 	GstClockTime time_per_frame;
 
+	GMutex af_mutex;
+	GstPhotographyFocusMode focus_mode;
+	GstClockID af_clock_id;
+
 	/* properties */
 	gint capture_mode;
 	gint fps_n;
