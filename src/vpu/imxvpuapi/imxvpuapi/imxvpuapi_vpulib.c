@@ -2296,6 +2296,30 @@ struct _ImxVpuEncoder
 	ImxVpuFramebuffer *framebuffers;
 
 	BOOL first_frame;
+
+	union
+	{
+		struct
+		{
+			uint8_t *sps_rbsp;
+			uint8_t *pps_rbsp;
+			size_t sps_rbsp_size;
+			size_t pps_rbsp_size;
+		}
+		h264_headers;
+
+		struct
+		{
+			uint8_t *vos_header;
+			uint8_t *vis_header;
+			uint8_t *vol_header;
+			size_t vos_header_size;
+			size_t vis_header_size;
+			size_t vol_header_size;
+		}
+		mpeg4_headers;
+	}
+	headers;
 };
 
 
@@ -2478,6 +2502,136 @@ static void imx_vpu_enc_set_mjpeg_tables(unsigned int quality_factor, EncMjpgPar
 	}
 
 	memcpy(mjpeg_params->cInfoTab, component_info_table, 4 * 6);
+}
+
+
+static ImxVpuEncReturnCodes imx_vpu_enc_generate_header_data(ImxVpuEncoder *encoder)
+{
+	ImxVpuEncReturnCodes ret;
+	RetCode enc_ret;
+
+#define GENERATE_HEADER_DATA(COMMAND, HEADER_TYPE, HEADER_FIELD, DESCRIPTION) \
+	do \
+	{ \
+		enc_header_param.headerType = (HEADER_TYPE); \
+		enc_ret = vpu_EncGiveCommand(encoder->handle, (COMMAND), &enc_header_param); \
+		if ((ret = IMX_VPU_ENC_HANDLE_ERROR("header generation command failed", enc_ret)) != IMX_VPU_ENC_RETURN_CODE_OK) \
+			return ret; \
+		\
+		if ((encoder->headers.HEADER_FIELD = IMX_VPU_ALLOC(enc_header_param.size)) == NULL) \
+		{ \
+			IMX_VPU_ERROR("could not allocate %d byte for %s memory block", enc_header_param.size, (DESCRIPTION)); \
+			return IMX_VPU_ENC_RETURN_CODE_ERROR; \
+		} \
+		\
+		memcpy( \
+			encoder->headers.HEADER_FIELD, \
+			encoder->bitstream_buffer_virtual_address + (enc_header_param.buf - encoder->bitstream_buffer_physical_address), \
+			enc_header_param.size \
+		); \
+		encoder->headers.HEADER_FIELD ## _size = enc_header_param.size; \
+		\
+		IMX_VPU_LOG("generated %s with %d byte", (DESCRIPTION), enc_header_param.size); \
+	} \
+	while (0)
+
+	switch (encoder->codec_format)
+	{
+		case IMX_VPU_CODEC_FORMAT_H264:
+		{
+			EncHeaderParam enc_header_param;
+			memset(&enc_header_param, 0, sizeof(enc_header_param));
+
+			GENERATE_HEADER_DATA(ENC_PUT_AVC_HEADER, SPS_RBSP, h264_headers.sps_rbsp, "h.264 SPS");
+			GENERATE_HEADER_DATA(ENC_PUT_AVC_HEADER, PPS_RBSP, h264_headers.pps_rbsp, "h.264 PPS");
+
+			break;
+		}
+
+		case IMX_VPU_CODEC_FORMAT_MPEG4:
+		{
+			unsigned int num_macroblocks_per_frame;
+			unsigned int num_macroblocks_per_second;
+			unsigned int w, h;
+			EncHeaderParam enc_header_param;
+
+			memset(&enc_header_param, 0, sizeof(enc_header_param));
+
+			w = encoder->picture_width;
+			h = encoder->picture_height;
+
+			/* Calculate the number of macroblocks per second in two steps.
+			 * Step 1 calculates the number of macroblocks per frame.
+			 * Based on that, step 2 calculates the actual number of
+			 * macroblocks per second. The "((encoder->frame_rate_denominator + 1) / 2)"
+			 * part is for rounding up. */
+			num_macroblocks_per_frame = ((w + 15) / 16) * ((h + 15) / 16);
+			num_macroblocks_per_second = (num_macroblocks_per_frame * encoder->frame_rate_numerator + ((encoder->frame_rate_denominator + 1) / 2)) / encoder->frame_rate_denominator;
+
+			/* Decide the user profile level indication based on the VPU
+			 * documentation's section 3.2.2.4 and Annex N in ISO/IEC 14496-2 */
+
+			if ((w <= 176) && (h <= 144) && (num_macroblocks_per_second <= 1485))
+				enc_header_param.userProfileLevelIndication = 1; /* XXX: this is set to 8 in the VPU wrapper, why? */
+			else if ((w <= 352) && (h <= 288) && (num_macroblocks_per_second <= 5940))
+				enc_header_param.userProfileLevelIndication = 2;
+			else if ((w <= 352) && (h <= 288) && (num_macroblocks_per_second <= 11880))
+				enc_header_param.userProfileLevelIndication = 3;
+			else if ((w <= 640) && (h <= 480) && (num_macroblocks_per_second <= 36000))
+				enc_header_param.userProfileLevelIndication = 4;
+			else if ((w <= 720) && (h <= 576) && (num_macroblocks_per_second <= 40500))
+				enc_header_param.userProfileLevelIndication = 5;
+			else
+				enc_header_param.userProfileLevelIndication = 6;
+
+			enc_header_param.userProfileLevelEnable = 1;
+
+			IMX_VPU_LOG("picture size: %u x %u pixel, %u macroblocks per second => MPEG-4 user profile level indication = %d", w, h, num_macroblocks_per_second, enc_header_param.userProfileLevelIndication);
+
+			GENERATE_HEADER_DATA(ENC_PUT_MP4_HEADER, VOS_HEADER, mpeg4_headers.vos_header, "MPEG-4 VOS header");
+			GENERATE_HEADER_DATA(ENC_PUT_MP4_HEADER, VIS_HEADER, mpeg4_headers.vis_header, "MPEG-4 VIS header");
+			GENERATE_HEADER_DATA(ENC_PUT_MP4_HEADER, VOL_HEADER, mpeg4_headers.vol_header, "MPEG-4 VOL header");
+
+			break;
+		}
+
+		default:
+			break;
+	}
+
+#undef GENERATE_HEADER_DATA
+
+	return IMX_VPU_ENC_RETURN_CODE_OK;
+}
+
+
+static void imx_vpu_enc_free_header_data(ImxVpuEncoder *encoder)
+{
+#define DEALLOC_HEADER(HEADER_FIELD) \
+	if (encoder->headers.HEADER_FIELD != NULL) \
+	{ \
+		IMX_VPU_FREE(encoder->headers.HEADER_FIELD, encoder->headers.HEADER_FIELD ## _size); \
+		encoder->headers.HEADER_FIELD = NULL; \
+	}
+
+	switch (encoder->codec_format)
+	{
+		case IMX_VPU_CODEC_FORMAT_H264:
+			DEALLOC_HEADER(h264_headers.sps_rbsp);
+			DEALLOC_HEADER(h264_headers.pps_rbsp);
+			break;
+
+		case IMX_VPU_CODEC_FORMAT_MPEG4:
+			DEALLOC_HEADER(mpeg4_headers.vos_header);
+			DEALLOC_HEADER(mpeg4_headers.vis_header);
+			DEALLOC_HEADER(mpeg4_headers.vol_header);
+			break;
+
+		default:
+			break;
+	}
+
+#undef DEALLOC_HEADER
 }
 
 
@@ -2829,6 +2983,8 @@ ImxVpuEncReturnCodes imx_vpu_enc_close(ImxVpuEncoder *encoder)
 
 	/* Remaining cleanup */
 
+	imx_vpu_enc_free_header_data(encoder);
+
 	if (encoder->bitstream_buffer != NULL)
 		imx_vpu_dma_buffer_unmap(encoder->bitstream_buffer);
 
@@ -3018,6 +3174,12 @@ ImxVpuEncReturnCodes imx_vpu_enc_get_initial_info(ImxVpuEncoder *encoder, ImxVpu
 	/* Reserve extra framebuffers for the subsampled images */
 	info->min_num_required_framebuffers += VPU_ENC_NUM_EXTRA_SUBSAMPLE_FRAMEBUFFERS;
 
+	/* Generate out-of-band header data if necessary
+	 * This data does not change during encoding, so
+	 * it only has to be generated once */
+	if ((ret = imx_vpu_enc_generate_header_data(encoder)) != IMX_VPU_ENC_RETURN_CODE_OK)
+		return ret;
+
 	return IMX_VPU_ENC_RETURN_CODE_OK;
 }
 
@@ -3078,7 +3240,6 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	imx_vpu_phys_addr_t picture_phys_addr;
 	uint8_t *write_ptr;
 	BOOL timeout;
-	BOOL needs_header = TRUE;
 
 	ret = IMX_VPU_ENC_RETURN_CODE_OK;
 
@@ -3115,118 +3276,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 		*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
 	}
 
-	/* Add header(s) if I picture generation is forced, or if the codec
-	 * format is motion JPEG (which needs a JPEG header for every frame) */
-	needs_header = encoder->first_frame || (encoder->codec_format == IMX_VPU_CODEC_FORMAT_MJPEG) || encoding_params->force_I_picture;
-
-	IMX_VPU_LOG("encoding picture with physical address %" IMX_VPU_PHYS_ADDR_FORMAT ", adding header(s): %d", picture_phys_addr, needs_header);
-
-#define COPY_FRAME_HEADER(COMMAND, HEADER_TYPE, DESCRIPTION) \
-	do \
-	{ \
-		ptrdiff_t available_space; \
- \
-		enc_header_param.headerType = (HEADER_TYPE); \
-		vpu_EncGiveCommand(encoder->handle, (COMMAND), &enc_header_param); \
-		available_space = encoded_frame_virt_addr_end - write_ptr; \
- \
-		if (available_space < enc_header_param.size) \
-		{ \
-			IMX_VPU_ERROR( \
-				"output memory block for encoded frame data is not large enough, cannot write %s header (need minimum of %d byte of space, got %td)", \
-				(DESCRIPTION), \
-				enc_header_param.size, \
-				available_space \
-			); \
-			ret = IMX_VPU_ENC_RETURN_CODE_ERROR; \
-			goto finish; \
-		} \
- \
-		memcpy(write_ptr, GET_BITSTREAM_VIRT_ADDR(enc_header_param.buf), enc_header_param.size); \
-		IMX_VPU_LOG("added %s with %d byte", (DESCRIPTION), enc_header_param.size); \
-		write_ptr += enc_header_param.size; \
-	} \
-	while (0)
-
-	/* Add header information if needed */
-	if (needs_header)
-	{
-		switch (encoder->codec_format)
-		{
-			case IMX_VPU_CODEC_FORMAT_H264:
-			{
-				EncHeaderParam enc_header_param;
-				memset(&enc_header_param, 0, sizeof(enc_header_param));
-
-				COPY_FRAME_HEADER(ENC_PUT_AVC_HEADER, SPS_RBSP, "h.264 SPS");
-				COPY_FRAME_HEADER(ENC_PUT_AVC_HEADER, PPS_RBSP, "h.264 PPS");
-
-				break;
-			}
-
-			case IMX_VPU_CODEC_FORMAT_MPEG4:
-			{
-				unsigned int num_macroblocks_per_frame;
-				unsigned int num_macroblocks_per_second;
-				unsigned int w, h;
-				EncHeaderParam enc_header_param;
-				memset(&enc_header_param, 0, sizeof(enc_header_param));
-
-				w = encoder->picture_width;
-				h = encoder->picture_height;
-
-				/* Calculate the number of macroblocks per second in two steps.
-				 * Step 1 calculates the number of macroblocks per frame.
-				 * Based on that, step 2 calculates the actual number of
-				 * macroblocks per second. The "((encoder->frame_rate_denominator + 1) / 2)"
-				 * part is for rounding up. */
-				num_macroblocks_per_frame = ((w + 15) / 16) * ((h + 15) / 16);
-				num_macroblocks_per_second = (num_macroblocks_per_frame * encoder->frame_rate_numerator + ((encoder->frame_rate_denominator + 1) / 2)) / encoder->frame_rate_denominator;
-
-				/* Decide the user profile level indication based on the VPU
-				 * documentation's section 3.2.2.4 and Annex N in ISO/IEC 14496-2 */
-
-				if ((w <= 176) && (h <= 144) && (num_macroblocks_per_second <= 1485))
-					enc_header_param.userProfileLevelIndication = 1; /* XXX: this is set to 8 in the VPU wrapper, why? */
-				else if ((w <= 352) && (h <= 288) && (num_macroblocks_per_second <= 5940))
-					enc_header_param.userProfileLevelIndication = 2;
-				else if ((w <= 352) && (h <= 288) && (num_macroblocks_per_second <= 11880))
-					enc_header_param.userProfileLevelIndication = 3;
-				else if ((w <= 640) && (h <= 480) && (num_macroblocks_per_second <= 36000))
-					enc_header_param.userProfileLevelIndication = 4;
-				else if ((w <= 720) && (h <= 576) && (num_macroblocks_per_second <= 40500))
-					enc_header_param.userProfileLevelIndication = 5;
-				else
-					enc_header_param.userProfileLevelIndication = 6;
-
-				enc_header_param.userProfileLevelEnable = 1;
-
-				IMX_VPU_LOG("picture size: %u x %u pixel, %u macroblocks per second => MPEG-4 user profile level indication = %d", w, h, num_macroblocks_per_second, enc_header_param.userProfileLevelIndication);
-
-				COPY_FRAME_HEADER(ENC_PUT_MP4_HEADER, VOS_HEADER, "MPEG-4 VOS header");
-				COPY_FRAME_HEADER(ENC_PUT_MP4_HEADER, VIS_HEADER, "MPEG-4 VIS header");
-				COPY_FRAME_HEADER(ENC_PUT_MP4_HEADER, VOL_HEADER, "MPEG-4 VOL header");
-
-				break;
-			}
-
-			case IMX_VPU_CODEC_FORMAT_MJPEG:
-				/* Header already added earlier */
-				break;
-
-			case IMX_VPU_CODEC_FORMAT_H263:
-				/* Nothing needs to be added for h.263 */
-				break;
-
-			default:
-				IMX_VPU_ERROR("Invalid codec format %d", encoder->codec_format);
-				ret = IMX_VPU_ENC_RETURN_CODE_ERROR;
-				goto finish;
-		}
-	}
-
-#undef COPY_FRAME_HEADER
-
+	IMX_VPU_LOG("encoding picture with physical address %" IMX_VPU_PHYS_ADDR_FORMAT, picture_phys_addr);
 
 	/* Copy over data from the picture into the source_framebuffer
 	 * structure, which is what vpu_EncStartOneFrame() expects
@@ -3328,12 +3378,58 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	);
 
 
+	/* For h.264 and MPEG-4 streams, headers may have to be added */
+	if ((encoder->codec_format == IMX_VPU_CODEC_FORMAT_H264) || (encoder->codec_format == IMX_VPU_CODEC_FORMAT_H264_MVC) || (encoder->codec_format == IMX_VPU_CODEC_FORMAT_MPEG4))
+	{
+		/* Add a header if at least one of these apply:
+		 * 1. This is the first frame
+		 * 2. I-frame generation was forced
+		 * 3. Picture type is I or IDR
+		 */
+		BOOL add_header = encoder->first_frame || encoding_params->force_I_picture || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_IDR) || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_I);
+
+		if (add_header)
+		{
+#define ADD_HEADER_DATA(HEADER_FIELD, DESCRIPTION) \
+			do \
+			{ \
+				size_t size = encoder->headers.HEADER_FIELD ## _size; \
+				memcpy(write_ptr, encoder->headers.HEADER_FIELD, size); \
+				write_ptr += size; \
+				IMX_VPU_LOG("added %s with %zu byte", (DESCRIPTION), size); \
+			} \
+			while (0)
+
+			switch (encoder->codec_format)
+			{
+				case IMX_VPU_CODEC_FORMAT_H264:
+				case IMX_VPU_CODEC_FORMAT_H264_MVC:
+				{
+					ADD_HEADER_DATA(h264_headers.sps_rbsp, "h.264 SPS RBSP");
+					ADD_HEADER_DATA(h264_headers.pps_rbsp, "h.264 PPS RBSP");
+					break;
+				}
+
+				case IMX_VPU_CODEC_FORMAT_MPEG4:
+				{
+					ADD_HEADER_DATA(mpeg4_headers.vos_header, "MPEG-4 VOS header");
+					ADD_HEADER_DATA(mpeg4_headers.vis_header, "MPEG-4 VIS header");
+					ADD_HEADER_DATA(mpeg4_headers.vol_header, "MPEG-4 VOL header");
+					break;
+				}
+
+				default:
+					break;
+			}
+
+			*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
+#undef ADD_HEADER_DATA
+		}
+	}
+
+
 	/* Add this flag since the input picture has been successfully consumed */
 	*output_code |= IMX_VPU_ENC_OUTPUT_CODE_INPUT_USED;
-
-	/* Add contains-header flag if a header was added earlier */
-	if (needs_header)
-		*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
 
 	/* Get the encoded data out of the bitstream buffer into the output buffer */
 	if (enc_output_info.bitstreamBuffer != 0)
