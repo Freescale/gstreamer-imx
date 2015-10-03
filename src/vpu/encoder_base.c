@@ -671,6 +671,14 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 			return GST_FLOW_ERROR;
 		}
 
+		/* Check that data was actually generated (it is a hard error if not) */
+		if (encoded_data_frame.data_size == 0)
+		{
+			GST_ERROR_OBJECT(vpu_encoder_base, "encoder produced no data");
+			g_free(output_memblock);
+			return GST_FLOW_ERROR;
+		}
+
 		/* Shrink the memory block to the actual encoded data size */
 		g_assert(encoded_data_frame.data_size <= initial_outmemblock_size);
 		temp_ptr = g_try_realloc(output_memblock, encoded_data_frame.data_size);

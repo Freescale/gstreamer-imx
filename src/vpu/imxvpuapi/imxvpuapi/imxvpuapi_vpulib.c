@@ -3088,9 +3088,6 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	assert(encoded_frame->data_size > 0);
 	assert(encoding_params != NULL);
 	assert(output_code != NULL);
- 
-	if (encoded_frame->codec_data != NULL)
-		assert(encoded_frame->codec_data_size > 0);
 
 	*output_code = 0;
 
