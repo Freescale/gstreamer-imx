@@ -1604,12 +1604,16 @@ static ImxVpuDecReturnCodes imx_vpu_dec_push_input_data(ImxVpuDecoder *decoder, 
 	 * decoding, the write_ptr is the interesting one. The read_ptr is just logged.
 	 * These pointers are physical addresses. To get an offset value for the write
 	 * position for example, one calculates:
-	 * write_offset = (write_ptr - bitstream_buffer_physical_address) */
-	dec_ret = vpu_DecGetBitstreamBuffer(decoder->handle, &read_ptr, &write_ptr, &num_free_bytes);
-	ret = IMX_VPU_DEC_HANDLE_ERROR("could not retrieve bitstream buffer information", dec_ret);
-	if (ret != IMX_VPU_DEC_RETURN_CODE_OK)
-		return ret;
-	IMX_VPU_LOG("bitstream buffer status:  read ptr 0x%x  write ptr 0x%x  num free bytes %u", read_ptr, write_ptr, num_free_bytes);
+	 * write_offset = (write_ptr - bitstream_buffer_physical_address)
+	 * Also, since MJPEG uses line buffer mode, this is not done for MJPEG */
+	if (decoder->codec_format != IMX_VPU_CODEC_FORMAT_MJPEG)
+	{
+		dec_ret = vpu_DecGetBitstreamBuffer(decoder->handle, &read_ptr, &write_ptr, &num_free_bytes);
+		ret = IMX_VPU_DEC_HANDLE_ERROR("could not retrieve bitstream buffer information", dec_ret);
+		if (ret != IMX_VPU_DEC_RETURN_CODE_OK)
+			return ret;
+		IMX_VPU_LOG("bitstream buffer status:  read ptr 0x%x  write ptr 0x%x  num free bytes %u", read_ptr, write_ptr, num_free_bytes);
+	}
 
 
 	/* The bitstream buffer behaves like a ring buffer. This means that incoming data
@@ -1643,11 +1647,16 @@ static ImxVpuDecReturnCodes imx_vpu_dec_push_input_data(ImxVpuDecoder *decoder, 
 		uint8_t *dest = ((uint8_t*)(decoder->bitstream_buffer_virtual_address)) + write_offset;
 		memcpy(dest, src, num_bytes_to_push);
 
-		/* Inform VPU about new data */
-		dec_ret = vpu_DecUpdateBitstreamBuffer(decoder->handle, num_bytes_to_push);
-		ret = IMX_VPU_DEC_HANDLE_ERROR("could not update bitstream buffer with new data", dec_ret);
-		if (ret != IMX_VPU_DEC_RETURN_CODE_OK)
-			return ret;
+		/* Update the bitstream buffer pointers. Since MJPEG does not use the
+		 * ring buffer (instead it uses the line buffer mode), update it only
+		 * for non-MJPEG codec formats */
+		if (decoder->codec_format != IMX_VPU_CODEC_FORMAT_MJPEG)
+		{
+			dec_ret = vpu_DecUpdateBitstreamBuffer(decoder->handle, num_bytes_to_push);
+			ret = IMX_VPU_DEC_HANDLE_ERROR("could not update bitstream buffer with new data", dec_ret);
+			if (ret != IMX_VPU_DEC_RETURN_CODE_OK)
+				return ret;
+		}
 
 		/* Update offsets and write sizes */
 		read_offset += num_bytes_to_push;
@@ -3092,6 +3101,23 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	encoded_frame_virt_addr_end = encoded_frame->data + encoded_frame->data_size;
 	write_ptr = encoded_frame_virt_addr;
 
+	/* MJPEG frames always need JPEG headers, since each frame is an independent JPEG picture */
+	if (encoder->codec_format == IMX_VPU_CODEC_FORMAT_MJPEG)
+	{
+		EncParamSet mjpeg_param;
+		memset(&mjpeg_param, 0, sizeof(mjpeg_param));
+
+		mjpeg_param.size = encoded_frame_virt_addr_end - write_ptr;
+		mjpeg_param.pParaSet = write_ptr;
+
+		vpu_EncGiveCommand(encoder->handle, ENC_GET_JPEG_HEADER, &mjpeg_param);
+		IMX_VPU_LOG("added JPEG header with %d byte", mjpeg_param.size);
+
+		write_ptr += mjpeg_param.size;
+
+		*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
+	}
+
 	/* Add header(s) if I picture generation is forced, or if the codec
 	 * format is motion JPEG (which needs a JPEG header for every frame) */
 	needs_header = encoder->first_frame || (encoder->codec_format == IMX_VPU_CODEC_FORMAT_MJPEG) || encoding_params->force_I_picture;
@@ -3188,20 +3214,8 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 			}
 
 			case IMX_VPU_CODEC_FORMAT_MJPEG:
-			{
-				EncParamSet mjpeg_param;
-				memset(&mjpeg_param, 0, sizeof(mjpeg_param));
-
-				mjpeg_param.size = encoded_frame_virt_addr_end - write_ptr;
-				mjpeg_param.pParaSet = write_ptr;
-
-				vpu_EncGiveCommand(encoder->handle, ENC_GET_JPEG_HEADER, &mjpeg_param);
-				IMX_VPU_LOG("added JPEG header with %d byte", mjpeg_param.size);
-
-				write_ptr += mjpeg_param.size;
-
+				/* Header already added earlier */
 				break;
-			}
 
 			case IMX_VPU_CODEC_FORMAT_H263:
 				/* Nothing needs to be added for h.263 */
