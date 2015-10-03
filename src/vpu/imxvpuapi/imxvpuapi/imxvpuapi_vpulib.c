@@ -3310,13 +3310,20 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 		return IMX_VPU_ENC_RETURN_CODE_TIMEOUT;
 
 
+	{
+		ImxVpuPicType pic_types[2];
+		convert_pic_type(encoder->codec_format, enc_output_info.picType, FALSE, pic_types);
+		encoded_frame->pic_type = pic_types[0];
+	}
+
+
 	IMX_VPU_LOG(
-		"output info:  bitstreamBuffer %" IMX_VPU_PHYS_ADDR_FORMAT "  bitstreamSize %u  bitstreamWrapAround %d  skipEncoded %d  picType %d  numOfSlices %d",
+		"output info:  bitstreamBuffer %" IMX_VPU_PHYS_ADDR_FORMAT "  bitstreamSize %u  bitstreamWrapAround %d  skipEncoded %d  picType %d (%s)  numOfSlices %d",
 		enc_output_info.bitstreamBuffer,
 		enc_output_info.bitstreamSize,
 		enc_output_info.bitstreamWrapAround,
 		enc_output_info.skipEncoded,
-		enc_output_info.picType,
+		enc_output_info.picType, imx_vpu_picture_type_string(encoded_frame->pic_type),
 		enc_output_info.numOfSlices
 	);
 

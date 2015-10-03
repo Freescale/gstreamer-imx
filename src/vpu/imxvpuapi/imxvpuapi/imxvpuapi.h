@@ -356,6 +356,10 @@ typedef struct
 	uint8_t *codec_data;
 	size_t codec_data_size;
 
+	/* Picture type (I, P, B, ..) of the encoded frame. Filled by the encoder.
+	 * Unused by the decoder. */
+	ImxVpuPicType pic_type;
+
 	/* User-defined pointer. The library does not touch this value.
 	 * This pointer and the one from the corresponding
 	 * picture will have the same value. The library will
