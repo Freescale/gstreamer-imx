@@ -814,14 +814,14 @@ static void gst_imx_vpu_encoder_base_close(GstImxVpuEncoderBase *vpu_encoder_bas
 		vpu_encoder_base->internal_input_buffer = NULL;
 	}
 
+	if ((ret = imx_vpu_enc_close(vpu_encoder_base->encoder)) != IMX_VPU_ENC_RETURN_CODE_OK)
+		GST_ERROR_OBJECT(vpu_encoder_base, "error while closing encoder: %s", imx_vpu_enc_error_string(ret));
+
 	if (vpu_encoder_base->framebuffer_array != NULL)
 	{
 		gst_object_unref(GST_OBJECT(vpu_encoder_base->framebuffer_array));
 		vpu_encoder_base->framebuffer_array = NULL;
 	}
-
-	if ((ret = imx_vpu_enc_close(vpu_encoder_base->encoder)) != IMX_VPU_ENC_RETURN_CODE_OK)
-		GST_ERROR_OBJECT(vpu_encoder_base, "error while closing encoder: %s", imx_vpu_enc_error_string(ret));
 
 	vpu_encoder_base->encoder = NULL;
 }
