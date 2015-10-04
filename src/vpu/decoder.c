@@ -130,8 +130,7 @@ static void gst_imx_vpu_decoder_get_property(GObject *object, guint prop_id, GVa
 
 static GstStateChangeReturn gst_imx_vpu_decoder_change_state(GstElement *element, GstStateChange transition);
 
-static void gst_imx_vpu_decoder_close(GstImxVpuDecoder *vpu_decoder);
-static void gst_imx_vpu_decoder_clear_decoder_context(GstImxVpuDecoder *vpu_decoder);
+static void gst_imx_vpu_decoder_close_and_clear_decoder_context(GstImxVpuDecoder *vpu_decoder);
 static gboolean gst_imx_vpu_decoder_fill_param_set(GstImxVpuDecoder *vpu_decoder, GstVideoCodecState *state, ImxVpuDecOpenParams *open_params, GstBuffer **codec_data);
 static int gst_imx_vpu_decoder_initial_info_callback(ImxVpuDecoder *decoder, ImxVpuDecInitialInfo *new_initial_info, unsigned int output_code, void *user_data);
 
@@ -262,13 +261,11 @@ static gboolean gst_imx_vpu_decoder_stop(GstVideoDecoder *decoder)
 	}
 
 	/* Cleanup the decoder context (= enable its no_wait mode, mark the
-	 * decoder as gone in the context, and unref it). If any gstbuffers
-	 * downstream with framebuffers inside still exist, they keep the
-	 * context alive, since they too have a reference to it. Once they
-	 * are gone, so is the context. */
-	gst_imx_vpu_decoder_clear_decoder_context(vpu_decoder);
-
-	gst_imx_vpu_decoder_close(vpu_decoder);
+	 * decoder as gone in the context, and unref it), and close the
+	 * decoder. If any gstbuffers downstream with framebuffers inside
+	 * still exist, they keep the context alive, since they too have a
+	 * reference to it. Once they are gone, so is the context. */
+	gst_imx_vpu_decoder_close_and_clear_decoder_context(vpu_decoder);
 
 	if (vpu_decoder->bitstream_buffer != NULL)
 	{
@@ -316,17 +313,15 @@ static gboolean gst_imx_vpu_decoder_set_format(GstVideoDecoder *decoder, GstVide
 	GST_INFO_OBJECT(decoder, "draining remaining frames from decoder");
 	gst_imx_vpu_decoder_finish(decoder);
 
-	/* Close old decoder instance */
-	gst_imx_vpu_decoder_close(vpu_decoder);
-
 	/* Cleanup the existing decoder context (= enable its no_wait mode,
-	 * mark the decoder as gone in the context, and unref it). If any
-	 * gstbuffers downstream with framebuffers inside still exist, they
-	 * keep the context alive, since they too have a reference to it.
-	 * Once they are gone, so is the context. New gstbuffers however
-	 * will make use of a new decoder context, which fits with the
-	 * new caps in the new output state, and which is created later. */
-	gst_imx_vpu_decoder_clear_decoder_context(vpu_decoder);
+	 * mark the decoder as gone in the context, and unref it), and close
+	 * the existing decoder. If any gstbuffers downstream with framebuffers
+	 * inside still exist, they keep the context alive, since they too
+	 * have a reference to it. Once they are gone, so is the context.
+	 * New gstbuffers however will make use of a new decoder context,
+	 * which fits with the new caps in the new output state, and which
+	 is created later. */
+	gst_imx_vpu_decoder_close_and_clear_decoder_context(vpu_decoder);
 
 	/* Clean up old codec data copy */
 	if (vpu_decoder->codec_data != NULL)
@@ -1033,18 +1028,26 @@ static void gst_imx_vpu_decoder_close(GstImxVpuDecoder *vpu_decoder)
 }
 
 
-static void gst_imx_vpu_decoder_clear_decoder_context(GstImxVpuDecoder *vpu_decoder)
+static void gst_imx_vpu_decoder_close_and_clear_decoder_context(GstImxVpuDecoder *vpu_decoder)
 {
 	if (vpu_decoder->decoder_context == NULL)
 		return;
 
 	GST_INFO_OBJECT(vpu_decoder, "Clearing decoder context");
 
-	/* Using mutexes here to prevent race conditions when decoder_open is set to
-	 * FALSE at the same time as it is checked in the buffer pool release() function */
+	/* Using mutexes here to prevent race conditions when the decoder is set as gone
+	 * at the same time as it is checked in the buffer pool release() function.
+	 * For similar reasons, the decoder is closed while the mutex is held. the decoder
+	 * must be closed *before* the context is unref'd, since the internal imxvpuapi
+	 * decoder might try to access entries from the context' framebuffer array in its
+	 * imx_vpu_dec_close() function. To avoid an edge case (decoder is closed,
+	 * and a buffer's release() function tries to mark the buffer as displayed
+	 * *before* the decoder was marked as gone), the decoder is closed while the
+	 * mutex is held. */
 	GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_decoder->decoder_context);
 	gst_imx_vpu_decoder_context_set_no_wait(vpu_decoder->decoder_context, TRUE);
 	gst_imx_vpu_decoder_context_set_decoder_as_gone(vpu_decoder->decoder_context);
+	gst_imx_vpu_decoder_close(vpu_decoder);
 	GST_IMX_VPU_DECODER_CONTEXT_UNLOCK(vpu_decoder->decoder_context);
 
 	gst_object_unref(vpu_decoder->decoder_context);
@@ -1232,8 +1235,7 @@ static int gst_imx_vpu_decoder_initial_info_callback(G_GNUC_UNUSED ImxVpuDecoder
 {
 	/* This function is called from within imx_vpu_dec_decode(), which in
 	 * turn is called with a locked decoder context mutex. For this reason,
-	 * this mutex isn't locked here again. This is also why in here, the
-	 * gst_imx_vpu_decoder_clear_decoder_context() cannot be called. */
+	 * this mutex isn't locked here again. */
 
 	GstImxVpuDecoder *vpu_decoder = (GstImxVpuDecoder *)user_data;
 
