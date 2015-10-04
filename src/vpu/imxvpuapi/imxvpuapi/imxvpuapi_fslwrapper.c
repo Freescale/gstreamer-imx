@@ -211,6 +211,8 @@ static void default_dmabufalloc_deallocate(ImxVpuDMABufferAllocator *allocator, 
 		IMX_VPU_ERROR("deallocating %d bytes of physical memory failed: %s", defaultbuf->size, imx_vpu_dec_error_string(ret));
 	else
 		IMX_VPU_TRACE("deallocated %d bytes of physical memory", defaultbuf->size);
+
+	IMX_VPU_FREE(defaultbuf, sizeof(DefaultDMABuffer));
 }
 
 
