@@ -180,8 +180,8 @@ void imx_vpu_init_wrapped_dma_buffer(ImxVpuWrappedDMABuffer *buffer);
 /* Heap allocation function for virtual memory blocks internally allocated by imxvpuapi.
  * These have nothing to do with the DMA buffer allocation interface defined above.
  * By default, malloc/free are used. */
-typedef void* (*ImxVpuHeapAllocFunc)(size_t const size, void *context);
-typedef void (*ImxVpuHeapFreeFunc)(void *memblock, size_t const size, void *context);
+typedef void* (*ImxVpuHeapAllocFunc)(size_t const size, void *context, char const *file, int const line, char const *fn);
+typedef void (*ImxVpuHeapFreeFunc)(void *memblock, size_t const size, void *context, char const *file, int const line, char const *fn);
 
 /* This function allows for setting custom heap allocators, which are used to create internal heap blocks.
  * The heap allocator referred to by "heap_alloc_fn" must return NULL if allocation fails.

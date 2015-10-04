@@ -30,8 +30,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_api_debug);
 
 /* GLib mutexes are implicitely initialized if they are global */
 static GMutex load_mutex;
+static gboolean head_functions_set_up = FALSE;
 static gboolean logging_set_up = FALSE;
 
+
+static void imx_vpu_setup_heap_allocator_functions(void);
+static void* imx_vpu_heap_alloc_func(size_t const size, void *context, char const *file, int const line, char const *fn);
+static void imx_vpu_heap_free_func(void *memblock, size_t const size, void *context, char const *file, int const line, char const *fn);
 
 static void imx_vpu_logging_func(ImxVpuLogLevel level, char const *file, int const line, char const *fn, const char *format, ...);
 
@@ -39,6 +44,8 @@ static void imx_vpu_logging_func(ImxVpuLogLevel level, char const *file, int con
 gboolean gst_imx_vpu_decoder_load()
 {
 	gboolean ret;
+
+	imx_vpu_setup_heap_allocator_functions();
 
 	g_mutex_lock(&load_mutex);
 	ret = (imx_vpu_dec_load() == IMX_VPU_DEC_RETURN_CODE_OK);
@@ -59,6 +66,8 @@ void gst_imx_vpu_decoder_unload()
 gboolean gst_imx_vpu_encoder_load()
 {
 	gboolean ret;
+
+	imx_vpu_setup_heap_allocator_functions();
 
 	g_mutex_lock(&load_mutex);
 	ret = (imx_vpu_enc_load() == IMX_VPU_ENC_RETURN_CODE_OK);
@@ -102,6 +111,33 @@ void imx_vpu_setup_logging(void)
 		logging_set_up = TRUE;
 	}
 	g_mutex_unlock(&load_mutex);
+}
+
+
+static void imx_vpu_setup_heap_allocator_functions(void)
+{
+	g_mutex_lock(&load_mutex);
+	if (!head_functions_set_up)
+	{
+		imx_vpu_set_heap_allocator_functions(imx_vpu_heap_alloc_func, imx_vpu_heap_free_func, NULL);
+		head_functions_set_up = TRUE;
+	}
+	g_mutex_unlock(&load_mutex);
+}
+
+
+static void* imx_vpu_heap_alloc_func(size_t const size, G_GNUC_UNUSED void *context, char const *file, int const line, char const *fn)
+{
+	void *ptr = g_slice_alloc(size);
+	imx_vpu_logging_func(IMX_VPU_LOG_LEVEL_TRACE, file, line, fn, "allocated %zu byte, ptr: %p", size, ptr);
+	return ptr;
+}
+
+
+static void imx_vpu_heap_free_func(void *memblock, size_t const size, G_GNUC_UNUSED void *context, char const *file, int const line, char const *fn)
+{
+	g_slice_free1(size, memblock);
+	imx_vpu_logging_func(IMX_VPU_LOG_LEVEL_TRACE, file, line, fn, "freed %zu byte, ptr: %p", size, memblock);
 }
 
 

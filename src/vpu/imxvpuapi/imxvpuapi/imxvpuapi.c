@@ -150,16 +150,22 @@ void imx_vpu_init_wrapped_dma_buffer(ImxVpuWrappedDMABuffer *buffer)
 
 
 
-static void* default_heap_alloc_fn(size_t const size, void *context)
+static void* default_heap_alloc_fn(size_t const size, void *context, char const *file, int const line, char const *fn)
 {
 	IMXVPUAPI_UNUSED_PARAM(context);
+	IMXVPUAPI_UNUSED_PARAM(file);
+	IMXVPUAPI_UNUSED_PARAM(line);
+	IMXVPUAPI_UNUSED_PARAM(fn);
 	return malloc(size);
 }
 
-static void default_heap_free_fn(void *memblock, size_t const size, void *context)
+static void default_heap_free_fn(void *memblock, size_t const size, void *context, char const *file, int const line, char const *fn)
 {
 	IMXVPUAPI_UNUSED_PARAM(context);
 	IMXVPUAPI_UNUSED_PARAM(size);
+	IMXVPUAPI_UNUSED_PARAM(file);
+	IMXVPUAPI_UNUSED_PARAM(line);
+	IMXVPUAPI_UNUSED_PARAM(fn);
 	free(memblock);
 }
 
@@ -167,7 +173,7 @@ void *imx_vpu_cur_heap_alloc_context;
 ImxVpuHeapAllocFunc imx_vpu_cur_heap_alloc_fn = default_heap_alloc_fn;
 ImxVpuHeapFreeFunc imx_vpu_cur_heap_free_fn = default_heap_free_fn;
 
-void imx_vpu_set_allocator_functions(ImxVpuHeapAllocFunc heap_alloc_fn, ImxVpuHeapFreeFunc heap_free_fn, void *context)
+void imx_vpu_set_heap_allocator_functions(ImxVpuHeapAllocFunc heap_alloc_fn, ImxVpuHeapFreeFunc heap_free_fn, void *context)
 {
 	imx_vpu_cur_heap_alloc_context = context;
 	if ((heap_alloc_fn == NULL) || (heap_free_fn == NULL))

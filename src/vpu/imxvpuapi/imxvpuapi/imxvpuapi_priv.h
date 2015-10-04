@@ -35,8 +35,8 @@ extern "C" {
 #define IMX_VPU_ALIGN_VAL_TO(LENGTH, ALIGN_SIZE)  ( ((uintptr_t)(((uint8_t*)(LENGTH)) + (ALIGN_SIZE) - 1) / (ALIGN_SIZE)) * (ALIGN_SIZE) )
 
 
-#define IMX_VPU_ALLOC(SIZE) imx_vpu_cur_heap_alloc_fn((SIZE), imx_vpu_cur_heap_alloc_context)
-#define IMX_VPU_FREE(PTR, SIZE) imx_vpu_cur_heap_free_fn((PTR), (SIZE), imx_vpu_cur_heap_alloc_context)
+#define IMX_VPU_ALLOC(SIZE) imx_vpu_cur_heap_alloc_fn((SIZE), imx_vpu_cur_heap_alloc_context, __FILE__, __LINE__, __FUNCTION__)
+#define IMX_VPU_FREE(PTR, SIZE) imx_vpu_cur_heap_free_fn((PTR), (SIZE), imx_vpu_cur_heap_alloc_context, __FILE__, __LINE__, __FUNCTION__)
 
 extern void *imx_vpu_cur_heap_alloc_context;
 extern ImxVpuHeapAllocFunc imx_vpu_cur_heap_alloc_fn;
