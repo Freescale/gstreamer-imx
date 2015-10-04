@@ -3129,12 +3129,10 @@ ImxVpuEncReturnCodes imx_vpu_enc_register_framebuffers(ImxVpuEncoder *encoder, I
 		 * into the imx-vpu library's vpu_lib.c vpu_EncGiveCommand() definition */
 		int rotation_angle = 0;
 		int mirror = 0;
-		int stride = framebuffers[0].y_stride;
 		int append_nullbytes_to_sof_field = 0;
 
 		vpu_EncGiveCommand(encoder->handle, SET_ROTATION_ANGLE, (void *)(&rotation_angle));
 		vpu_EncGiveCommand(encoder->handle, SET_MIRROR_DIRECTION,(void *)(&mirror));
-		vpu_EncGiveCommand(encoder->handle, SET_ROTATOR_STRIDE, (void *)(&stride));
 		vpu_EncGiveCommand(encoder->handle, ENC_ENABLE_SOF_STUFF, (void*)(&append_nullbytes_to_sof_field));
 	}
 
