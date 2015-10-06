@@ -23,6 +23,7 @@
 #include <string.h>
 #include <vpu_lib.h>
 #include <vpu_io.h>
+#include <config.h>
 #include "imxvpuapi.h"
 #include "imxvpuapi_priv.h"
 #include "imxvpuapi_parse_jpeg.h"
@@ -3133,11 +3134,16 @@ ImxVpuEncReturnCodes imx_vpu_enc_register_framebuffers(ImxVpuEncoder *encoder, I
 		 * into the imx-vpu library's vpu_lib.c vpu_EncGiveCommand() definition */
 		int rotation_angle = 0;
 		int mirror = 0;
-		int append_nullbytes_to_sof_field = 0;
 
 		vpu_EncGiveCommand(encoder->handle, SET_ROTATION_ANGLE, (void *)(&rotation_angle));
 		vpu_EncGiveCommand(encoder->handle, SET_MIRROR_DIRECTION,(void *)(&mirror));
-		vpu_EncGiveCommand(encoder->handle, ENC_ENABLE_SOF_STUFF, (void*)(&append_nullbytes_to_sof_field));
+
+#ifdef HAVE_ENC_ENABLE_SOF_STUFF
+		{
+			int append_nullbytes_to_sof_field = 0;
+			vpu_EncGiveCommand(encoder->handle, ENC_ENABLE_SOF_STUFF, (void*)(&append_nullbytes_to_sof_field));
+		}
+#endif
 	}
 
 

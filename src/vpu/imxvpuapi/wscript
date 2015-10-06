@@ -20,6 +20,21 @@ def configure(conf):
 		else:
 			Logs.pprint('YELLOW', 'could not find installed imxvpu library - VPU elements will not be built')
 
+		with_sof_stuff = conf.check_cc(fragment = '''
+			#include <vpu_lib.h>
+			int main() {
+				return ENC_ENABLE_SOF_STUFF * 0;
+			}
+			''',
+			uselib = 'VPULIB',
+			mandatory = False,
+			execute = False,
+			msg = 'checking if ENC_ENABLE_SOF_STUFF exists'
+		)
+
+		if with_sof_stuff:
+			conf.define('HAVE_ENC_ENABLE_SOF_STUFF', 1)
+
 	else:
 		if conf.check_cfg(package = 'libfslvpuwrap >= 1.0.45', uselib_store = 'FSLVPUWRAPPER', args = '--cflags --libs', mandatory = 1):
 			Logs.pprint('GREEN', 'found installed libfslvpuwrap library - VPU elements and internal imxvpuapi copy will be built')
@@ -34,7 +49,7 @@ def build(bld):
 	if bld.env['BUILD_VPU_ELEMENTS']:
 		bld(
 			features = ['c'],
-			includes = ['.'],
+			includes = ['.', '../../..'],
 			export_includes = ['.'],
 			uselib = bld.env['VPUAPI_USELIBS'],
 			source = ['imxvpuapi/imxvpuapi.c', 'imxvpuapi/imxvpuapi_jpeg.c', 'imxvpuapi/imxvpuapi_parse_jpeg.c'] + bld.env['VPUAPI_BACKEND_SOURCE'],
