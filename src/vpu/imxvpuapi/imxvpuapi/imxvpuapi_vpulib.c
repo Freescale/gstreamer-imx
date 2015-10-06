@@ -88,6 +88,8 @@
 #define VPU_WAIT_TIMEOUT             500 /* milliseconds to wait for frame completion */
 #define VPU_MAX_TIMEOUT_COUNTS       4   /* how many timeouts are allowed in series */
 
+#define MJPEG_ENC_HEADER_DATA_MAX_SIZE  2048
+
 
 static uint8_t const mjpeg_enc_component_info_tables[5][4 * 6] =
 {
@@ -2320,6 +2322,8 @@ struct _ImxVpuEncoder
 			size_t vol_header_size;
 		}
 		mpeg4_headers;
+
+		uint8_t mjpeg_header_data[MJPEG_ENC_HEADER_DATA_MAX_SIZE];
 	}
 	headers;
 };
@@ -3236,28 +3240,28 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	EncParam enc_param;
 	EncOutputInfo enc_output_info;
 	FrameBuffer source_framebuffer;
-	uint8_t *encoded_frame_virt_addr, *encoded_frame_virt_addr_end;
 	imx_vpu_phys_addr_t picture_phys_addr;
-	uint8_t *write_ptr;
+	uint8_t *write_ptr, *write_ptr_start, *write_ptr_end;
 	BOOL timeout;
+	BOOL add_header;
+	size_t mjpeg_header_size;
+	size_t encoded_data_size;
 
 	ret = IMX_VPU_ENC_RETURN_CODE_OK;
 
 	assert(encoder != NULL);
 	assert(encoded_frame != NULL);
-	assert(encoded_frame->data != NULL);
-	assert(encoded_frame->data_size > 0);
 	assert(encoding_params != NULL);
 	assert(output_code != NULL);
+	assert(encoding_params->acquire_output_buffer != NULL);
+	assert(encoding_params->finish_output_buffer != NULL);
 
 	*output_code = 0;
+	write_ptr_start = NULL;
 
 	/* Get the physical address for the picture that shall be encoded
 	 * and the virtual pointer to the output buffer */
 	picture_phys_addr = imx_vpu_dma_buffer_get_physical_address(picture->framebuffer->dma_buffer);
-	encoded_frame_virt_addr = encoded_frame->data;
-	encoded_frame_virt_addr_end = encoded_frame->data + encoded_frame->data_size;
-	write_ptr = encoded_frame_virt_addr;
 
 	/* MJPEG frames always need JPEG headers, since each frame is an independent JPEG picture */
 	if (encoder->codec_format == IMX_VPU_CODEC_FORMAT_MJPEG)
@@ -3265,13 +3269,13 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 		EncParamSet mjpeg_param;
 		memset(&mjpeg_param, 0, sizeof(mjpeg_param));
 
-		mjpeg_param.size = encoded_frame_virt_addr_end - write_ptr;
-		mjpeg_param.pParaSet = write_ptr;
+		mjpeg_param.size = MJPEG_ENC_HEADER_DATA_MAX_SIZE;
+		mjpeg_param.pParaSet = encoder->headers.mjpeg_header_data;
 
 		vpu_EncGiveCommand(encoder->handle, ENC_GET_JPEG_HEADER, &mjpeg_param);
 		IMX_VPU_LOG("added JPEG header with %d byte", mjpeg_param.size);
 
-		write_ptr += mjpeg_param.size;
+		mjpeg_header_size = mjpeg_param.size;
 
 		*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
 	}
@@ -3357,7 +3361,10 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	 * encoding and return an error code, since vpu_EncGetOutputInfo()
 	 * has been called, unlocking the VPU encoder calls. */
 	if (timeout)
-		return IMX_VPU_ENC_RETURN_CODE_TIMEOUT;
+	{
+		ret = IMX_VPU_ENC_RETURN_CODE_TIMEOUT;
+		goto finish;
+	}
 
 
 	{
@@ -3378,53 +3385,102 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	);
 
 
-	/* For h.264 and MPEG-4 streams, headers may have to be added */
-	if ((encoder->codec_format == IMX_VPU_CODEC_FORMAT_H264) || (encoder->codec_format == IMX_VPU_CODEC_FORMAT_H264_MVC) || (encoder->codec_format == IMX_VPU_CODEC_FORMAT_MPEG4))
+	switch (encoder->codec_format)
 	{
-		/* Add a header if at least one of these apply:
-		 * 1. This is the first frame
-		 * 2. I-frame generation was forced
-		 * 3. Picture type is I or IDR
-		 */
-		BOOL add_header = encoder->first_frame || encoding_params->force_I_picture || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_IDR) || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_I);
-
-		if (add_header)
+		case IMX_VPU_CODEC_FORMAT_MJPEG:
 		{
+			add_header = TRUE;
+			break;
+		}
+
+		case IMX_VPU_CODEC_FORMAT_H264:
+		case IMX_VPU_CODEC_FORMAT_H264_MVC:
+		case IMX_VPU_CODEC_FORMAT_MPEG4:
+			add_header = encoder->first_frame || encoding_params->force_I_picture || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_IDR) || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_I);
+			break;
+
+		default:
+			add_header = FALSE;
+	}
+
+	encoded_data_size = enc_output_info.bitstreamSize;
+
+	if (add_header)
+	{
+		switch (encoder->codec_format)
+		{
+			case IMX_VPU_CODEC_FORMAT_MJPEG:
+				encoded_data_size += mjpeg_header_size;
+				break;
+
+			case IMX_VPU_CODEC_FORMAT_H264:
+			case IMX_VPU_CODEC_FORMAT_H264_MVC:
+				encoded_data_size += encoder->headers.h264_headers.sps_rbsp_size + encoder->headers.h264_headers.pps_rbsp_size;
+				break;
+
+			case IMX_VPU_CODEC_FORMAT_MPEG4:
+				encoded_data_size += encoder->headers.mpeg4_headers.vos_header_size + encoder->headers.mpeg4_headers.vis_header_size + encoder->headers.mpeg4_headers.vol_header_size;
+				break;
+
+			default:
+				break;
+		}
+	}
+
+	write_ptr_start = encoding_params->acquire_output_buffer(encoding_params->output_buffer_context, encoded_data_size);
+	if (write_ptr_start == NULL)
+	{
+		IMX_VPU_ERROR("could not allocate %zu byte for encoded frame data", encoded_data_size);
+		ret = IMX_VPU_ENC_RETURN_CODE_ERROR;
+		goto finish;
+	}
+
+	write_ptr = write_ptr_start;
+	write_ptr_end = write_ptr + encoded_data_size;
+
+	if (add_header)
+	{
 #define ADD_HEADER_DATA(HEADER_FIELD, DESCRIPTION) \
-			do \
-			{ \
-				size_t size = encoder->headers.HEADER_FIELD ## _size; \
-				memcpy(write_ptr, encoder->headers.HEADER_FIELD, size); \
-				write_ptr += size; \
-				IMX_VPU_LOG("added %s with %zu byte", (DESCRIPTION), size); \
-			} \
-			while (0)
+		do \
+		{ \
+			size_t size = encoder->headers.HEADER_FIELD ## _size; \
+			memcpy(write_ptr, encoder->headers.HEADER_FIELD, size); \
+			write_ptr += size; \
+			IMX_VPU_LOG("added %s with %zu byte", (DESCRIPTION), size); \
+		} \
+		while (0)
 
-			switch (encoder->codec_format)
+		switch (encoder->codec_format)
+		{
+			case IMX_VPU_CODEC_FORMAT_H264:
+			case IMX_VPU_CODEC_FORMAT_H264_MVC:
 			{
-				case IMX_VPU_CODEC_FORMAT_H264:
-				case IMX_VPU_CODEC_FORMAT_H264_MVC:
-				{
-					ADD_HEADER_DATA(h264_headers.sps_rbsp, "h.264 SPS RBSP");
-					ADD_HEADER_DATA(h264_headers.pps_rbsp, "h.264 PPS RBSP");
-					break;
-				}
-
-				case IMX_VPU_CODEC_FORMAT_MPEG4:
-				{
-					ADD_HEADER_DATA(mpeg4_headers.vos_header, "MPEG-4 VOS header");
-					ADD_HEADER_DATA(mpeg4_headers.vis_header, "MPEG-4 VIS header");
-					ADD_HEADER_DATA(mpeg4_headers.vol_header, "MPEG-4 VOL header");
-					break;
-				}
-
-				default:
-					break;
+				ADD_HEADER_DATA(h264_headers.sps_rbsp, "h.264 SPS RBSP");
+				ADD_HEADER_DATA(h264_headers.pps_rbsp, "h.264 PPS RBSP");
+				break;
 			}
 
-			*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
-#undef ADD_HEADER_DATA
+			case IMX_VPU_CODEC_FORMAT_MPEG4:
+			{
+				ADD_HEADER_DATA(mpeg4_headers.vos_header, "MPEG-4 VOS header");
+				ADD_HEADER_DATA(mpeg4_headers.vis_header, "MPEG-4 VIS header");
+				ADD_HEADER_DATA(mpeg4_headers.vol_header, "MPEG-4 VOL header");
+				break;
+			}
+
+			case IMX_VPU_CODEC_FORMAT_MJPEG:
+			{
+				memcpy(write_ptr, encoder->headers.mjpeg_header_data, mjpeg_header_size);
+				write_ptr += mjpeg_header_size;
+				break;
+			}
+
+			default:
+				break;
 		}
+
+		*output_code |= IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER;
+#undef ADD_HEADER_DATA
 	}
 
 
@@ -3434,7 +3490,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	/* Get the encoded data out of the bitstream buffer into the output buffer */
 	if (enc_output_info.bitstreamBuffer != 0)
 	{
-		ptrdiff_t available_space = encoded_frame_virt_addr_end - write_ptr;
+		ptrdiff_t available_space = write_ptr_end - write_ptr;
 		uint8_t const *output_data_ptr = GET_BITSTREAM_VIRT_ADDR(enc_output_info.bitstreamBuffer);
 
 		if (available_space < (ptrdiff_t)(enc_output_info.bitstreamSize))
@@ -3456,8 +3512,6 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 		*output_code |= IMX_VPU_ENC_OUTPUT_CODE_ENCODED_FRAME_AVAILABLE;
 	}
 
-	encoded_frame->data_size = write_ptr - encoded_frame->data;
-
 	/* Since the encoder does not perform any kind of delay
 	 * or reordering, this is appropriate, because in that
 	 * case, one input frame always immediately leads to
@@ -3465,7 +3519,11 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	encoded_frame->context = picture->context;
 
 	encoder->first_frame = FALSE;
+
 finish:
+	if (write_ptr_start != NULL)
+		encoding_params->finish_output_buffer(encoding_params->output_buffer_context);
+
 	return ret;
 
 #undef GET_BITSTREAM_VIRT_ADDR

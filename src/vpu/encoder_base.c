@@ -79,6 +79,9 @@ static gboolean gst_imx_vpu_encoder_flush(GstVideoEncoder *encoder);
 static void gst_imx_vpu_encoder_base_close(GstImxVpuEncoderBase *vpu_encoder_base);
 static gboolean gst_imx_vpu_encoder_base_set_bitrate(GstImxVpuEncoderBase *vpu_encoder_base);
 
+static void* gst_imx_vpu_encoder_base_acquire_output_buffer(void *context, size_t size);
+static void gst_imx_vpu_encoder_base_finish_output_buffer(void *context);
+
 
 
 
@@ -619,6 +622,9 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 	memset(&enc_params, 0, sizeof(enc_params));
 	imx_vpu_enc_set_default_encoding_params(vpu_encoder_base->encoder, &enc_params);
 	enc_params.force_I_picture = 0;
+	enc_params.acquire_output_buffer = gst_imx_vpu_encoder_base_acquire_output_buffer;
+	enc_params.finish_output_buffer = gst_imx_vpu_encoder_base_finish_output_buffer;
+	enc_params.output_buffer_context = vpu_encoder_base;
 
 	/* Force I-frame if either IS_FORCE_KEYFRAME or IS_FORCE_KEYFRAME_HEADERS is set for the current frame. */
 	if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(input_frame) || GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME_HEADERS(input_frame))
@@ -640,64 +646,27 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 	{
 		ImxVpuEncReturnCodes enc_ret;
 		unsigned int output_code = 0;
-		GstBuffer *output_buffer;
-		gpointer output_memblock, temp_ptr;
-		guint initial_outmemblock_size;
 		ImxVpuEncodedFrame encoded_data_frame;
 
-		/* Allocate memory block with enough size for any encoding result.
-		 * Using g_try_malloc0() directly here instead of gst_buffer_new_allocate(), since
-		 * the actual encoded data size will most likely be much smaller than the initial
-		 * memory block size, and gst_buffer_resize() doesn't actually shrink the buffer
-		 * size with a g_try_realloc() call. To make sure RAM isn't wasted, the malloc
-		 * and subsequent realloc operations are done manually. */
-		initial_outmemblock_size = vpu_encoder_base->framebuffer_array->framebuffer_sizes.total_size;
-		output_memblock = g_try_malloc0(initial_outmemblock_size);
-		if (output_memblock == NULL)
-		{
-			GST_ERROR_OBJECT(vpu_encoder_base, "could not allocate output memory block with %u byte", initial_outmemblock_size);
-			return GST_FLOW_ERROR;
-		}
+		vpu_encoder_base->output_buffer = NULL;
 
 		/* The actual encoding call */
 		memset(&encoded_data_frame, 0, sizeof(ImxVpuEncodedFrame));
-		encoded_data_frame.data = output_memblock;
-		encoded_data_frame.data_size = initial_outmemblock_size;
 		enc_ret = imx_vpu_enc_encode(vpu_encoder_base->encoder, &(vpu_encoder_base->input_picture), &encoded_data_frame, &enc_params, &output_code);
 		if (enc_ret != IMX_VPU_ENC_RETURN_CODE_OK)
 		{
 			GST_ERROR_OBJECT(vpu_encoder_base, "failed to encode frame: %s", imx_vpu_enc_error_string(enc_ret));
-			g_free(output_memblock);
+			if (vpu_encoder_base->output_buffer != NULL)
+				gst_buffer_unref(vpu_encoder_base->output_buffer);
 			return GST_FLOW_ERROR;
 		}
-
-		/* Check that data was actually generated (it is a hard error if not) */
-		if (encoded_data_frame.data_size == 0)
-		{
-			GST_ERROR_OBJECT(vpu_encoder_base, "encoder produced no data");
-			g_free(output_memblock);
-			return GST_FLOW_ERROR;
-		}
-
-		/* Shrink the memory block to the actual encoded data size */
-		g_assert(encoded_data_frame.data_size <= initial_outmemblock_size);
-		temp_ptr = g_try_realloc(output_memblock, encoded_data_frame.data_size);
-		if (temp_ptr == NULL)
-		{
-			GST_ERROR_OBJECT(vpu_encoder_base, "could not resize output memory block from %u to %u byte", initial_outmemblock_size, encoded_data_frame.data_size);
-			g_free(output_memblock);
-			return GST_FLOW_ERROR;
-		}
-		output_memblock = temp_ptr;
-
-		/* Wrap the manually (re)allocated buffer in a GstBuffer */
-		output_buffer = gst_buffer_new_wrapped(output_memblock, encoded_data_frame.data_size);
 
 		/* Give the derived class a chance to process the output_block_buffer */
-		if ((klass->process_output_buffer != NULL) && !klass->process_output_buffer(vpu_encoder_base, input_frame, &output_buffer))
+		if ((klass->process_output_buffer != NULL) && !klass->process_output_buffer(vpu_encoder_base, input_frame, &(vpu_encoder_base->output_buffer)))
 		{
 			GST_ERROR_OBJECT(vpu_encoder_base, "derived class reports failure while processing encoded output");
-			gst_buffer_unref(output_buffer);
+			if (vpu_encoder_base->output_buffer != NULL)
+				gst_buffer_unref(vpu_encoder_base->output_buffer);
 			return GST_FLOW_ERROR;
 		}
 
@@ -714,7 +683,7 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 
 			/* Take all of the encoded bits. The adapter contains an encoded frame
 			 * at this point. */
-			input_frame->output_buffer = output_buffer;
+			input_frame->output_buffer = vpu_encoder_base->output_buffer;
 
 			/* And finish the frame, handing the output data over to the base class */
 			gst_video_encoder_finish_frame(encoder, input_frame);
@@ -726,11 +695,13 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 			 * encoded. Therefore, no output frame can be pushed downstream. Note that this
 			 * should not happen during normal operation, so a warning is logged. */
 
+			if (vpu_encoder_base->output_buffer != NULL)
+				gst_buffer_unref(vpu_encoder_base->output_buffer);
+
 			GST_WARNING_OBJECT(vpu_encoder_base, "frame unfinished ; dropping");
 			input_frame->output_buffer = NULL; /* necessary to make finish_frame() drop the frame */
 			gst_video_encoder_finish_frame(encoder, input_frame);
 		}
-
 	}
 
 
@@ -833,6 +804,26 @@ static gboolean gst_imx_vpu_encoder_base_set_bitrate(GstImxVpuEncoderBase *vpu_e
 		imx_vpu_enc_configure_bitrate(vpu_encoder_base->encoder, vpu_encoder_base->bitrate);
 
 	return TRUE;
+}
+
+
+static void* gst_imx_vpu_encoder_base_acquire_output_buffer(void *context, size_t size)
+{
+	GstImxVpuEncoderBase *vpu_encoder_base = (GstImxVpuEncoderBase *)(context);
+	GstBuffer *buffer = gst_buffer_new_allocate(NULL, size, NULL);
+	vpu_encoder_base->output_buffer = buffer;
+	gst_buffer_map(buffer, &(vpu_encoder_base->output_buffer_map_info), GST_MAP_WRITE);
+	GST_LOG_OBJECT(vpu_encoder_base, "acquired output buffer %p with %zu byte", (gpointer)buffer, size);
+	return vpu_encoder_base->output_buffer_map_info.data;
+}
+
+
+static void gst_imx_vpu_encoder_base_finish_output_buffer(void *context)
+{
+	GstImxVpuEncoderBase *vpu_encoder_base = (GstImxVpuEncoderBase *)(context);
+	GstBuffer *buffer = vpu_encoder_base->output_buffer;
+	GST_LOG_OBJECT(vpu_encoder_base, "finished output buffer %p with %zu byte", (gpointer)buffer, vpu_encoder_base->output_buffer_map_info.size);
+	gst_buffer_unmap(buffer, &(vpu_encoder_base->output_buffer_map_info));
 }
 
 

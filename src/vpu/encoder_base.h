@@ -93,6 +93,11 @@ struct _GstImxVpuEncoderBase
 	guint bitrate;
 	gint slice_size;
 	guint intra_refresh;
+
+	/* These are used during the actual encoding. The output buffer
+	 * is allocated and mapped to receive the encoded data. */
+	GstBuffer *output_buffer;
+	GstMapInfo output_buffer_map_info;
 };
 
 

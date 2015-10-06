@@ -327,24 +327,13 @@ ImxVpuFramebuffer;
 typedef struct
 {
 	/* When decoding, data must point to the memory block which contains
-	 * encoded frame data that gets consumed by the VPU.
-	 * When encoding, data must point to a memory block which shall contain
-	 * the encoded frame data that gets produced by the VPU. The caller
-	 * must also set data_size to the size of this memory block, to prevent
-	 * buffer overflows. If this buffer is too small, encoding fails. */
+	 * encoded frame data that gets consumed by the VPU. Not used by
+	 * the encoder. */
 	uint8_t *data;
 
-	/* Size of the encoded data, in bytes.
-	 * When decoding, this is set by the user, and is the size of the
-	 * encoded data that is pointed to by data.
-	 * When encoding, this is set to the number of bytes available for
-	 * the encoder's output. If this size is too small for the encoding
-	 * operation to finish, imx_vpu_enc_encode() returns an error.
-	 * Therefore, it is important to ensure that the number of available
-	 * bytes is set by the user to a large enough value. The size of an
-	 * uncompressed picture in bytes is a typical and safe choice.
-	 * After the frame got encoded, this contains the number of bytes of
-	 * the actual encoded frame. */
+	/* Size of the encoded data, in bytes. This is set by the user, and
+	 * is the size of the encoded data that is pointed to by data.
+	 * Not used by the encoder. */
 	size_t data_size;
 
 	/* Pointer to out-of-band codec/header data. If such data exists,
@@ -963,11 +952,19 @@ typedef struct
 ImxVpuEncInitialInfo;
 
 
+typedef void* (*ImxVpuEncAcquireOutputBuffer)(void *context, size_t size);
+typedef void (*ImxVpuEncFinishOutputBuffer)(void *context);
+
+
 typedef struct
 {
 	int force_I_picture;
 	int skip_picture;
 	int enable_autoskip;
+
+	ImxVpuEncAcquireOutputBuffer acquire_output_buffer;
+	ImxVpuEncFinishOutputBuffer finish_output_buffer;
+	void *output_buffer_context;
 
 	unsigned int quant_param;
 }
@@ -1036,8 +1033,11 @@ void imx_vpu_enc_configure_min_intra_refresh(ImxVpuEncoder *encoder, unsigned in
 void imx_vpu_enc_configure_intra_qp(ImxVpuEncoder *encoder, int intra_qp);
 
 /* Encodes a given input picture. encoded_frame is filled with information about the encoded output frame.
- * Some of the encoded_frame's fields must be set by the user before this function is called. See the
- * ImxVpuEncodedFrame documentation for details.
+ * The encoder calls the acquire function of encoding_params to get a memory buffer to write encoded data
+ * into. Once it is done, it calls the finish function. These two function pointers must be set to valid
+ * values prior to encoding. Typically, the acquire function allocates a memory block with the given size,
+ * memory-maps it (if necessary), and returns the pointer to the memory block area. It is guaranteed that
+ * the finish function gets called if the acquire function was called.
  * output_code is a bit mask containing information about the encoding result.
  * encoding_params specifies additional encoding parameters, which can vary from frame to frame.
  * None of the arguments may be NULL. */
