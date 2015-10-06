@@ -70,14 +70,12 @@ GstImxEglVivSinkEGLPlatform* gst_imx_egl_viv_sink_egl_platform_create(gchar cons
 	if (platform->egl_display == EGL_NO_DISPLAY)
 	{
 		GST_ERROR("eglGetDisplay failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
-		g_free(platform);
 		goto cleanup;
 	}
 
 	if (!eglInitialize(platform->egl_display, &ver_major, &ver_minor))
 	{
 		GST_ERROR("eglInitialize failed: %s", gst_imx_egl_viv_sink_egl_platform_get_last_error_string());
-		g_free(platform);
 		goto cleanup;
 	}
 
