@@ -204,6 +204,7 @@ static void gst_imx_vpu_decoder_init(GstImxVpuDecoder *vpu_decoder)
 	vpu_decoder->phys_mem_allocator = NULL;
 	vpu_decoder->num_additional_framebuffers = DEFAULT_NUM_ADDITIONAL_FRAMEBUFFERS;
 	vpu_decoder->unfinished_frames_table = NULL;
+	vpu_decoder->fatal_error = FALSE;
 }
 
 
@@ -236,6 +237,7 @@ static gboolean gst_imx_vpu_decoder_start(GstVideoDecoder *decoder)
 		return FALSE;
 	}
 
+	vpu_decoder->fatal_error = FALSE;
 	vpu_decoder->unfinished_frames_table = g_hash_table_new(NULL, NULL);
 
 	/* The decoder is initialized in set_format, not here, since only then the input bitstream
@@ -473,9 +475,9 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 		 * since it is new and hasn't been finished yet */
 		gst_imx_vpu_decoder_add_to_unfinished_frame_table(vpu_decoder, input_frame);
 
-		GST_LOG_OBJECT(decoder, "input gstframe %p with input buffer %p number #%" G_GUINT32_FORMAT, (gpointer)input_frame, (gpointer)(input_frame->input_buffer), input_frame->system_frame_number);
-
 		gst_buffer_map(input_frame->input_buffer, &in_map_info, GST_MAP_READ);
+
+		GST_LOG_OBJECT(decoder, "input gstframe %p with input buffer %p number #%" G_GUINT32_FORMAT " and %z" G_GSIZE_FORMAT " byte", (gpointer)input_frame, (gpointer)(input_frame->input_buffer), input_frame->system_frame_number, in_map_info.size);
 
 		encoded_frame.data = in_map_info.data;
 		encoded_frame.data_size = in_map_info.size;
@@ -557,6 +559,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 	if (ret != IMX_VPU_DEC_RETURN_CODE_OK)
 	{
 		GST_ERROR_OBJECT(vpu_decoder, "failed to decode: %s", imx_vpu_dec_error_string(ret));
+		vpu_decoder->fatal_error = TRUE;
 		return GST_FLOW_ERROR;
 	}
 	else if (exit_early)
@@ -806,6 +809,9 @@ static GstFlowReturn gst_imx_vpu_decoder_finish(GstVideoDecoder *decoder)
 	if (vpu_decoder->decoder_context == NULL)
 		return GST_FLOW_OK;
 
+	if (vpu_decoder->fatal_error)
+		return GST_FLOW_ERROR;
+
 	GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_decoder->decoder_context);
 	imx_vpu_dec_enable_drain_mode(vpu_decoder->decoder, 1);
 	GST_IMX_VPU_DECODER_CONTEXT_UNLOCK(vpu_decoder->decoder_context);
@@ -822,6 +828,8 @@ static GstFlowReturn gst_imx_vpu_decoder_finish(GstVideoDecoder *decoder)
 			GST_INFO_OBJECT(vpu_decoder, "last remaining unfinished frame pushed");
 			break;
 		}
+		else if (flow_ret != GST_FLOW_OK)
+			break;
 		else
 			GST_LOG_OBJECT(vpu_decoder, "unfinished frame pushed, others remain");
 	}

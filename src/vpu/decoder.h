@@ -91,6 +91,8 @@ struct _GstImxVpuDecoder
 	gint chroma_interleave;
 
 	GHashTable *unfinished_frames_table;
+
+	gboolean fatal_error;
 };
 
 
