@@ -73,6 +73,8 @@ struct _GstImxBPAggregatorPad
 
   /* Protected by the OBJECT_LOCK */
   GstSegment segment;
+  /* Segment to use in the clip function, before the queue */
+  GstSegment clip_segment;
 
   /* < Private > */
   GstImxBPAggregatorPadPrivate   *  priv;
@@ -190,7 +192,7 @@ struct _GstImxBPAggregator
  *                  The subclass should get ready to process
  *                  aggregated buffers.
  * @get_next_time:  Optional.
- *                  Called when the element needs to know the time of the next
+ *                  Called when the element needs to know the running time of the next
  *                  rendered buffer for live pipelines. This causes deadline
  *                  based aggregation to occur. Defaults to returning
  *                  GST_CLOCK_TIME_NONE causing the element to wait for buffers
