@@ -96,7 +96,6 @@ static VpuCodStd convert_to_wrapper_codec_std(ImxVpuCodecFormat format)
 		case IMX_VPU_CODEC_FORMAT_MPEG4:    return VPU_V_MPEG4;
 		case IMX_VPU_CODEC_FORMAT_H263:     return VPU_V_H263;
 		case IMX_VPU_CODEC_FORMAT_H264:     return VPU_V_AVC;
-		case IMX_VPU_CODEC_FORMAT_H264_MVC: return VPU_V_AVC_MVC;
 		case IMX_VPU_CODEC_FORMAT_WMV3:     return VPU_V_VC1;
 		case IMX_VPU_CODEC_FORMAT_WVC1:     return VPU_V_VC1_AP;
 		case IMX_VPU_CODEC_FORMAT_MPEG2:    return VPU_V_MPEG2;
@@ -682,7 +681,6 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 	switch (open_params->codec_format)
 	{
 		case IMX_VPU_CODEC_FORMAT_H264:
-		case IMX_VPU_CODEC_FORMAT_H264_MVC:
 		case IMX_VPU_CODEC_FORMAT_MPEG2:
 		case IMX_VPU_CODEC_FORMAT_MPEG4:
 			(*decoder)->consumption_info_available = TRUE;

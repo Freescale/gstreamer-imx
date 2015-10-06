@@ -381,7 +381,7 @@ ImxVpuFieldType convert_field_type(ImxVpuCodecFormat codec_format, DecOutputInfo
 	{
 		ImxVpuFieldType result = dec_output_info->topFieldFirst ? IMX_VPU_FIELD_TYPE_TOP_FIRST : IMX_VPU_FIELD_TYPE_BOTTOM_FIRST;
 
-		if ((codec_format == IMX_VPU_CODEC_FORMAT_H264) || (codec_format == IMX_VPU_CODEC_FORMAT_H264_MVC))
+		if (codec_format == IMX_VPU_CODEC_FORMAT_H264)
 		{
 			switch (dec_output_info->h264Npf)
 			{
@@ -947,7 +947,6 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 	switch (open_params->codec_format)
 	{
 		case IMX_VPU_CODEC_FORMAT_H264:
-		case IMX_VPU_CODEC_FORMAT_H264_MVC:
 			dec_open_param.bitstreamFormat = STD_AVC;
 			dec_open_param.reorderEnable = open_params->enable_frame_reordering;
 			break;
@@ -987,7 +986,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 	dec_open_param.filePlayEnable = 0;
 	dec_open_param.picWidth = open_params->frame_width;
 	dec_open_param.picHeight = open_params->frame_height;
-	dec_open_param.avcExtension = (open_params->codec_format == IMX_VPU_CODEC_FORMAT_H264_MVC);
+	dec_open_param.avcExtension = 0;
 	dec_open_param.dynamicAllocEnable = 0;
 	dec_open_param.streamStartByteOffset = 0;
 	dec_open_param.mjpg_thumbNailDecEnable = 0;
@@ -2118,7 +2117,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			 * picture, otherwise it is a non-IDR one. The non-IDR case is then
 			 * handled in the default way (see convert_pic_type() for details). */
 			pic_types = &(decoder->frame_entries[idx_decoded].pic_types[0]);
-			if (((decoder->codec_format == IMX_VPU_CODEC_FORMAT_H264) || (decoder->codec_format == IMX_VPU_CODEC_FORMAT_H264_MVC)) && (decoder->dec_output_info.idrFlg & 0x01))
+			if ((decoder->codec_format == IMX_VPU_CODEC_FORMAT_H264) && (decoder->dec_output_info.idrFlg & 0x01))
 				pic_types[0] = pic_types[1] = IMX_VPU_PIC_TYPE_IDR;
 			else
 				convert_pic_type(decoder->codec_format, decoder->dec_output_info.picType, !!(decoder->dec_output_info.interlacedFrame), pic_types);
@@ -3400,7 +3399,6 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 		}
 
 		case IMX_VPU_CODEC_FORMAT_H264:
-		case IMX_VPU_CODEC_FORMAT_H264_MVC:
 		case IMX_VPU_CODEC_FORMAT_MPEG4:
 			add_header = encoder->first_frame || encoding_params->force_I_picture || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_IDR) || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_I);
 			break;
@@ -3420,7 +3418,6 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 				break;
 
 			case IMX_VPU_CODEC_FORMAT_H264:
-			case IMX_VPU_CODEC_FORMAT_H264_MVC:
 				encoded_data_size += encoder->headers.h264_headers.sps_rbsp_size + encoder->headers.h264_headers.pps_rbsp_size;
 				break;
 
@@ -3459,7 +3456,6 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 		switch (encoder->codec_format)
 		{
 			case IMX_VPU_CODEC_FORMAT_H264:
-			case IMX_VPU_CODEC_FORMAT_H264_MVC:
 			{
 				ADD_HEADER_DATA(h264_headers.sps_rbsp, "h.264 SPS RBSP");
 				ADD_HEADER_DATA(h264_headers.pps_rbsp, "h.264 PPS RBSP");
