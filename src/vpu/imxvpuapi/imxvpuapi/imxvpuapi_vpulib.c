@@ -92,32 +92,65 @@
 #define MJPEG_ENC_HEADER_DATA_MAX_SIZE  2048
 
 
+/* Component tables, used by imx-vpu to fill in JPEG SOF headers as described
+ * by the JPEG specification section B.2.2 and to pick the correct quantization
+ * tables. There are 5 tables, one for each supported pixel format. Each table
+ * contains 4 row, each row is made up of 6 byte.
+ *
+ * The row structure goes as follows:
+ * - The first byte is the number of the component.
+ * - The second and third bytes contain, respectively, the vertical and
+ *   horizontal sampling factors, which are either 1 or 2. Chroma components
+ *   always use sampling factors of 1, while the luma component can contain
+ *   factors of value 2. For example, a horizontal luma factor of 2 means
+ *   that horizontally, for a pair of 2 Y pixels there is one U and one
+ *   V pixel.
+ * - The fourth byte is the index of the quantization table to use. The
+ *   luma component uses the table with index 0, the chroma components use
+ *   the table with index 1. These indices correspond to the DC_TABLE_INDEX0
+ *   and DC_TABLE_INDEX1 constants.
+ *
+ * Note that the fourth component row is currently unused. So are the fifth
+ * and sixth bytes in each row. Still, the imx-vpu library API requires them
+ * (possibly for future extensions?).
+ */
+
 static uint8_t const mjpeg_enc_component_info_tables[5][4 * 6] =
 {
+	/* YUV 4:2:0 table. For each 2x2 patch of Y pixels,
+	 * there is one U and one V pixel. */
 	{ 0x00, 0x02, 0x02, 0x00, 0x00, 0x00,
 	  0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
 	  0x02, 0x01, 0x01, 0x01, 0x01, 0x01,
-	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 }, /* YUV 4:2:0 */
+	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 },
 
+	/* YUV 4:2:2 horizontal table. For each horizontal pair
+	 * of 2 Y pixels, there is one U and one V pixel. */
 	{ 0x00, 0x02, 0x01, 0x00, 0x00, 0x00,
 	  0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
 	  0x02, 0x01, 0x01, 0x01, 0x01, 0x01,
-	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 }, /* YUV 4:2:2 horizontal */
+	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 },
 
+	/* YUV 4:2:2 vertical table. For each vertical pair
+	 * of 2 Y pixels, there is one U and one V pixel. */
 	{ 0x00, 0x01, 0x02, 0x00, 0x00, 0x00,
 	  0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
 	  0x02, 0x01, 0x01, 0x01, 0x01, 0x01,
-	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 }, /* YUV 4:2:2 vertical */
+	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 },
 
+	/* YUV 4:4:4 table. For each Y pixel, there is one
+	 * U and one V pixel. */
 	{ 0x00, 0x01, 0x01, 0x00, 0x00, 0x00,
 	  0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
 	  0x02, 0x01, 0x01, 0x01, 0x01, 0x01,
-	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 }, /* YUV 4:4:4 */
+	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 },
 
+	/* YUV 4:0:0 table. There are only Y pixels, no U or
+	 * V ones. This is essentially grayscale. */
 	{ 0x00, 0x01, 0x01, 0x00, 0x00, 0x00,
 	  0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
 	  0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
-	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 }  /* YUV 4:0:0 */
+	  0x03, 0x00, 0x00, 0x00, 0x00, 0x00 }
 };
 
 
