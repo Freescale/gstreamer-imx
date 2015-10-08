@@ -6,6 +6,21 @@
 #include "egl_platform.h"
 #include "../common/phys_mem_meta.h"
 
+/*
+ * Those definitions are mandatory for Android. Indeed the Vivante GLES2
+ * extensions are not available in the android NDK header, the proper way to
+ * solve this would be to import vivante headers in a freescale Android bsp and
+ * generate a NDK from this source tree.
+ */
+#ifdef ANDROID
+/* GL_VIV_texture */
+#define GL_VIV_YV12                                             0x8FC0
+#define GL_VIV_NV12                                             0x8FC1
+#define GL_VIV_YUY2                                             0x8FC2
+#define GL_VIV_UYVY                                             0x8FC3
+#define GL_VIV_NV21                                             0x8FC4
+#define GL_VIV_I420                                             0x8FC5
+#endif
 
 GST_DEBUG_CATEGORY_STATIC(imx_gles2renderer_debug);
 #define GST_CAT_DEFAULT imx_gles2renderer_debug
