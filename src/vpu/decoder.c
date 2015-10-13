@@ -1081,12 +1081,11 @@ gboolean gst_imx_vpu_decoder_fill_param_set(GstImxVpuDecoder *vpu_decoder, GstVi
 		s = gst_caps_get_structure(state->caps, structure_nr);
 		name = gst_structure_get_name(s);
 
-		open_params->enable_frame_reordering = 0;
+		open_params->enable_frame_reordering = 1;
 
 		if (g_strcmp0(name, "video/x-h264") == 0)
 		{
 			open_params->codec_format = IMX_VPU_CODEC_FORMAT_H264;
-			open_params->enable_frame_reordering = 1;
 			GST_INFO_OBJECT(vpu_decoder, "setting h.264 as stream format");
 		}
 		else if (g_strcmp0(name, "video/mpeg") == 0)

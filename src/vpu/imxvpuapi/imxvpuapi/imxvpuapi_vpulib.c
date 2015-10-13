@@ -981,7 +981,6 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 	{
 		case IMX_VPU_CODEC_FORMAT_H264:
 			dec_open_param.bitstreamFormat = STD_AVC;
-			dec_open_param.reorderEnable = open_params->enable_frame_reordering;
 			break;
 		case IMX_VPU_CODEC_FORMAT_MPEG2:
 			dec_open_param.bitstreamFormat = STD_MPEG2;
@@ -998,14 +997,12 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 			break;
 		case IMX_VPU_CODEC_FORMAT_WVC1:
 			dec_open_param.bitstreamFormat = STD_VC1;
-			dec_open_param.reorderEnable = 1;
 			break;
 		case IMX_VPU_CODEC_FORMAT_MJPEG:
 			dec_open_param.bitstreamFormat = STD_MJPG;
 			break;
 		case IMX_VPU_CODEC_FORMAT_VP8:
 			dec_open_param.bitstreamFormat = STD_VP8;
-			dec_open_param.reorderEnable = 1;
 			break;
 		default:
 			break;
@@ -1028,6 +1025,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_open(ImxVpuDecoder **decoder, ImxVpuDecOpenPara
 	dec_open_param.mapType = 0;
 	dec_open_param.tiled2LinearEnable = 0; // this must ALWAYS be 0, otherwise VPU hangs eventually (it is 0 in the wrapper except for MX6X)
 	dec_open_param.bitstreamMode = 1;
+	dec_open_param.reorderEnable = open_params->enable_frame_reordering;
 
 	/* Motion-JPEG specific settings
 	 * With motion JPEG, the VPU is configured to operate in line buffer mode,
