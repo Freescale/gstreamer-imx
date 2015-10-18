@@ -79,8 +79,8 @@ static gboolean gst_imx_vpu_encoder_flush(GstVideoEncoder *encoder);
 static void gst_imx_vpu_encoder_base_close(GstImxVpuEncoderBase *vpu_encoder_base);
 static gboolean gst_imx_vpu_encoder_base_set_bitrate(GstImxVpuEncoderBase *vpu_encoder_base);
 
-static void* gst_imx_vpu_encoder_base_acquire_output_buffer(void *context, size_t size);
-static void gst_imx_vpu_encoder_base_finish_output_buffer(void *context);
+static void* gst_imx_vpu_encoder_base_acquire_output_buffer(void *context, size_t size, void **acquired_handle);
+static void gst_imx_vpu_encoder_base_finish_output_buffer(void *context, void *acquired_handle);
 
 
 
@@ -375,12 +375,12 @@ static gboolean gst_imx_vpu_encoder_base_set_format(GstVideoEncoder *encoder, Gs
 
 		if (vpu_encoder_base->slice_size < 0)
 		{
-			vpu_encoder_base->open_params.slice_mode.slice_size_mode = IMX_VPU_ENC_SLICE_SIZE_MODE_MACROBLOCKS;
+			vpu_encoder_base->open_params.slice_mode.slice_size_unit = IMX_VPU_ENC_SLICE_SIZE_UNIT_MACROBLOCKS;
 			vpu_encoder_base->open_params.slice_mode.slice_size = -vpu_encoder_base->slice_size;
 		}
 		else
 		{
-			vpu_encoder_base->open_params.slice_mode.slice_size_mode = IMX_VPU_ENC_SLICE_SIZE_MODE_BITS;
+			vpu_encoder_base->open_params.slice_mode.slice_size_unit = IMX_VPU_ENC_SLICE_SIZE_UNIT_BITS;
 			vpu_encoder_base->open_params.slice_mode.slice_size = vpu_encoder_base->slice_size;
 		}
 	}
@@ -621,7 +621,7 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 
 	memset(&enc_params, 0, sizeof(enc_params));
 	imx_vpu_enc_set_default_encoding_params(vpu_encoder_base->encoder, &enc_params);
-	enc_params.force_I_picture = 0;
+	enc_params.force_I_frame = 0;
 	enc_params.acquire_output_buffer = gst_imx_vpu_encoder_base_acquire_output_buffer;
 	enc_params.finish_output_buffer = gst_imx_vpu_encoder_base_finish_output_buffer;
 	enc_params.output_buffer_context = vpu_encoder_base;
@@ -629,7 +629,7 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 	/* Force I-frame if either IS_FORCE_KEYFRAME or IS_FORCE_KEYFRAME_HEADERS is set for the current frame. */
 	if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(input_frame) || GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME_HEADERS(input_frame))
 	{
-		enc_params.force_I_picture = 1;
+		enc_params.force_I_frame = 1;
 		GST_LOG_OBJECT(vpu_encoder_base, "got request to make this a keyframe - forcing I frame");
 		GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(input_frame);
 	}
@@ -807,18 +807,19 @@ static gboolean gst_imx_vpu_encoder_base_set_bitrate(GstImxVpuEncoderBase *vpu_e
 }
 
 
-static void* gst_imx_vpu_encoder_base_acquire_output_buffer(void *context, size_t size)
+static void* gst_imx_vpu_encoder_base_acquire_output_buffer(void *context, size_t size, void **acquired_handle)
 {
 	GstImxVpuEncoderBase *vpu_encoder_base = (GstImxVpuEncoderBase *)(context);
 	GstBuffer *buffer = gst_buffer_new_allocate(NULL, size, NULL);
 	vpu_encoder_base->output_buffer = buffer;
 	gst_buffer_map(buffer, &(vpu_encoder_base->output_buffer_map_info), GST_MAP_WRITE);
 	GST_LOG_OBJECT(vpu_encoder_base, "acquired output buffer %p with %zu byte", (gpointer)buffer, size);
+	*acquired_handle = buffer;
 	return vpu_encoder_base->output_buffer_map_info.data;
 }
 
 
-static void gst_imx_vpu_encoder_base_finish_output_buffer(void *context)
+static void gst_imx_vpu_encoder_base_finish_output_buffer(void *context, void *acquired_handle)
 {
 	GstImxVpuEncoderBase *vpu_encoder_base = (GstImxVpuEncoderBase *)(context);
 	GstBuffer *buffer = vpu_encoder_base->output_buffer;

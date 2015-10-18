@@ -51,7 +51,7 @@ uint8_t* wrapped_dma_buffer_allocator_map(ImxVpuDMABufferAllocator *allocator, I
 {
 	IMXVPUAPI_UNUSED_PARAM(allocator);
 	ImxVpuWrappedDMABuffer *wrapped_buf = (ImxVpuWrappedDMABuffer *)(buffer);
-	return (wrapped_buf->map_func != NULL) ? wrapped_buf->map_func(wrapped_buf, flags) : NULL;
+	return (wrapped_buf->map != NULL) ? wrapped_buf->map(wrapped_buf, flags) : NULL;
 }
 
 
@@ -59,8 +59,8 @@ void wrapped_dma_buffer_allocator_unmap(ImxVpuDMABufferAllocator *allocator, Imx
 {
 	IMXVPUAPI_UNUSED_PARAM(allocator);
 	ImxVpuWrappedDMABuffer *wrapped_buf = (ImxVpuWrappedDMABuffer *)(buffer);
-	if (wrapped_buf->unmap_func != NULL)
-		wrapped_buf->unmap_func(wrapped_buf);
+	if (wrapped_buf->unmap != NULL)
+		wrapped_buf->unmap(wrapped_buf);
 }
 
 

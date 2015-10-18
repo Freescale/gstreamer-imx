@@ -666,19 +666,19 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 			/* Add interlacing flags to the output buffer if necessary */
 			if (vpu_decoder->decoder_context->uses_interlacing)
 			{
-				switch (decoded_picture.field_type)
+				switch (decoded_picture.interlacing_mode)
 				{
-					case IMX_VPU_FIELD_TYPE_NO_INTERLACING:
+					case IMX_VPU_INTERLACING_MODE_NO_INTERLACING:
 						GST_LOG_OBJECT(vpu_decoder, "bitstream has interlacing flag set, but this picture is progressive");
 						break;
 
-					case IMX_VPU_FIELD_TYPE_TOP_FIRST:
+					case IMX_VPU_INTERLACING_MODE_TOP_FIELD_FIRST:
 						GST_LOG_OBJECT(vpu_decoder, "interlaced picture, 1 field, top field first");
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_TFF);
 						break;
 
-					case IMX_VPU_FIELD_TYPE_BOTTOM_FIRST:
+					case IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_FIRST:
 						GST_LOG_OBJECT(vpu_decoder, "interlaced picture, 1 field, bottom field first");
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_TFF);

@@ -75,16 +75,16 @@ static ImxVpuPicType convert_from_wrapper_pic_type(VpuPicType type)
 }
 
 
-static ImxVpuFieldType convert_from_wrapper_field_type(VpuFieldType type)
+static ImxVpuInterlacingMode convert_from_wrapper_field_type(VpuFieldType type)
 {
 	switch (type)
 	{
-		case VPU_FIELD_NONE:   return IMX_VPU_FIELD_TYPE_NO_INTERLACING;
-		case VPU_FIELD_TOP:    return IMX_VPU_FIELD_TYPE_TOP_ONLY;
-		case VPU_FIELD_BOTTOM: return IMX_VPU_FIELD_TYPE_BOTTOM_ONLY;
-		case VPU_FIELD_TB:     return IMX_VPU_FIELD_TYPE_TOP_FIRST;
-		case VPU_FIELD_BT:     return IMX_VPU_FIELD_TYPE_BOTTOM_FIRST;
-		default: return IMX_VPU_FIELD_TYPE_UNKNOWN;
+		case VPU_FIELD_NONE:   return IMX_VPU_INTERLACING_MODE_NO_INTERLACING;
+		case VPU_FIELD_TOP:    return IMX_VPU_INTERLACING_MODE_TOP_FIELD_ONLY;
+		case VPU_FIELD_BOTTOM: return IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_ONLY;
+		case VPU_FIELD_TB:     return IMX_VPU_INTERLACING_MODE_TOP_FIELD_FIRST;
+		case VPU_FIELD_BT:     return IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_FIRST;
+		default: return IMX_VPU_INTERLACING_MODE_UNKNOWN;
 	}
 }
 
@@ -1093,8 +1093,6 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 				IMX_VPU_ERROR("resetting decoder failed: %s", imx_vpu_dec_error_string(imxret));
 				return imxret;
 			}
-			else
-				*output_code |= IMX_VPU_DEC_OUTPUT_CODE_INTERNAL_RESET;
 		}
 		else if (ret != VPU_DEC_RET_SUCCESS)
 		{
@@ -1197,12 +1195,6 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		decoder->num_available_framebuffers--;
 		decoder->num_times_counter_decremented++;
 		IMX_VPU_LOG("decremented number of available framebuffers to %d (with consumed frame info); number of times decremented is now %d", decoder->num_available_framebuffers, decoder->num_times_counter_decremented);
-	}
-
-	if (buf_ret_code & VPU_DEC_OUTPUT_NODIS)
-	{
-		if ((encoded_frame->data != NULL) && (decoder->codec_format == IMX_VPU_CODEC_FORMAT_VP8))
-			*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DECODE_ONLY;
 	}
 
 	/* VPU_DEC_NO_ENOUGH_BUF handled by caller - should be treated as an error */
@@ -1311,7 +1303,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, Imx
 	}
 
 	decoded_picture->pic_types[0] = decoded_picture->pic_types[1] = convert_from_wrapper_pic_type(out_frame_info.ePicType);
-	decoded_picture->field_type = convert_from_wrapper_field_type(out_frame_info.eFieldType);
+	decoded_picture->interlacing_mode = convert_from_wrapper_field_type(out_frame_info.eFieldType);
 	decoded_picture->context = context;
 
 	/* XXX
@@ -1397,7 +1389,10 @@ struct _ImxVpuEncoder
 	void *virt_mem_sub_block;
 	size_t virt_mem_sub_block_size;
 
+	uint8_t *temp_enc_data_buffer;
+
 	ImxVpuDMABuffer *bitstream_buffer;
+	size_t bitstream_buffer_size;
 
 	ImxVpuCodecFormat codec_format;
 	unsigned int frame_width, frame_height;
@@ -1444,22 +1439,34 @@ static int enc_convert_to_wrapper_open_param(ImxVpuEncOpenParams *open_params, V
 	wrapper_open_param->nLinear2TiledEnable = 1;
 	wrapper_open_param->eColorFormat = convert_to_wrapper_color_format(open_params->color_format);
 
-	wrapper_open_param->nUserQpMin = open_params->user_defined_min_qp;
-	wrapper_open_param->nUserQpMax = open_params->user_defined_max_qp;
-	wrapper_open_param->nUserQpMinEnable = open_params->enable_user_defined_min_qp;
-	wrapper_open_param->nUserQpMaxEnable = open_params->enable_user_defined_max_qp;
+	/* The specification states that both values must be set if user defined
+	 * values are used, so disable both if both values are -1, and enable
+	 * both otherwise */
+	if ((open_params->user_defined_min_qp == -1) && (open_params->user_defined_max_qp == -1))
+	{
+		wrapper_open_param->nUserQpMinEnable = 0;
+		wrapper_open_param->nUserQpMaxEnable = 0;
+		wrapper_open_param->nUserQpMin = 0;
+		wrapper_open_param->nUserQpMax = 0;
+	}
+	else
+	{
+		wrapper_open_param->nUserQpMinEnable = 1;
+		wrapper_open_param->nUserQpMaxEnable = 1;
+		wrapper_open_param->nUserQpMin = open_params->user_defined_min_qp;
+		wrapper_open_param->nUserQpMax = open_params->user_defined_max_qp;
+	}
 
 	wrapper_open_param->nIntraRefresh = open_params->min_intra_refresh_mb_count;
 	wrapper_open_param->nRcIntraQp = open_params->intra_qp;
 	
-	wrapper_open_param->nUserGamma = open_params->user_gamma;
+	wrapper_open_param->nUserGamma = open_params->qp_estimation_smoothness;
 
-	wrapper_open_param->nRcIntervalMode = open_params->rate_interval_mode;
+	wrapper_open_param->nRcIntervalMode = open_params->rate_control_mode;
 	wrapper_open_param->nMbInterval = open_params->macroblock_interval;
-	wrapper_open_param->nAvcIntra16x16OnlyModeEnable = open_params->enable_avc_intra_16x16_only_mode;
 
 	wrapper_open_param->sliceMode.sliceMode = open_params->slice_mode.multiple_slices_per_picture;
-	wrapper_open_param->sliceMode.sliceSizeMode = open_params->slice_mode.slice_size_mode;
+	wrapper_open_param->sliceMode.sliceSizeMode = open_params->slice_mode.slice_size_unit;
 	wrapper_open_param->sliceMode.sliceSize = open_params->slice_mode.slice_size;
 
 	wrapper_open_param->nInitialDelay = open_params->initial_delay;
@@ -1472,7 +1479,7 @@ static int enc_convert_to_wrapper_open_param(ImxVpuEncOpenParams *open_params, V
 	switch (open_params->codec_format)
 	{
 		case IMX_VPU_CODEC_FORMAT_MPEG4:
-			wrapper_open_param->VpuEncStdParam.mp4Param.mp4_dataPartitionEnable = open_params->codec_params.mpeg4_params.enable_data_partition;
+			wrapper_open_param->VpuEncStdParam.mp4Param.mp4_dataPartitionEnable = open_params->codec_params.mpeg4_params.enable_data_partitioning;
 			wrapper_open_param->VpuEncStdParam.mp4Param.mp4_reversibleVlcEnable = open_params->codec_params.mpeg4_params.enable_reversible_vlc;
 			wrapper_open_param->VpuEncStdParam.mp4Param.mp4_intraDcVlcThr = open_params->codec_params.mpeg4_params.intra_dc_vlc_thr;
 			wrapper_open_param->VpuEncStdParam.mp4Param.mp4_hecEnable = open_params->codec_params.mpeg4_params.enable_hec;
@@ -1652,18 +1659,15 @@ void imx_vpu_enc_set_default_open_params(ImxVpuCodecFormat codec_format, ImxVpuE
 	open_params->bitrate = 100;
 	open_params->gop_size = 16;
 	open_params->color_format = IMX_VPU_COLOR_FORMAT_YUV420;
-	open_params->user_defined_min_qp = 0;
-	open_params->user_defined_max_qp = 0;
-	open_params->enable_user_defined_min_qp = 0;
-	open_params->enable_user_defined_max_qp = 0;
+	open_params->user_defined_min_qp = -1;
+	open_params->user_defined_max_qp = -1;
 	open_params->min_intra_refresh_mb_count = 0;
 	open_params->intra_qp = -1;
-	open_params->user_gamma = (int)(0.75*32768);
-	open_params->rate_interval_mode = IMX_VPU_ENC_RATE_INTERVAL_MODE_NORMAL;
+	open_params->qp_estimation_smoothness = (int)(0.75*32768);
+	open_params->rate_control_mode = IMX_VPU_ENC_RATE_CONTROL_MODE_NORMAL;
 	open_params->macroblock_interval = 0;
-	open_params->enable_avc_intra_16x16_only_mode = 0;
 	open_params->slice_mode.multiple_slices_per_picture = 0;
-	open_params->slice_mode.slice_size_mode = IMX_VPU_ENC_SLICE_SIZE_MODE_BITS;
+	open_params->slice_mode.slice_size_unit = IMX_VPU_ENC_SLICE_SIZE_UNIT_BITS;
 	open_params->slice_mode.slice_size = 4000;
 	open_params->initial_delay = 0;
 	open_params->vbv_buffer_size = 0;
@@ -1675,7 +1679,7 @@ void imx_vpu_enc_set_default_open_params(ImxVpuCodecFormat codec_format, ImxVpuE
 	switch (codec_format)
 	{
 		case IMX_VPU_CODEC_FORMAT_MPEG4:
-			open_params->codec_params.mpeg4_params.enable_data_partition = 0;
+			open_params->codec_params.mpeg4_params.enable_data_partitioning = 0;
 			open_params->codec_params.mpeg4_params.enable_reversible_vlc = 0;
 			open_params->codec_params.mpeg4_params.intra_dc_vlc_thr = 0;
 			open_params->codec_params.mpeg4_params.enable_hec = 0;
@@ -1711,22 +1715,33 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 	VpuEncOpenParam open_param;
 	uint8_t *bitstream_buffer_virtual_address;
 	imx_vpu_phys_addr_t bitstream_buffer_physical_address;
+	size_t bitstream_buffer_size;
 
 	assert(encoder != NULL);
 	assert(open_params != NULL);
 	assert(bitstream_buffer != NULL);
 
+	bitstream_buffer_size = imx_vpu_dma_buffer_get_size(bitstream_buffer);
+	bitstream_buffer_virtual_address = imx_vpu_dma_buffer_map(bitstream_buffer, 0);
+	bitstream_buffer_physical_address = imx_vpu_dma_buffer_get_physical_address(bitstream_buffer);
+
 	*encoder = IMX_VPU_ALLOC(sizeof(ImxVpuEncoder));
 	if ((*encoder) == NULL)
 	{
 		IMX_VPU_ERROR("allocating memory for encoder object failed");
-		return IMX_VPU_ENC_RETURN_CODE_ERROR;
+		ret = VPU_ENC_RET_FAILURE;
+		goto cleanup;
 	}
 
 	memset(*encoder, 0, sizeof(ImxVpuEncoder));
 
-	bitstream_buffer_virtual_address = imx_vpu_dma_buffer_map(bitstream_buffer, 0);
-	bitstream_buffer_physical_address = imx_vpu_dma_buffer_get_physical_address(bitstream_buffer);
+	(*encoder)->temp_enc_data_buffer = IMX_VPU_ALLOC(bitstream_buffer_size);
+	if ((*encoder)->temp_enc_data_buffer == NULL)
+	{
+		IMX_VPU_ERROR("allocating memory for temporary encoded data buffer failed");
+		ret = VPU_ENC_RET_FAILURE;
+		goto cleanup;
+	}
 
 	{
 		int i;
@@ -1748,9 +1763,9 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 					(*encoder)->virt_mem_sub_block = IMX_VPU_ALLOC((*encoder)->virt_mem_sub_block_size);
 					if ((*encoder)->virt_mem_sub_block == NULL)
 					{
-						imx_vpu_dma_buffer_unmap(bitstream_buffer);
 						IMX_VPU_ERROR("allocating memory for sub block failed");
-						return IMX_VPU_ENC_RETURN_CODE_ERROR;
+						ret = VPU_ENC_RET_FAILURE;
+						goto cleanup;
 					}
 
 					sub_block->pVirtAddr = (unsigned char *)IMX_VPU_ALIGN_VAL_TO((*encoder)->virt_mem_sub_block, sub_block->nAlignment);
@@ -1801,6 +1816,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 	(*encoder)->frame_rate_numerator = open_params->frame_rate_numerator;
 	(*encoder)->frame_rate_denominator = open_params->frame_rate_denominator;
 	(*encoder)->bitstream_buffer = bitstream_buffer;
+	(*encoder)->bitstream_buffer_size = bitstream_buffer_size;
 
 finish:
 	if (ret == VPU_ENC_RET_SUCCESS)
@@ -1810,10 +1826,14 @@ finish:
 
 cleanup:
 	imx_vpu_dma_buffer_unmap(bitstream_buffer);
-	if ((*encoder)->virt_mem_sub_block != NULL)
-		IMX_VPU_FREE((*encoder)->virt_mem_sub_block, (*encoder)->virt_mem_sub_block_size);
-	IMX_VPU_FREE(*encoder, sizeof(ImxVpuDecoder));
-	*encoder = NULL;
+
+	if ((*encoder) != NULL)
+	{
+		if ((*encoder)->virt_mem_sub_block != NULL)
+			IMX_VPU_FREE((*encoder)->virt_mem_sub_block, (*encoder)->virt_mem_sub_block_size);
+		IMX_VPU_FREE(*encoder, sizeof(ImxVpuDecoder));
+		*encoder = NULL;
+	}
 
 	goto finish;
 }
@@ -1823,9 +1843,15 @@ ImxVpuEncReturnCodes imx_vpu_enc_close(ImxVpuEncoder *encoder)
 {
 	VpuEncRetCode ret;
 
+	if (encoder == NULL)
+		return IMX_VPU_ENC_RETURN_CODE_OK;
+
 	ret = VPU_EncClose(encoder->handle);
 	if (ret != VPU_ENC_RET_SUCCESS)
 		IMX_VPU_ERROR("closing encoder failed: %s", imx_vpu_enc_error_string(enc_convert_retcode(ret)));
+
+	if (encoder->temp_enc_data_buffer != NULL)
+		IMX_VPU_FREE(encoder->temp_enc_data_buffer, encoder->bitstream_buffer_size);
 
 	imx_vpu_dma_buffer_unmap(encoder->bitstream_buffer);
 
@@ -1942,11 +1968,9 @@ void imx_vpu_enc_set_default_encoding_params(ImxVpuEncoder *encoder, ImxVpuEncPa
 
 	IMXVPUAPI_UNUSED_PARAM(encoder);
 
-	encoding_params->force_I_picture = 0;
+	encoding_params->force_I_frame = 0;
 	encoding_params->skip_picture = 0;
 	encoding_params->enable_autoskip = 0;
-
-	encoding_params->quant_param = 0;
 }
 
 
@@ -1986,15 +2010,14 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	VpuFrameBuffer in_framebuffer;
 	imx_vpu_phys_addr_t picture_phys_addr;
 	uint8_t *write_ptr;
+	void *output_buffer_ptr;
+	size_t encoded_data_size;
 
 	assert(encoder != NULL);
 	assert(encoded_frame != NULL);
-	assert(encoded_frame->data != NULL);
-	assert(encoded_frame->data_size > 0);
 	assert(encoding_params != NULL);
 	assert(output_code != NULL);
 
-	write_ptr = encoded_frame->data;
 	picture_phys_addr = imx_vpu_dma_buffer_get_physical_address(picture->framebuffer->dma_buffer);
 
 	memset(&enc_enc_param, 0, sizeof(enc_enc_param));
@@ -2016,15 +2039,15 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	enc_enc_param.nQuantParam = encoding_params->quant_param;
 
 	enc_enc_param.nInPhyOutput = 0; /* This is not used by the VPU wrapper on i.MX6 SoCs */
-	enc_enc_param.nInOutputBufLen = encoded_frame->data_size;
 
-	enc_enc_param.nForceIPicture = encoding_params->force_I_picture;
+	enc_enc_param.nForceIPicture = encoding_params->force_I_frame;
 	enc_enc_param.nSkipPicture = encoding_params->skip_picture;
 	enc_enc_param.nEnableAutoSkip = encoding_params->enable_autoskip;
 
 	enc_enc_param.pInFrame = &in_framebuffer;
 
-	encoded_frame->data_size = 0;
+	write_ptr = encoder->temp_enc_data_buffer;
+	encoded_data_size = 0;
 	*output_code = 0;
 
 	/* When encoding h.264 or MPEG4, the VPU wrapper outputs the header separately.
@@ -2038,7 +2061,16 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	 * second call will also produce the actual encoded frame. Loop exits. */
 	while (TRUE)
 	{
+		size_t num_written_bytes = write_ptr - encoder->temp_enc_data_buffer;
+
+		if (num_written_bytes >= encoder->bitstream_buffer_size)
+		{
+			IMX_VPU_ERROR("cannot encode frame - ran out of temporary encoded data buffer space");
+			return IMX_VPU_ENC_RETURN_CODE_ERROR;
+		}
+
 		enc_enc_param.nInVirtOutput = (unsigned int)write_ptr;
+		enc_enc_param.nInOutputBufLen = encoder->bitstream_buffer_size - num_written_bytes;
 
 		ret = VPU_EncEncodeFrame(encoder->handle, &enc_enc_param);
 		IMX_VPU_LOG("VPU_EncEncodeFrame out ret code: 0x%x size: %d", enc_enc_param.eOutRetCode, enc_enc_param.nOutOutputSize);
@@ -2049,7 +2081,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 			return enc_convert_retcode(ret);
 		}
 
-		encoded_frame->data_size += enc_enc_param.nOutOutputSize;
+		encoded_data_size += enc_enc_param.nOutOutputSize;
 		write_ptr += enc_enc_param.nOutOutputSize;
 
 		if (enc_enc_param.eOutRetCode & VPU_ENC_OUTPUT_DIS)
@@ -2064,6 +2096,16 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 			break;
 		}
 	}
+
+	/* Acquire an output buffer and Transfer the encoded data to it */
+	output_buffer_ptr = encoding_params->acquire_output_buffer(encoding_params->output_buffer_context, encoded_data_size, &(encoded_frame->acquired_handle));
+	if (output_buffer_ptr == NULL)
+	{
+		IMX_VPU_ERROR("could not acquire buffer with %zu byte for encoded frame data", encoded_data_size);
+		return IMX_VPU_ENC_RETURN_CODE_ERROR;
+	}
+	memcpy(output_buffer_ptr, encoder->temp_enc_data_buffer, encoded_data_size);
+	encoding_params->finish_output_buffer(encoding_params->output_buffer_context, encoded_frame->acquired_handle);
 
 	/* Since the encoder does not perform any kind of delay
 	 * or reordering, this is appropriate, because in that

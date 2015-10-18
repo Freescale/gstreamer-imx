@@ -48,23 +48,35 @@ extern "C" {
 /**************************************************/
 
 
+/* Format and for printf-compatibel format-strings
+ * example use: printf("physical address: %" IMX_VPU_PHYS_ADDR_FORMAT, phys_addr */
 #define IMX_VPU_PHYS_ADDR_FORMAT "#lx"
+/* Typedef for physical addresses */
 typedef unsigned long imx_vpu_phys_addr_t;
 
 
+/* ImxVpuMappingFlags: flags for the ImxVpuDMABufferAllocator's allocate vfunc
+ * These flags can be bitwise-OR combined, although WRITECOMBINE and UNCACHED
+ * cannot both be set */
 typedef enum
 {
 	IMX_VPU_ALLOCATION_FLAG_WRITECOMBINE = (1UL << 0),
 	IMX_VPU_ALLOCATION_FLAG_UNCACHED     = (1UL << 1)
+	/* XXX: When adding extra flags here, follow the pattern: IMX_VPU_ALLOCATION_FLAG_<NAME> = (1UL << <INDEX>) */
 }
 ImxVpuAllocationFlags;
 
 
+/* ImxVpuMappingFlags: flags for the ImxVpuDMABufferAllocator's map vfuncs
+ * These flags can be bitwise-OR combined, although READ and WRITE cannot
+ * both be set */
 typedef enum
 {
+	/* Map memory for CPU read access */
 	IMX_VPU_MAPPING_FLAG_WRITE   = (1UL << 0),
-	IMX_VPU_MAPPING_FLAG_READ    = (1UL << 1),
-	IMX_VPU_MAPPING_FLAG_DISCARD = (1UL << 2)
+	/* Map memory for CPU write access */
+	IMX_VPU_MAPPING_FLAG_READ    = (1UL << 1)
+	/* XXX: When adding extra flags here, follow the pattern: IMX_VPU_MAPPING_FLAG_<NAME> = (1UL << <INDEX>) */
 }
 ImxVpuMappingFlags;
 
@@ -83,43 +95,40 @@ typedef struct _ImxVpuDMABufferAllocator ImxVpuDMABufferAllocator;
  * Older allocators like the VPU ones unfortunately work with physical addresses directly, and do not support
  * DMA-BUF or the like. To keep compatible with these older allocators and allowing for newer and better
  * methods, both physical addresses and FDs are supported by this API. Typically, an allocator allows for
- * one of them. If an allocator does not support FDs, @get_fd must return -1. If it does not support physical
- * addresses, then the physical address returned by @get_physical_address must be set to zero.
+ * one of them. If an allocator does not support FDs, get_fd() must return -1. If it does not support physical
+ * addresses, then the physical address returned by get_physical_address() must be 0.
  *
  * The vfuncs are:
  *
- * @allocate: Allocates a DMA buffer. "size" is the size of the buffer in bytes. "alignment" is the address
- *            alignment in bytes. An alignment of 1 or 0 means that no alignment is required.
- *            "flags" is a bitwise OR combination of flags (or 0 if no flags are used, in which case
- *            cached pages are used by default).
- *            If allocation fails, NULL is returned.
+ * allocate(): Allocates a DMA buffer. "size" is the size of the buffer in bytes. "alignment" is the address
+ *             alignment in bytes. An alignment of 1 or 0 means that no alignment is required.
+ *             "flags" is a bitwise OR combination of flags (or 0 if no flags are used, in which case
+ *             cached pages are used by default). See ImxVpuAllocationFlags for a list of valid flags.
+ *             If allocation fails, NULL is returned.
  *
- * @deallocate: Deallocates a DMA buffer. The buffer must have been allocated with the same allocator.
+ * deallocate(): Deallocates a DMA buffer. The buffer must have been allocated with the same allocator.
  *
- * @map: Maps a DMA buffer to the local address space, and returns the virtual address to this space.
- *       "flags" is a bitwise OR combination of flags (or 0 if no flags are used, in which case it will map
- *       in regular read/write mode).
+ * map(): Maps a DMA buffer to the local address space, and returns the virtual address to this space.
+ *        "flags" is a bitwise OR combination of flags (or 0 if no flags are used, in which case it will map
+ *        in regular read/write mode). See ImxVpuMappingFlags for a list of valid flags.
  *
- * @unmap: Unmaps a DMA buffer. @map and @unmap must contain an internal counter, to allow for multiple
- *       map/unmap calls. Only if that counter reaches zero again - in other words, once @unmap is called as
- *       many times as @map was called - unmapping shall actually occur.
+ * unmap(): Unmaps a DMA buffer. If the buffer isn't currently mapped, this function does nothing.
  *
- * @get_fd: Gets the file descriptor associated with the DMA buffer. This is the preferred way of interacting
- *          with DMA buffers. If the underlying allocator does not support FDs, this function returns -1.
+ * get_fd(): Gets the file descriptor associated with the DMA buffer. This is the preferred way of interacting
+ *           with DMA buffers. If the underlying allocator does not support FDs, this function returns -1.
  *
- * @get_physical_address: Gets the physical address associated with the DMA buffer. This address points to the
- *                        start of the buffer in the physical address space. If no physical addresses are
- *                        supported by the allocator, this function returns 0.
+ * get_physical_address(): Gets the physical address associated with the DMA buffer. This address points to the
+ *                         start of the buffer in the physical address space. If no physical addresses are
+ *                         supported by the allocator, this function returns 0.
  *
- * @get_size: Returns the size of the buffer, in bytes.
+ * get_size(): Returns the size of the buffer, in bytes.
  *
- * The vfuncs @get_fd, @get_physical_address, and @get_size can also be used while the buffer is mapped. */
+ * The vfuncs get_fd(), get_physical_address(), and get_size() can also be used while the buffer is mapped. */
 struct _ImxVpuDMABufferAllocator
 {
 	ImxVpuDMABuffer* (*allocate)(ImxVpuDMABufferAllocator *allocator, size_t size, unsigned int alignment, unsigned int flags);
 	void (*deallocate)(ImxVpuDMABufferAllocator *allocator, ImxVpuDMABuffer *buffer);
 
-	/* Mapping/unmapping must use some kind of internal counter, to allow for multiple map() calls */
 	uint8_t* (*map)(ImxVpuDMABufferAllocator *allocator, ImxVpuDMABuffer *buffer, unsigned int flags);
 	void (*unmap)(ImxVpuDMABufferAllocator *allocator, ImxVpuDMABuffer *buffer);
 
@@ -156,8 +165,8 @@ struct _ImxVpuWrappedDMABuffer
 {
 	ImxVpuDMABuffer parent;
 
-	uint8_t* (*map_func)(ImxVpuWrappedDMABuffer *wrapped_dma_buffer, unsigned int flags);
-	void (*unmap_func)(ImxVpuWrappedDMABuffer *wrapped_dma_buffer);
+	uint8_t* (*map)(ImxVpuWrappedDMABuffer *wrapped_dma_buffer, unsigned int flags);
+	void (*unmap)(ImxVpuWrappedDMABuffer *wrapped_dma_buffer);
 
 	int fd;
 	imx_vpu_phys_addr_t physical_address;
@@ -174,6 +183,8 @@ int imx_vpu_dma_buffer_get_fd(ImxVpuDMABuffer *buffer);
 imx_vpu_phys_addr_t imx_vpu_dma_buffer_get_physical_address(ImxVpuDMABuffer *buffer);
 size_t imx_vpu_dma_buffer_get_size(ImxVpuDMABuffer *buffer);
 
+/* Call for initializing wrapped DMA buffer structures.
+ * Always call this before further using such a structure. */
 void imx_vpu_init_wrapped_dma_buffer(ImxVpuWrappedDMABuffer *buffer);
 
 
@@ -198,6 +209,7 @@ void imx_vpu_set_heap_allocator_functions(ImxVpuHeapAllocFunc heap_alloc_fn, Imx
 /***********************/
 
 
+/* Log levels. */
 typedef enum
 {
 	IMX_VPU_LOG_LEVEL_ERROR = 0,
@@ -209,6 +221,13 @@ typedef enum
 }
 ImxVpuLogLevel;
 
+/* Function pointer type for logging functions.
+ *
+ * This function is invoked by IMX_VPU_LOG() macro calls. This macro also passes the name
+ * of the source file, the line in that file, and the function name where the logging occurs
+ * to the logging function (over the file, line, and fn arguments, respectively).
+ * Together with the log level, custom logging functions can output this metadata, or use
+ * it for log filtering etc.*/
 typedef void (*ImxVpuLoggingFunc)(ImxVpuLogLevel level, char const *file, int const line, char const *fn, const char *format, ...);
 
 /* Defines the threshold for logging. Logs with lower priority are discarded.
@@ -227,42 +246,133 @@ void imx_vpu_set_logging_function(ImxVpuLoggingFunc logging_fn);
 /******************************************************/
 
 
+/* Picture types understood by the VPU. Note that no codec format
+ * supports all of these types. */
 typedef enum
 {
+	/* Unknown picture type */
 	IMX_VPU_PIC_TYPE_UNKNOWN = 0,
+	/* Picture is an I (= intra) frame. These can be used as keyframes / sync points.
+	 * All codec formats support this one. With MJPEG, all frames are I frames. */
 	IMX_VPU_PIC_TYPE_I,
+	/* Picture is n P (= predicted) frame. All codec formats except MJPEG
+	 * support these frames. */
 	IMX_VPU_PIC_TYPE_P,
+	/* Picture is n B (= bidirectionally predicted) frame. Out of the list of codec
+	 * formats the VPU can decode, h.264, MPEG-2, MPEG-4, and VC-1 support these. */
 	IMX_VPU_PIC_TYPE_B,
+	/* Picture is n IDR frame. These are h.264 specific frames, and can be used as
+	 * key frames / sync points. */
 	IMX_VPU_PIC_TYPE_IDR,
+	/* Picture is a B frame (see above), but all of its macroblocks are intra coded.
+	 * VC-1 specific. Cannot be used as a keyframe / sync point. */
 	IMX_VPU_PIC_TYPE_BI,
+	/* Picture was skipped. TODO: is this necessary? */
 	IMX_VPU_PIC_TYPE_SKIP
 }
 ImxVpuPicType;
 
 
+/* Valid interlacing modes. When interlacing is used, each frame is made of one or
+ * or two interlaced fields (in almost all cases, it's two fields). Rows with odd
+ * Y coordinates belong to the top field, rows with even Y coordinates to the bottom.
+ *
+ * Some video sources send the top field first, some the bottom first, some send
+ * only the top or bottom fields. If both fields got transmitted, it is important
+ * to know which field was transmitted first to establish a correct temporal order.
+ * This is because in interlacing, the top and bottom fields do not contain the
+ * data from the same frame (unless the source data was progressive video). If the
+ * top field came first, then the top field contains rows from a time t, and the
+ * bottom field from a time t+1. For operations like deinterlacing, knowing the
+ * right temporal order might be essential. */
 typedef enum
 {
-	IMX_VPU_FIELD_TYPE_UNKNOWN = 0,
-	IMX_VPU_FIELD_TYPE_NO_INTERLACING,
-	IMX_VPU_FIELD_TYPE_TOP_FIRST,
-	IMX_VPU_FIELD_TYPE_BOTTOM_FIRST,
-	IMX_VPU_FIELD_TYPE_TOP_ONLY,
-	IMX_VPU_FIELD_TYPE_BOTTOM_ONLY
+	/* Unknown interlacing mode */
+	IMX_VPU_INTERLACING_MODE_UNKNOWN = 0,
+	/* Picture is progressive; it does not use interlacing */
+	IMX_VPU_INTERLACING_MODE_NO_INTERLACING,
+	/* Top field (= odd rows) came first */
+	IMX_VPU_INTERLACING_MODE_TOP_FIELD_FIRST,
+	/* Bottom field (= even rows) came first */
+	IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_FIRST,
+	/* Only the top field was transmitted (even rows are empty) */
+	IMX_VPU_INTERLACING_MODE_TOP_FIELD_ONLY,
+	/* Only the bottom field was transmitted (odd rows are empty) */
+	IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_ONLY
 }
-ImxVpuFieldType;
+ImxVpuInterlacingMode;
 
 
+/* Codec format to use for en/decoding. Only a subset of these
+ * are also supported by the encoder. Unless otherwise noted, the maximum
+ * supported resolution is 1920x1088.*/
 typedef enum
 {
-	IMX_VPU_CODEC_FORMAT_MPEG2 = 0, /* includes MPEG1 */
+	/* MPEG-1 part 2 and MPEG-2 part 2.
+	 *
+	 * Decoding: Fully compatible with the ISO/IEC 13182-2 specification and
+	 * the main and high profiles. Both progressive and interlaced content is
+	 * supported. */
+	IMX_VPU_CODEC_FORMAT_MPEG2 = 0,
+
+	/* MPEG-4 part 2.
+	 *
+	 * Decoding: Supports simple and advanced simple profile (except for GMC).
+	 * NOTE: DivX 3/5/6 are not supported and require special licensing by
+	 * Freescale.
+	 *
+	 * Encoding: Supports the simple profile and max. level 5/6.
+	 */
 	IMX_VPU_CODEC_FORMAT_MPEG4,
+
+	/* h.263.
+	 *
+	 * Decoding: Supports baseline profile and Annex I, J, K (except for RS/ASO), T, and max. level 70.
+	 * Encoding: Supports baseline profile and Annex I, J, K (RS and ASO are 0), T, and max. level 70.
+	 */
 	IMX_VPU_CODEC_FORMAT_H263,
+
+	/* h.264.
+	 *
+	 * Decoding: Supports baseline, main, high profiles, max. level 4.1.
+	 * Encoding: Supports baseline and constrained baseline profile, max. level 4.0.
+	 */
 	IMX_VPU_CODEC_FORMAT_H264,
+
+	/* WMV3, also known as Windows Media Video 9. Compatible to VC-1 simple and main profiles.
+	 *
+	 * Decoding: Fully supported WMV3 decoding, excluding the deprecated WMV3
+	 * interlace support (which has been obsoleted by the interlacing in the
+	 * VC-1 advanced profile). */
 	IMX_VPU_CODEC_FORMAT_WMV3,
+
+	/* VC-1, also known as Windows Media Video 9 Advanced Profile.
+	 *
+	 * Decoding: SMPTE VC-1 compressed video standard fully supported. Max. level is 3.
+	 */
 	IMX_VPU_CODEC_FORMAT_WVC1,
+
+	/* Motion JPEG.
+	 *
+	 * Decoding: Only baseline JPEG frames are supported. Maximum resolution is 8192x8192.
+	 *
+	 * Encoding: Only baseline JPEG frames are supported. Maximum resolution is 8192x8192.
+	 * MJPEG always operates in constant quality mode, even if the encoder open params
+	 * have a nonzero bitrate set.
+	 */
 	IMX_VPU_CODEC_FORMAT_MJPEG,
+
+	/* VP8.
+	 *
+	 * Decoder: fully compatible with the VP8 decoding specification.
+	 * Both simple and normal in-loop deblocking are supported.
+	 * NOTE: VPU specs state that the maximum supported resolution is 1280x720, but tests
+	 * show that up to 1920x1088 pixels do work.
+	 */
 	IMX_VPU_CODEC_FORMAT_VP8
-	/* XXX others will be added when the firmware supports them */
+
+	/* XXX others will be added when the firmware supports them or when the
+	 * firmware for them is acquired (this includes formats like AVS, DivX 3/5/6) */
 }
 ImxVpuCodecFormat;
 
@@ -278,7 +388,8 @@ typedef enum
 	IMX_VPU_COLOR_FORMAT_YUV422_VERTICAL   = 2,
 	/* planar 4:4:4; if the chroma_interleave parameter is 1, the corresponding format is NV24 */
 	IMX_VPU_COLOR_FORMAT_YUV444            = 3,
-	IMX_VPU_COLOR_FORMAT_YUV400            = 4  /* 8-bit grayscale */
+	/* 8-bit greayscale */
+	IMX_VPU_COLOR_FORMAT_YUV400            = 4
 }
 ImxVpuColorFormat;
 
@@ -348,6 +459,10 @@ typedef struct
 	 * Unused by the decoder. */
 	ImxVpuPicType pic_type;
 
+	/* Handle produced by the user-defined acquire_output_buffer function
+	 * during encoding. Not used by the decoder. */
+	void *acquired_handle;
+
 	/* User-defined pointer. The library does not touch this value.
 	 * This pointer and the one from the corresponding
 	 * picture will have the same value. The library will
@@ -373,8 +488,8 @@ typedef struct
 	 * both types are set to the same value. */
 	ImxVpuPicType pic_types[2];
 
-	/* Interlacing field type (top-first, bottom-first..); unused by the encoder */
-	ImxVpuFieldType field_type;
+	/* Interlacing mode (top-first, bottom-first..); unused by the encoder */
+	ImxVpuInterlacingMode interlacing_mode;
 
 	/* User-defined pointer. The library does not touch this value.
 	 * This pointer and the one from the corresponding
@@ -387,7 +502,7 @@ typedef struct
 ImxVpuPicture;
 
 
-/* Structure used together with @imx_vpu_calc_framebuffer_sizes */
+/* Structure used together with imx_vpu_calc_framebuffer_sizes() */
 typedef struct
 {
 	/* Frame width and height, aligned to the 16-pixel boundary required by the VPU. */
@@ -465,7 +580,7 @@ char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type);
  *    enough to hold a frame. If step 7 was performed, allocating as many bytes as indicated
  *    by total_size is enough. Make sure the Y,Cb,Cr,MvCol offsets in each ImxVpuFramebuffer
  *    instance are valid. Using the imx_vpu_fill_framebuffer_params() convenience function
- *    for this is recommended.
+ *    for this is strongly recommended.
  * 9. Call imx_vpu_dec_register_framebuffers() and pass in the ImxVpuFramebuffer array
  *    and the number of ImxVpuFramebuffer instances.
  *    This should be the last action in the callback.
@@ -479,12 +594,13 @@ char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type);
  *     decoded pictures again.
  *     If IMX_VPU_DEC_OUTPUT_CODE_DROPPED is set, you can call
  *     imx_vpu_dec_get_dropped_frame_context() to retrieve the context field
- *     of the dropped frame. If IMX_VPU_DEC_OUTPUT_CODE_EOS is set, stop playback and close
- *     the decoder.
+ *     of the dropped frame. If IMX_VPU_DEC_OUTPUT_CODE_EOS is set, or if imx_vpu_dec_decode()
+ *     returns a value other than IMX_VPU_DEC_RETURN_CODE_OK, stop playback and close the decoder.
  * 11. In case a flush/reset is desired (typically after seeking), call imx_vpu_dec_flush().
  *     Note that any internal context pointers from the en/decoded frames will be
- *     set to NULL after this call (this is the only exception where the library modifies
- *     the context fields).
+ *     thrown away after this call; if for example the context is an index, the system that
+ *     hands out the indices should be informed that any previously handed out index is now
+ *     unused.
  * 12. When there is no more incoming data, and pending decoded frames need to be retrieved
  *     from the decoder, enable drain mode with imx_vpu_dec_enable_drain_mode(). This is
  *     typically necessary when the data source reached its end, playback is finishing, and
@@ -492,7 +608,8 @@ char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type);
  *     After this call, continue calling imx_vpu_dec_decode() to retrieve the pending
  *     decoded pictures, but the data and the codec data pointers of encoded_frame
  *     must be NULL.
- *     As in step 10, if IMX_VPU_DEC_OUTPUT_CODE_EOS is set, stop playback, close the decoder.
+ *     As in step 10, if IMX_VPU_DEC_OUTPUT_CODE_EOS is set, or if imx_vpu_dec_decode() returns
+ *     a value other than IMX_VPU_DEC_RETURN_CODE_OK, stop playback and close the decoder.
  * 13. After playback is finished, close the decoder with imx_vpu_dec_close().
  * 14. Deallocate framebuffer memory blocks and the bitstream buffer memory block.
  * 15. Call imx_vpu_dec_unload().
@@ -515,43 +632,100 @@ char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type);
  */
 
 
+/* Opaque decoder structure. */
 typedef struct _ImxVpuDecoder ImxVpuDecoder;
 
 
+/* Decoder return codes. With the exception of IMX_VPU_DEC_RETURN_CODE_OK, these
+ * should be considered hard errors, and the decoder should be closed when they
+ * are returned. */
 typedef enum
 {
+	/* Operation finished successfully. */
 	IMX_VPU_DEC_RETURN_CODE_OK = 0,
+	/* General return code for when an error occurs. This is used as a catch-all
+	 * for when the other error return codes do not match the error. */
 	IMX_VPU_DEC_RETURN_CODE_ERROR,
+	/* Input parameters were invalid. */
 	IMX_VPU_DEC_RETURN_CODE_INVALID_PARAMS,
+	/* VPU decoder handle is invalid. This is an internal error, and most likely
+	 * a bug in the library. Please report such errors. */
 	IMX_VPU_DEC_RETURN_CODE_INVALID_HANDLE,
+	/* Framebuffer information is invalid. Typically happens when the ImxVpuFramebuffer
+	 * structures that get passed to imx_vpu_dec_register_framebuffers() contain
+	 * invalid values. */
 	IMX_VPU_DEC_RETURN_CODE_INVALID_FRAMEBUFFER,
+	/* Registering framebuffers for decoding failed because not enough framebuffers
+	 * were given to the imx_vpu_dec_register_framebuffers() function. */
 	IMX_VPU_DEC_RETURN_CODE_INSUFFICIENT_FRAMEBUFFERS,
+	/* A stride value (for example one of the stride values of a framebuffer) is invalid. */
 	IMX_VPU_DEC_RETURN_CODE_INVALID_STRIDE,
+	/* A function was called at an inappropriate time (for example, when
+	 * imx_vpu_dec_register_framebuffers() is called before a single byte of input data
+	 * was passed to imx_vpu_dec_decode() ). */
 	IMX_VPU_DEC_RETURN_CODE_WRONG_CALL_SEQUENCE,
+	/* The operation timed out. */
 	IMX_VPU_DEC_RETURN_CODE_TIMEOUT,
+	/* A function that should only be called once for the duration of the decoding
+	 * session was called again. One example is imx_vpu_dec_register_framebuffers(). */
 	IMX_VPU_DEC_RETURN_CODE_ALREADY_CALLED
 }
 ImxVpuDecReturnCodes;
 
 
+/* Decoder output codes. These can be bitwise OR combined, so check
+ * for their presence in the output_codes bitmask returned by
+ * imx_vpu_dec_decode() by using a bitwise AND. */
 typedef enum
 {
+	/* Input data was used. If this code is present, the input data
+	 * that was given to the imx_vpu_dec_decode() must not be given
+	 * to a following imx_vpu_dec_decode() call; instead, new data
+	 * should be loaded. If this code is not present, then the decoder
+	 * didn't use it yet, so give it to the decoder again until this
+	 * code is set or an error is returned. */
 	IMX_VPU_DEC_OUTPUT_CODE_INPUT_USED                   = (1UL << 0),
+	/* EOS was reached; no more unfinished frames are queued internally.
+	 * This can be reached either by bitstreams with no frame delay,
+	 * or by running the decoder in drain mode (enabled by calling
+	 * imx_vpu_dec_enable_drain_mode() ).
+	 */
 	IMX_VPU_DEC_OUTPUT_CODE_EOS                          = (1UL << 1),
+	/* A fully decoded picture is now available, and can be retrieved
+	 * by calling imx_vpu_dec_get_decoded_picture(). */
 	IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE    = (1UL << 2),
+	/* A picture was dropped by the decoder. The dropped picture's
+	 * context value can be retrieved by calling
+	 * imx_vpu_dec_get_dropped_frame_context(). */
 	IMX_VPU_DEC_OUTPUT_CODE_DROPPED                      = (1UL << 3),
+	/* There aren't enough free framebuffers available for decoding.
+	 * This usually happens when imx_vpu_dec_mark_framebuffer_as_displayed()
+	 * wasn't called before imx_vpu_dec_decode(), which can occur in
+	 * multithreaded environments. imx_vpu_dec_check_if_can_decode() is useful
+	 * to avoid this. Also see the guide above for more. */
 	IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_OUTPUT_FRAMES     = (1UL << 4),
+	/* Input data for a frame is incomplete. No decoded picture will
+	 * be available until the input frame's data has been fully and
+	 * correctly delivered. */
 	IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_INPUT_DATA        = (1UL << 5),
-	IMX_VPU_DEC_OUTPUT_CODE_RESOLUTION_CHANGED           = (1UL << 6),
-	IMX_VPU_DEC_OUTPUT_CODE_DECODE_ONLY                  = (1UL << 7),
-	IMX_VPU_DEC_OUTPUT_CODE_INTERNAL_RESET               = (1UL << 8)
+	/* The VPU detected a resolution change. This resets the framebuffer
+	 * registration, meaning that the initial info callback that was
+	 * passed to imx_vpu_dec_open will be called again, with the new
+	 * resolution. The framebuffer registration process is repeated.
+	 * Make sure the old framebuffers are deallocated when this happens!
+	 * If the environment is a framework like GStreamer or libav, which
+	 * has parsers that detect resolution changes on its own, chances are,
+	 * this output code is never encountered, because in these frameworks,
+	 * the decoder is reopened with the updated resolution instead. */
+	IMX_VPU_DEC_OUTPUT_CODE_RESOLUTION_CHANGED           = (1UL << 6)
 }
 ImxVpuDecOutputCodes;
 
 
-/* Structure used together with @imx_vpu_dec_open */
+/* Structure used together with imx_vpu_dec_open() */
 typedef struct
 {
+	/* Format of the incoming data to decode. */
 	ImxVpuCodecFormat codec_format;
 
 	/* Set to 1 if frame reordering shall be done by the VPU, 0 otherwise.
@@ -571,7 +745,8 @@ typedef struct
 ImxVpuDecOpenParams;
 
 
-/* Structure used together with @imx_vpu_dec_new_initial_info_callback */
+/* Structure used together with imx_vpu_dec_new_initial_info_callback() .
+ * The values are filled by the decoder. */
 typedef struct
 {
 	/* Width of height of frames, in pixels. Note: it is not guaranteed that
@@ -606,7 +781,7 @@ ImxVpuDecInitialInfo;
  * information about the bitstream becomes available. output_code is useful
  * to check why this callback was invoked. IMX_VPU_DEC_OUTPUT_CODE_INITIAL_INFO_AVAILABLE
  * is always set. If IMX_VPU_DEC_OUTPUT_CODE_RESOLUTION_CHANGED is also set,
- * it means that this callback was called before, and not got called again, because
+ * it means that this callback was called before, and now got called again, because
  * the resolution is now different. Either way, every time this callback gets called,
  * new framebuffers should be allocated and registered with imx_vpu_dec_register_framebuffers().
  * user_data is a user-defined pointer that is passed to this callback. It has the same value
@@ -632,7 +807,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_unload(void);
 /* Convenience predefined allocator for allocating DMA buffers. */
 ImxVpuDMABufferAllocator* imx_vpu_dec_get_default_allocator(void);
 
-/* Called before @imx_vpu_dec_open, it returns the alignment and size for the
+/* Called before imx_vpu_dec_open(), it returns the alignment and size for the
  * physical memory block necessary for the decoder's bitstream buffer. The user
  * must allocate a DMA buffer of at least this size, and its physical address
  * must be aligned according to the alignment value. */
@@ -663,7 +838,7 @@ int imx_vpu_dec_is_drain_mode_enabled(ImxVpuDecoder *decoder);
 ImxVpuDecReturnCodes imx_vpu_dec_flush(ImxVpuDecoder *decoder);
 
 /* Registers the specified array of framebuffers with the decoder. This must be called after
- * @imx_vpu_dec_decode returned an output code with IMX_VPU_DEC_OUTPUT_CODE_INITIAL_INFO_AVAILABLE
+ * imx_vpu_dec_decode() returned an output code with IMX_VPU_DEC_OUTPUT_CODE_INITIAL_INFO_AVAILABLE
  * set in it. Registering can happen only once during the lifetime of a decoder instance. If for some reason
  * framebuffers need to be re-registered, the instance must be closed, and a new one opened.
  * The caller must ensure that the specified framebuffer array remains valid until the decoder instance
@@ -671,8 +846,8 @@ ImxVpuDecReturnCodes imx_vpu_dec_flush(ImxVpuDecoder *decoder);
  * and/or freed from the inside). Also, the framebuffers' DMA buffers will be memory-mapped until the decoder
  * is closed.
  *
- * The framebuffers must contain valid values. The convenience functions @imx_vpu_calc_framebuffer_sizes and
- * @imx_vpu_fill_framebuffer_params can be used for this. Note that all framebuffers must have the same
+ * The framebuffers must contain valid values. The convenience functions imx_vpu_calc_framebuffer_sizes() and
+ * imx_vpu_fill_framebuffer_params() can be used for this. Note that all framebuffers must have the same
  * stride values. */
 ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, ImxVpuFramebuffer *framebuffers, unsigned int num_framebuffers);
 
@@ -684,17 +859,17 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 /* Retrieves a decoded picture. The structure referred to by "decoded_picture" will be filled with data about
  * the decoded picture. "decoded_picture" must not be NULL.
  *
- * CAUTION: This function must not be called before @imx_vpu_dec_decode, and even then, only if the output code
+ * CAUTION: This function must not be called before imx_vpu_dec_decode(), and even then, only if the output code
  * has the IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE flag set. Otherwise, undefined behavior happens.
  * If the flag is set, this function must not be called more than once. Again, doing so causes undefined
- * behavior. Only after another @imx_vpu_dec_decode call (again, with the flag set) it is valid to
+ * behavior. Only after another imx_vpu_dec_decode() call (again, with the flag set) it is valid to
  * call this function again. */
 ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, ImxVpuPicture *decoded_picture);
 
 /* Retrieves the context of the dropped frame. This is useful to be able to identify which input frame
  * was dropped. Media frameworks may require this to properly keep track of timestamping.
  *
- * NOTE: This function must not be called before @imx_vpu_dec_decode, and even then, only if the output code has
+ * NOTE: This function must not be called before imx_vpu_dec_decode(), and even then, only if the output code has
  * the IMX_VPU_DEC_OUTPUT_CODE_DROPPED flag set. Otherwise, the returned context value is invalid. */
 void* imx_vpu_dec_get_dropped_frame_context(ImxVpuDecoder *decoder);
 
@@ -784,51 +959,96 @@ ImxVpuDecReturnCodes imx_vpu_dec_mark_framebuffer_as_displayed(ImxVpuDecoder *de
  */
 
 
+/* Opaque encoder structure. */
 typedef struct _ImxVpuEncoder ImxVpuEncoder;
 
 
+/* Encoder return codes. With the exception of IMX_VPU_ENC_RETURN_CODE_OK, these
+ * should be considered hard errors, and the encoder should be closed when they
+ * are returned. */
 typedef enum
 {
+	/* Operation finished successfully. */
 	IMX_VPU_ENC_RETURN_CODE_OK = 0,
+	/* General return code for when an error occurs. This is used as a catch-all
+	 * for when the other error return codes do not match the error. */
 	IMX_VPU_ENC_RETURN_CODE_ERROR,
+	/* Input parameters were invalid. */
 	IMX_VPU_ENC_RETURN_CODE_INVALID_PARAMS,
+	/* VPU encoder handle is invalid. This is an internal error, and most likely
+	 * a bug in the library. Please report such errors. */
 	IMX_VPU_ENC_RETURN_CODE_INVALID_HANDLE,
+	/* Framebuffer information is invalid. Typically happens when the ImxVpuFramebuffer
+	 * structures that get passed to imx_vpu_enc_register_framebuffers() contain
+	 * invalid values. */
 	IMX_VPU_ENC_RETURN_CODE_INVALID_FRAMEBUFFER,
+	/* Registering framebuffers for encoding failed because not enough framebuffers
+	 * were given to the imx_vpu_enc_register_framebuffers() function. */
 	IMX_VPU_ENC_RETURN_CODE_INSUFFICIENT_FRAMEBUFFERS,
+	/* A stride value (for example one of the stride values of a framebuffer) is invalid. */
 	IMX_VPU_ENC_RETURN_CODE_INVALID_STRIDE,
+	/* A function was called at an inappropriate time. */
 	IMX_VPU_ENC_RETURN_CODE_WRONG_CALL_SEQUENCE,
+	/* The operation timed out. */
 	IMX_VPU_ENC_RETURN_CODE_TIMEOUT
 }
 ImxVpuEncReturnCodes;
 
 
+/* Encoder output codes. These can be bitwise OR combined, so check
+ * for their presence in the output_codes bitmask returned by
+ * imx_vpu_enc_encode() by using a bitwise AND. */
 typedef enum
 {
+	/* Input data was used. If this code is present, the input picture
+	 * that was given to the imx_vpu_dec_encode() must not be given
+	 * to a following imx_vpu_dec_encode() call; instead, a new picture
+	 * should be loaded. If this code is not present, then the encoder
+	 * didn't use it yet, so give it to the encoder again until this
+	 * code is set or an error is returned. */
 	IMX_VPU_ENC_OUTPUT_CODE_INPUT_USED                 = (1UL << 0),
+	/* A fully encoded frame is now available. The encoded_frame argument
+	 * passed to imx_vpu_enc_encode() contains information about this frame. */
 	IMX_VPU_ENC_OUTPUT_CODE_ENCODED_FRAME_AVAILABLE    = (1UL << 1),
+	/* The data in the encoded frame also contains header information
+	 * like SPS/PSS for h.264. Headers are always placed at the beginning
+	 * of the encoded data, and this code is never present if the
+	 * IMX_VPU_ENC_OUTPUT_CODE_ENCODED_FRAME_AVAILABLE isn't set. */
 	IMX_VPU_ENC_OUTPUT_CODE_CONTAINS_HEADER            = (1UL << 2)
 }
 ImxVpuEncOutputCodes;
 
 
+/* Valid slice size modes that can be used in the ImxVpuEncSliceMode structure. */
 typedef enum
 {
-	IMX_VPU_ENC_SLICE_SIZE_MODE_BITS = 0,
-	IMX_VPU_ENC_SLICE_SIZE_MODE_MACROBLOCKS
+	/* The slice_size value in ImxVpuEncSliceMode is given in bits */
+	IMX_VPU_ENC_SLICE_SIZE_UNIT_BITS = 0,
+	/* The slice_size value in ImxVpuEncSliceMode is given in macroblocks */
+	IMX_VPU_ENC_SLICE_SIZE_UNIT_MACROBLOCKS
 }
-ImxVpuEncSliceSizeMode;
+ImxVpuEncSliceSizeUnits;
 
 
+/* Rate control mode to use in the encoder. Not used in constant quality mode. */
 typedef enum
 {
-	IMX_VPU_ENC_RATE_INTERVAL_MODE_NORMAL = 0,
-	IMX_VPU_ENC_RATE_INTERVAL_MODE_FRAME_LEVEL,
-	IMX_VPU_ENC_RATE_INTERVAL_MODE_SLICE_LEVEL,
-	IMX_VPU_ENC_RATE_INTERVAL_MODE_USER_DEFINED_LEVEL
+	/* Normal rate control mode. */
+	IMX_VPU_ENC_RATE_CONTROL_MODE_NORMAL = 0,
+	/* Per-frame rate control mode. */
+	IMX_VPU_ENC_RATE_CONTROL_MODE_FRAME_LEVEL,
+	/* Per-slice rate control mode. */
+	IMX_VPU_ENC_RATE_CONTROL_MODE_SLICE_LEVEL,
+	/* User defined rate control mode. The macroblock_interval value
+	 * in ImxVpuEncOpenParams must also be set if this mode is used. */
+	IMX_VPU_ENC_RATE_CONTROL_MODE_USER_DEFINED_LEVEL
 }
-ImxVpuEncRateIntervalMode;
+ImxVpuEncRateControlModes;
 
 
+/* Motion estimation search window range to use in the encoder. This specifies
+ * the size of the window around the current block that is searched by the
+ * encoder. Naming convention is: width_in_blocks x height_in_blocks. */
 typedef enum
 {
 	IMX_VPU_ENC_ME_SEARCH_RANGE_256x128 = 0,
@@ -839,89 +1059,204 @@ typedef enum
 ImxVpuEncMESearchRanges;
 
 
+/* Slice mode information to be used when opening an encoder instance. */
 typedef struct
 {
+	/* If this is 1, multiple sizes are produced per picture. If it is 0,
+	 * one slice per picture is used. Default value is 0. */
 	int multiple_slices_per_picture;
-	ImxVpuEncSliceSizeMode slice_size_mode;
+	/* If multiple_slices_per_picture is 1, this specifies the unit
+	 * for the slice_size value. if multiple_slices_per_picture is 0,
+	 * this value is ignored. Default value is IMX_VPU_ENC_SLICE_SIZE_UNIT_BITS. */
+	ImxVpuEncSliceSizeUnits slice_size_unit;
+	/* If multiple_slices_per_picture is 1, this specifies the size of
+	 * a slice, in units specified by slice_size_unit. If
+	 * multiple_slices_per_picture is 0, this value is ignored. Default
+	 * vlaue is 4000. */
 	unsigned int slice_size;
 }
 ImxVpuEncSliceMode;
 
 
+/* MPEG-4 part 2 parameters to be used when opening an encoder instance. */
 typedef struct
 {
-	int enable_data_partition;
+	/* If set to 1, MPEG-4 data partitioning mode is enabled. If set to
+	 * 0, it is disabled. Default value is 0. */
+	int enable_data_partitioning;
+	/* If set to 1, additional reversible variable length codes for
+	 * increased resilience are added. If 0, they are omitted.
+	 * Default value is 0. */
 	int enable_reversible_vlc;
+	/* The mechanism to use for switching between two VLC's for intra
+	 * coeffient encoding, as described in ISO/IEC 14496-2 section 6.3.6.
+	 * Default value is 0. Valid range is 0 to 7. */
 	unsigned int intra_dc_vlc_thr;
+	/* If set to 1, it enables the header extension code. 0 disables it.
+	 * Default value is 0. */
 	int enable_hec;
+	/* The MPEG-4 part 2 standard version ID. Valid values are 1 and 2.
+	 * Default value is 2. */
 	unsigned int version_id;
 }
 ImxVpuEncMPEG4Params;
 
 
+/* h.263 parameters for the new encoder instance. */
 typedef struct
 {
+	/* 1 = Annex.I support is enabled. 0 = disabled. Default value is 0. */
 	int enable_annex_i;
+	/* 1 = Annex.J support is enabled. 0 = disabled. Default value is 1. */
 	int enable_annex_j;
+	/* 1 = Annex.K support is enabled. 0 = disabled. Default value is 0. */
 	int enable_annex_k;
+	/* 1 = Annex.T support is enabled. 0 = disabled. Default value is 0. */
 	int enable_annex_t;
 }
 ImxVpuEncH263Params;
 
 
+/* h.264 parameters for the new encoder instance. */
 typedef struct
 {
+	/* If set to 1, constrained intra prediction is enabled, as described
+	 * in ISO/IEC 14496-10 section 7.4.2.2. If set to 0, it is disabled.
+	 * Default value is 0. */
 	int enable_constrained_intra_prediction;
+	/* If set to 1, the deblocking filter at slice boundaries is disabled.
+	 * If set to 0, it remains enabled. Default value is 0.
+	 * This value corresponds to disable_deblocking_filter_idc in
+	 * ISO/IEC 14496-10 section 7.4.3. */
 	int disable_deblocking;
-	int deblock_filter_offset_alpha, deblock_filter_offset_beta;
+	/* Alpha offset for the deblocking filter. This corresponds to
+	 * slice_alpha_c0_offset_div2 in ISO/IEC 14496-10 section 7.4.3.
+	 * Default value is 6. */
+	int deblock_filter_offset_alpha;
+	/* Beta offset for the deblocking filter. This corresponds to
+	 * slice_beta_offset_div2 in ISO/IEC 14496-10 section 7.4.3.
+	 * Default value is 0. */
+	int deblock_filter_offset_beta;
+	/* Chroma offset for QP chroma value indices. This corresponds to
+	 * chroma_qp_index_offset in ISO/IEC 14496-10 section 7.4.3.
+	 * Default value is 0. */
 	int chroma_qp_offset;
+	/* If set to 1, the encoder produces access unit delimiters.
+	 * If set to 0, this is disabled. Default value is 0. */
 	int enable_access_unit_delimiters;
 }
 ImxVpuEncH264Params;
 
 
+/* Motion JPEG parameters for the new encoder instance. */
 typedef struct
 {
+	/* Quality factor for JPEG encoding, between 0 (worst quality, best
+	 * compression) and 100 (best quality, worst compression). Default
+	 * value is 85.
+	 * This quality factor is the one from the Independent JPEG Group's
+	 * formula for generating a scale factor out of the quality factor.
+	 * This means that this quality factor is exactly the same as the
+	 * one used by libjpeg. */
 	unsigned int quality_factor;
 }
 ImxVpuEncMJPEGParams;
 
 
+/* Structure used together with imx_vpu_enc_open() */
 typedef struct
 {
+	/* Format encoded data to produce. */
 	ImxVpuCodecFormat codec_format;
 
+	/* Width and height of the incoming frames, in pixels. These
+	 * do not have to be aligned to any boundaries. */
 	unsigned int frame_width, frame_height;
+	/* Frame rate, given as a rational number. */
 	unsigned int frame_rate_numerator;
 	unsigned int frame_rate_denominator;
+	/* Bitrate in kbps. If this is set to 0, rate control is disabled, and
+	 * constant quality mode is active instead. This value is ignored for
+	 * MJPEG (which essentially always operates in constant quality mode).
+	 * Default value is 100. */
 	unsigned int bitrate;
+	/* Size of the Group of Pictures. It specifies the number of frames
+	 * between the initial I frames of each group. Therefore, 0 causes the
+	 * VPU to only produce I frames, 1 allows for one P frame in between,
+	 * 2 for two P frames etc. MJPEG ignores this value, and behaves as if
+	 * it were set to 0 (= produces only I frames). Maximum value is 32767.
+	 * Default value is 16. */
 	unsigned int gop_size;
+	/* Color format to use for incoming frames. Only MJPEG actually uses
+	 * this value; other codec formats always use IMX_VPU_COLOR_FORMAT_YUV420.
+	 * See the ImxVpuColorFormat documentation for an explanation how
+	 * the chroma_interleave value can affec the pixel format that is used. */
 	ImxVpuColorFormat color_format;
 
+	/* User defined minimum allowed qp value. Not used in constant quality mode.
+	 * This is a constraint for the rate control's qp estimation. -1 causes
+	 * the VPU to use its internal default limit for the given codec format.
+	 * Default value is -1. */
 	int user_defined_min_qp;
+	/* User defined maximum allowed qp value. Not used in constant quality mode.
+	 * This is a constraint for the rate control's qp estimation. -1 causes
+	 * the VPU to use its internal default limit for the given codec format.
+	 * Default value is -1. */
 	int user_defined_max_qp;
-	int enable_user_defined_min_qp;
-	int enable_user_defined_max_qp;
 
+	/* How many macroblocks at least to encode as intra macroblocks in every
+	 * P frame. If this is set to 0, intra macroblocks are not used. This value
+	 * is ignored for MJPEG. Default value is 0. */
 	int min_intra_refresh_mb_count;
+	/* Quantization parameter for I frames. -1 instructs the VPU to automatically
+	 * determine its value. Valid range is 1-31 for MPEG4 and h.263, and 0-51
+	 * for h.264. MJPEG ignores this value. Default value is -1. */
 	int intra_qp;
 
-	unsigned int user_gamma;
+	/* Smoothness factor for qp (quantization parameter) estimation. Not used
+	 * in constant quality mode. Valid value are between 0 and 32768. Default
+	 * value is 24576 (= 0.75 * 32768). Low values cause the qp to change
+	 * slowly, high values cause it to change quickly. */
+	unsigned int qp_estimation_smoothness;
 
-	ImxVpuEncRateIntervalMode rate_interval_mode;
+	/* Rate control mode to use. This defines the intervals for race control
+	 * updates. For user defined intervals, macroblock_interval must also be
+	 * set. Not used in constant quality mode. Default value is
+	 * IMX_VPU_ENC_RATE_CONTROL_MODE_NORMAL. */
+	ImxVpuEncRateControlModes rate_control_mode;
+	/* User defined macroblock interval. This value is only used if no constant
+	 * quakity control mode is active and if rate_control_mode is set to
+	 * IMX_VPU_ENC_RATE_CONTROL_MODE_USER_DEFINED_LEVEL. */
 	unsigned int macroblock_interval;
 
-	int enable_avc_intra_16x16_only_mode;
-
+	/* Encoding slice mode to use. */
 	ImxVpuEncSliceMode slice_mode;
 
+	/* delay in milliseconds for the bitstream to fully occupy the vbv buffer
+	 * starting from an empty buffer. In constant quality mode, this value is
+	 * ignored. 0 means the buffer size constraints are not checked for.
+	 * Default value is 0. */
 	unsigned int initial_delay;
+	/* Size of the vbv buffer, in bits. This is only used if initial_delay is
+	 * nonzero and if rate control is active (= the bitrate in ImxVpuEncOpenParams
+	 * is nonzero). 0 means the buffer size constraints are not checked for.
+	 * Default value is 0. */
 	unsigned int vbv_buffer_size;
 
+	/* Search range for motion estimation computation. Default value is
+	 * IMX_VPU_ENC_ME_SEARCH_RANGE_256x128. */
 	ImxVpuEncMESearchRanges me_search_range;
+	/* If this is 0, then during encoding, the current pmv (predicted motion vector)
+	 * is derived from the neighbouring pmv. If it is 1, a zero PMV is used.
+	 * Default value is 0. */
 	int use_me_zero_pmv;
+	/* Additional weight factor for deciding whether to generate intra- or
+	 * inter-macroblocks. The VPU computes a weight factor, and adds this value to it.
+	 * A higher combined weight factor tends to produce more inter-macroblocks.
+	 * Default value is 0. */
 	unsigned int additional_intra_cost_weight;
 
+	/* Additional codec format specific parameters. */
 	union
 	{
 		ImxVpuEncMPEG4Params mpeg4_params;
@@ -939,6 +1274,9 @@ typedef struct
 ImxVpuEncOpenParams;
 
 
+/* Initial encoding information, produced by the encoder. This structure is
+ * essential to actually begin encoding, since it contains all of the
+ * necessary information to create and register enough framebuffers. */
 typedef struct
 {
 	/* Caller must register at least this many framebuffers
@@ -951,20 +1289,66 @@ typedef struct
 ImxVpuEncInitialInfo;
 
 
-typedef void* (*ImxVpuEncAcquireOutputBuffer)(void *context, size_t size);
-typedef void (*ImxVpuEncFinishOutputBuffer)(void *context);
+/* Function pointer used during encoding for acquiring output buffers.
+ * See imx_vpu_enc_encode() for details about the encoding process.
+ * context is the value of output_buffer_context specified in
+ * ImxVpuEncParams. size is the size of the block to acquire, in bytes.
+ * acquired_handle is an output value; the function can set this to a
+ * handle that corresponds to the acquired buffer. For example, in
+ * libav/FFmpeg, this handle could be a pointer to an AVBuffer. In
+ * GStreamer, this could be a pointer to a GstBuffer. The value of
+ * *acquired_handle will later be copied to the acquired_handle value
+ * of ImxVpuEncodedFrame.
+ * The return value is a pointer to a memory-mapped region of the
+ * output buffer, or NULL if acquiring failed.
+ * This function is only used by imx_vpu_enc_encode(). */
+typedef void* (*ImxVpuEncAcquireOutputBuffer)(void *context, size_t size, void **acquired_handle);
+/* Function pointer used during encoding for notifying that the encoder
+ * is done with the output buffer. This is *not* a function for freeing
+ * allocated buffers; instead, it makes it possible to release, unmap etc.
+ * context is the value of output_buffer_context specified in
+ * ImxVpuEncParams. acquired_handle equals the value of *acquired_handle in
+ * ImxVpuEncAcquireOutputBuffer. */
+typedef void (*ImxVpuEncFinishOutputBuffer)(void *context, void *acquired_handle);
 
 
 typedef struct
 {
-	int force_I_picture;
+	/* If set to 1, this forces the encoder to produce an I frame.
+	 * 0 disables this. Default value is 0. */
+	int force_I_frame;
+	/* If set to 1, the VPU ignores the given source picture, and
+	 * instead generates a "skipped picture". If such a picture is
+	 * reconstructed, it is a duplicate of the preceding picture.
+	 * This skipped picture is encoded as a P frame.
+	 * 0 disables skipped picture generation. Default value is 0. */
 	int skip_picture;
+	/* If set to 1, the rate control mechanism can automatically
+	 * decide to use skipped pictures. This is ignored if rate
+	 * control is disabled (= if the bitrate value is nonzero in
+	 * ImxVpuEncOpenParams). Default value is 0. */
 	int enable_autoskip;
 
+	/* Functions for acquiring and finishing output buffers. See the
+	 * typedef documentations above for details about how these
+	 * functions should behave, and the imx_vpu_enc_encode()
+	 * documentation for how they are used. */
 	ImxVpuEncAcquireOutputBuffer acquire_output_buffer;
 	ImxVpuEncFinishOutputBuffer finish_output_buffer;
 	void *output_buffer_context;
 
+	/* Quantization parameter. Its value and valid range depends on
+	 * the codec format the encoder has been configured to use.
+	 * This value is ignored is rate control mode is enabled
+	 * (= the bitrate value in ImxVpuEncOpenParams was set to a
+	 * nonzero value). For MPEG-4 and h.263, the valid range is 1-31,
+	 * where 1 produces the best quality, and 31 the best compression.
+	 * For h.264, the valid range is 0-51, where 0 is the best quality,
+	 * and 51 the best compression. This value is not used for MJPEG;
+	 * its quality factor can only be set in the ImxVpuEncOpenParams
+	 * structure.
+	 * NOTE: since this parameter is codec specific, no default value
+	 * is set by imx_vpu_enc_set_default_encoding_params(). */
 	unsigned int quant_param;
 }
 ImxVpuEncParams;
@@ -1014,33 +1398,59 @@ ImxVpuEncReturnCodes imx_vpu_enc_flush(ImxVpuEncoder *encoder);
  * the "min_num_required_framebuffers" field of ImxVpuEncInitialInfo. */
 ImxVpuEncReturnCodes imx_vpu_enc_register_framebuffers(ImxVpuEncoder *encoder, ImxVpuFramebuffer *framebuffers, unsigned int num_framebuffers);
 
-/* Retrieves initial information available after calling @imx_vpu_enc_open. */
+/* Retrieves initial information available after calling imx_vpu_enc_open(). */
 ImxVpuEncReturnCodes imx_vpu_enc_get_initial_info(ImxVpuEncoder *encoder, ImxVpuEncInitialInfo *info);
 
-/* Set the fields in "open_params" to valid defaults
+/* Set the fields in "encoding_params" to valid defaults
  * Useful if the caller wants to modify only a few fields (or none at all) */
 void imx_vpu_enc_set_default_encoding_params(ImxVpuEncoder *encoder, ImxVpuEncParams *encoding_params);
 
 /* Sets/updates the bitrate. This allows for controlled bitrate updates during encoding. Calling this
  * function is optional; by default, the bitrate from the open_params in imx_vpu_enc_open() is used. */
 void imx_vpu_enc_configure_bitrate(ImxVpuEncoder *encoder, unsigned int bitrate);
-/* Sets/updates the miniimum number of macroblocks to refresh in a frame. */
+/* Sets/updates the minimum number of macroblocks to refresh in a P frame. */
 void imx_vpu_enc_configure_min_intra_refresh(ImxVpuEncoder *encoder, unsigned int min_intra_refresh_num);
 /* Sets/updates a constant I-frame quantization parameter (1-31 for MPEG-4, 0-51 for h.264). -1 enables
  * automatic selection by the VPU. Calling this function is optional; by default, the intra QP value from
  * the open_params in imx_vpu_enc_open() is used. */
 void imx_vpu_enc_configure_intra_qp(ImxVpuEncoder *encoder, int intra_qp);
 
-/* Encodes a given input picture. encoded_frame is filled with information about the encoded output frame.
- * The encoder calls the acquire function of encoding_params to get a memory buffer to write encoded data
- * into. Once it is done, it calls the finish function. These two function pointers must be set to valid
- * values prior to encoding. Typically, the acquire function allocates a memory block with the given size,
- * memory-maps it (if necessary), and returns the pointer to the memory block area. It is guaranteed that
- * the finish function gets called if the acquire function was called.
- * output_code is a bit mask containing information about the encoding result.
- * encoding_params specifies additional encoding parameters, which can vary from frame to frame.
+/* Encodes a given input picture with the given encoding parameters. encoded_frame is filled with information
+ * about the resulting encoded output frame. The encoded frame data itself is stored in a buffer that is
+ * allocated by user-supplied functions (which are set as the acquire_output_buffer and finish_output_buffer
+ * function pointers in the encoding_params).
+ *
+ * Encoding internally works as follows: first, the actual encoding operation is performed by the VPU. Next,
+ * information about the encoded data is queried, particularly its size in bytes. Once this size is known,
+ * acquire_output_buffer() from encoding_params is called. This function must acquire a buffer that can be
+ * used to store the encoded data. This buffer must be at least as large as the size of the encoded data
+ * (which is given to acquire_output_buffer() as an argument). The return value of acquire_output_buffer()
+ * is a pointer to the (potentially memory-mapped) region of the buffer. The encoded frame data is then
+ * copied to this buffer, and finish_output_buffer() is called. This function can be used to inform the
+ * caller tha the encoder is done with this buffer; it now contains encoded data, and will not be modified
+ * further. encoded_frame is filled with information about the encoded frame data.
+ * If acquiring the buffer fails, acquire_output_buffer() returns a NULL pointer.
+ * NOTE: again, finish_output_buffer() is NOT a function to free the buffer; it just signals that the encoder
+ * won't touch the memory inside the buffer anymore.
+ *
+ * acquire_output_buffer() can also pass on a handle to the acquired buffer (for example, in FFmpeg/libav,
+ * this handle would be a pointer to an AVBuffer). The handle is called the "acquired_handle".
+ * acquire_output_buffer() can return such a handle. This handle is copied to the encoded_frame struct's
+ * acquired_handle field. This way, a more intuitive workflow can be used; if for example, acquire_output_buffer()
+ * returns an AVBuffer pointer as the handle, this AVBuffer pointer ends up in the encoded_frame. Afterwards,
+ * encoded_frame contains all the necessary information to process the encoded frame data.
+ *
+ * It is guaranteed that once the buffer was acquired, finish_output_buffer() will always be called, even if
+ * an error occurs. This prevents potential memory/resource leaks if the finish_output_buffer() call somehow
+ * unlocks or releases the buffer for further processing.
+ *
+ * The other fields in encoding_params specify additional encoding parameters, which can vary from frame to
+ * frame.
+ * output_code is a bit mask containing information about the encoding result. The value is a bitwise OR
+ * combination of the codes in ImxVpuEncOutputCodes.
+ *
  * None of the arguments may be NULL. */
-ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *picture, ImxVpuEncodedFrame *encoded_frame, ImxVpuEncParams *encoding_params, unsigned int *output_code);
+ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *picture, ImxVpuEncodedFrame *encoded_frame, ImxVpuEncParams *encoding_params,  unsigned int *output_code);
 
 
 

@@ -408,18 +408,18 @@ static void convert_pic_type(ImxVpuCodecFormat codec_format, int vpu_pic_type, B
 }
 
 
-ImxVpuFieldType convert_field_type(ImxVpuCodecFormat codec_format, DecOutputInfo *dec_output_info)
+ImxVpuInterlacingMode convert_interlacing_mode(ImxVpuCodecFormat codec_format, DecOutputInfo *dec_output_info)
 {
 	if (dec_output_info->interlacedFrame)
 	{
-		ImxVpuFieldType result = dec_output_info->topFieldFirst ? IMX_VPU_FIELD_TYPE_TOP_FIRST : IMX_VPU_FIELD_TYPE_BOTTOM_FIRST;
+		ImxVpuInterlacingMode result = dec_output_info->topFieldFirst ? IMX_VPU_INTERLACING_MODE_TOP_FIELD_FIRST : IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_FIRST;
 
 		if (codec_format == IMX_VPU_CODEC_FORMAT_H264)
 		{
 			switch (dec_output_info->h264Npf)
 			{
-				case 1: result = IMX_VPU_FIELD_TYPE_BOTTOM_ONLY; break;
-				case 2: result = IMX_VPU_FIELD_TYPE_TOP_ONLY; break;
+				case 1: result = IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_ONLY; break;
+				case 2: result = IMX_VPU_INTERLACING_MODE_TOP_FIELD_ONLY; break;
 				default: break;
 			}
 		}
@@ -427,7 +427,7 @@ ImxVpuFieldType convert_field_type(ImxVpuCodecFormat codec_format, DecOutputInfo
 		return result;
 	}
 	else
-		return IMX_VPU_FIELD_TYPE_NO_INTERLACING;
+		return IMX_VPU_INTERLACING_MODE_NO_INTERLACING;
 }
 
 
@@ -713,7 +713,7 @@ typedef struct
 {
 	void *context;
 	ImxVpuPicType pic_types[2];
-	ImxVpuFieldType field_type;
+	ImxVpuInterlacingMode interlacing_mode;
 	FrameMode mode;
 }
 ImxVpuDecFrameEntry;
@@ -832,7 +832,7 @@ static ImxVpuDecReturnCodes imx_vpu_dec_handle_error_full(char const *fn, int li
 
 		case RETCODE_INSUFFICIENT_FRAME_BUFFERS:
 			IMX_VPU_ERROR_FULL(fn, linenr, funcn, "%s: not enough frame buffers specified (must be equal to or larger than the minimum number reported by imx_vpu_dec_get_initial_info)", msg_start);
-			return IMX_VPU_DEC_RETURN_CODE_INVALID_PARAMS;
+			return IMX_VPU_DEC_RETURN_CODE_INSUFFICIENT_FRAMEBUFFERS;
 
 		case RETCODE_INVALID_STRIDE:
 			IMX_VPU_ERROR_FULL(fn, linenr, funcn, "%s: invalid stride - check Y stride values of framebuffers (must be a multiple of 8 and equal to or larger than the picture width)", msg_start);
@@ -864,13 +864,14 @@ static ImxVpuDecReturnCodes imx_vpu_dec_handle_error_full(char const *fn, int li
 
 		case RETCODE_FAILURE_TIMEOUT:
 			IMX_VPU_ERROR_FULL(fn, linenr, funcn, "%s: timeout", msg_start);
-			return IMX_VPU_DEC_RETURN_CODE_ERROR;
+			return IMX_VPU_DEC_RETURN_CODE_TIMEOUT;
 
 		case RETCODE_MEMORY_ACCESS_VIOLATION:
 			IMX_VPU_ERROR_FULL(fn, linenr, funcn, "%s: memory access violation", msg_start);
 			return IMX_VPU_DEC_RETURN_CODE_ERROR;
 
 		case RETCODE_JPEG_EOS:
+			/* NOTE: this returns OK on purpose - reaching the MJPEG EOS is not an error */
 			IMX_VPU_ERROR_FULL(fn, linenr, funcn, "%s: MJPEG end-of-stream reached", msg_start);
 			return IMX_VPU_DEC_RETURN_CODE_OK;
 
@@ -2140,7 +2141,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 
 			decoder->frame_entries[idx_decoded].context = encoded_frame->context;
 			decoder->frame_entries[idx_decoded].mode = FrameMode_ReservedForDecoding;
-			decoder->frame_entries[idx_decoded].field_type = convert_field_type(decoder->codec_format, &(decoder->dec_output_info));
+			decoder->frame_entries[idx_decoded].interlacing_mode = convert_interlacing_mode(decoder->codec_format, &(decoder->dec_output_info));
 
 			/* XXX: The VPU documentation seems to be incorrect about IDR types.
 			 * There is an undocumented idrFlg field which is also used by the
@@ -2225,7 +2226,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, Imx
 	 * to FALSE, since it contains a fully decoded and still undisplayed framebuffer */
 	decoded_picture->framebuffer = &(decoder->framebuffers[idx]);
 	decoded_picture->framebuffer->already_marked = FALSE;
-	decoded_picture->field_type = decoder->frame_entries[idx].field_type;
+	decoded_picture->interlacing_mode = decoder->frame_entries[idx].interlacing_mode;
 	decoded_picture->context = decoder->frame_entries[idx].context;
 	for (i = 0; i < 2; ++i)
 		decoded_picture->pic_types[i] = decoder->frame_entries[idx].pic_types[i];
@@ -2727,18 +2728,15 @@ void imx_vpu_enc_set_default_open_params(ImxVpuCodecFormat codec_format, ImxVpuE
 	open_params->bitrate = 100;
 	open_params->gop_size = 16;
 	open_params->color_format = IMX_VPU_COLOR_FORMAT_YUV420;
-	open_params->user_defined_min_qp = 0;
-	open_params->user_defined_max_qp = 0;
-	open_params->enable_user_defined_min_qp = 0;
-	open_params->enable_user_defined_max_qp = 0;
+	open_params->user_defined_min_qp = -1;
+	open_params->user_defined_max_qp = -1;
 	open_params->min_intra_refresh_mb_count = 0;
 	open_params->intra_qp = -1;
-	open_params->user_gamma = (int)(0.75*32768);
-	open_params->rate_interval_mode = IMX_VPU_ENC_RATE_INTERVAL_MODE_NORMAL;
+	open_params->qp_estimation_smoothness = (int)(0.75*32768);
+	open_params->rate_control_mode = IMX_VPU_ENC_RATE_CONTROL_MODE_NORMAL;
 	open_params->macroblock_interval = 0;
-	open_params->enable_avc_intra_16x16_only_mode = 0;
 	open_params->slice_mode.multiple_slices_per_picture = 0;
-	open_params->slice_mode.slice_size_mode = IMX_VPU_ENC_SLICE_SIZE_MODE_BITS;
+	open_params->slice_mode.slice_size_unit = IMX_VPU_ENC_SLICE_SIZE_UNIT_BITS;
 	open_params->slice_mode.slice_size = 4000;
 	open_params->initial_delay = 0;
 	open_params->vbv_buffer_size = 0;
@@ -2750,7 +2748,7 @@ void imx_vpu_enc_set_default_open_params(ImxVpuCodecFormat codec_format, ImxVpuE
 	switch (codec_format)
 	{
 		case IMX_VPU_CODEC_FORMAT_MPEG4:
-			open_params->codec_params.mpeg4_params.enable_data_partition = 0;
+			open_params->codec_params.mpeg4_params.enable_data_partitioning = 0;
 			open_params->codec_params.mpeg4_params.enable_reversible_vlc = 0;
 			open_params->codec_params.mpeg4_params.intra_dc_vlc_thr = 0;
 			open_params->codec_params.mpeg4_params.enable_hec = 0;
@@ -2836,22 +2834,35 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 	enc_open_param.vbvBufferSize = open_params->vbv_buffer_size;
 	enc_open_param.gopSize = open_params->gop_size;
 	enc_open_param.slicemode.sliceMode = open_params->slice_mode.multiple_slices_per_picture;
-	enc_open_param.slicemode.sliceSizeMode = open_params->slice_mode.slice_size_mode;
+	enc_open_param.slicemode.sliceSizeMode = open_params->slice_mode.slice_size_unit;
 	enc_open_param.slicemode.sliceSize = open_params->slice_mode.slice_size;
 	enc_open_param.intraRefresh = open_params->min_intra_refresh_mb_count;
 	enc_open_param.rcIntraQp = open_params->intra_qp;
-	enc_open_param.userQpMin = open_params->user_defined_min_qp;
-	enc_open_param.userQpMax = open_params->user_defined_max_qp;
-	enc_open_param.userQpMinEnable = open_params->enable_user_defined_min_qp;
-	enc_open_param.userQpMaxEnable = open_params->enable_user_defined_max_qp;
-	enc_open_param.userGamma = open_params->user_gamma;
-	enc_open_param.RcIntervalMode = open_params->rate_interval_mode;
+	enc_open_param.userGamma = open_params->qp_estimation_smoothness;
+	enc_open_param.RcIntervalMode = open_params->rate_control_mode;
 	enc_open_param.MbInterval = open_params->macroblock_interval;
-	enc_open_param.avcIntra16x16OnlyModeEnable = open_params->enable_avc_intra_16x16_only_mode;
 	enc_open_param.MESearchRange = open_params->me_search_range;
 	enc_open_param.MEUseZeroPmv = open_params->use_me_zero_pmv;
 	enc_open_param.IntraCostWeight = open_params->additional_intra_cost_weight;
 	enc_open_param.chromaInterleave = open_params->chroma_interleave;
+
+	/* The specification states that both values must be set if user defined
+	 * values are used, so disable both if both values are -1, and enable
+	 * both otherwise */
+	if ((open_params->user_defined_min_qp == -1) && (open_params->user_defined_max_qp == -1))
+	{
+		enc_open_param.userQpMinEnable = 0;
+		enc_open_param.userQpMaxEnable = 0;
+		enc_open_param.userQpMin = 0;
+		enc_open_param.userQpMax = 0;
+	}
+	else
+	{
+		enc_open_param.userQpMinEnable = 1;
+		enc_open_param.userQpMaxEnable = 1;
+		enc_open_param.userQpMin = open_params->user_defined_min_qp;
+		enc_open_param.userQpMax = open_params->user_defined_max_qp;
+	}
 
 	/* Reports are currently not used */
 	enc_open_param.sliceReport = 0;
@@ -2874,7 +2885,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_open(ImxVpuEncoder **encoder, ImxVpuEncOpenPara
 	{
 		case IMX_VPU_CODEC_FORMAT_MPEG4:
 			enc_open_param.bitstreamFormat = STD_MPEG4;
-			enc_open_param.EncStdParam.mp4Param.mp4_dataPartitionEnable = open_params->codec_params.mpeg4_params.enable_data_partition;
+			enc_open_param.EncStdParam.mp4Param.mp4_dataPartitionEnable = open_params->codec_params.mpeg4_params.enable_data_partitioning;
 			enc_open_param.EncStdParam.mp4Param.mp4_reversibleVlcEnable = open_params->codec_params.mpeg4_params.enable_reversible_vlc;
 			enc_open_param.EncStdParam.mp4Param.mp4_intraDcVlcThr = open_params->codec_params.mpeg4_params.intra_dc_vlc_thr;
 			enc_open_param.EncStdParam.mp4Param.mp4_hecEnable = open_params->codec_params.mpeg4_params.enable_hec;
@@ -3000,7 +3011,8 @@ ImxVpuEncReturnCodes imx_vpu_enc_close(ImxVpuEncoder *encoder)
 	ImxVpuEncReturnCodes ret;
 	RetCode enc_ret;
 
-	assert(encoder != NULL);
+	if (encoder == NULL)
+		return IMX_VPU_ENC_RETURN_CODE_OK;
 
 	IMX_VPU_DEBUG("closing encoder");
 
@@ -3230,11 +3242,9 @@ void imx_vpu_enc_set_default_encoding_params(ImxVpuEncoder *encoder, ImxVpuEncPa
 
 	IMXVPUAPI_UNUSED_PARAM(encoder);
 
-	encoding_params->force_I_picture = 0;
+	encoding_params->force_I_frame = 0;
 	encoding_params->skip_picture = 0;
 	encoding_params->enable_autoskip = 0;
-
-	encoding_params->quant_param = 0;
 }
 
 
@@ -3344,7 +3354,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	memset(&enc_param, 0, sizeof(enc_param));
 
 	enc_param.sourceFrame = &source_framebuffer;
-	enc_param.forceIPicture = encoding_params->force_I_picture;
+	enc_param.forceIPicture = encoding_params->force_I_frame;
 	enc_param.skipPicture = encoding_params->skip_picture;
 	enc_param.quantParam = encoding_params->quant_param;
 	enc_param.enableAutoSkip = encoding_params->enable_autoskip;
@@ -3431,7 +3441,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 
 		case IMX_VPU_CODEC_FORMAT_H264:
 		case IMX_VPU_CODEC_FORMAT_MPEG4:
-			add_header = encoder->first_frame || encoding_params->force_I_picture || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_IDR) || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_I);
+			add_header = encoder->first_frame || encoding_params->force_I_frame || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_IDR) || (encoded_frame->pic_type == IMX_VPU_PIC_TYPE_I);
 			break;
 
 		default:
@@ -3461,10 +3471,10 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 		}
 	}
 
-	write_ptr_start = encoding_params->acquire_output_buffer(encoding_params->output_buffer_context, encoded_data_size);
+	write_ptr_start = encoding_params->acquire_output_buffer(encoding_params->output_buffer_context, encoded_data_size, &(encoded_frame->acquired_handle));
 	if (write_ptr_start == NULL)
 	{
-		IMX_VPU_ERROR("could not allocate %zu byte for encoded frame data", encoded_data_size);
+		IMX_VPU_ERROR("could not acquire buffer with %zu byte for encoded frame data", encoded_data_size);
 		ret = IMX_VPU_ENC_RETURN_CODE_ERROR;
 		goto finish;
 	}
@@ -3555,7 +3565,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 
 finish:
 	if (write_ptr_start != NULL)
-		encoding_params->finish_output_buffer(encoding_params->output_buffer_context);
+		encoding_params->finish_output_buffer(encoding_params->output_buffer_context, encoded_frame->acquired_handle);
 
 	return ret;
 

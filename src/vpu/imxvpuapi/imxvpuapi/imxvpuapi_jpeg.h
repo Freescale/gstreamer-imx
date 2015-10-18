@@ -85,12 +85,12 @@ ImxVpuDecReturnCodes imx_vpu_jpeg_dec_close(ImxVpuJPEGDecoder *jpeg_decoder);
  *
  * For simple decoding schemes where one frame is decoded, then displayed or
  * consumed in any other way, and then returned to the decoder by calling
- * @imx_vpu_jpeg_dec_picture_finished, this function does not have to be used,
+ * imx_vpu_jpeg_dec_picture_finished(), this function does not have to be used,
  * since in this case, there will always be enough free framebuffers.
  * If however the consumption of the decoded frame occurs in a different thread
  * than the decoding, it makes sense to use this function. Also, in this case,
  * this function is more likely to return 1 the more extra framebuffers were
- * requested in the @imx_vpu_jpeg_dec_open call.
+ * requested in the imx_vpu_jpeg_dec_open() call.
  */
 int imx_vpu_jpeg_dec_can_decode(ImxVpuJPEGDecoder *jpeg_decoder);
 
@@ -107,14 +107,14 @@ int imx_vpu_jpeg_dec_can_decode(ImxVpuJPEGDecoder *jpeg_decoder);
  * Note that the return value can be IMX_VPU_DEC_RETURN_CODE_OK even though
  * no picture was returned. This is the case when not enough free framebuffers
  * are present. It is recommended to check the return value of the
- * @imx_vpu_jpeg_dec_can_decode function before calling this, unless the decoding
- * sequence is simple (like in the example mentioned in the @imx_vpu_jpeg_dec_can_decode
+ * imx_vpu_jpeg_dec_can_decode() function before calling this, unless the decoding
+ * sequence is simple (like in the example mentioned in the imx_vpu_jpeg_dec_can_decode()
  * description). */
 ImxVpuDecReturnCodes imx_vpu_jpeg_dec_decode(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuEncodedFrame *encoded_frame, ImxVpuPicture *picture);
 
 /* Retrieves information about the decoded JPEG picture.
  *
- * This function must not be called before @imx_vpu_jpeg_dec_decode , since otherwise,
+ * This function must not be called before imx_vpu_jpeg_dec_decode() , since otherwise,
  * there is no information available (it is read in the decoding step). */
 void imx_vpu_jpeg_dec_get_info(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuJPEGInfo *info);
 
