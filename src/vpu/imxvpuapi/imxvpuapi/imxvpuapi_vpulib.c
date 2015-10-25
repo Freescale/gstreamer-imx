@@ -1509,10 +1509,7 @@ static void imx_vpu_dec_insert_vc1_frame_layer_header(uint8_t *header, uint8_t *
 
 static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *decoder, uint8_t const *codec_data, size_t codec_data_size, uint8_t *main_data, size_t main_data_size)
 {
-	BOOL can_push_codec_data;
 	ImxVpuDecReturnCodes ret = IMX_VPU_DEC_RETURN_CODE_OK;
-
-	can_push_codec_data = (!(decoder->main_header_pushed) && (codec_data != NULL) && (codec_data_size > 0));
 
 	switch (decoder->codec_format)
 	{
@@ -1530,6 +1527,12 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 			else
 			{
 				uint8_t header[WMV3_RCV_SEQUENCE_LAYER_SIZE];
+
+				if (codec_data == NULL)
+				{
+					IMX_VPU_ERROR("WMV3 input expects codec data, but none has been set");
+					return IMX_VPU_DEC_RETURN_CODE_INVALID_PARAMS;
+				}
 
 				if (codec_data_size < 4)
 				{
@@ -1549,6 +1552,18 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 		{
 			if (!(decoder->main_header_pushed))
 			{
+				if (codec_data == NULL)
+				{
+					IMX_VPU_ERROR("WVC1 input expects codec data, but none has been set");
+					return IMX_VPU_DEC_RETURN_CODE_INVALID_PARAMS;
+				}
+
+				if (codec_data_size == 0)
+				{
+					IMX_VPU_ERROR("WVC1 input expects codec data with nonzero length");
+					return IMX_VPU_DEC_RETURN_CODE_INVALID_PARAMS;
+				}
+
 				/* First, push the codec_data (except for its first byte,
 				 * which contains the size of the codec data), since it
 				 * contains the sequence layer header */
@@ -1583,9 +1598,9 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 		case IMX_VPU_CODEC_FORMAT_VP8:
 		{
 			/* VP8 does not need out-of-band codec data. However, some headers
-			 * need to be inserted to contain it in an IVF stream, which the VPU needs. */
-			// XXX the vpu wrapper has a special mode for "raw VP8 data". What is this?
-			// Perhaps it means raw IVF-contained VP8?
+			 * need to be inserted to contain it in an IVF stream, which the VPU needs.
+			 * XXX the vpu wrapper has a special mode for "raw VP8 data". What is this?
+			 * Perhaps it means raw IVF-contained VP8? */
 
 			uint8_t header[VP8_SEQUENCE_HEADER_SIZE + VP8_FRAME_HEADER_SIZE];
 			size_t header_size = 0;
@@ -1594,6 +1609,7 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 			{
 				imx_vpu_dec_insert_vp8_ivf_frame_header(&(header[0]), main_data_size, 0);
 				header_size = VP8_FRAME_HEADER_SIZE;
+				IMX_VPU_LOG("pushing VP8 IVF frame header data with %zu byte", header_size);
 			}
 			else
 			{
@@ -1601,6 +1617,7 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 				imx_vpu_dec_insert_vp8_ivf_frame_header(&(header[VP8_SEQUENCE_HEADER_SIZE]), main_data_size, 0);
 				header_size = VP8_SEQUENCE_HEADER_SIZE + VP8_FRAME_HEADER_SIZE;
 				decoder->main_header_pushed = TRUE;
+				IMX_VPU_LOG("pushing VP8 IVF main and frame header data with %zu byte total", header_size);
 			}
 
 			if (header_size != 0)
@@ -1610,11 +1627,15 @@ static ImxVpuDecReturnCodes imx_vpu_dec_insert_frame_headers(ImxVpuDecoder *deco
 		}
 
 		default:
-			if (can_push_codec_data)
+		{
+			if (!(decoder->main_header_pushed) && (codec_data != NULL) && (codec_data_size > 0))
 			{
+				IMX_VPU_LOG("pushing codec data with %zu byte", codec_data_size);
+
 				ret = imx_vpu_dec_push_input_data(decoder, codec_data, codec_data_size);
 				decoder->main_header_pushed = TRUE;
 			}
+		}
 	}
 
 	return ret;
