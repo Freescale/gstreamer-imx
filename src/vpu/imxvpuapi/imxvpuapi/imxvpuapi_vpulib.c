@@ -2117,6 +2117,21 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			decoder->dec_output_info.indexFrameDisplay = jpeg_frame_idx;
 		}
 
+		/* Check if there were enough output framebuffers */
+		if (decoder->dec_output_info.indexFrameDecoded == VPU_DECODER_DECODEIDX_ALL_FRAMES_DECODED)
+		{
+			IMX_VPU_DEBUG("not enough output framebuffers were available");
+			*output_code |= IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_OUTPUT_FRAMES;
+		}
+
+		/* Check if decoding was incomplete (first bit is then 0, fourth bit 1).
+		 * Incomplete decoding indicates incomplete input data. */
+		if (decoder->dec_output_info.decodingSuccess & 0x10)
+		{
+			IMX_VPU_DEBUG("not enough input data was available");
+			*output_code = IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_INPUT_DATA;
+		}
+
 		/* Report dropped frames */
 		if (
 		  (((*output_code) & IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_INPUT_DATA) == 0) &&
