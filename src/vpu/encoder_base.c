@@ -175,9 +175,9 @@ static void gst_imx_vpu_encoder_base_init(GstImxVpuEncoderBase *vpu_encoder_base
 	vpu_encoder_base->internal_input_bufferpool = NULL;
 	vpu_encoder_base->internal_input_buffer = NULL;
 
-	memset(&(vpu_encoder_base->input_picture), 0, sizeof(ImxVpuPicture));
+	memset(&(vpu_encoder_base->input_frame), 0, sizeof(ImxVpuRawFrame));
 	imx_vpu_init_wrapped_dma_buffer(&(vpu_encoder_base->input_dmabuffer));
-	vpu_encoder_base->input_picture.framebuffer = &(vpu_encoder_base->input_framebuffer);
+	vpu_encoder_base->input_frame.framebuffer = &(vpu_encoder_base->input_framebuffer);
 	vpu_encoder_base->input_framebuffer.dma_buffer = (ImxVpuDMABuffer *)(&(vpu_encoder_base->input_dmabuffer));
 
 	vpu_encoder_base->framebuffer_array = NULL;
@@ -371,7 +371,7 @@ static gboolean gst_imx_vpu_encoder_base_set_format(GstVideoEncoder *encoder, Gs
 
 	if (vpu_encoder_base->slice_size != 0)
 	{
-		vpu_encoder_base->open_params.slice_mode.multiple_slices_per_picture = 1;
+		vpu_encoder_base->open_params.slice_mode.multiple_slices_per_frame = 1;
 
 		if (vpu_encoder_base->slice_size < 0)
 		{
@@ -652,7 +652,7 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 
 		/* The actual encoding call */
 		memset(&encoded_data_frame, 0, sizeof(ImxVpuEncodedFrame));
-		enc_ret = imx_vpu_enc_encode(vpu_encoder_base->encoder, &(vpu_encoder_base->input_picture), &encoded_data_frame, &enc_params, &output_code);
+		enc_ret = imx_vpu_enc_encode(vpu_encoder_base->encoder, &(vpu_encoder_base->input_frame), &encoded_data_frame, &enc_params, &output_code);
 		if (enc_ret != IMX_VPU_ENC_RETURN_CODE_OK)
 		{
 			GST_ERROR_OBJECT(vpu_encoder_base, "failed to encode frame: %s", imx_vpu_enc_error_string(enc_ret));

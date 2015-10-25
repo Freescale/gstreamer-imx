@@ -60,17 +60,17 @@ static int convert_to_wrapper_color_format(ImxVpuColorFormat format)
 }
 
 
-static ImxVpuPicType convert_from_wrapper_pic_type(VpuPicType type)
+static ImxVpuFrameType convert_from_wrapper_pic_type(VpuPicType type)
 {
 	switch (type)
 	{
-		case VPU_I_PIC:    return IMX_VPU_PIC_TYPE_I;
-		case VPU_P_PIC:    return IMX_VPU_PIC_TYPE_P;
-		case VPU_B_PIC:    return IMX_VPU_PIC_TYPE_B;
-		case VPU_IDR_PIC:  return IMX_VPU_PIC_TYPE_IDR;
-		case VPU_BI_PIC:   return IMX_VPU_PIC_TYPE_BI;
-		case VPU_SKIP_PIC: return IMX_VPU_PIC_TYPE_SKIP;
-		default: return IMX_VPU_PIC_TYPE_UNKNOWN;
+		case VPU_I_PIC:    return IMX_VPU_FRAME_TYPE_I;
+		case VPU_P_PIC:    return IMX_VPU_FRAME_TYPE_P;
+		case VPU_B_PIC:    return IMX_VPU_FRAME_TYPE_B;
+		case VPU_IDR_PIC:  return IMX_VPU_FRAME_TYPE_IDR;
+		case VPU_BI_PIC:   return IMX_VPU_FRAME_TYPE_BI;
+		case VPU_SKIP_PIC: return IMX_VPU_FRAME_TYPE_SKIP;
+		default: return IMX_VPU_FRAME_TYPE_UNKNOWN;
 	}
 }
 
@@ -373,6 +373,9 @@ struct _ImxVpuDecoder
 
 	ImxVpuDMABuffer *bitstream_buffer;
 
+	uint8_t const *codec_data;
+	size_t codec_data_size;
+
 	ImxVpuCodecFormat codec_format;
 
 	unsigned int num_framebuffers;
@@ -423,7 +426,7 @@ static unsigned int dec_convert_outcode(VpuDecBufRetCode code)
 	unsigned int out = 0;
 	if (code & VPU_DEC_INPUT_USED)         out |= IMX_VPU_DEC_OUTPUT_CODE_INPUT_USED;
 	if (code & VPU_DEC_OUTPUT_EOS)         out |= IMX_VPU_DEC_OUTPUT_CODE_EOS;
-	if (code & VPU_DEC_OUTPUT_DIS)         out |= IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE;
+	if (code & VPU_DEC_OUTPUT_DIS)         out |= IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE;
 	if (code & VPU_DEC_OUTPUT_DROPPED)     out |= IMX_VPU_DEC_OUTPUT_CODE_DROPPED;
 	if (code & VPU_DEC_OUTPUT_MOSAIC_DIS)  out |= IMX_VPU_DEC_OUTPUT_CODE_DROPPED; /* mosaic frames are dropped */
 	if (code & VPU_DEC_NO_ENOUGH_BUF)      out |= IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_OUTPUT_FRAMES;
@@ -962,7 +965,14 @@ ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, I
 }
 
 
-ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFrame *encoded_frame, unsigned int *output_code)
+void imx_vpu_dec_set_codec_data(ImxVpuDecoder *decoder, uint8_t const *codec_data, size_t codec_data_size)
+{
+	decoder->codec_data = codec_data;
+	decoder->codec_data_size = codec_data_size;
+}
+
+
+ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFrame const *encoded_frame, unsigned int *output_code)
 {
 	VpuDecRetCode ret;
 	VpuBufferNode node;
@@ -977,8 +987,8 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 	node.pPhyAddr = 0; /* encoded data is always read from a regular memory block, not a DMA buffer */
 	node.nSize = encoded_frame->data_size;
 
-	node.sCodecData.pData = encoded_frame->codec_data;
-	node.sCodecData.nSize = encoded_frame->codec_data_size;
+	node.sCodecData.pData = (void *)(decoder->codec_data);
+	node.sCodecData.nSize = decoder->codec_data_size;
 
 	decoder->pending_context = encoded_frame->context;
 
@@ -1212,21 +1222,21 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		/* mosaic frames do not seem to be useful for anything, so they are just dropped here */
 
 		ImxVpuDecReturnCodes imxret;
-		ImxVpuPicture decoded_picture;
+		ImxVpuRawFrame decoded_frame;
 
-		if ((imxret = imx_vpu_dec_get_decoded_picture(decoder, &decoded_picture)) != IMX_VPU_DEC_RETURN_CODE_OK)
+		if ((imxret = imx_vpu_dec_get_decoded_frame(decoder, &decoded_frame)) != IMX_VPU_DEC_RETURN_CODE_OK)
 		{
 			IMX_VPU_ERROR("error getting output mosaic frame: %s", imx_vpu_dec_error_string(imxret));
 			return imxret;
 		}
 
-		if ((imxret = imx_vpu_dec_mark_framebuffer_as_displayed(decoder, decoded_picture.framebuffer)) != IMX_VPU_DEC_RETURN_CODE_OK)
+		if ((imxret = imx_vpu_dec_mark_framebuffer_as_displayed(decoder, decoded_frame.framebuffer)) != IMX_VPU_DEC_RETURN_CODE_OK)
 		{
 			IMX_VPU_ERROR("error marking mosaic frame as displayed: %s", imx_vpu_dec_error_string(imxret));
 			return imxret;
 		}
 
-		decoder->dropped_frame_context = decoded_picture.context;
+		decoder->dropped_frame_context = decoded_frame.context;
 
 		*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DROPPED;
 	}
@@ -1258,7 +1268,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 }
 
 
-ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, ImxVpuPicture *decoded_picture)
+ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVpuRawFrame *decoded_frame)
 {
 	VpuDecRetCode ret;
 	VpuDecOutFrameInfo out_frame_info;
@@ -1266,7 +1276,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, Imx
 	void *context;
 
 	assert(decoder != NULL);
-	assert(decoded_picture != NULL);
+	assert(decoded_frame != NULL);
 
 	ret = VPU_DecGetOutputFrame(decoder->handle, &out_frame_info);
 	if (ret != VPU_DEC_RET_SUCCESS)
@@ -1302,20 +1312,20 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, Imx
 		}
 	}
 
-	decoded_picture->pic_types[0] = decoded_picture->pic_types[1] = convert_from_wrapper_pic_type(out_frame_info.ePicType);
-	decoded_picture->interlacing_mode = convert_from_wrapper_field_type(out_frame_info.eFieldType);
-	decoded_picture->context = context;
+	decoded_frame->frame_types[0] = decoded_frame->frame_types[1] = convert_from_wrapper_pic_type(out_frame_info.ePicType);
+	decoded_frame->interlacing_mode = convert_from_wrapper_field_type(out_frame_info.eFieldType);
+	decoded_frame->context = context;
 
 	/* XXX
 	 * This association assumes that the order of internal framebuffer entries
 	 * inside the VPU wrapper is the same as the order of the framebuffers here.
 	 * So, decoder->framebuffers[1] equals internal framebuffer entry with index 1 etc.
 	 */
-	decoded_picture->framebuffer = &(decoder->framebuffers[fb_index]);
+	decoded_frame->framebuffer = &(decoder->framebuffers[fb_index]);
 	/* This is used in imx_vpu_dec_mark_framebuffer_as_displayed() to be able
 	 * to mark the vpuwrapper framebuffer as displayed */
-	decoded_picture->framebuffer->internal = out_frame_info.pDisplayFrameBuf;
-	decoded_picture->framebuffer->already_marked = FALSE;
+	decoded_frame->framebuffer->internal = out_frame_info.pDisplayFrameBuf;
+	decoded_frame->framebuffer->already_marked = FALSE;
 
 	decoder->num_framebuffers_in_use++;
 
@@ -1465,7 +1475,7 @@ static int enc_convert_to_wrapper_open_param(ImxVpuEncOpenParams *open_params, V
 	wrapper_open_param->nRcIntervalMode = open_params->rate_control_mode;
 	wrapper_open_param->nMbInterval = open_params->macroblock_interval;
 
-	wrapper_open_param->sliceMode.sliceMode = open_params->slice_mode.multiple_slices_per_picture;
+	wrapper_open_param->sliceMode.sliceMode = open_params->slice_mode.multiple_slices_per_frame;
 	wrapper_open_param->sliceMode.sliceSizeMode = open_params->slice_mode.slice_size_unit;
 	wrapper_open_param->sliceMode.sliceSize = open_params->slice_mode.slice_size;
 
@@ -1666,7 +1676,7 @@ void imx_vpu_enc_set_default_open_params(ImxVpuCodecFormat codec_format, ImxVpuE
 	open_params->qp_estimation_smoothness = (int)(0.75*32768);
 	open_params->rate_control_mode = IMX_VPU_ENC_RATE_CONTROL_MODE_NORMAL;
 	open_params->macroblock_interval = 0;
-	open_params->slice_mode.multiple_slices_per_picture = 0;
+	open_params->slice_mode.multiple_slices_per_frame = 0;
 	open_params->slice_mode.slice_size_unit = IMX_VPU_ENC_SLICE_SIZE_UNIT_BITS;
 	open_params->slice_mode.slice_size = 4000;
 	open_params->initial_delay = 0;
@@ -1969,7 +1979,7 @@ void imx_vpu_enc_set_default_encoding_params(ImxVpuEncoder *encoder, ImxVpuEncPa
 	IMXVPUAPI_UNUSED_PARAM(encoder);
 
 	encoding_params->force_I_frame = 0;
-	encoding_params->skip_picture = 0;
+	encoding_params->skip_frame = 0;
 	encoding_params->enable_autoskip = 0;
 }
 
@@ -2003,12 +2013,12 @@ void imx_vpu_enc_configure_intra_qp(ImxVpuEncoder *encoder, int intra_qp)
 }
 
 
-ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *picture, ImxVpuEncodedFrame *encoded_frame, ImxVpuEncParams *encoding_params, unsigned int *output_code)
+ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuRawFrame const *raw_frame, ImxVpuEncodedFrame *encoded_frame, ImxVpuEncParams *encoding_params,  unsigned int *output_code)
 {
 	VpuEncRetCode ret;
 	VpuEncEncParam enc_enc_param;
 	VpuFrameBuffer in_framebuffer;
-	imx_vpu_phys_addr_t picture_phys_addr;
+	imx_vpu_phys_addr_t raw_frame_phys_addr;
 	uint8_t *write_ptr;
 	void *output_buffer_ptr;
 	size_t encoded_data_size;
@@ -2018,16 +2028,16 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	assert(encoding_params != NULL);
 	assert(output_code != NULL);
 
-	picture_phys_addr = imx_vpu_dma_buffer_get_physical_address(picture->framebuffer->dma_buffer);
+	raw_frame_phys_addr = imx_vpu_dma_buffer_get_physical_address(raw_frame->framebuffer->dma_buffer);
 
 	memset(&enc_enc_param, 0, sizeof(enc_enc_param));
 
-	in_framebuffer.nStrideY = picture->framebuffer->y_stride;
-	in_framebuffer.nStrideC = picture->framebuffer->cbcr_stride;
-	in_framebuffer.pbufY = (unsigned char*)(picture_phys_addr + picture->framebuffer->y_offset);
-	in_framebuffer.pbufCb = (unsigned char*)(picture_phys_addr + picture->framebuffer->cb_offset);
-	in_framebuffer.pbufCr = (unsigned char*)(picture_phys_addr + picture->framebuffer->cr_offset);
-	in_framebuffer.pbufMvCol = (unsigned char*)(picture_phys_addr + picture->framebuffer->mvcol_offset);
+	in_framebuffer.nStrideY = raw_frame->framebuffer->y_stride;
+	in_framebuffer.nStrideC = raw_frame->framebuffer->cbcr_stride;
+	in_framebuffer.pbufY = (unsigned char*)(raw_frame_phys_addr + raw_frame->framebuffer->y_offset);
+	in_framebuffer.pbufCb = (unsigned char*)(raw_frame_phys_addr + raw_frame->framebuffer->cb_offset);
+	in_framebuffer.pbufCr = (unsigned char*)(raw_frame_phys_addr + raw_frame->framebuffer->cr_offset);
+	in_framebuffer.pbufMvCol = (unsigned char*)(raw_frame_phys_addr + raw_frame->framebuffer->mvcol_offset);
 
 	enc_enc_param.eFormat = convert_to_wrapper_codec_std(encoder->codec_format);
 	enc_enc_param.nPicWidth = encoder->frame_width;
@@ -2041,7 +2051,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	enc_enc_param.nInPhyOutput = 0; /* This is not used by the VPU wrapper on i.MX6 SoCs */
 
 	enc_enc_param.nForceIPicture = encoding_params->force_I_frame;
-	enc_enc_param.nSkipPicture = encoding_params->skip_picture;
+	enc_enc_param.nSkipPicture = encoding_params->skip_frame;
 	enc_enc_param.nEnableAutoSkip = encoding_params->enable_autoskip;
 
 	enc_enc_param.pInFrame = &in_framebuffer;
@@ -2111,7 +2121,7 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *p
 	 * or reordering, this is appropriate, because in that
 	 * case, one input frame always immediately leads to
 	 * one output frame */
-	encoded_frame->context = picture->context;
+	encoded_frame->context = raw_frame->context;
 
 	return IMX_VPU_DEC_RETURN_CODE_OK;
 }

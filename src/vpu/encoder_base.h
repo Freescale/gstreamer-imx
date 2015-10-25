@@ -76,7 +76,7 @@ struct _GstImxVpuEncoderBase
 	/* Structures for incoming data. These are needed for providing
 	 * the imxvpuapi encoder functions with input. They are used
 	 * even if upstream delivers DMA buffers. */
-	ImxVpuPicture input_picture;
+	ImxVpuRawFrame input_frame;
 	ImxVpuFramebuffer input_framebuffer;
 	ImxVpuWrappedDMABuffer input_dmabuffer;
 

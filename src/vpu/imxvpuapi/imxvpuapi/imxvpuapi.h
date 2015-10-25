@@ -1,5 +1,5 @@
 /* imxvpuapi API library for the Freescale i.MX SoC
- * Copyright (C) 2014 Carlos Rafael Giani
+ * Copyright (C) 2015 Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -246,31 +246,31 @@ void imx_vpu_set_logging_function(ImxVpuLoggingFunc logging_fn);
 /******************************************************/
 
 
-/* Picture types understood by the VPU. Note that no codec format
+/* Frame types understood by the VPU. Note that no codec format
  * supports all of these types. */
 typedef enum
 {
-	/* Unknown picture type */
-	IMX_VPU_PIC_TYPE_UNKNOWN = 0,
-	/* Picture is an I (= intra) frame. These can be used as keyframes / sync points.
+	/* Unknown frame type */
+	IMX_VPU_FRAME_TYPE_UNKNOWN = 0,
+	/* Frame is an I (= intra) frame. These can be used as keyframes / sync points.
 	 * All codec formats support this one. With MJPEG, all frames are I frames. */
-	IMX_VPU_PIC_TYPE_I,
-	/* Picture is n P (= predicted) frame. All codec formats except MJPEG
+	IMX_VPU_FRAME_TYPE_I,
+	/* Frame is n P (= predicted) frame. All codec formats except MJPEG
 	 * support these frames. */
-	IMX_VPU_PIC_TYPE_P,
-	/* Picture is n B (= bidirectionally predicted) frame. Out of the list of codec
+	IMX_VPU_FRAME_TYPE_P,
+	/* Frame is n B (= bidirectionally predicted) frame. Out of the list of codec
 	 * formats the VPU can decode, h.264, MPEG-2, MPEG-4, and VC-1 support these. */
-	IMX_VPU_PIC_TYPE_B,
-	/* Picture is n IDR frame. These are h.264 specific frames, and can be used as
+	IMX_VPU_FRAME_TYPE_B,
+	/* Frame is n IDR frame. These are h.264 specific frames, and can be used as
 	 * key frames / sync points. */
-	IMX_VPU_PIC_TYPE_IDR,
-	/* Picture is a B frame (see above), but all of its macroblocks are intra coded.
+	IMX_VPU_FRAME_TYPE_IDR,
+	/* Frame is a B frame (see above), but all of its macroblocks are intra coded.
 	 * VC-1 specific. Cannot be used as a keyframe / sync point. */
-	IMX_VPU_PIC_TYPE_BI,
-	/* Picture was skipped. TODO: is this necessary? */
-	IMX_VPU_PIC_TYPE_SKIP
+	IMX_VPU_FRAME_TYPE_BI,
+	/* Frame was skipped. TODO: is this necessary? */
+	IMX_VPU_FRAME_TYPE_SKIP
 }
-ImxVpuPicType;
+ImxVpuFrameType;
 
 
 /* Valid interlacing modes. When interlacing is used, each frame is made of one or
@@ -289,7 +289,7 @@ typedef enum
 {
 	/* Unknown interlacing mode */
 	IMX_VPU_INTERLACING_MODE_UNKNOWN = 0,
-	/* Picture is progressive; it does not use interlacing */
+	/* Frame is progressive; it does not use interlacing */
 	IMX_VPU_INTERLACING_MODE_NO_INTERLACING,
 	/* Top field (= odd rows) came first */
 	IMX_VPU_INTERLACING_MODE_TOP_FIELD_FIRST,
@@ -394,7 +394,7 @@ typedef enum
 ImxVpuColorFormat;
 
 
-/* Framebuffers are picture containers, and are used both for en- and decoding. */
+/* Framebuffers are frame containers, and are used both for en- and decoding. */
 typedef struct
 {
 	/* Stride of the Y and of the Cb&Cr components.
@@ -417,7 +417,7 @@ typedef struct
 
 	/* User-defined pointer. The library does not touch this value.
 	 * Not to be confused with the context fields of ImxVpuEncodedFrame
-	 * and ImxVpuPicture.
+	 * and ImxVpuRawFrame.
 	 * This can be used for example to identify which framebuffer out of
 	 * the initially allocated pool was used by the VPU to contain a frame.
 	 */
@@ -446,60 +446,48 @@ typedef struct
 	 * Not used by the encoder. */
 	size_t data_size;
 
-	/* Pointer to out-of-band codec/header data. If such data exists,
-	 * specify the pointer to the memory block containing the data,
-	 * as well as the size of the memory block (in bytes).
-	 * Set pointer and size for every encoded frame when decoding.
-	 * If no such data exists or is required, or if drain mode is enabled,
-	 * the pointer must be NULL, the size must be 0. Not used by the encoder. */
-	uint8_t *codec_data;
-	size_t codec_data_size;
-
-	/* Picture type (I, P, B, ..) of the encoded frame. Filled by the encoder.
+	/* Frame type (I, P, B, ..) of the encoded frame. Filled by the encoder.
 	 * Unused by the decoder. */
-	ImxVpuPicType pic_type;
+	ImxVpuFrameType frame_type;
 
 	/* Handle produced by the user-defined acquire_output_buffer function
 	 * during encoding. Not used by the decoder. */
 	void *acquired_handle;
 
 	/* User-defined pointer. The library does not touch this value.
-	 * This pointer and the one from the corresponding
-	 * picture will have the same value. The library will
-	 * pass then through.
-	 * It can be used to identify which picture is associated with
-	 * this encoded frame for example. */
+	 * This pointer and the one from the corresponding raw frame will have
+	 * the same value. The library will pass then through.
+	 * It can be used to identify which raw frame is associated with this
+	 * encoded frame for example. */
 	void *context;
 }
 ImxVpuEncodedFrame;
 
 
-/* Structure containing details about unencoded frames (also called "pictures"). */
+/* Structure containing details about raw, uncompressed frames. */
 typedef struct
 {
-	/* When decoding: pointer to the framebuffer containing the decoded picture.
-	 * When encoding: pointer to the framebuffer containing the picture to be encoded.
-	 * Must always be valid. */
+	/* When decoding: pointer to the framebuffer containing the decoded raw frame.
+	 * When encoding: pointer to the framebuffer containing the raw frame to encode. */
 	ImxVpuFramebuffer *framebuffer;
 
-	/* Picture types (I, P, B, ..) ; unused by the encoder
-	 * In case of interlaced content, the first picture type corresponds to the
+	/* Frame types (I, P, B, ..) ; unused by the encoder.
+	 * In case of interlaced content, the first frame type corresponds to the
 	 * first field, the second type to the second field. For progressive content,
 	 * both types are set to the same value. */
-	ImxVpuPicType pic_types[2];
+	ImxVpuFrameType frame_types[2];
 
 	/* Interlacing mode (top-first, bottom-first..); unused by the encoder */
 	ImxVpuInterlacingMode interlacing_mode;
 
 	/* User-defined pointer. The library does not touch this value.
-	 * This pointer and the one from the corresponding
-	 * encoded frame will have the same value. The library will
-	 * pass then through.
-	 * It can be used to identify which picture is associated with
-	 * this encoded frame for example. */
+	 * This pointer and the one from the corresponding encoded frame will have
+	 * the same value. The library will pass then through.
+	 * It can be used to identify which raw frame is associated with this
+	 * encoded frame for example. */
 	void *context;
 }
-ImxVpuPicture;
+ImxVpuRawFrame;
 
 
 /* Structure used together with imx_vpu_calc_framebuffer_sizes() */
@@ -543,8 +531,8 @@ void imx_vpu_fill_framebuffer_params(ImxVpuFramebuffer *framebuffer, ImxVpuFrame
 
 /* Returns a human-readable description of the given color format. Useful for logging. */
 char const *imx_vpu_color_format_string(ImxVpuColorFormat color_format);
-/* Returns a human-readable description of the given picture-type. Useful for logging. */
-char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type);
+/* Returns a human-readable description of the given frame type. Useful for logging. */
+char const *imx_vpu_frame_type_string(ImxVpuFrameType frame_type);
 
 
 
@@ -586,12 +574,12 @@ char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type);
  *    This should be the last action in the callback.
  * 10. Continue calling imx_vpu_dec_decode(). The data point in encoded_frame
  *     must not be NULL; also, the data_size value in encoded_frame must be > 0.
- *     If the IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE flag is set in the output code,
- *     call imx_vpu_dec_get_decoded_picture() with a pointer to an ImxVpuPicture instance
- *     which gets filled with information about the decoded picture. Once the decoded picture
+ *     If the IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE flag is set in the output code,
+ *     call imx_vpu_dec_get_decoded_frame() with a pointer to an ImxVpuRawFrame instance
+ *     which gets filled with information about the decoded frame. Once the decoded frame
  *     has been processed by the user, imx_vpu_dec_mark_framebuffer_as_displayed() must be
  *     called to let the decoder know that the framebuffer is available for storing new
- *     decoded pictures again.
+ *     decoded frames again.
  *     If IMX_VPU_DEC_OUTPUT_CODE_DROPPED is set, you can call
  *     imx_vpu_dec_get_dropped_frame_context() to retrieve the context field
  *     of the dropped frame. If IMX_VPU_DEC_OUTPUT_CODE_EOS is set, or if imx_vpu_dec_decode()
@@ -606,7 +594,7 @@ char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type);
  *     typically necessary when the data source reached its end, playback is finishing, and
  *     there is a delay of N frames at the beginning.
  *     After this call, continue calling imx_vpu_dec_decode() to retrieve the pending
- *     decoded pictures, but the data and the codec data pointers of encoded_frame
+ *     decoded frames, but the data and the codec data pointers of encoded_frame
  *     must be NULL.
  *     As in step 10, if IMX_VPU_DEC_OUTPUT_CODE_EOS is set, or if imx_vpu_dec_decode() returns
  *     a value other than IMX_VPU_DEC_RETURN_CODE_OK, stop playback and close the decoder.
@@ -691,10 +679,10 @@ typedef enum
 	 * imx_vpu_dec_enable_drain_mode() ).
 	 */
 	IMX_VPU_DEC_OUTPUT_CODE_EOS                          = (1UL << 1),
-	/* A fully decoded picture is now available, and can be retrieved
-	 * by calling imx_vpu_dec_get_decoded_picture(). */
-	IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE    = (1UL << 2),
-	/* A picture was dropped by the decoder. The dropped picture's
+	/* A fully decoded frame is now available, and can be retrieved
+	 * by calling imx_vpu_dec_get_decoded_frame(). */
+	IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE      = (1UL << 2),
+	/* A frame was dropped by the decoder. The dropped frame's
 	 * context value can be retrieved by calling
 	 * imx_vpu_dec_get_dropped_frame_context(). */
 	IMX_VPU_DEC_OUTPUT_CODE_DROPPED                      = (1UL << 3),
@@ -704,7 +692,7 @@ typedef enum
 	 * multithreaded environments. imx_vpu_dec_check_if_can_decode() is useful
 	 * to avoid this. Also see the guide above for more. */
 	IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_OUTPUT_FRAMES     = (1UL << 4),
-	/* Input data for a frame is incomplete. No decoded picture will
+	/* Input data for a frame is incomplete. No decoded frame will
 	 * be available until the input frame's data has been fully and
 	 * correctly delivered. */
 	IMX_VPU_DEC_OUTPUT_CODE_NOT_ENOUGH_INPUT_DATA        = (1UL << 5),
@@ -717,6 +705,7 @@ typedef enum
 	 * has parsers that detect resolution changes on its own, chances are,
 	 * this output code is never encountered, because in these frameworks,
 	 * the decoder is reopened with the updated resolution instead. */
+	// TODO: add this to vpulib backend
 	IMX_VPU_DEC_OUTPUT_CODE_RESOLUTION_CHANGED           = (1UL << 6)
 }
 ImxVpuDecOutputCodes;
@@ -851,20 +840,27 @@ ImxVpuDecReturnCodes imx_vpu_dec_flush(ImxVpuDecoder *decoder);
  * stride values. */
 ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, ImxVpuFramebuffer *framebuffers, unsigned int num_framebuffers);
 
+/* If codec_data is non-NULL, it points to read out-of-band codec/header data the decoder can use in the
+ * imx_vpu_dec_decode() call. codec_data_size is the size of this data, in bytes. Note that the data is not
+ * guaranteed to be copied, so the given memory region must remain valid at least until after the subsequent
+ * imx_vpu_dec_decode() call. If codec_data is NULL, then no out-of-band codec/header data is used. */
+void imx_vpu_dec_set_codec_data(ImxVpuDecoder *decoder, uint8_t const *codec_data, size_t codec_data_size);
+
 /* Decodes an encoded input frame. "encoded_frame" must always be set, even in drain mode. See ImxVpuEncodedFrame
  * for details about its contents. output_code is a bit mask, must not be NULL, and returns important information
- * about the decoding process. The value is a bitwise OR combination of the codes in ImxVpuDecOutputCodes. */
-ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFrame *encoded_frame, unsigned int *output_code);
+ * about the decoding process. The value is a bitwise OR combination of the codes in ImxVpuDecOutputCodes. Also
+ * look at imx_vpu_dec_get_decoded_frame() about how to retrieve decoded frames (if these exist). */
+ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFrame const *encoded_frame, unsigned int *output_code);
 
-/* Retrieves a decoded picture. The structure referred to by "decoded_picture" will be filled with data about
- * the decoded picture. "decoded_picture" must not be NULL.
+/* Retrieves a decoded frame. The structure referred to by "decoded_frame" will be filled with data about
+ * the decoded frame. "decoded_frame" must not be NULL.
  *
  * CAUTION: This function must not be called before imx_vpu_dec_decode(), and even then, only if the output code
- * has the IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE flag set. Otherwise, undefined behavior happens.
+ * has the IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE flag set. Otherwise, undefined behavior happens.
  * If the flag is set, this function must not be called more than once. Again, doing so causes undefined
  * behavior. Only after another imx_vpu_dec_decode() call (again, with the flag set) it is valid to
  * call this function again. */
-ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_picture(ImxVpuDecoder *decoder, ImxVpuPicture *decoded_picture);
+ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVpuRawFrame *decoded_frame);
 
 /* Retrieves the context of the dropped frame. This is useful to be able to identify which input frame
  * was dropped. Media frameworks may require this to properly keep track of timestamping.
@@ -880,8 +876,8 @@ void* imx_vpu_dec_get_dropped_frame_context(ImxVpuDecoder *decoder);
  * decoding can be done again. See the explanation above for details. */
 int imx_vpu_dec_check_if_can_decode(ImxVpuDecoder *decoder);
 
-/* Marks a framebuffer as displayed. This always needs to be called once the application is done with the decoded
- * picture. It returns the framebuffer to the VPU pool so it can be reused for further decoding. Not calling
+/* Marks a framebuffer as displayed. This always needs to be called once the application is done with a decoded
+ * frame. It returns the framebuffer to the VPU pool so it can be reused for further decoding. Not calling
  * this will eventually cause the decoder to fail, because it won't find any free framebuffer for storing
  * a decoded frame anymore.
  *
@@ -926,7 +922,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_mark_framebuffer_as_displayed(ImxVpuDecoder *de
  *     Set its size to an appropriate value.
  *     Typically, using the same size as the input buffer is enough, since the whole point of
  *     encoding is to produce encoded frames that are much smaller than the original ones.
- * 11. Create an instance of ImxVpuPicture, set its values to zero (typically by using memset()),
+ * 11. Create an instance of ImxVpuRawFrame, set its values to zero (typically by using memset()),
  *     and set its framebuffer pointer to refer to the DMA buffer allocated in step 9.
  * 12. Create an instance of ImxVpuEncodedFrame. Set its values to zero (typically by using memset()).
  *     Set its data pointer to refer to the memory block allocated in step 10, and data_size to
@@ -1000,9 +996,9 @@ ImxVpuEncReturnCodes;
  * imx_vpu_enc_encode() by using a bitwise AND. */
 typedef enum
 {
-	/* Input data was used. If this code is present, the input picture
+	/* Input data was used. If this code is present, the input frame
 	 * that was given to the imx_vpu_dec_encode() must not be given
-	 * to a following imx_vpu_dec_encode() call; instead, a new picture
+	 * to a following imx_vpu_dec_encode() call; instead, a new frame
 	 * should be loaded. If this code is not present, then the encoder
 	 * didn't use it yet, so give it to the encoder again until this
 	 * code is set or an error is returned. */
@@ -1062,16 +1058,16 @@ ImxVpuEncMESearchRanges;
 /* Slice mode information to be used when opening an encoder instance. */
 typedef struct
 {
-	/* If this is 1, multiple sizes are produced per picture. If it is 0,
-	 * one slice per picture is used. Default value is 0. */
-	int multiple_slices_per_picture;
-	/* If multiple_slices_per_picture is 1, this specifies the unit
-	 * for the slice_size value. if multiple_slices_per_picture is 0,
+	/* If this is 1, multiple sizes are produced per frame. If it is 0,
+	 * one slice per frame is used. Default value is 0. */
+	int multiple_slices_per_frame;
+	/* If multiple_slices_per_frame is 1, this specifies the unit
+	 * for the slice_size value. if multiple_slices_per_frame is 0,
 	 * this value is ignored. Default value is IMX_VPU_ENC_SLICE_SIZE_UNIT_BITS. */
 	ImxVpuEncSliceSizeUnits slice_size_unit;
-	/* If multiple_slices_per_picture is 1, this specifies the size of
+	/* If multiple_slices_per_frame is 1, this specifies the size of
 	 * a slice, in units specified by slice_size_unit. If
-	 * multiple_slices_per_picture is 0, this value is ignored. Default
+	 * multiple_slices_per_frame is 0, this value is ignored. Default
 	 * vlaue is 4000. */
 	unsigned int slice_size;
 }
@@ -1317,14 +1313,14 @@ typedef struct
 	/* If set to 1, this forces the encoder to produce an I frame.
 	 * 0 disables this. Default value is 0. */
 	int force_I_frame;
-	/* If set to 1, the VPU ignores the given source picture, and
-	 * instead generates a "skipped picture". If such a picture is
-	 * reconstructed, it is a duplicate of the preceding picture.
-	 * This skipped picture is encoded as a P frame.
-	 * 0 disables skipped picture generation. Default value is 0. */
-	int skip_picture;
+	/* If set to 1, the VPU ignores the given source frame, and
+	 * instead generates a "skipped frame". If such a frame is
+	 * reconstructed, it is a duplicate of the preceding frame.
+	 * This skipped frame is encoded as a P frame.
+	 * 0 disables skipped frame generation. Default value is 0. */
+	int skip_frame;
 	/* If set to 1, the rate control mechanism can automatically
-	 * decide to use skipped pictures. This is ignored if rate
+	 * decide to use skipped frames. This is ignored if rate
 	 * control is disabled (= if the bitrate value is nonzero in
 	 * ImxVpuEncOpenParams). Default value is 0. */
 	int enable_autoskip;
@@ -1415,7 +1411,7 @@ void imx_vpu_enc_configure_min_intra_refresh(ImxVpuEncoder *encoder, unsigned in
  * the open_params in imx_vpu_enc_open() is used. */
 void imx_vpu_enc_configure_intra_qp(ImxVpuEncoder *encoder, int intra_qp);
 
-/* Encodes a given input picture with the given encoding parameters. encoded_frame is filled with information
+/* Encodes a given raw input frame with the given encoding parameters. encoded_frame is filled with information
  * about the resulting encoded output frame. The encoded frame data itself is stored in a buffer that is
  * allocated by user-supplied functions (which are set as the acquire_output_buffer and finish_output_buffer
  * function pointers in the encoding_params).
@@ -1450,7 +1446,7 @@ void imx_vpu_enc_configure_intra_qp(ImxVpuEncoder *encoder, int intra_qp);
  * combination of the codes in ImxVpuEncOutputCodes.
  *
  * None of the arguments may be NULL. */
-ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuPicture *picture, ImxVpuEncodedFrame *encoded_frame, ImxVpuEncParams *encoding_params,  unsigned int *output_code);
+ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuRawFrame const *raw_frame, ImxVpuEncodedFrame *encoded_frame, ImxVpuEncParams *encoding_params,  unsigned int *output_code);
 
 
 

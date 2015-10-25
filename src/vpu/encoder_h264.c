@@ -260,7 +260,7 @@ gboolean gst_imx_vpu_encoder_h264_set_frame_enc_params(GstImxVpuEncoderBase *vpu
 	enc_params->quant_param = vpu_encoder_h264->quant_param;
 	if (vpu_encoder_h264->idr_interval > 0)
 	{
-		/* Force IDR picture if either force_I_frame is already set, or if
+		/* Force IDR frame if either force_I_frame is already set, or if
 		 * an IDR interval is configured and this happens to be the first
 		 * frame of such an interval */
 		enc_params->force_I_frame = enc_params->force_I_frame || ((vpu_encoder_h264->frame_count % vpu_encoder_h264->idr_interval) == 0);

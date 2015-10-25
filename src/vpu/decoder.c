@@ -482,8 +482,8 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 		encoded_frame.data = in_map_info.data;
 		encoded_frame.data_size = in_map_info.size;
 		/* The system frame number is necessary to correctly associate encoded
-		 * frames and decoded pictures. This is required, because some formats
-		 * have a delay (= output pictures only show up after N complete input
+		 * frames and decoded frames. This is required, because some formats
+		 * have a delay (= output frames only show up after N complete input
 		 * frames), and others like h.264 even reorder frames. */
 		encoded_frame.context = (void *)(input_frame->system_frame_number);
 	}
@@ -495,8 +495,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 	if (vpu_decoder->codec_data != NULL)
 	{
 		gst_buffer_map(vpu_decoder->codec_data, &codecdata_map_info, GST_MAP_READ);
-		encoded_frame.codec_data = codecdata_map_info.data;
-		encoded_frame.codec_data_size = codecdata_map_info.size;
+		imx_vpu_dec_set_codec_data(vpu_decoder->decoder, codecdata_map_info.data, codecdata_map_info.size);
 		GST_LOG_OBJECT(vpu_decoder, "setting extra codec data (%d byte)", codecdata_map_info.size);
 	}
 
@@ -587,7 +586,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 		 * and unref'ing memory, thus avoiding leaks */
 		gst_video_decoder_release_frame(decoder, input_frame);
 	}
-	else if (output_code & IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE)
+	else if (output_code & IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE)
 	{
 		/* A complete encoded input frame has been fed into the decode, either
 		 * in one go (= input_frame contains the entire encoded frame), or after
@@ -595,20 +594,20 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 
 		guint32 system_frame_number;
 		GstVideoCodecFrame *out_frame;
-		ImxVpuPicture decoded_picture;
+		ImxVpuRawFrame decoded_frame;
 		GstBuffer *out_buffer;
 
-		/* Using mutex locks when retrieving the picture, to avoid data
+		/* Using mutex locks when retrieving the frame, to avoid data
 		 * races; a GstBuffer with a framebuffer inside might be unref'd
 		 * concurrently, leading to race conditions, since its release function
 		 * then calls gst_imx_vpu_decoder_context_mark_as_displayed(). */
 		GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_decoder->decoder_context);
-		ret = imx_vpu_dec_get_decoded_picture(vpu_decoder->decoder, &decoded_picture);
+		ret = imx_vpu_dec_get_decoded_frame(vpu_decoder->decoder, &decoded_frame);
 		GST_IMX_VPU_DECODER_CONTEXT_UNLOCK(vpu_decoder->decoder_context);
 
 		if (ret != IMX_VPU_DEC_RETURN_CODE_OK)
 		{
-			GST_ERROR_OBJECT(vpu_decoder, "could not get decoded picture: %s", imx_vpu_dec_error_string(ret));
+			GST_ERROR_OBJECT(vpu_decoder, "could not get decoded frame: %s", imx_vpu_dec_error_string(ret));
 			return GST_FLOW_ERROR;
 		}
 
@@ -616,31 +615,31 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 		{
 			GST_LOG_OBJECT(
 				vpu_decoder,
-				"picture types for the retrieved frame's fields: %s %s",
-				imx_vpu_picture_type_string(decoded_picture.pic_types[0]),
-				imx_vpu_picture_type_string(decoded_picture.pic_types[1])
+				"frame types for the retrieved frame's fields: %s %s",
+				imx_vpu_frame_type_string(decoded_frame.frame_types[0]),
+				imx_vpu_frame_type_string(decoded_frame.frame_types[1])
 			);
 		}
 		else
 		{
 			GST_LOG_OBJECT(
 				vpu_decoder,
-				"picture type for the retrieved frame: %s",
-				imx_vpu_picture_type_string(decoded_picture.pic_types[0])
+				"frame type for the retrieved frame: %s",
+				imx_vpu_frame_type_string(decoded_frame.frame_types[0])
 			);
 		}
 
-		/* Retrieve the correct GstVideoCodecFrame for the decoded picture
-		 * based on the decoded picture's context (see the "if (input_frame != NULL)"
+		/* Retrieve the correct GstVideoCodecFrame for the decoded frame
+		 * based on the decoded frame's context (see the "if (input_frame != NULL)"
 		 * block above for more details) */
-		system_frame_number = (guint32)(decoded_picture.context);
+		system_frame_number = (guint32)(decoded_frame.context);
 		out_frame = gst_video_decoder_get_frame(decoder, system_frame_number);
 
 		if (out_frame != NULL)
 		{
 			/* We got the GstVideoCodecFrame that corresponds to the decoded
-			 * picture. Get a GstBuffer from the memory pool, place the
-			 * decoded picture's framebuffer in it, and finish the frame,
+			 * frame. Get a GstBuffer from the memory pool, place the
+			 * decoded frame's framebuffer in it, and finish the frame,
 			 * pushing it downstream. */
 
 			GST_LOG_OBJECT(vpu_decoder, "retrieved gstframe %p with number #%" G_GUINT32_FORMAT, (gpointer)out_frame, system_frame_number);
@@ -649,9 +648,9 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 			if (out_buffer == NULL)
 				return GST_FLOW_ERROR;
 
-			GST_LOG_OBJECT(vpu_decoder, "output gstbuffer: %p imxvpu framebuffer: %p", out_buffer, decoded_picture.framebuffer);
+			GST_LOG_OBJECT(vpu_decoder, "output gstbuffer: %p imxvpu framebuffer: %p", out_buffer, decoded_frame.framebuffer);
 
-			gst_imx_vpu_framebuffer_array_set_framebuffer_in_gstbuffer(vpu_decoder->decoder_context->framebuffer_array, out_buffer, decoded_picture.framebuffer);
+			gst_imx_vpu_framebuffer_array_set_framebuffer_in_gstbuffer(vpu_decoder->decoder_context->framebuffer_array, out_buffer, decoded_frame.framebuffer);
 
 			/* The GST_BUFFER_FLAG_TAG_MEMORY flag will be set, because the
 			 * buffer's memory was added after the buffer was acquired from
@@ -666,26 +665,26 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 			/* Add interlacing flags to the output buffer if necessary */
 			if (vpu_decoder->decoder_context->uses_interlacing)
 			{
-				switch (decoded_picture.interlacing_mode)
+				switch (decoded_frame.interlacing_mode)
 				{
 					case IMX_VPU_INTERLACING_MODE_NO_INTERLACING:
-						GST_LOG_OBJECT(vpu_decoder, "bitstream has interlacing flag set, but this picture is progressive");
+						GST_LOG_OBJECT(vpu_decoder, "bitstream has interlacing flag set, but this frame is progressive");
 						break;
 
 					case IMX_VPU_INTERLACING_MODE_TOP_FIELD_FIRST:
-						GST_LOG_OBJECT(vpu_decoder, "interlaced picture, 1 field, top field first");
+						GST_LOG_OBJECT(vpu_decoder, "interlaced frame, 1 field, top field first");
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_TFF);
 						break;
 
 					case IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_FIRST:
-						GST_LOG_OBJECT(vpu_decoder, "interlaced picture, 1 field, bottom field first");
+						GST_LOG_OBJECT(vpu_decoder, "interlaced frame, 1 field, bottom field first");
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_TFF);
 						break;
 
 					default:
-						GST_LOG_OBJECT(vpu_decoder, "interlaced picture, but interlacing type is unsupported");
+						GST_LOG_OBJECT(vpu_decoder, "interlaced frame, but interlacing type is unsupported");
 						break;
 				}
 			}
@@ -707,13 +706,13 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 			/* If this point is reached, something went wrong. It could be a
 			 * severely broken and/or invalid video stream, or a bug in
 			 * imxvpuapi. Try to continue to decode, but emit a warning.
-			 * Unfortunately, the decoded picture cannot be used, since no
+			 * Unfortunately, the decoded frame cannot be used, since no
 			 * corresponding output GstVideoCodecFrame could be found. */
 
-			GST_WARNING_OBJECT(vpu_decoder, "no gstframe exists with number #%" G_GUINT32_FORMAT " - discarding decoded picture", system_frame_number);
+			GST_WARNING_OBJECT(vpu_decoder, "no gstframe exists with number #%" G_GUINT32_FORMAT " - discarding decoded frame", system_frame_number);
 
 			GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_decoder->decoder_context);
-			gst_imx_vpu_decoder_context_mark_as_displayed(vpu_decoder->decoder_context, decoded_picture.framebuffer);
+			gst_imx_vpu_decoder_context_mark_as_displayed(vpu_decoder->decoder_context, decoded_frame.framebuffer);
 			GST_IMX_VPU_DECODER_CONTEXT_UNLOCK(vpu_decoder->decoder_context);
 		}
 	}

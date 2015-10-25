@@ -241,16 +241,16 @@ char const *imx_vpu_color_format_string(ImxVpuColorFormat color_format)
 }
 
 
-char const *imx_vpu_picture_type_string(ImxVpuPicType picture_type)
+char const *imx_vpu_frame_type_string(ImxVpuFrameType frame_type)
 {
-	switch (picture_type)
+	switch (frame_type)
 	{
-		case IMX_VPU_PIC_TYPE_I: return "I";
-		case IMX_VPU_PIC_TYPE_P: return "P";
-		case IMX_VPU_PIC_TYPE_B: return "B";
-		case IMX_VPU_PIC_TYPE_IDR: return "IDR";
-		case IMX_VPU_PIC_TYPE_BI: return "BI";
-		case IMX_VPU_PIC_TYPE_SKIP: return "SKIP";
+		case IMX_VPU_FRAME_TYPE_I: return "I";
+		case IMX_VPU_FRAME_TYPE_P: return "P";
+		case IMX_VPU_FRAME_TYPE_B: return "B";
+		case IMX_VPU_FRAME_TYPE_IDR: return "IDR";
+		case IMX_VPU_FRAME_TYPE_BI: return "BI";
+		case IMX_VPU_FRAME_TYPE_SKIP: return "SKIP";
 		default: return "<unknown>";
 	}
 }

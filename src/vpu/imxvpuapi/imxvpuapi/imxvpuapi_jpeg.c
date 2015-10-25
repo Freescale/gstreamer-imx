@@ -234,27 +234,27 @@ int imx_vpu_jpeg_dec_can_decode(ImxVpuJPEGDecoder *jpeg_decoder)
 }
 
 
-ImxVpuDecReturnCodes imx_vpu_jpeg_dec_decode(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuEncodedFrame *encoded_frame, ImxVpuPicture *picture)
+ImxVpuDecReturnCodes imx_vpu_jpeg_dec_decode(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuEncodedFrame const *encoded_frame, ImxVpuRawFrame *raw_frame)
 {
 	unsigned int output_code;
 	ImxVpuDecReturnCodes ret;
 
 	assert(encoded_frame != NULL);
-	assert(picture != NULL);
+	assert(raw_frame != NULL);
 	assert(jpeg_decoder != NULL);
 	assert(jpeg_decoder->decoder != NULL);
 
 	if ((ret = imx_vpu_dec_decode(jpeg_decoder->decoder, encoded_frame, &output_code)) != IMX_VPU_DEC_RETURN_CODE_OK)
 		return ret;
 
-	if (output_code & IMX_VPU_DEC_OUTPUT_CODE_DECODED_PICTURE_AVAILABLE)
+	if (output_code & IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE)
 	{
-		if ((ret = imx_vpu_dec_get_decoded_picture(jpeg_decoder->decoder, picture)) != IMX_VPU_DEC_RETURN_CODE_OK)
+		if ((ret = imx_vpu_dec_get_decoded_frame(jpeg_decoder->decoder, raw_frame)) != IMX_VPU_DEC_RETURN_CODE_OK)
 			return ret;
 	}
 	else
 	{
-		picture->framebuffer = NULL;
+		raw_frame->framebuffer = NULL;
 	}
 
 	return IMX_VPU_DEC_RETURN_CODE_OK;
@@ -287,13 +287,13 @@ void imx_vpu_jpeg_dec_get_info(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuJPEGInfo *
 }
 
 
-ImxVpuDecReturnCodes imx_vpu_jpeg_dec_picture_finished(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuPicture *picture)
+ImxVpuDecReturnCodes imx_vpu_jpeg_dec_frame_finished(ImxVpuJPEGDecoder *jpeg_decoder, ImxVpuRawFrame *raw_frame)
 {
-	assert(picture != NULL);
+	assert(raw_frame != NULL);
 	assert(jpeg_decoder != NULL);
 	assert(jpeg_decoder->decoder != NULL);
 
-	return imx_vpu_dec_mark_framebuffer_as_displayed(jpeg_decoder->decoder, picture->framebuffer);
+	return imx_vpu_dec_mark_framebuffer_as_displayed(jpeg_decoder->decoder, raw_frame->framebuffer);
 }
 
 
@@ -433,14 +433,14 @@ ImxVpuEncReturnCodes imx_vpu_jpeg_enc_close(ImxVpuJPEGEncoder *jpeg_encoder)
 }
 
 
-ImxVpuEncReturnCodes imx_vpu_jpeg_enc_encode(ImxVpuJPEGEncoder *jpeg_encoder, ImxVpuPicture *picture, uint8_t *output_data_buffer, size_t *output_data_buffer_size)
+ImxVpuEncReturnCodes imx_vpu_jpeg_enc_encode(ImxVpuJPEGEncoder *jpeg_encoder, ImxVpuRawFrame const *raw_frame, uint8_t *output_data_buffer, size_t *output_data_buffer_size)
 {
 	unsigned int output_code;
 	ImxVpuEncParams enc_params;
 	ImxVpuEncodedFrame encoded_frame;
 	ImxVpuEncReturnCodes ret;
 
-	assert(picture != NULL);
+	assert(raw_frame != NULL);
 	assert(output_data_buffer != NULL);
 	assert(output_data_buffer_size != NULL);
 	assert(jpeg_encoder != NULL);
@@ -453,7 +453,7 @@ ImxVpuEncReturnCodes imx_vpu_jpeg_enc_encode(ImxVpuJPEGEncoder *jpeg_encoder, Im
 	encoded_frame.data = output_data_buffer;
 	encoded_frame.data_size = *output_data_buffer_size;
 
-	ret = imx_vpu_enc_encode(jpeg_encoder->encoder, picture, &encoded_frame, &enc_params, &output_code);
+	ret = imx_vpu_enc_encode(jpeg_encoder->encoder, raw_frame, &encoded_frame, &enc_params, &output_code);
 
 	if (ret == IMX_VPU_ENC_RETURN_CODE_OK)
 		*output_data_buffer_size = encoded_frame.data_size;
