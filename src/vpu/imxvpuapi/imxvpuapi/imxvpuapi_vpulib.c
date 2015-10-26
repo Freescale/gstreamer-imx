@@ -2260,7 +2260,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVp
 	 * to retrieve yet, or the frame was already retrieved */
 	if (decoder->available_decoded_frame_idx < 0)
 	{
-		IMX_VPU_ERROR("no decoded frame available");
+		IMX_VPU_ERROR("no decoded frame available, or function was already called earlier");
 		return IMX_VPU_DEC_RETURN_CODE_WRONG_CALL_SEQUENCE;
 	}
 

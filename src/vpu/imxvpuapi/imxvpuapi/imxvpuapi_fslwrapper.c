@@ -386,6 +386,7 @@ struct _ImxVpuDecoder
 	void *dropped_frame_context;
 	int num_context;
 
+	BOOL output_info_available;
 	BOOL consumption_info_available;
 	BOOL flush_vpu_upon_reset;
 
@@ -1264,6 +1265,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DROPPED;
 	}
 
+	if (*output_code & IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE)
+		decoder->output_info_available = TRUE;
+
 	return IMX_VPU_DEC_RETURN_CODE_OK;
 }
 
@@ -1277,6 +1281,14 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVp
 
 	assert(decoder != NULL);
 	assert(decoded_frame != NULL);
+
+	if (!(decoder->output_info_available))
+	{
+		IMX_VPU_ERROR("no decoded frame available, or function was already called earlier");
+		return IMX_VPU_DEC_RETURN_CODE_WRONG_CALL_SEQUENCE;
+	}
+
+	decoder->output_info_available = FALSE;
 
 	ret = VPU_DecGetOutputFrame(decoder->handle, &out_frame_info);
 	if (ret != VPU_DEC_RET_SUCCESS)

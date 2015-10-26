@@ -875,11 +875,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 /* Retrieves a decoded frame. The structure referred to by "decoded_frame" will be filled with data about
  * the decoded frame. "decoded_frame" must not be NULL.
  *
- * CAUTION: This function must not be called before imx_vpu_dec_decode(), and even then, only if the output code
- * has the IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE flag set. Otherwise, undefined behavior happens.
- * If the flag is set, this function must not be called more than once. Again, doing so causes undefined
- * behavior. Only after another imx_vpu_dec_decode() call (again, with the flag set) it is valid to
- * call this function again. */
+ * Calling this function before imx_vpu_dec_decode() results in an IMX_VPU_DEC_RETURN_CODE_WRONG_CALL_SEQUENCE
+ * return value. Calling this function more than once after a imx_vpu_dec_decode() yields the same result.
+ */
 ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVpuRawFrame *decoded_frame);
 
 /* Retrieves the context of the dropped frame. This is useful to be able to identify which input frame
