@@ -627,6 +627,7 @@ static void gst_imx_v4l2src_get_property(GObject *object, guint prop_id,
 
 		case PROP_NOISE_REDUCTION:
 			g_value_set_flags(value, 0);
+			break;
 
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
