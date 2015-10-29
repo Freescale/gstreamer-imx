@@ -493,6 +493,7 @@ static GstImxPxPFormatDetails const * gst_imx_pxp_blitter_get_format_details(Gst
 		case GST_VIDEO_FORMAT_YV12: FORMAT_DETAILS(PXP_PIX_FMT_YVU420P, 8);
 		case GST_VIDEO_FORMAT_Y42B: FORMAT_DETAILS(PXP_PIX_FMT_YUV422P, 8);
 		case GST_VIDEO_FORMAT_NV12: FORMAT_DETAILS(PXP_PIX_FMT_NV12, 8);
+		case GST_VIDEO_FORMAT_NV16: FORMAT_DETAILS(PXP_PIX_FMT_NV16, 8);
 
 		default: return NULL;
 	}

@@ -54,7 +54,6 @@ typedef struct _GstImxPxPBlitterPrivate GstImxPxPBlitterPrivate;
  *   v308: image corrupted
  *   IYU1: green screen with all destination formats (except for GRAY8, which display black)
  *   NV21: colors are corrupted
- *   NV16: left half of the screen is fine, right one is greenish
  *   YUV9 YVU9: green screen
  *
  * Broken destination formats:
@@ -108,6 +107,7 @@ typedef struct _GstImxPxPBlitterPrivate GstImxPxPBlitterPrivate;
 	" , YV12 " \
 	" , Y42B " \
 	" , NV12 " \
+	" , NV16 " \
 	" , YUY2 " \
 	" , UYVY " \
 	" , YVYU " \
