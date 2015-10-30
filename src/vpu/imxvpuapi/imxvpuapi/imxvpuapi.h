@@ -267,7 +267,8 @@ typedef enum
 	/* Frame is a B frame (see above), but all of its macroblocks are intra coded.
 	 * VC-1 specific. Cannot be used as a keyframe / sync point. */
 	IMX_VPU_FRAME_TYPE_BI,
-	/* Frame was skipped. TODO: is this necessary? */
+	/* Frame was skipped, meaning the result is identical to the previous frame.
+	 * This is VC-1 specific */
 	IMX_VPU_FRAME_TYPE_SKIP
 }
 ImxVpuFrameType;
