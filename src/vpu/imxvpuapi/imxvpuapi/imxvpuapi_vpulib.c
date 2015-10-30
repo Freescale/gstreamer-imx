@@ -56,7 +56,7 @@
 #define TO_BOOL(X) ((X) ? TRUE : FALSE)
 
 
-#define MIN_NUM_FREE_FB_REQUIRED 6
+#define MIN_NUM_FREE_FB_REQUIRED 5
 #define FRAME_ALIGN 16
 
 #define VPU_MEMORY_ALIGNMENT         0x8

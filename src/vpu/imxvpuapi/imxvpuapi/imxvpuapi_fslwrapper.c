@@ -361,7 +361,7 @@ void imx_vpu_fill_framebuffer_params(ImxVpuFramebuffer *framebuffer, ImxVpuFrame
 /************************************************/
 
 
-#define MIN_NUM_FREE_FB_REQUIRED 6
+#define MIN_NUM_FREE_FB_REQUIRED 5
 
 
 struct _ImxVpuDecoder

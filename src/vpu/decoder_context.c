@@ -99,7 +99,7 @@ GstImxVpuDecoderContext* gst_imx_vpu_decoder_context_new(ImxVpuDecoder *decoder,
 		initial_info->framebuffer_alignment,
 		initial_info->interlacing,
 		chroma_interleave,
-		initial_info->min_num_required_framebuffers,
+		initial_info->min_num_required_framebuffers + 1, /* add one extra framebuffer, since GStreamer video sinks typically keep a reference on the last displayed frame */
 		allocator
 	);
 

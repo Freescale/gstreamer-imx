@@ -116,6 +116,8 @@ GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat 
 
 	framebuffer_array->allocator = (GstAllocator *)gst_object_ref(GST_OBJECT(phys_mem_allocator));
 
+	GST_DEBUG_OBJECT(framebuffer_array, "allocating and registering %u framebuffers", num_framebuffers);
+
 	for (i = 0; i < num_framebuffers; ++i)
 	{
 		GstImxPhysMemory *memory;
