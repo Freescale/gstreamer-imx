@@ -461,6 +461,18 @@ typedef struct
 	 * It can be used to identify which raw frame is associated with this
 	 * encoded frame for example. */
 	void *context;
+
+	/* User-defined timestamps. These are here for convenience. In many
+	 * cases, the context one wants to associate with raw/encoded frames
+	 * is a PTS-DTS pair. If only the context pointer were available, users
+	 * would have to create a separate data structure containing PTS & DTS
+	 * values for each context. Since this use case is common, these two
+	 * fields are added to the frame structure. Just like the context
+	 * pointer, the library just passes them through to the associated
+	 * raw frame, and does not actually touch their values. It is also
+	 * perfectly OK to not use them, and just use the context pointer
+	 * instead, or vice versa. */
+	uint64_t pts, dts;
 }
 ImxVpuEncodedFrame;
 
@@ -487,6 +499,18 @@ typedef struct
 	 * It can be used to identify which raw frame is associated with this
 	 * encoded frame for example. */
 	void *context;
+
+	/* User-defined timestamps. These are here for convenience. In many
+	 * cases, the context one wants to associate with raw/encoded frames
+	 * is a PTS-DTS pair. If only the context pointer were available, users
+	 * would have to create a separate data structure containing PTS & DTS
+	 * values for each context. Since this use case is common, these two
+	 * fields are added to the frame structure. Just like the context
+	 * pointer, the library just passes them through to the associated
+	 * encoded frame, and does not actually touch their values. It is also
+	 * perfectly OK to not use them, and just use the context pointer
+	 * instead, or vice versa. */
+	uint64_t pts, dts;
 }
 ImxVpuRawFrame;
 
@@ -600,12 +624,12 @@ char const *imx_vpu_frame_type_string(ImxVpuFrameType frame_type);
  *     Once the decoded frame has been processed by the user, it is important to call
  *     imx_vpu_dec_mark_framebuffer_as_displayed() to let the decoder know that the
  *     framebuffer is available for storing new decoded frames again.
- *     If IMX_VPU_DEC_OUTPUT_CODE_DROPPED is set, it is possible to retrieve the context value
- *     of the dropped frame by calling imx_vpu_dec_get_dropped_frame_context().
+ *     If IMX_VPU_DEC_OUTPUT_CODE_DROPPED is set, it is possible to retrieve information about
+ *     the dropped frame (context pointer, PTS/DTS values) with imx_vpu_dec_get_dropped_frame_info().
  *     If IMX_VPU_DEC_OUTPUT_CODE_EOS is set, or if imx_vpu_dec_decode() returns a value other
  *     than IMX_VPU_DEC_RETURN_CODE_OK, stop playback and close the decoder.
  * 11. In case a flush/reset is desired (typically after seeking), call imx_vpu_dec_flush().
- *     Note that any internal context values from the encoded and raw frames will be thrown
+ *     Note that any internal context/PTS/DTS values from the encoded and raw frames will be thrown
  *     away after this call; if for example the context is an index, the system that hands
  *     out the indices should be informed that any previously handed out index is now unused.
  * 12. When there is no more incoming data, and pending decoded frames need to be retrieved
@@ -704,8 +728,8 @@ typedef enum
 	 * by calling imx_vpu_dec_get_decoded_frame(). */
 	IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE      = (1UL << 2),
 	/* A frame was dropped by the decoder. The dropped frame's
-	 * context value can be retrieved by calling
-	 * imx_vpu_dec_get_dropped_frame_context(). */
+	 * context, PTS, DTS values can be retrieved by calling
+	 * imx_vpu_dec_get_dropped_frame_info(). */
 	IMX_VPU_DEC_OUTPUT_CODE_DROPPED                      = (1UL << 3),
 	/* There aren't enough free framebuffers available for decoding.
 	 * This usually happens when imx_vpu_dec_mark_framebuffer_as_displayed()
@@ -881,12 +905,15 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
  */
 ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVpuRawFrame *decoded_frame);
 
-/* Retrieves the context of the dropped frame. This is useful to be able to identify which input frame
- * was dropped. Media frameworks may require this to properly keep track of timestamping.
+/* Retrieves information about the dropped frame. This is useful to be able to identify which input frame
+ * was dropped. Media frameworks may require this to properly keep track of timestamping. context, pts, dts
+ * point to output values that are filled with the frame's context pointer, PTS, and DTS values, respectively.
+ * These arguments can be set to NULL. NULL arguments will instruct this function to not write the corresponding
+ * value.
  *
  * NOTE: This function must not be called before imx_vpu_dec_decode(), and even then, only if the output code has
  * the IMX_VPU_DEC_OUTPUT_CODE_DROPPED flag set. Otherwise, the returned context value is invalid. */
-void* imx_vpu_dec_get_dropped_frame_context(ImxVpuDecoder *decoder);
+void imx_vpu_dec_get_dropped_frame_info(ImxVpuDecoder *decoder, void **context, uint64_t *pts, uint64_t *dts);
 
 /* Check if the VPU can decode right now. While decoding a video stream, sometimes the VPU may not be able
  * to decode. This is directly related to the set of free framebuffers. If this function returns 0, decoding

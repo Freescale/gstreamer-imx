@@ -19,6 +19,7 @@
 
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 #include <vpu_lib.h>
@@ -712,6 +713,7 @@ FrameMode;
 typedef struct
 {
 	void *context;
+	uint64_t pts, dts;
 	ImxVpuFrameType frame_types[2];
 	ImxVpuInterlacingMode interlacing_mode;
 	FrameMode mode;
@@ -744,7 +746,7 @@ struct _ImxVpuDecoder
 	FrameBuffer *internal_framebuffers;
 	ImxVpuFramebuffer *framebuffers;
 	ImxVpuDecFrameEntry *frame_entries;
-	void *dropped_frame_context;
+	ImxVpuDecFrameEntry dropped_frame_entry;
 
 	BOOL main_header_pushed;
 
@@ -2163,8 +2165,10 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		  )
 		)
 		{
-			IMX_VPU_DEBUG("frame got dropped (context: %p)", encoded_frame->context);
-			decoder->dropped_frame_context = encoded_frame->context;
+			IMX_VPU_DEBUG("frame got dropped (context: %p pts %" PRIu64 " dts %" PRIu64 ")", encoded_frame->context, encoded_frame->pts, encoded_frame->dts);
+			decoder->dropped_frame_entry.context = encoded_frame->context;
+			decoder->dropped_frame_entry.pts = encoded_frame->pts;
+			decoder->dropped_frame_entry.dts = encoded_frame->dts;
 			*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DROPPED;
 		}
 
@@ -2187,6 +2191,8 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			assert(idx_decoded < (int)(decoder->num_framebuffers));
 
 			decoder->frame_entries[idx_decoded].context = encoded_frame->context;
+			decoder->frame_entries[idx_decoded].pts = encoded_frame->pts;
+			decoder->frame_entries[idx_decoded].dts = encoded_frame->dts;
 			decoder->frame_entries[idx_decoded].mode = FrameMode_ReservedForDecoding;
 			decoder->frame_entries[idx_decoded].interlacing_mode = convert_interlacing_mode(decoder->codec_format, &(decoder->dec_output_info));
 
@@ -2219,12 +2225,15 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 
 		if (decoder->dec_output_info.indexFrameDisplay >= 0)
 		{
+			ImxVpuDecFrameEntry *entry;
 			int idx_display = decoder->dec_output_info.indexFrameDisplay;
 			assert(idx_display < (int)(decoder->num_framebuffers));
 
-			IMX_VPU_LOG("decoded and displayable frame available (framebuffer display index: %d  context: %p)", idx_display, decoder->frame_entries[idx_display].context);
+			entry = &(decoder->frame_entries[idx_display]);
 
-			decoder->frame_entries[idx_display].mode = FrameMode_ContainsDisplayableFrame;
+			IMX_VPU_LOG("decoded and displayable frame available (framebuffer display index: %d context: %p pts: %" PRIu64 " dts: %" PRIu64 ")", idx_display, entry->context, entry->pts, entry->dts);
+
+			entry->mode = FrameMode_ContainsDisplayableFrame;
 
 			decoder->available_decoded_frame_idx = idx_display;
 			*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DECODED_FRAME_AVAILABLE;
@@ -2275,6 +2284,8 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVp
 	decoded_frame->framebuffer->already_marked = FALSE;
 	decoded_frame->interlacing_mode = decoder->frame_entries[idx].interlacing_mode;
 	decoded_frame->context = decoder->frame_entries[idx].context;
+	decoded_frame->pts = decoder->frame_entries[idx].pts;
+	decoded_frame->dts = decoder->frame_entries[idx].dts;
 	for (i = 0; i < 2; ++i)
 		decoded_frame->frame_types[i] = decoder->frame_entries[idx].frame_types[i];
 
@@ -2290,9 +2301,16 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVp
 }
 
 
-void* imx_vpu_dec_get_dropped_frame_context(ImxVpuDecoder *decoder)
+void imx_vpu_dec_get_dropped_frame_info(ImxVpuDecoder *decoder, void **context, uint64_t *pts, uint64_t *dts)
 {
-	return decoder->dropped_frame_context;
+	assert(decoder != NULL);
+
+	if (context != NULL)
+		*context = decoder->dropped_frame_entry.context;
+	if (pts != NULL)
+		*pts = decoder->dropped_frame_entry.pts;
+	if (dts != NULL)
+		*dts = decoder->dropped_frame_entry.dts;
 }
 
 
@@ -3607,6 +3625,8 @@ ImxVpuEncReturnCodes imx_vpu_enc_encode(ImxVpuEncoder *encoder, ImxVpuRawFrame c
 	 * case, one input frame always immediately leads to
 	 * one output frame */
 	encoded_frame->context = raw_frame->context;
+	encoded_frame->pts = raw_frame->pts;
+	encoded_frame->dts = raw_frame->dts;
 
 	encoder->first_frame = FALSE;
 

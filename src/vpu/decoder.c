@@ -718,7 +718,8 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 	}
 	else if (output_code & IMX_VPU_DEC_OUTPUT_CODE_DROPPED)
 	{
-		guint32 system_frame_number;
+		void* system_frame_number_ptr;
+		guint32 system_frame_number_uint;
 		GstVideoCodecFrame *out_frame;
 		
 		/* Using mutex locks when retrieving the dropped frame's context,
@@ -726,17 +727,19 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 		 * unref'd concurrently, leading to race conditions, since its release
 		 * function then calls gst_imx_vpu_decoder_context_mark_as_displayed(). */
 		GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_decoder->decoder_context);
-		system_frame_number = (guint32)imx_vpu_dec_get_dropped_frame_context(vpu_decoder->decoder);
+		imx_vpu_dec_get_dropped_frame_info(vpu_decoder->decoder, &system_frame_number_ptr, NULL, NULL);
 		GST_IMX_VPU_DECODER_CONTEXT_UNLOCK(vpu_decoder->decoder_context);
 
-		GST_DEBUG_OBJECT(vpu_decoder, "VPU dropped frame #%" G_GUINT32_FORMAT " internally", system_frame_number);
+		system_frame_number_uint = (guint32)((guintptr)system_frame_number_ptr);
+
+		GST_DEBUG_OBJECT(vpu_decoder, "VPU dropped frame #%" G_GUINT32_FORMAT " internally", system_frame_number_uint);
 
 		/* Get the corresponding GstVideoCodecFrame so we can drop it */
-		out_frame = gst_video_decoder_get_frame(decoder, system_frame_number);
+		out_frame = gst_video_decoder_get_frame(decoder, system_frame_number_uint);
 
 		if (out_frame != NULL)
 		{
-			GST_DEBUG_OBJECT(vpu_decoder, "dropping gstframe %p with number #%" G_GUINT32_FORMAT, (gpointer)out_frame, system_frame_number);
+			GST_DEBUG_OBJECT(vpu_decoder, "dropping gstframe %p with number #%" G_GUINT32_FORMAT, (gpointer)out_frame, system_frame_number_uint);
 			/* Unref, since the gst_video_decoder_get_frame() call refs the out_frame */
 			gst_video_codec_frame_unref(out_frame);
 		}
@@ -752,7 +755,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 			/* Unref, since the gst_video_decoder_get_oldest_frame() call refs the out_frame */
 			gst_video_codec_frame_unref(out_frame);
 
-			GST_WARNING_OBJECT(vpu_decoder, "didn't get a gstframe with number #%" G_GUINT32_FORMAT " - dropping oldest gstframe %p instead", system_frame_number, (gpointer)out_frame);
+			GST_WARNING_OBJECT(vpu_decoder, "didn't get a gstframe with number #%" G_GUINT32_FORMAT " - dropping oldest gstframe %p instead", system_frame_number_uint, (gpointer)out_frame);
 		}
 
 		/* A dropped frame isn't unfinished */

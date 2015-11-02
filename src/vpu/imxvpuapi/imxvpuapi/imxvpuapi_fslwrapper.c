@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include <vpu_wrapper.h>
 #include "imxvpuapi.h"
 #include "imxvpuapi_priv.h"
@@ -364,6 +365,14 @@ void imx_vpu_fill_framebuffer_params(ImxVpuFramebuffer *framebuffer, ImxVpuFrame
 #define MIN_NUM_FREE_FB_REQUIRED 5
 
 
+typedef struct
+{
+	void *context;
+	uint64_t pts, dts;
+}
+ImxVpuDecFrameEntry;
+
+
 struct _ImxVpuDecoder
 {
 	VpuDecHandle handle;
@@ -381,9 +390,9 @@ struct _ImxVpuDecoder
 	unsigned int num_framebuffers;
 	VpuFrameBuffer **wrapper_framebuffers;
 	ImxVpuFramebuffer *framebuffers;
-	void **context_for_frames;
-	void *pending_context;
-	void *dropped_frame_context;
+	ImxVpuDecFrameEntry *frame_entries;
+	ImxVpuDecFrameEntry pending_entry;
+	ImxVpuDecFrameEntry dropped_frame_entry;
 	int num_context;
 
 	BOOL output_info_available;
@@ -790,8 +799,8 @@ ImxVpuDecReturnCodes imx_vpu_dec_close(ImxVpuDecoder *decoder)
 			imx_vpu_dma_buffer_unmap(decoder->framebuffers[i].dma_buffer);
 	}
 
-	if (decoder->context_for_frames != NULL)
-		IMX_VPU_FREE(decoder->context_for_frames, sizeof(void*) * decoder->num_framebuffers);
+	if (decoder->frame_entries != NULL)
+		IMX_VPU_FREE(decoder->frame_entries, sizeof(ImxVpuDecFrameEntry) * decoder->num_framebuffers);
 	if (decoder->wrapper_framebuffers != NULL)
 		IMX_VPU_FREE(decoder->wrapper_framebuffers, sizeof(VpuFrameBuffer*) * decoder->num_framebuffers);
 	if (decoder->virt_mem_sub_block != NULL)
@@ -868,8 +877,8 @@ ImxVpuDecReturnCodes imx_vpu_dec_flush(ImxVpuDecoder *decoder)
 	else
 		IMX_VPU_INFO("decoder not flushed, because it is unnecessary for this codec format");
 
-	if (decoder->context_for_frames != NULL)
-		memset(decoder->context_for_frames, 0, sizeof(void*) * decoder->num_framebuffers);
+	if (decoder->frame_entries != NULL)
+		IMX_VPU_FREE(decoder->frame_entries, sizeof(ImxVpuDecFrameEntry) * decoder->num_framebuffers);
 	decoder->num_context = 0;
 
 	return dec_convert_retcode(ret);
@@ -945,8 +954,8 @@ ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, I
 		IMX_VPU_LOG("out_num: %d  num_framebuffers: %u", out_num, num_framebuffers);
 	}
 
-	decoder->context_for_frames = IMX_VPU_ALLOC(sizeof(void*) * num_framebuffers);
-	if (decoder->context_for_frames == NULL)
+	decoder->frame_entries = IMX_VPU_ALLOC(sizeof(ImxVpuDecFrameEntry) * num_framebuffers);
+	if (decoder->frame_entries == NULL)
 	{
 		IMX_VPU_ERROR("allocating memory for frame context pointers failed");
 		IMX_VPU_FREE(decoder->wrapper_framebuffers, sizeof(VpuFrameBuffer*) * num_framebuffers);
@@ -958,7 +967,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_register_framebuffers(ImxVpuDecoder *decoder, I
 	decoder->num_framebuffers = num_framebuffers;
 	decoder->num_available_framebuffers = num_framebuffers;
 
-	memset(decoder->context_for_frames, 0, sizeof(void*) * num_framebuffers);
+	memset(decoder->frame_entries, 0, sizeof(ImxVpuDecFrameEntry) * num_framebuffers);
 	decoder->num_context = 0;
 
 
@@ -991,7 +1000,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 	node.sCodecData.pData = (void *)(decoder->codec_data);
 	node.sCodecData.nSize = decoder->codec_data_size;
 
-	decoder->pending_context = encoded_frame->context;
+	decoder->pending_entry.context = encoded_frame->context;
+	decoder->pending_entry.pts = encoded_frame->pts;
+	decoder->pending_entry.dts = encoded_frame->dts;
 
 	ret = VPU_DecDecodeBuf(decoder->handle, &node, &buf_ret_code);
 	IMX_VPU_LOG("VPU_DecDecodeBuf buf ret code: 0x%x", buf_ret_code);
@@ -1155,7 +1166,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		 * do not use frame reordering. They can delay frame decoding, but the order of
 		 * frames stays intact. */
 
-		void *context = decoder->pending_context;
+		ImxVpuDecFrameEntry entry = decoder->pending_entry;
 
 		if ((buf_ret_code & VPU_DEC_ONE_FRM_CONSUMED) && !(buf_ret_code & VPU_DEC_OUTPUT_DROPPED))
 		{
@@ -1176,11 +1187,11 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			{
 				if ((fb_index >= 0) && (fb_index < (int)(decoder->num_framebuffers)))
 				{
-					IMX_VPU_LOG("framebuffer index %d for framebuffer %p user data %p", fb_index, (void *)(consumed_frame_info.pFrame), context);
-					decoder->context_for_frames[fb_index] = context;
+					IMX_VPU_LOG("framebuffer index %d for framebuffer %p user data %p pts %" PRIu64 " dts %" PRIu64, fb_index, (void *)(consumed_frame_info.pFrame), entry.context, entry.pts, entry.dts);
+					decoder->frame_entries[fb_index] = entry;
 				}
 				else
-					IMX_VPU_ERROR("framebuffer index %d for framebuffer %p user data %p out of bounds", fb_index, (void *)(consumed_frame_info.pFrame), context);
+					IMX_VPU_ERROR("framebuffer index %d for framebuffer %p user data %p pts %" PRIu64 " dts %" PRIu64 " out of bounds", fb_index, (void *)(consumed_frame_info.pFrame), entry.context, entry.pts, entry.dts);
 			}
 			else
 				IMX_VPU_WARNING("consumed frame info contains a NULL frame");
@@ -1189,10 +1200,10 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		{
 			if (decoder->num_context < (int)(decoder->num_framebuffers))
 			{
-				decoder->context_for_frames[decoder->num_context] = context;
+				decoder->frame_entries[decoder->num_context] = entry;
 				decoder->num_context++;
 
-				IMX_VPU_LOG("user data %p stored as newest", context);
+				IMX_VPU_LOG("user data %p pts %" PRIu64 " dts %" PRIu64 " stored as newest", entry.context, entry.pts, entry.dts);
 
 				IMX_VPU_TRACE("incremented number of userdata pointers to %d", decoder->num_context);
 			}
@@ -1237,7 +1248,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 			return imxret;
 		}
 
-		decoder->dropped_frame_context = decoded_frame.context;
+		decoder->dropped_frame_entry.context = decoded_frame.context;
+		decoder->dropped_frame_entry.pts = decoded_frame.pts;
+		decoder->dropped_frame_entry.dts = decoded_frame.dts;
 
 		*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DROPPED;
 	}
@@ -1246,13 +1259,12 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 		// TODO improve this for formats with consumption info
 		if (decoder->num_context > 0)
 		{
-			decoder->dropped_frame_context = decoder->context_for_frames[0];
-			decoder->context_for_frames[0] = NULL;
-			memmove(decoder->context_for_frames, decoder->context_for_frames + 1, sizeof(void*) * (decoder->num_context - 1));
+			decoder->dropped_frame_entry = decoder->frame_entries[0];
+			memmove(decoder->frame_entries, decoder->frame_entries + 1, sizeof(ImxVpuDecFrameEntry) * (decoder->num_context - 1));
 			decoder->num_context--;
 		}
 		else
-			decoder->dropped_frame_context = NULL;
+			memset(&(decoder->dropped_frame_entry), 0, sizeof(ImxVpuDecFrameEntry));
 	}
 
 	/* In case the VPU didn't use the input and no consumed frame info is available,
@@ -1261,7 +1273,9 @@ ImxVpuDecReturnCodes imx_vpu_dec_decode(ImxVpuDecoder *decoder, ImxVpuEncodedFra
 	 * associations; unlikely to occur thought) */
 	if ((encoded_frame->data != NULL) && !(buf_ret_code & (VPU_DEC_ONE_FRM_CONSUMED | VPU_DEC_INPUT_USED)))
 	{
-		decoder->dropped_frame_context = encoded_frame->context;
+		decoder->dropped_frame_entry.context = encoded_frame->context;
+		decoder->dropped_frame_entry.pts = encoded_frame->pts;
+		decoder->dropped_frame_entry.dts = encoded_frame->dts;
 		*output_code |= IMX_VPU_DEC_OUTPUT_CODE_DROPPED;
 	}
 
@@ -1277,7 +1291,7 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVp
 	VpuDecRetCode ret;
 	VpuDecOutFrameInfo out_frame_info;
 	int fb_index;
-	void *context;
+	ImxVpuDecFrameEntry entry;
 
 	assert(decoder != NULL);
 	assert(decoded_frame != NULL);
@@ -1300,33 +1314,34 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVp
 
 	fb_index = dec_get_wrapper_framebuffer_index(decoder, out_frame_info.pDisplayFrameBuf);
 
-	context = NULL;
+	memset(&entry, 0, sizeof(ImxVpuDecFrameEntry));
 	if (decoder->consumption_info_available)
 	{
 		if ((fb_index >= 0) && (fb_index < (int)(decoder->num_framebuffers)))
 		{
-			context = decoder->context_for_frames[fb_index];
-			IMX_VPU_LOG("framebuffer index %d for framebuffer %p and user data %p", fb_index, (void *)(out_frame_info.pDisplayFrameBuf), context);
-			decoder->context_for_frames[fb_index] = NULL;
+			entry = decoder->frame_entries[fb_index];
+			IMX_VPU_LOG("framebuffer index %d for framebuffer %p and user data %p pts %" PRIu64 " dts %" PRIu64, fb_index, (void *)(out_frame_info.pDisplayFrameBuf), entry.context, entry.pts, entry.dts);
+			memset(&(decoder->frame_entries[fb_index]), 0, sizeof(ImxVpuDecFrameEntry));
 		}
 		else
-			IMX_VPU_ERROR("framebuffer index %d for framebuffer %p and user data %p out of bounds", fb_index, (void *)(out_frame_info.pDisplayFrameBuf), context);
+			IMX_VPU_ERROR("framebuffer index %d for framebuffer %p out of bounds", fb_index, (void *)(out_frame_info.pDisplayFrameBuf));
 	}
 	else
 	{
 		if (decoder->num_context > 0)
 		{
-			context = decoder->context_for_frames[0];
-			decoder->context_for_frames[0] = NULL;
-			IMX_VPU_LOG("framebuffer index %d user data %p retrieved as oldest", fb_index, context);
-			memmove(decoder->context_for_frames, decoder->context_for_frames + 1, sizeof(void*) * (decoder->num_context - 1));
+			entry = decoder->frame_entries[0];
+			IMX_VPU_LOG("framebuffer index %d user data %p pts %" PRIu64 " dts %" PRIu64 " retrieved as oldest", fb_index, entry.context, entry.pts, entry.dts);
+			memmove(decoder->frame_entries, decoder->frame_entries + 1, sizeof(ImxVpuDecFrameEntry) * (decoder->num_context - 1));
 			decoder->num_context--;
 		}
 	}
 
 	decoded_frame->frame_types[0] = decoded_frame->frame_types[1] = convert_from_wrapper_pic_type(out_frame_info.ePicType);
 	decoded_frame->interlacing_mode = convert_from_wrapper_field_type(out_frame_info.eFieldType);
-	decoded_frame->context = context;
+	decoded_frame->context = entry.context;
+	decoded_frame->pts = entry.pts;
+	decoded_frame->dts = entry.dts;
 
 	/* XXX
 	 * This association assumes that the order of internal framebuffer entries
@@ -1345,10 +1360,15 @@ ImxVpuDecReturnCodes imx_vpu_dec_get_decoded_frame(ImxVpuDecoder *decoder, ImxVp
 }
 
 
-void* imx_vpu_dec_get_dropped_frame_context(ImxVpuDecoder *decoder)
+void imx_vpu_dec_get_dropped_frame_info(ImxVpuDecoder *decoder, void **context, uint64_t *pts, uint64_t *dts)
 {
 	assert(decoder != NULL);
-	return decoder->dropped_frame_context;
+	if (context != NULL)
+		*context = decoder->dropped_frame_entry.context;
+	if (pts != NULL)
+		*pts = decoder->dropped_frame_entry.pts;
+	if (dts != NULL)
+		*dts = decoder->dropped_frame_entry.dts;
 }
 
 
