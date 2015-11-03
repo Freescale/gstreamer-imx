@@ -1284,8 +1284,29 @@ static gboolean gst_imx_blitter_video_sink_acquire_blitter(GstImxBlitterVideoSin
 		return FALSE;
 	}
 
-	return gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer) &&
-	       gst_imx_blitter_set_output_canvas(blitter_video_sink->blitter, &(blitter_video_sink->canvas)) &&
-	       gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info)) &&
-	       gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 2 : 1);
+	if (!gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer))
+	{
+		GST_ERROR_OBJECT(blitter_video_sink, "could not set the output frame");
+		return FALSE;
+	}
+
+	if (!gst_imx_blitter_set_output_canvas(blitter_video_sink->blitter, &(blitter_video_sink->canvas)))
+	{
+		GST_ERROR_OBJECT(blitter_video_sink, "could not set the output canvas");
+		return FALSE;
+	}
+
+	if (!gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info)))
+	{
+		GST_ERROR_OBJECT(blitter_video_sink, "could not set the output video info");
+		return FALSE;
+	}
+
+	if (!gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 2 : 1))
+	{
+		GST_ERROR_OBJECT(blitter_video_sink, "could not set the number of output pages");
+		return FALSE;
+	}
+
+	return TRUE;
 }
