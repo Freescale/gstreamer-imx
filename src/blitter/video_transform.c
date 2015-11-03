@@ -1264,6 +1264,7 @@ static GstFlowReturn gst_imx_blitter_video_transform_prepare_output_buffer(GstBa
 
 static GstFlowReturn gst_imx_blitter_video_transform_transform_frame(GstBaseTransform *transform, GstBuffer *in, GstBuffer *out)
 {
+	gboolean ret = TRUE;
 	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
 
 	g_assert(blitter_video_transform->blitter != NULL);
@@ -1282,14 +1283,14 @@ static GstFlowReturn gst_imx_blitter_video_transform_transform_frame(GstBaseTran
 
 	GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
 
-	gst_imx_blitter_set_input_frame(blitter_video_transform->blitter, in);
-	gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, out);
-	gst_imx_blitter_blit(blitter_video_transform->blitter, 255);
-	gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, NULL);
+	ret = ret && gst_imx_blitter_set_input_frame(blitter_video_transform->blitter, in);
+	ret = ret && gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, out);
+	ret = ret && gst_imx_blitter_blit(blitter_video_transform->blitter, 255);
+	ret = ret && gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, NULL);
 
 	GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 
-	return GST_FLOW_OK;
+	return ret ? GST_FLOW_OK : GST_FLOW_ERROR;
 }
 
 

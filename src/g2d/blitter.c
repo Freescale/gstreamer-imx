@@ -217,7 +217,8 @@ static gboolean gst_imx_g2d_blitter_set_input_frame(GstImxBlitter *blitter, GstB
 
 	if (g2d_blitter->input_frame != NULL)
 	{
-		gst_imx_g2d_blitter_set_surface_params(g2d_blitter, input_frame, &(g2d_blitter->input_surface), &(g2d_blitter->input_video_info));
+		if (!gst_imx_g2d_blitter_set_surface_params(g2d_blitter, input_frame, &(g2d_blitter->input_surface), &(g2d_blitter->input_video_info)))
+			return FALSE;
 
 		if (g2d_blitter->use_entire_input_frame)
 		{
@@ -239,7 +240,9 @@ static gboolean gst_imx_g2d_blitter_set_output_frame(GstImxBlitter *blitter, Gst
 
 	if (g2d_blitter->output_frame != NULL)
 	{
-		gst_imx_g2d_blitter_set_surface_params(g2d_blitter, output_frame, &(g2d_blitter->output_surface), &(g2d_blitter->output_video_info));
+		if (!gst_imx_g2d_blitter_set_surface_params(g2d_blitter, output_frame, &(g2d_blitter->output_surface), &(g2d_blitter->output_video_info)))
+			return FALSE;
+
 		g2d_blitter->empty_surface = g2d_blitter->output_surface;
 		g2d_blitter->background_surface = g2d_blitter->output_surface;
 	}

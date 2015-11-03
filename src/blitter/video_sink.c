@@ -87,8 +87,8 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 
 static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink);
 static void gst_imx_blitter_video_sink_close_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink);
-static void gst_imx_blitter_video_sink_select_fb_page(GstImxBlitterVideoSink *blitter_video_sink, guint page);
-static void gst_imx_blitter_video_sink_flip_to_selected_fb_page(GstImxBlitterVideoSink *blitter_video_sink);
+static gboolean gst_imx_blitter_video_sink_select_fb_page(GstImxBlitterVideoSink *blitter_video_sink, guint page);
+static gboolean gst_imx_blitter_video_sink_flip_to_selected_fb_page(GstImxBlitterVideoSink *blitter_video_sink);
 static gboolean gst_imx_blitter_video_sink_set_virtual_fb_height(GstImxBlitterVideoSink *blitter_video_sink, guint32 virtual_fb_height);
 static gboolean gst_imx_blitter_video_sink_reconfigure_fb(GstImxBlitterVideoSink *blitter_video_sink, guint num_pages);
 static gboolean gst_imx_blitter_video_sink_restore_original_fb_config(GstImxBlitterVideoSink *blitter_video_sink);
@@ -897,6 +897,7 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 {
 	/* must be called with lock held */
 
+	gboolean ret = TRUE;
 	int fd;
 	guint fb_width, fb_height;
 	GstVideoFormat fb_format;
@@ -1030,13 +1031,18 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 	 * and output frame, since these two items changed */
 	if (blitter_video_sink->blitter != NULL)
 	{
-		gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info));
-		gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer);
-		gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 2 : 1);
+		ret = ret && gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info));
+		ret = ret && gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer);
+		ret = ret && gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 2 : 1);
 	}
 
+	if (!ret)
+	{
+		close(fd);
+		blitter_video_sink->framebuffer_fd = -1;
+	}
 
-	return TRUE;
+	return ret;
 }
 
 
@@ -1074,25 +1080,36 @@ static void gst_imx_blitter_video_sink_close_framebuffer_device(GstImxBlitterVid
 }
 
 
-static void gst_imx_blitter_video_sink_select_fb_page(GstImxBlitterVideoSink *blitter_video_sink, guint page)
+static gboolean gst_imx_blitter_video_sink_select_fb_page(GstImxBlitterVideoSink *blitter_video_sink, guint page)
 {
 	GstImxPhysMemMeta *phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(blitter_video_sink->framebuffer);
 	guint height = GST_VIDEO_INFO_HEIGHT(&(blitter_video_sink->output_video_info));
 	guint page_size = GST_VIDEO_INFO_PLANE_STRIDE(&(blitter_video_sink->output_video_info), 0) * height;
+
+	if (blitter_video_sink->framebuffer_fd == -1)
+		return FALSE;
 
 	GST_LOG_OBJECT(blitter_video_sink, "switching to page %u", page);
 
 	phys_mem_meta->phys_addr = (gst_imx_phys_addr_t)(blitter_video_sink->fb_fix.smem_start) + page_size * page;
 	blitter_video_sink->fb_var.yoffset = height * page;
 
-	gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer);
+	return gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer);
 }
 
 
-static void gst_imx_blitter_video_sink_flip_to_selected_fb_page(GstImxBlitterVideoSink *blitter_video_sink)
+static gboolean gst_imx_blitter_video_sink_flip_to_selected_fb_page(GstImxBlitterVideoSink *blitter_video_sink)
 {
+	if (blitter_video_sink->framebuffer_fd == -1)
+		return FALSE;
+
 	if (ioctl(blitter_video_sink->framebuffer_fd, FBIOPAN_DISPLAY, &(blitter_video_sink->fb_var)) == -1)
+	{
 		GST_ERROR_OBJECT(blitter_video_sink, "FBIOPAN_DISPLAY error: %s", strerror(errno));
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 
