@@ -344,10 +344,14 @@ static gboolean gst_imx_v4l2_buffer_pool_stop(GstBufferPool *bpool)
 			pool->buffers[i] = NULL;
 		}
 	}
-	g_free(pool->buffers);
-	pool->buffers = NULL;
 
 	ret = GST_BUFFER_POOL_CLASS(gst_imx_v4l2_buffer_pool_parent_class)->stop(bpool);
+
+	/* Freeing the buffers array *after* the base class stopped. This is because
+	 * the base class might try to release/free individual buffers in its stop()
+	 * function, so the buffers array must be valid until the base class is done. */
+	g_free(pool->buffers);
+	pool->buffers = NULL;
 
 	return ret;
 }
