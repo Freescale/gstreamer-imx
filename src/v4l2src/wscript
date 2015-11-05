@@ -6,7 +6,7 @@ def configure(conf):
 
 
 def build(bld):
-	if not bld.env['BUILD_FOR_ANDROID']:
+	if conf.env['WITH_GSTPHOTOGRAPHY']:
 		bld(
 			features = ['c', bld.env['CLIBTYPE']],
 			includes = ['.', '../..'],
