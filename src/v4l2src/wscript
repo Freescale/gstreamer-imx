@@ -6,7 +6,7 @@ def configure(conf):
 
 
 def build(bld):
-	if conf.env['WITH_GSTPHOTOGRAPHY']:
+	if bld.env['WITH_GSTPHOTOGRAPHY']:
 		bld(
 			features = ['c', bld.env['CLIBTYPE']],
 			includes = ['.', '../..'],
