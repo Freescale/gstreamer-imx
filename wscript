@@ -57,7 +57,6 @@ def options(opt):
 	opt.load('compiler_c')
 	opt.load('gnu_dirs')
 	opt.recurse('src/eglvivsink')
-	opt.recurse('src/vpu')
 
 
 def check_linux_headers(conf):

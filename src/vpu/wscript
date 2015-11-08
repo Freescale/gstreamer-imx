@@ -4,34 +4,21 @@
 from waflib import Logs
 
 
-def options(opt):
-	opt.recurse('imxvpuapi')
-	opt.add_option('--use-system-imxvpuapi', action = 'store_true', default = False, help = 'use a system imxvpuapi library instead of the integrated one [default: %default]')
-
-
 def configure(conf):
-	if conf.options.use_system_imxvpuapi:
-		Logs.pprint('GREEN', 'using system imxvpuapi library')
-		if conf.check_cfg(package = 'imxvpuapi', uselib_store = 'IMXVPUAPI', args = '--cflags --libs', mandatory = 0):
-			Logs.pprint('GREEN', 'found installed imxvpuapi library - VPU elements will be built')
-			conf.env['BUILD_VPU_ELEMENTS'] = 1
-		else:
-			Logs.pprint('YELLOW', 'could not find installed imxvpuapi library - VPU elements will not be built')
+	if conf.check_cfg(package = 'libimxvpuapi', uselib_store = 'IMXVPUAPI', args = '--cflags --libs', mandatory = 0):
+		Logs.pprint('GREEN', 'found installed imxvpuapi library - VPU elements will be built')
+		conf.env['BUILD_VPU_ELEMENTS'] = 1
 	else:
-		Logs.pprint('GREEN', 'using integrated imxvpuapi library')
-		conf.recurse('imxvpuapi')
+		Logs.pprint('YELLOW', 'could not find installed imxvpuapi library - VPU elements will not be built')
 
 
 def build(bld):
-	if not bld.options.use_system_imxvpuapi:
-		bld.recurse('imxvpuapi')
-
 	if bld.env['BUILD_VPU_ELEMENTS']:
 		bld(
 			features = ['c', bld.env['CLIBTYPE']],
 			includes = ['.', '../..'],
 			uselib = bld.env['COMMON_USELIB'] + ['IMXVPUAPI'],
-			use = 'gstimxcommon imxvpuapi',
+			use = 'gstimxcommon',
 			target = 'gstimxvpu',
 			source = bld.path.ant_glob('*.c'),
 			install_path = bld.env['PLUGIN_INSTALL_PATH']

@@ -21,8 +21,8 @@
 #include "encoder_base.h"
 #include "allocator.h"
 #include "device.h"
-#include "../../common/phys_mem_buffer_pool.h"
-#include "../../common/phys_mem_meta.h"
+#include "../common/phys_mem_buffer_pool.h"
+#include "../common/phys_mem_meta.h"
 
 
 
