@@ -873,7 +873,23 @@ static gboolean gst_imx_vpu_decoder_decide_allocation(GstVideoDecoder *decoder, 
 		{
 			gst_query_parse_nth_allocation_pool(query, i, &pool, &size, &min, &max);
 			if (gst_buffer_pool_has_option(pool, GST_BUFFER_POOL_OPTION_IMX_VPU_DECODER_FRAMEBUFFER))
+			{
+				/* This pool can be used, since it does have the
+				 * GST_BUFFER_POOL_OPTION_IMX_VPU_DECODER_FRAMEBUFFER option. Exit the
+				 * loop *without* unref'ing the pool (since it is used
+				 * later below). */
+				GST_DEBUG_OBJECT(decoder, "video pool %p can be used - it does have the GST_BUFFER_POOL_OPTION_IMX_VPU_DECODER_FRAMEBUFFER", (gpointer)pool);
 				break;
+			}
+			else
+			{
+				/* This pool cannot be used, since it doesn't have the
+				 * GST_BUFFER_POOL_OPTION_IMX_VPU_DECODER_FRAMEBUFFER option.
+				 * Unref it, since gst_query_parse_nth_allocation_pool() refs it. */
+				GST_DEBUG_OBJECT(decoder, "video pool %p cannot be used - it does not have the GST_BUFFER_POOL_OPTION_IMX_VPU_DECODER_FRAMEBUFFER; unref'ing", (gpointer)pool);
+				gst_object_unref(GST_OBJECT(pool));
+				pool = NULL;
+			}
 		}
 
 		size = MAX(size, (guint)(vpu_decoder->decoder_context->framebuffer_array->framebuffer_sizes.total_size));
@@ -924,6 +940,8 @@ static gboolean gst_imx_vpu_decoder_decide_allocation(GstVideoDecoder *decoder, 
 	else
 		gst_query_add_allocation_pool(query, pool, size, min, max);
 
+	/* Unref the pool, since both gst_query_set_nth_allocation_pool() and
+	 * gst_query_add_allocation_pool() ref it */
 	if (pool != NULL)
 		gst_object_unref(pool);
 
