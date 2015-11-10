@@ -95,7 +95,7 @@ static gboolean gst_imx_g2d_free_phys_mem(GstImxPhysMemAllocator *allocator, Gst
 
 static void gst_imx_g2d_cache_op(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, enum g2d_cache_mode cache_mode)
 {
-	gchar const *desc;
+	gchar const *desc = NULL;
 	struct g2d_buf *buf = (struct g2d_buf *)(memory->internal);
 
 	switch (cache_mode)
@@ -103,6 +103,7 @@ static void gst_imx_g2d_cache_op(GstImxPhysMemAllocator *allocator, GstImxPhysMe
 		case G2D_CACHE_CLEAN:      desc = "cleaning"; break;
 		case G2D_CACHE_FLUSH:      desc = "flushing"; break;
 		case G2D_CACHE_INVALIDATE: desc = "invalidating"; break;
+		default: g_assert_not_reached();
 	}
 
 	if (g2d_cache_op(buf, cache_mode) == 0)

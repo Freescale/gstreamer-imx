@@ -1,5 +1,5 @@
-/* GStreamer meta data structure for VPU specific buffer information
- * Copyright (C) 2013  Carlos Rafael Giani
+/* GStreamer meta data structure for VPU framebuffer specific information
+ * Copyright (C) 2015  Carlos Rafael Giani
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -17,33 +17,32 @@
  */
 
 
-#include "vpu_buffer_meta.h"
+#include "vpu_framebuffer_meta.h"
 
 
-static gboolean gst_imx_vpu_buffer_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
+static gboolean gst_imx_vpu_framebuffer_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
 {
-	GstImxVpuBufferMeta *imx_vpu_meta = (GstImxVpuBufferMeta *)meta;
+	GstImxVpuFramebufferMeta *imx_vpu_meta = (GstImxVpuFramebufferMeta *)meta;
 	imx_vpu_meta->framebuffer = NULL;
-	imx_vpu_meta->not_displayed_yet = FALSE;
 	return TRUE;
 }
 
 
-static void gst_imx_vpu_buffer_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
+static void gst_imx_vpu_framebuffer_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBuffer *buffer)
 {
-	GstImxVpuBufferMeta *imx_vpu_meta = (GstImxVpuBufferMeta *)meta;
+	GstImxVpuFramebufferMeta *imx_vpu_meta = (GstImxVpuFramebufferMeta *)meta;
 	imx_vpu_meta->framebuffer = NULL;
 }
 
 
-GType gst_imx_vpu_buffer_meta_api_get_type(void)
+GType gst_imx_vpu_framebuffer_meta_api_get_type(void)
 {
 	static volatile GType type;
 	static gchar const *tags[] = { "imx_vpu", NULL };
 
 	if (g_once_init_enter(&type))
 	{
-		GType _type = gst_meta_api_type_register("GstImxVpuBufferMetaAPI", tags);
+		GType _type = gst_meta_api_type_register("GstImxVpuFramebufferMetaAPI", tags);
 		g_once_init_leave(&type, _type);
 	}
 
@@ -51,18 +50,18 @@ GType gst_imx_vpu_buffer_meta_api_get_type(void)
 }
 
 
-GstMetaInfo const * gst_imx_vpu_buffer_meta_get_info(void)
+GstMetaInfo const * gst_imx_vpu_framebuffer_meta_get_info(void)
 {
 	static GstMetaInfo const *meta_buffer_imx_vpu_info = NULL;
 
 	if (g_once_init_enter(&meta_buffer_imx_vpu_info))
 	{
 		GstMetaInfo const *meta = gst_meta_register(
-			gst_imx_vpu_buffer_meta_api_get_type(),
-			"GstImxVpuBufferMeta",
-			sizeof(GstImxVpuBufferMeta),
-			GST_DEBUG_FUNCPTR(gst_imx_vpu_buffer_meta_init),
-			GST_DEBUG_FUNCPTR(gst_imx_vpu_buffer_meta_free),
+			gst_imx_vpu_framebuffer_meta_api_get_type(),
+			"GstImxVpuFramebufferMeta",
+			sizeof(GstImxVpuFramebufferMeta),
+			GST_DEBUG_FUNCPTR(gst_imx_vpu_framebuffer_meta_init),
+			GST_DEBUG_FUNCPTR(gst_imx_vpu_framebuffer_meta_free),
 			(GstMetaTransformFunction)NULL
 		);
 		g_once_init_leave(&meta_buffer_imx_vpu_info, meta);
