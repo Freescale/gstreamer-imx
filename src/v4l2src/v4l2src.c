@@ -295,9 +295,7 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 
 	/* no repooling; leads to stream off situation due to pool start/stop */
 	pool = gst_base_src_get_buffer_pool(bsrc);
-	if (!pool)
-	{
-		/* No pool present. Create one. */
+	if (!pool) {
 		pool = gst_imx_v4l2_buffer_pool_new(v4l2src->fd_obj_v4l, v4l2src->metaCropX,
 						    v4l2src->metaCropY, v4l2src->metaCropWidth,
 						    v4l2src->metaCropHeight);
@@ -305,12 +303,6 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 		gst_buffer_pool_config_set_params(config, caps, size, min, max);
 		gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 		gst_buffer_pool_set_config(pool, config);
-	}
-	else
-	{
-		/* There is already a pool. Unref it here, since the
-		 * gst_base_src_get_buffer_pool() call refs it. */
-		gst_object_unref(GST_OBJECT(pool));
 	}
 
 	if (update)
