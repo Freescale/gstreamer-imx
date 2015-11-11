@@ -171,7 +171,7 @@ Available plugins
 Dependencies
 ------------
 
-You'll need a GStreamer 1.2 installation, and Freescale's VPU wrapper library (at least version 1.0.45).
+You'll need a GStreamer 1.2 installation, and the [libimxvpuapi library](https://github.com/Freescale/libimxvpuapi).
 Also, the `videoparsersbad` plugin from the `gst-plugins-bad` package in GStreamer is needed, since
 this plugin contains video parsers like `h264parse`, `mpegvideoparse` (for MPEG1 and MPEG2), and
 `mpeg4videoparse` (for MPEG4).
