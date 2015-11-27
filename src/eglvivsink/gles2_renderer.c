@@ -113,7 +113,14 @@ static unsigned int const vertex_texcoords_offset = sizeof(GLfloat)*2;
 
 
 
+// Vivante GLES2 extensions
+typedef void (GL_APIENTRYP PFNGLTEXDIRECTVIVMAP) (GLenum, GLsizei, GLsizei, GLenum, GLvoid **, const GLuint *);
+typedef void (GL_APIENTRYP PFNGLTEXDIRECTVIV) (GLenum, GLsizei, GLsizei, GLenum, GLvoid **);
+typedef void (GL_APIENTRYP PFNGLTEXDIRECTINVALIDATEVIV)(GLenum);
 
+static PFNGLTEXDIRECTVIVMAP glTexDirectVIVMap;
+static PFNGLTEXDIRECTVIV glTexDirectVIV;
+static PFNGLTEXDIRECTINVALIDATEVIV glTexDirectInvalidateVIV;
 
 static void init_debug_category(void)
 {
@@ -124,8 +131,6 @@ static void init_debug_category(void)
 		initialized = TRUE;
 	}
 }
-
-
 
 
 static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
@@ -164,8 +169,12 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 			return 0;
 		}
 
-		if (gst_imx_egl_viv_sink_gles2_renderer_search_extension(extensions))
+		if (gst_imx_egl_viv_sink_gles2_renderer_search_extension(extensions)) {
 			GST_INFO("Vivante direct texture extension (GL_VIV_direct_texture) present");
+			glTexDirectVIV = (PFNGLTEXDIRECTVIV) eglGetProcAddress("glTexDirectVIV");
+			glTexDirectVIVMap = (PFNGLTEXDIRECTVIVMAP) eglGetProcAddress("glTexDirectVIVMap");
+			glTexDirectInvalidateVIV = (PFNGLTEXDIRECTINVALIDATEVIV) eglGetProcAddress("glTexDirectInvalidateVIV");
+		}
 		else
 		{
 			GST_ERROR("Vivante direct texture extension (GL_VIV_direct_texture) missing");
