@@ -183,12 +183,14 @@ def configure(conf):
 
 
 	conf.recurse('src/common')
-	conf.recurse('src/g2d')
+	if not conf.options.build_for_android:
+		conf.recurse('src/g2d')
 	conf.recurse('src/pxp')
 	conf.recurse('src/ipu')
 	conf.recurse('src/vpu')
 	conf.recurse('src/eglvivsink')
-	conf.recurse('src/v4l2src')
+	if not conf.options.build_for_android:
+		conf.recurse('src/v4l2src')
 	conf.recurse('src/audio')
 
 
@@ -198,12 +200,14 @@ def configure(conf):
 
 def build(bld):
 	bld.recurse('src/common')
-	bld.recurse('src/g2d')
+	if not bld.env['BUILD_FOR_ANDROID']:
+		bld.recurse('src/g2d')
 	bld.recurse('src/pxp')
 	bld.recurse('src/ipu')
 	bld.recurse('src/vpu')
 	bld.recurse('src/eglvivsink')
-	bld.recurse('src/v4l2src')
+	if not bld.env['BUILD_FOR_ANDROID']:
+		bld.recurse('src/v4l2src')
 	bld.recurse('src/audio')
 	bld.recurse('src/blitter')
 	bld.recurse('src/compositor')

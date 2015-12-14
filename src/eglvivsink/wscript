@@ -57,7 +57,7 @@ def check_viv_texformat(conf, texformat):
 	return conf.check(fragment = (test_code % texformat), mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for GLES texture format %s' % texformat, uselib = ['GLES2'], okmsg = 'yes', errmsg = 'no')
 
 
-valid_egl_platforms = ['fb', 'x11', 'wayland']
+valid_egl_platforms = ['fb', 'x11', 'wayland', 'android']
 
 
 def options(opt):
@@ -80,6 +80,10 @@ def check_dependencies(conf):
 			return False
 		conf.env['PLATFORM_SOURCE'] = ['egl_platform_wayland.c']
 		conf.env['PLATFORM_USELIBS'] += ["WAYLAND_CLIENT", "WAYLAND_CURSOR", "WAYLAND_EGL"]
+	elif platform == 'android':
+		if not check_vivante_egl(conf, None):
+			return False
+		conf.env['PLATFORM_SOURCE'] = ['egl_platform_android.c']
 
 	if not check_gles2(conf):
 		return False
