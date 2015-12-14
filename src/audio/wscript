@@ -12,14 +12,13 @@ def add_fslcodec(conf, desc, codec_name, arm_core, gstcaps):
 		soname_line = reduce(lambda a,b : a or b, map(lambda x: x if x.find('SONAME') != -1 else None, objdump_out))
 		soname_line = soname_line.strip()
 		soname = re.search('SONAME\s*(\S*)', soname_line).group(1)
-		print(soname)
 		codec_fn = orig_codec_fn
 
 		path = conf.env['UNIAUDIO_TARGET_CODEC_PATH']
 		fullpath = os.path.join(path, soname)
 		suffix = "%s_%s" % (codec_name.upper(), arm_core.upper())
 		conf.env['CODEC_ENTRIES'] += [ { "filename": fullpath, "gstcaps": gstcaps } ]
-		Logs.pprint('NORMAL', '  added %s decoder' % desc)
+		Logs.pprint('NORMAL', '  added %s decoder (soname: %s)' % (desc, soname))
 	except Errors.WafError as e:
 		Logs.pprint('NORMAL', '  could not add %s decoder' % desc)
 
@@ -45,12 +44,11 @@ def configure_uniaudio_decoder(conf):
 	if conf.env['CODEC_ENTRIES']:
 		codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
 		conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s, %s }" % (codec_str, null_terminator), quote = False)
+		conf.env['UNIAUDIO_DECODER_ENABLED'] = 1
+		conf.define('WITH_UNIAUDIO_DECODER', 1)
 		Logs.pprint('GREEN', 'uniaudio decoder will be built')
 	else:
 		Logs.pprint('RED', 'no fslcodec plugins found - not building uniaudio decoder')
-
-	conf.env['UNIAUDIO_DECODER_ENABLED'] = 1
-	conf.define('WITH_UNIAUDIO_DECODER', 1)
 
 
 def configure_mp3_encoder(conf):
