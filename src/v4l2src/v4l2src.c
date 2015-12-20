@@ -124,15 +124,19 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	gint fd_v4l;
 
 	fd_v4l = open(v4l2src->devicename, O_RDWR, 0);
-	if (fd_v4l < 0) {
+	if (fd_v4l < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "Unable to open %s",
 				v4l2src->devicename);
 		return -1;
 	}
 
-	if (ioctl (fd_v4l, VIDIOC_G_STD, &id) < 0) {
+	if (ioctl (fd_v4l, VIDIOC_G_STD, &id) < 0)
+	{
 		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed: %s", strerror(errno));
-	} else {
+	}
+	else
+	{
 		if (ioctl (fd_v4l, VIDIOC_S_STD, &id) < 0) {
 			GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_STD failed");
 			close(fd_v4l);
@@ -141,17 +145,19 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	}
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(fd_v4l, VIDIOC_G_FMT, &fmt) < 0) {
+	if (ioctl(fd_v4l, VIDIOC_G_FMT, &fmt) < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
 		close(fd_v4l);
 		return -1;
 	}
 
-	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d  field = %d", fmt.fmt.pix.pixelformat, fmt.fmt.pix.field);
+	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d  field = %d  std id = %#" G_GINT64_MODIFIER "x", fmt.fmt.pix.pixelformat, fmt.fmt.pix.field, id);
 
 	fszenum.index = v4l2src->capture_mode;
 	fszenum.pixel_format = fmt.fmt.pix.pixelformat;
-	if (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &fszenum) < 0) {
+	if (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &fszenum) < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_ENUM_FRAMESIZES failed: %s", strerror(errno));
 		close(fd_v4l);
 		return -1;
@@ -163,7 +169,8 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 			v4l2src->capture_width, v4l2src->capture_height);
 
 	input = v4l2src->input;
-	if (ioctl(fd_v4l, VIDIOC_S_INPUT, &input) < 0) {
+	if (ioctl(fd_v4l, VIDIOC_S_INPUT, &input) < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_INPUT failed: %s", strerror(errno));
 		close(fd_v4l);
 		return -1;
@@ -173,13 +180,16 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	parm.parm.capture.timeperframe.numerator = v4l2src->fps_d;
 	parm.parm.capture.timeperframe.denominator = v4l2src->fps_n;
 	parm.parm.capture.capturemode = v4l2src->capture_mode;
-	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0) {
+	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_PARM failed: %s", strerror(errno));
 		close(fd_v4l);
 		return -1;
 	}
+
 	/* Get the actual frame period if possible */
-	if (parm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME) {
+	if (parm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME)
+	{
 		v4l2src->fps_n = parm.parm.capture.timeperframe.denominator;
 		v4l2src->fps_d = parm.parm.capture.timeperframe.numerator;
 	}
@@ -190,7 +200,8 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	fmt.fmt.pix.sizeimage = 0;
 	fmt.fmt.pix.width = v4l2src->capture_width;
 	fmt.fmt.pix.height = v4l2src->capture_height;
-	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0) {
+	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_FMT failed: %s", strerror(errno));
 		close(fd_v4l);
 		return -1;
@@ -208,7 +219,8 @@ static gboolean gst_imx_v4l2src_start(GstBaseSrc *src)
 	GST_LOG_OBJECT(v4l2src, "start");
 
 	fd_v4l = gst_imx_v4l2src_capture_setup(v4l2src);
-	if (fd_v4l < 0) {
+	if (fd_v4l < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "capture_setup failed");
 		return FALSE;
 	}
@@ -216,7 +228,8 @@ static gboolean gst_imx_v4l2src_start(GstBaseSrc *src)
 	v4l2src->fd_obj_v4l = gst_fd_object_new(fd_v4l);
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0) {
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
 		return FALSE;
 	}
@@ -286,7 +299,8 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 		min = v4l2src->queue_size;
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0) {
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
 		return FALSE;
 	}
@@ -295,7 +309,8 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 
 	/* no repooling; leads to stream off situation due to pool start/stop */
 	pool = gst_base_src_get_buffer_pool(bsrc);
-	if (!pool) {
+	if (!pool)
+	{
 		pool = gst_imx_v4l2_buffer_pool_new(v4l2src->fd_obj_v4l, v4l2src->metaCropX,
 						    v4l2src->metaCropY, v4l2src->metaCropWidth,
 						    v4l2src->metaCropHeight);
@@ -342,21 +357,23 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 	struct v4l2_format fmt;
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0) {
+	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0)
+	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
 		return NULL;
 	}
 
-	switch (fmt.fmt.pix.pixelformat) {
-	case V4L2_PIX_FMT_YUV420: /* Special Case for handling YU12 */
-		pixel_format = "I420";
-		break;
-	case V4L2_PIX_FMT_YUYV: /* Special Case for handling YUYV */
-		pixel_format = "YUY2";
-		break;
-	default:
-		gst_fmt = gst_video_format_from_fourcc(fmt.fmt.pix.pixelformat);
-		pixel_format = gst_video_format_to_string(gst_fmt);
+	switch (fmt.fmt.pix.pixelformat)
+	{
+		case V4L2_PIX_FMT_YUV420: /* Special Case for handling YU12 */
+			pixel_format = "I420";
+			break;
+		case V4L2_PIX_FMT_YUYV: /* Special Case for handling YUYV */
+			pixel_format = "YUY2";
+			break;
+		default:
+			gst_fmt = gst_video_format_from_fourcc(fmt.fmt.pix.pixelformat);
+			pixel_format = gst_video_format_to_string(gst_fmt);
 	}
 
 	if (fmt.fmt.pix.field == V4L2_FIELD_INTERLACED)
@@ -825,11 +842,10 @@ static gchar * gst_imx_v4l2src_uri_get_uri(GstURIHandler * handler)
 {
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(handler);
 
-	if (v4l2src->devicename != NULL) {
+	if (v4l2src->devicename != NULL)
 		return g_strdup_printf("imxv4l2://%s", v4l2src->devicename);
-	}
 
-	return g_strdup ("imxv4l2://");
+	return g_strdup("imxv4l2://");
 }
 
 static gboolean gst_imx_v4l2src_uri_set_uri(GstURIHandler * handler,
@@ -838,9 +854,9 @@ static gboolean gst_imx_v4l2src_uri_set_uri(GstURIHandler * handler,
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(handler);
 	const gchar *device = "/dev/video0";
 
-	if (strcmp (uri, "imxv4l2://") != 0) {
+	if (strcmp (uri, "imxv4l2://") != 0)
 		device = uri + 10;
-	}
+
 	g_object_set(v4l2src, "device", device, NULL);
 
 	return TRUE;
@@ -883,21 +899,22 @@ static void gst_imx_v4l2src_uri_handler_init(gpointer g_iface, gpointer iface_da
 
 static inline const char *ctrl_name(int id)
 {
-	switch (id) {
-	case V4L2_CID_FOCUS_AUTO:
-		return "V4L2_CID_FOCUS_AUTO";
-	case V4L2_CID_AUTO_FOCUS_RANGE:
-		return "V4L2_CID_FOCUS_RANGE";
-	case V4L2_CID_AUTO_FOCUS_START:
-		return "V4L2_CID_AUTO_FOCUS_START";
-	case V4L2_CID_AUTO_FOCUS_STOP:
-		return "V4L2_CID_AUTO_FOCUS_STOP";
-	case V4L2_CID_AUTO_FOCUS_STATUS:
-		return "V4L2_CID_AUTO_FOCUS_STATUS";
-	case V4L2_CID_3A_LOCK:
-		return "V4L2_CID_3A_LOCK";
-	default:
-		return "<fixme>";
+	switch (id)
+	{
+		case V4L2_CID_FOCUS_AUTO:
+			return "V4L2_CID_FOCUS_AUTO";
+		case V4L2_CID_AUTO_FOCUS_RANGE:
+			return "V4L2_CID_FOCUS_RANGE";
+		case V4L2_CID_AUTO_FOCUS_START:
+			return "V4L2_CID_AUTO_FOCUS_START";
+		case V4L2_CID_AUTO_FOCUS_STOP:
+			return "V4L2_CID_AUTO_FOCUS_STOP";
+		case V4L2_CID_AUTO_FOCUS_STATUS:
+			return "V4L2_CID_AUTO_FOCUS_STATUS";
+		case V4L2_CID_3A_LOCK:
+			return "V4L2_CID_3A_LOCK";
+		default:
+			return "<fixme>";
 	}
 }
 
@@ -911,7 +928,8 @@ static int v4l2_g_ctrl(GstImxV4l2VideoSrc *v4l2src, int id, int *value)
 
 	if (ret < 0)
 		GST_LOG_OBJECT(v4l2src, "VIDIOC_G_CTRL(%s) failed", ctrl_name(id));
-	else {
+	else
+	{
 		GST_LOG_OBJECT(v4l2src, "VIDIOC_G_CTRL(%s) returned %d", ctrl_name(id), control.value);
 		*value = control.value;
 	}
@@ -949,7 +967,8 @@ static void gst_imx_v4l2src_apply_focus_settings(GstImxV4l2VideoSrc *v4l2src,
 	v4l2_s_ctrl(v4l2src, V4L2_CID_FOCUS_AUTO, 0);
 	/* ensure that single shot AF is not running */
 	v4l2_s_ctrl(v4l2src, V4L2_CID_AUTO_FOCUS_STOP, 0);
-	if (v4l2src->af_clock_id) {
+	if (v4l2src->af_clock_id)
+	{
 		gst_clock_id_unschedule(v4l2src->af_clock_id);
 		gst_clock_id_unref(v4l2src->af_clock_id);
 		v4l2src->af_clock_id = NULL;
@@ -958,24 +977,26 @@ static void gst_imx_v4l2src_apply_focus_settings(GstImxV4l2VideoSrc *v4l2src,
 	if (v4l2_g_ctrl(v4l2src, V4L2_CID_3A_LOCK, &locks) == 0 && (locks & V4L2_LOCK_FOCUS))
 		v4l2_s_ctrl(v4l2src, V4L2_CID_3A_LOCK, locks & ~V4L2_LOCK_FOCUS);
 
-	if (activate) {
-
+	if (activate)
+	{
 		/* set focus range */
 
-		switch (v4l2src->focus_mode) {
-		case GST_PHOTOGRAPHY_FOCUS_MODE_AUTO:
-			range = V4L2_AUTO_FOCUS_RANGE_AUTO;
-			break;
-		case GST_PHOTOGRAPHY_FOCUS_MODE_MACRO:
-			range = V4L2_AUTO_FOCUS_RANGE_MACRO;
-			break;
-		case GST_PHOTOGRAPHY_FOCUS_MODE_INFINITY:
-			range = V4L2_AUTO_FOCUS_RANGE_INFINITY;
-			break;
-		default:
-			range = V4L2_AUTO_FOCUS_RANGE_NORMAL;
-			break;
+		switch (v4l2src->focus_mode)
+		{
+			case GST_PHOTOGRAPHY_FOCUS_MODE_AUTO:
+				range = V4L2_AUTO_FOCUS_RANGE_AUTO;
+				break;
+			case GST_PHOTOGRAPHY_FOCUS_MODE_MACRO:
+				range = V4L2_AUTO_FOCUS_RANGE_MACRO;
+				break;
+			case GST_PHOTOGRAPHY_FOCUS_MODE_INFINITY:
+				range = V4L2_AUTO_FOCUS_RANGE_INFINITY;
+				break;
+			default:
+				range = V4L2_AUTO_FOCUS_RANGE_NORMAL;
+				break;
 		}
+
 		v4l2_s_ctrl(v4l2src, V4L2_CID_AUTO_FOCUS_RANGE, range);
 
 		/* enable continuous autofocus if requested */
@@ -992,24 +1013,26 @@ static gboolean gst_imx_v4l2src_set_focus_mode(GstPhotography *photo,
 
 	GST_LOG_OBJECT(v4l2src, "setting focus mode to %d", focus_mode);
 
-	switch (focus_mode) {
-	case GST_PHOTOGRAPHY_FOCUS_MODE_AUTO:
-	case GST_PHOTOGRAPHY_FOCUS_MODE_MACRO:
-	case GST_PHOTOGRAPHY_FOCUS_MODE_PORTRAIT:
-	case GST_PHOTOGRAPHY_FOCUS_MODE_INFINITY:
-		break;
-	case GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_NORMAL:
-	case GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_EXTENDED:
-		focus_mode = GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_NORMAL;
-		break;
-	default:
-		GST_WARNING_OBJECT(v4l2src, "focus mode %d is not supported", focus_mode);
-		return FALSE;
+	switch (focus_mode)
+	{
+		case GST_PHOTOGRAPHY_FOCUS_MODE_AUTO:
+		case GST_PHOTOGRAPHY_FOCUS_MODE_MACRO:
+		case GST_PHOTOGRAPHY_FOCUS_MODE_PORTRAIT:
+		case GST_PHOTOGRAPHY_FOCUS_MODE_INFINITY:
+			break;
+		case GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_NORMAL:
+		case GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_EXTENDED:
+			focus_mode = GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_NORMAL;
+			break;
+		default:
+			GST_WARNING_OBJECT(v4l2src, "focus mode %d is not supported", focus_mode);
+			return FALSE;
 	}
 
 	g_mutex_lock(&v4l2src->af_mutex);
 
-	if (v4l2src->focus_mode != focus_mode) {
+	if (v4l2src->focus_mode != focus_mode)
+	{
 		v4l2src->focus_mode = focus_mode;
 
 		if (GST_STATE(v4l2src) == GST_STATE_PAUSED || GST_STATE(v4l2src) == GST_STATE_PLAYING)
@@ -1047,31 +1070,33 @@ static void gst_imx_v4l2src_af_check_status(GstImxV4l2VideoSrc *v4l2src)
 	if (v4l2_g_ctrl(v4l2src, V4L2_CID_AUTO_FOCUS_STATUS, &status) < 0)
 		goto none;
 
-	switch (status) {
-	case V4L2_AUTO_FOCUS_STATUS_IDLE:
-	default:
-	none:
-		send_message = TRUE;
-		message_status = GST_PHOTOGRAPHY_FOCUS_STATUS_NONE;
-		schedule_recheck = FALSE;
-		break;
-	case V4L2_AUTO_FOCUS_STATUS_BUSY:
-		send_message = FALSE;
-		schedule_recheck = TRUE;
-		break;
-	case V4L2_AUTO_FOCUS_STATUS_REACHED:
-		send_message = TRUE;
-		message_status = GST_PHOTOGRAPHY_FOCUS_STATUS_SUCCESS;
-		schedule_recheck = FALSE;
-		break;
-	case V4L2_AUTO_FOCUS_STATUS_FAILED:
-		send_message = TRUE;
-		message_status = GST_PHOTOGRAPHY_FOCUS_STATUS_FAIL;
-		schedule_recheck = FALSE;
-		break;
+	switch (status)
+	{
+		case V4L2_AUTO_FOCUS_STATUS_IDLE:
+		default:
+		none:
+			send_message = TRUE;
+			message_status = GST_PHOTOGRAPHY_FOCUS_STATUS_NONE;
+			schedule_recheck = FALSE;
+			break;
+		case V4L2_AUTO_FOCUS_STATUS_BUSY:
+			send_message = FALSE;
+			schedule_recheck = TRUE;
+			break;
+		case V4L2_AUTO_FOCUS_STATUS_REACHED:
+			send_message = TRUE;
+			message_status = GST_PHOTOGRAPHY_FOCUS_STATUS_SUCCESS;
+			schedule_recheck = FALSE;
+			break;
+		case V4L2_AUTO_FOCUS_STATUS_FAILED:
+			send_message = TRUE;
+			message_status = GST_PHOTOGRAPHY_FOCUS_STATUS_FAIL;
+			schedule_recheck = FALSE;
+			break;
 	}
 
-	if (send_message) {
+	if (send_message)
+	{
 		GstStructure *s;
 		GstMessage *m;
 
@@ -1085,7 +1110,8 @@ static void gst_imx_v4l2src_af_check_status(GstImxV4l2VideoSrc *v4l2src)
 			GST_ERROR_OBJECT(v4l2src, "failed to post message");
 	}
 
-	if (schedule_recheck) {
+	if (schedule_recheck)
+	{
 		GstClock *c;
 		GstClockTime t;
 
@@ -1108,7 +1134,8 @@ static gboolean gst_imx_v4l2src_af_status_cb(GstClock *clock, GstClockTime time,
 
 	g_mutex_lock(&v4l2src->af_mutex);
 
-	if (v4l2src->af_clock_id == id) {
+	if (v4l2src->af_clock_id == id)
+	{
 		gst_clock_id_unref(v4l2src->af_clock_id);
 		v4l2src->af_clock_id = NULL;
 
@@ -1126,27 +1153,31 @@ void gst_imx_v4l2src_set_autofocus(GstPhotography *photo, gboolean on)
 
 	g_mutex_lock(&v4l2src->af_mutex);
 
-	if (v4l2src->af_clock_id) {
+	if (v4l2src->af_clock_id)
+	{
 		gst_clock_id_unschedule(v4l2src->af_clock_id);
 		gst_clock_id_unref(v4l2src->af_clock_id);
 		v4l2src->af_clock_id = NULL;
 	}
 
-	if (v4l2src->focus_mode == GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_NORMAL) {
-
-		if (v4l2_g_ctrl(v4l2src, V4L2_CID_3A_LOCK, &locks) == 0) {
+	if (v4l2src->focus_mode == GST_PHOTOGRAPHY_FOCUS_MODE_CONTINUOUS_NORMAL)
+	{
+		if (v4l2_g_ctrl(v4l2src, V4L2_CID_3A_LOCK, &locks) == 0)
+		{
 			if (on && !(locks & V4L2_LOCK_FOCUS))
 				v4l2_s_ctrl(v4l2src, V4L2_CID_3A_LOCK, locks | V4L2_LOCK_FOCUS);
 			else if (!on && (locks & V4L2_LOCK_FOCUS))
 				v4l2_s_ctrl(v4l2src, V4L2_CID_3A_LOCK, locks & ~V4L2_LOCK_FOCUS);
 		}
-
-	} else {
-
-		if (on) {
+	}
+	else
+	{
+		if (on)
+		{
 			if (v4l2_s_ctrl(v4l2src, V4L2_CID_AUTO_FOCUS_START, 0) == 0)
 				gst_imx_v4l2src_af_check_status(v4l2src);
-		} else
+		}
+		else
 			v4l2_s_ctrl(v4l2src, V4L2_CID_AUTO_FOCUS_STOP, 0);
 	}
 
