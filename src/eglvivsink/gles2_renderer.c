@@ -1,28 +1,12 @@
 #include <config.h>
 #include <string.h>
 #include <stdlib.h>
+#include "../common/phys_mem_meta.h"
 #include "gl_headers.h"
 #include "gles2_renderer.h"
 #include "egl_platform.h"
-#include "../common/phys_mem_meta.h"
 
-/*
- * Those definitions are mandatory for Android. Indeed the Vivante GLES2
- * extensions are not available in the android NDK header, the proper way to
- * solve this would be to import vivante headers in a freescale Android bsp and
- * generate a NDK from this source tree.
- */
-#ifdef ANDROID
-/* GL_VIV_texture */
-#define GL_VIV_YV12                                             0x8FC0
-#define GL_VIV_NV12                                             0x8FC1
-#define GL_VIV_YUY2                                             0x8FC2
-#define GL_VIV_UYVY                                             0x8FC3
-#define GL_VIV_NV21                                             0x8FC4
-#define GL_VIV_I420                                             0x8FC5
-#endif
-
-GST_DEBUG_CATEGORY_STATIC(imx_gles2renderer_debug);
+GST_DEBUG_CATEGORY(imx_gles2renderer_debug);
 #define GST_CAT_DEFAULT imx_gles2renderer_debug
 
 
@@ -128,14 +112,6 @@ static unsigned int const vertex_texcoords_offset = sizeof(GLfloat)*2;
 
 
 
-// Vivante GLES2 extensions
-typedef void (GL_APIENTRYP PFNGLTEXDIRECTVIVMAP) (GLenum, GLsizei, GLsizei, GLenum, GLvoid **, const GLuint *);
-typedef void (GL_APIENTRYP PFNGLTEXDIRECTVIV) (GLenum, GLsizei, GLsizei, GLenum, GLvoid **);
-typedef void (GL_APIENTRYP PFNGLTEXDIRECTINVALIDATEVIV)(GLenum);
-
-static PFNGLTEXDIRECTVIVMAP glTexDirectVIVMap;
-static PFNGLTEXDIRECTVIV glTexDirectVIV;
-static PFNGLTEXDIRECTINVALIDATEVIV glTexDirectInvalidateVIV;
 
 static void init_debug_category(void)
 {
@@ -155,6 +131,7 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 
 	{
 		GLubyte const *extensions;
+		gboolean success = TRUE;
 
 		if (!gst_imx_egl_viv_sink_egl_platform_init_window(
 			renderer->egl_platform,
@@ -184,15 +161,23 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 			return 0;
 		}
 
-		if (gst_imx_egl_viv_sink_gles2_renderer_search_extension(extensions)) {
+		if (gst_imx_egl_viv_sink_gles2_renderer_search_extension(extensions))
+		{
 			GST_INFO("Vivante direct texture extension (GL_VIV_direct_texture) present");
-			glTexDirectVIV = (PFNGLTEXDIRECTVIV) eglGetProcAddress("glTexDirectVIV");
-			glTexDirectVIVMap = (PFNGLTEXDIRECTVIVMAP) eglGetProcAddress("glTexDirectVIVMap");
-			glTexDirectInvalidateVIV = (PFNGLTEXDIRECTINVALIDATEVIV) eglGetProcAddress("glTexDirectInvalidateVIV");
+			if (!gst_imx_egl_viv_sink_init_viv_direct_texture())
+			{
+				GST_INFO("Could not initialize Vivante direct texture extension");
+				success = FALSE;
+			}
 		}
 		else
 		{
 			GST_ERROR("Vivante direct texture extension (GL_VIV_direct_texture) missing");
+			success = FALSE;
+		}
+
+		if (!success)
+		{
 			GLES2_RENDERER_LOCK(renderer);
 			renderer->loop_flow_retval = GST_FLOW_ERROR;
 			GLES2_RENDERER_UNLOCK(renderer);
@@ -477,24 +462,12 @@ static GLenum gst_imx_egl_viv_sink_gles2_renderer_get_viv_format(GstVideoFormat 
 {
 	switch (format)
 	{
-#ifdef HAVE_VIV_I420
 		case GST_VIDEO_FORMAT_I420:  return GL_VIV_I420;
-#endif
-#ifdef HAVE_VIV_YV12
 		case GST_VIDEO_FORMAT_YV12:  return GL_VIV_YV12;
-#endif
-#ifdef HAVE_VIV_NV12
 		case GST_VIDEO_FORMAT_NV12:  return GL_VIV_NV12;
-#endif
-#ifdef HAVE_VIV_NV21
 		case GST_VIDEO_FORMAT_NV21:  return GL_VIV_NV21;
-#endif
-#ifdef HAVE_VIV_YUY2
 		case GST_VIDEO_FORMAT_YUY2:  return GL_VIV_YUY2;
-#endif
-#ifdef HAVE_VIV_UYVY
 		case GST_VIDEO_FORMAT_UYVY:  return GL_VIV_UYVY;
-#endif
 		case GST_VIDEO_FORMAT_RGB16: return GL_RGB565;
 		case GST_VIDEO_FORMAT_RGBA:  return GL_RGBA;
 		case GST_VIDEO_FORMAT_BGRA:  return GL_BGRA_EXT;

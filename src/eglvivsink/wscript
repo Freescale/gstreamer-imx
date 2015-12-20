@@ -27,7 +27,7 @@ def check_gles2(conf, uselib = 'EGL', lib_list = ['GLESv2']):
 	conf.check_cc(mandatory = 0, header_name = ['GLES2/gl2.h', 'GLES2/gl2ext.h'], uselib = uselib, define_name = 'WITH_GL2EXT_H', uselib_store = 'GLES2')
 	return retval
 
-def check_vivante_egl(conf, egl_extra_defines):
+def check_vivante_egl(conf, egl_extra_defines, check_for_viv_header = False):
 	if not conf.check_cc(mandatory = 0, lib = ['EGL'], uselib_store = 'EGL'):
 		return False
 	old_cflags = list(conf.env['CFLAGS'])
@@ -36,25 +36,14 @@ def check_vivante_egl(conf, egl_extra_defines):
 		extra_defines += egl_extra_defines
 	extra_cflags = map(lambda x: conf.env['DEFINES_ST'] % x, extra_defines)
 	conf.env['CFLAGS'] += extra_cflags
-	retval = \
-		conf.check_cc(mandatory = 0, header_name = 'EGL/eglvivante.h', uselib_store = 'EGL') and \
-		conf.check_cc(mandatory = 0, header_name = 'EGL/egl.h', uselib_store = 'EGL')
+	retval = True
+	if check_for_viv_header:
+		retval = retval and conf.check_cc(mandatory = 0, header_name = 'EGL/eglvivante.h', uselib_store = 'EGL')
+	retval = retval and conf.check_cc(mandatory = 0, header_name = 'EGL/egl.h', uselib_store = 'EGL')
 	conf.env['CFLAGS'] = old_cflags
 	if retval:
 		conf.env['DEFINES_EGL'] += extra_defines
 	return retval
-
-def check_viv_texformat(conf, texformat):
-	test_code = """
-		#include <GLES2/gl2.h>
-		#include <GLES2/gl2ext.h>
-
-		int main()
-		{
-			return (GL_%s) * 0;
-		}
-	"""
-	return conf.check(fragment = (test_code % texformat), mandatory = 0, execute = 0, define_ret = 0, msg = 'Checking for GLES texture format %s' % texformat, uselib = ['GLES2'], okmsg = 'yes', errmsg = 'no')
 
 
 valid_egl_platforms = ['fb', 'x11', 'wayland', 'android']
@@ -64,15 +53,14 @@ def options(opt):
 	opt.add_option('--egl-platform', action='store', default='x11', help='EGL platform to build for (valid values: ' + ' '.join(valid_egl_platforms) + ')')
 
 
-def check_dependencies(conf):
-	platform = conf.options.egl_platform
+def check_dependencies(conf, platform):
 	if platform == "x11":
 		if not check_x11(conf) or not check_vivante_egl(conf, None):
 			return False
 		conf.env['PLATFORM_SOURCE'] = ['egl_platform_x11.c']
 		conf.env['PLATFORM_USELIBS'] += ["X11"]
 	elif platform == "fb":
-		if not check_vivante_egl(conf, ['EGL_API_FB']):
+		if not check_vivante_egl(conf, ['EGL_API_FB'], True):
 			return False
 		conf.env['PLATFORM_SOURCE'] = ['egl_platform_fb.c']
 	elif platform == 'wayland':
@@ -88,22 +76,22 @@ def check_dependencies(conf):
 	if not check_gles2(conf):
 		return False
 
-	for texfmt in ['VIV_I420', 'VIV_YV12', 'VIV_NV12', 'VIV_NV21', 'VIV_YUY2', 'VIV_UYVY']:
-		if check_viv_texformat(conf, texfmt):
-			conf.define('HAVE_' + texfmt, 1)
-
 	return True
 
 
 def configure(conf):
 	from waflib.Build import Logs
 
-	if not conf.options.egl_platform in valid_egl_platforms:
+	platform = conf.options.egl_platform
+	if conf.env['BUILD_FOR_ANDROID']:
+		platform = 'android'
+
+	if not (platform in valid_egl_platforms):
 		conf.fatal('Invalid platform selected; run "./waf configure --help" for details about the --egl-platform option')
 
-	if check_dependencies(conf):
+	if check_dependencies(conf, platform):
 		Logs.pprint('GREEN', 'EGL sink with Vivante direct textures will be built')
-		Logs.pprint('GREEN', 'Selected EGL platform: ' + conf.options.egl_platform)
+		Logs.pprint('GREEN', 'Selected EGL platform: ' + platform)
 		conf.env['EGLVIVSINK_ENABLED'] = 1
 	else:
 		Logs.pprint('RED', 'EGL sink with Vivante direct textures will not be built - dependencies not found')
@@ -117,7 +105,7 @@ def build(bld):
 			use = 'gstimxcommon',
 			uselib = ['EGL', 'GLES2'] + bld.env['PLATFORM_USELIBS'] + ['GSTREAMER_VIDEO'] + bld.env['COMMON_USELIB'],
 			target = 'gstimxeglvivsink',
-			source = ['eglvivsink.c', 'gles2_renderer.c', 'egl_misc.c', 'plugin.c'] + bld.env['PLATFORM_SOURCE'],
+			source = ['eglvivsink.c', 'gl_headers.c', 'gles2_renderer.c', 'egl_misc.c', 'plugin.c'] + bld.env['PLATFORM_SOURCE'],
 			install_path = bld.env['PLUGIN_INSTALL_PATH']
 		)
 

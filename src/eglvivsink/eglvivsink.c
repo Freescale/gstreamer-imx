@@ -60,54 +60,12 @@ enum
 #define DEFAULT_BORDERLESS_WINDOW FALSE
 
 
-#ifdef HAVE_VIV_I420
-	#define CAPS_VIV_I420 "I420, "
-#else
-	#define CAPS_VIV_I420 ""
-#endif
-
-#ifdef HAVE_VIV_YV12
-	#define CAPS_VIV_YV12 "YV12, "
-#else
-	#define CAPS_VIV_YV12 ""
-#endif
-
-#ifdef HAVE_VIV_YV21
-	#define CAPS_VIV_YV21 "YV21, "
-#else
-	#define CAPS_VIV_YV21 ""
-#endif
-
-#ifdef HAVE_VIV_NV12
-	#define CAPS_VIV_NV12 "NV12, "
-#else
-	#define CAPS_VIV_NV12 ""
-#endif
-
-#ifdef HAVE_VIV_NV21
-	#define CAPS_VIV_NV21 "NV21, "
-#else
-	#define CAPS_VIV_NV21 ""
-#endif
-
-#ifdef HAVE_VIV_UYVY
-	#define CAPS_VIV_UYVY "UYVY, "
-#else
-	#define CAPS_VIV_UYVY ""
-#endif
-
-
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	"sink",
 	GST_PAD_SINK,
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE("{ "
-		CAPS_VIV_I420
-		CAPS_VIV_YV12
-		CAPS_VIV_YV21
-		CAPS_VIV_NV12
-		CAPS_VIV_NV21
-		CAPS_VIV_UYVY
+		"I420, YV12, YV21, NV12, NV21, UYVY, "
 		"RGB16, RGBA, BGRA, RGBx, BGRx, BGR, ARGB, ABGR, xRGB, xBGR"
 	" }"))
 );
