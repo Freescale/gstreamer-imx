@@ -119,9 +119,11 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	struct v4l2_format fmt = {0};
 	struct v4l2_streamparm parm = {0};
 	struct v4l2_frmsizeenum fszenum = {0};
-	v4l2_std_id id;
+	v4l2_std_id std_id;
 	gint input;
 	gint fd_v4l;
+	guint i;
+	gint orig_fps_n, orig_fps_d, std_fps_n, std_fps_d;
 
 	fd_v4l = open(v4l2src->devicename, O_RDWR, 0);
 	if (fd_v4l < 0)
@@ -131,13 +133,14 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 		return -1;
 	}
 
-	if (ioctl (fd_v4l, VIDIOC_G_STD, &id) < 0)
+	if (ioctl(fd_v4l, VIDIOC_G_STD, &std_id) < 0)
 	{
 		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed: %s", strerror(errno));
 	}
 	else
 	{
-		if (ioctl (fd_v4l, VIDIOC_S_STD, &id) < 0) {
+		if (ioctl(fd_v4l, VIDIOC_S_STD, &std_id) < 0)
+		{
 			GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_STD failed");
 			close(fd_v4l);
 			return -1;
@@ -152,7 +155,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 		return -1;
 	}
 
-	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d  field = %d  std id = %#" G_GINT64_MODIFIER "x", fmt.fmt.pix.pixelformat, fmt.fmt.pix.field, id);
+	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d  field = %d  std id = %#" G_GINT64_MODIFIER "x", fmt.fmt.pix.pixelformat, fmt.fmt.pix.field, std_id);
 
 	fszenum.index = v4l2src->capture_mode;
 	fszenum.pixel_format = fmt.fmt.pix.pixelformat;
@@ -176,6 +179,56 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 		return -1;
 	}
 
+	orig_fps_n = v4l2src->fps_n;
+	orig_fps_d = v4l2src->fps_d;
+	std_fps_n = 0;
+	std_fps_d = 0;
+
+	if (std_id == V4L2_STD_UNKNOWN)
+	{
+		GST_DEBUG_OBJECT(v4l2src, "standard is unknown, using manually set fps %d/%d", v4l2src->fps_n, v4l2src->fps_d);
+	}
+	else
+	{
+		for (i = 0; ; ++i)
+		{
+			struct v4l2_standard standard = { 0 };
+
+			standard.frameperiod.numerator = 1;
+			standard.frameperiod.denominator = 0;
+			standard.index = i;
+
+			if (ioctl(fd_v4l, VIDIOC_ENUMSTD, &standard) < 0)
+			{
+				/* EINVAL,ENOTTY,ENODATA : end of standard enumeration */
+
+				if ((errno == EINVAL) || (errno == ENOTTY))
+					break;
+#ifdef ENODATA
+				else if (errno == ENODATA)
+					break;
+#endif
+				else
+				{
+					GST_ERROR_OBJECT(v4l2src, "VIDIOC_ENUMSTD failed: %s", strerror(errno));
+					close(fd_v4l);
+					return -1;
+				}
+			}
+
+			if (standard.id == std_id)
+			{
+				v4l2src->fps_n = std_fps_n = standard.frameperiod.denominator;
+				v4l2src->fps_d = std_fps_d = standard.frameperiod.numerator;
+				GST_DEBUG_OBJECT(v4l2src, "standard is %s, using fps %d/%d", standard.name, v4l2src->fps_n, v4l2src->fps_d);
+				break;
+			}
+		}
+
+		if ((std_fps_n == 0) && (std_fps_d == 0))
+			GST_DEBUG_OBJECT(v4l2src, "standard is unrecognized, using manually set fps %d/%d", v4l2src->fps_n, v4l2src->fps_d);
+	}
+
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	parm.parm.capture.timeperframe.numerator = v4l2src->fps_d;
 	parm.parm.capture.timeperframe.denominator = v4l2src->fps_n;
@@ -190,9 +243,30 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	/* Get the actual frame period if possible */
 	if (parm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME)
 	{
+		/* Try the timeperframe capability */
+
 		v4l2src->fps_n = parm.parm.capture.timeperframe.denominator;
 		v4l2src->fps_d = parm.parm.capture.timeperframe.numerator;
+
+		GST_DEBUG_OBJECT(v4l2src, "V4L2_CAP_TIMEPERFRAME capability present; fps: %d/%d", v4l2src->fps_n, v4l2src->fps_d);
 	}
+	else
+	{
+		/* Try retrieving the video capture parameter */
+
+		parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		if (ioctl(fd_v4l, VIDIOC_G_PARM, &parm) >= 0)
+		{
+			v4l2src->fps_n = parm.parm.capture.timeperframe.denominator;
+			v4l2src->fps_d = parm.parm.capture.timeperframe.numerator;
+
+			GST_DEBUG_OBJECT(v4l2src, "VIDIOC_G_PARM succeeded, retrieved fps from timeperframe: %d/%d", v4l2src->fps_n, v4l2src->fps_d);
+		}
+		else
+			GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_PARM failed: %s", strerror(errno));
+	}
+
+	GST_INFO_OBJECT(v4l2src, "manual fps: %d/%d  standard fps: %d/%d  actual fps: %d/%d", orig_fps_n, orig_fps_d, std_fps_n, std_fps_d, v4l2src->fps_n, v4l2src->fps_d);
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	fmt.fmt.pix.bytesperline = 0;
