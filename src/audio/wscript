@@ -32,8 +32,17 @@ def configure_uniaudio_decoder(conf):
 	conf.env['UNIAUDIO_BUILD_CODEC_PATH'] = os.path.join(conf.env['LIBPATH_FSLAUDIOCODEC'][0], 'wrap')
 	conf.env['UNIAUDIO_TARGET_CODEC_PATH'] = os.path.join(fslcodec_libdirvar, 'wrap')
 
+	# GStreamer's aacparse element does not have a profile caps field in GStreamer versions older than 1.4.4,
+	# so the field cannot be added for these versions (otherwise the decoder's caps would be incompatible
+	# with aacparse's)
+	aac_profile_lc_field = ""
+	gst_version = conf.env['GSTREAMER_VERSION']
+	if gst_version[0] >= 1 and gst_version[1] >= 4 and gst_version[2] >= 4:
+		Logs.pprint('NORMAL', 'GStreamer version is >= 1.4.4 - adding profile field to AAC caps')
+		aac_profile_lc_field = ", profile=(string)lc"
+
 	conf.env['CODEC_ENTRIES'] = []
-	add_fslcodec(conf, "AAC LC", "aacd", "arm12", "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}")
+	add_fslcodec(conf, "AAC LC", "aacd", "arm12", "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}" + aac_profile_lc_field)
 	add_fslcodec(conf, "MP3", "mp3d", "arm12", "audio/mpeg, mpegversion=(int)1, layer=(int)3, parsed=(boolean)true")
 	add_fslcodec(conf, "Vorbis", "vorbisd", "arm12", "audio/x-vorbis")
 	add_fslcodec(conf, "narrowband AMR", "nbamrd", "arm11", "audio/AMR")
