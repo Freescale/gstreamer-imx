@@ -61,6 +61,10 @@ def configure_mp3_encoder(conf):
 
 
 def configure(conf):
+	if not conf.env['WITH_GSTAUDIO']:
+		Logs.pprint('RED', 'could not find gstaudio library - not building audio plugins')
+		return
+
 	if conf.check_cfg(package = 'libfslaudiocodec', uselib_store = 'FSLAUDIOCODEC', args = '--cflags --libs', mandatory = 0):
 		configure_uniaudio_decoder(conf)
 		configure_mp3_encoder(conf)
@@ -71,6 +75,10 @@ def configure(conf):
 def build(bld):
 	base_source = ['plugin.c']
 	extra_source = []
+
+	if not bld.env['WITH_GSTAUDIO']:
+		return
+
 	if bld.env['UNIAUDIO_DECODER_ENABLED']:
 		extra_source += ['uniaudio_codec.c', 'uniaudio_decoder.c']
 	if bld.env['MP3_ENCODER_ENABLED']:
