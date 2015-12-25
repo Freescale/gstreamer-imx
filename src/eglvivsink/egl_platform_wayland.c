@@ -896,7 +896,7 @@ GstImxEglVivSinkMainloopRetval gst_imx_egl_viv_sink_egl_platform_mainloop(GstImx
 		{
 			GST_LOG("There is something to read from the display FD - handling events");
 			wl_display_read_events(platform->display);
-			wl_display_dispatch(platform->display);
+			wl_display_dispatch_pending(platform->display);
 		}
 		else
 		{
