@@ -9,8 +9,6 @@ i.MX platform, which make use of the i.MX multimedia capabilities.
 
 Currently, this software has been tested only with the i.MX6 SoC family.
 
-The software as a whole is currently in beta stage.
-
 
 License
 -------
@@ -24,14 +22,9 @@ Features
 * Zero-copy support
   "Zero-copy" refers to techniques to avoid unnecessary buffer copies, or at least unnecessary CPU-based
   copies (and copying via DMA instead). In gstreamer-imx, video elements try to avoid CPU-based frame copies
-  as much as possible. To that end, special DMA buffer allocators are used, and outgoing buffers are
-  extended with physical memory metadata. gstreamer-imx video elements only make CPU-based frame copies if
-  the incoming frames have no such metadata attached. The VPU decoder element, the IPU/G2D/PxP compositor
-  and video transform elements, and the imxv4l2videosrc element all produce frames with physically contiguous
-  memory (also called "DMA memory"), and attach the physical memory metadata to the frames. The VPU encoder
-  elements, the IPU/G2D/PxP compositor, transform, and sink elements all check incoming frames for this
-  metadata. As a result, it is possible to use playback and transcoding pipelines which run with very little
-  CPU usage, since the bulk of the transfers are done via DMA.
+  as much as possible. As a result, it is possible to use playback and transcoding pipelines which run with
+  very little CPU usage, since the bulk of the transfers are done via DMA. For futher details, see the
+  [zerocopy and physical memory explanation](docs/zerocopy.md).
 * Fully compatible with upstream GStreamer demuxers and parsers
   gstreamer-imx has been tested and used with the upstream demuxers and parsers. (Currently, there are no
   plans to add elements to gstreamer-imx which wrap Freescale parsers and demuxers.)
@@ -49,6 +42,15 @@ Features
   GstUriHandler interface, making it possible to show camera feeds directly with uridecodebin and playbin
   simply by specifying a `imxv4l2://<camera device name>` URI
 * G2D/IPU/PxP video sinks support tearing-free vsync output via page flipping
+
+
+Additional reading
+------------------
+
+* [Frequently Asked Questions](docs/faq.md)
+* [Zero-copy and physically contiguous memory](docs/zerocopy.md)
+* [Blitter-based element architecture](docs/blitter-architecture.md)
+* [Gateworks blog entries with usage examples](http://blog.gateworks.com/?p=223)
 
 
 Compositing
@@ -111,41 +113,6 @@ Current limitations:
   black pixels, even if only a subset is drawn to.
 
 
-Avoiding "tearing" via vsync
-----------------------------
-
-The sink elements all support vsync-based output to avoid tearing. The `imxeglvivsink` can achieve this by
-setting the `FB_MULTI_BUFFER` environment variable to 2 prior to starting the pipeline.
-
-The PxP/IPU/G2D sinks perform it by reconfiguring the framebuffer (they do not use the environment variable).
-Page flipping is done in these sinks by simply scrolling inside the virtual framebuffer by one full physical
-height unit. In other words, if the actual framebuffer resolution is 1280x800, the virtual framebuffer is
-reconfigured to 12800x1600, and page flipping is performed by scrolling to the 0th and 800th row.
-
-
-VPU decoder notes
------------------
-
-The VPU has an important limitation which needs to be respected when creating complex pipelines with lots of
-branching. The VPU *cannot* reallocate additional buffers for decoded output frames on the fly. When video
-decoding begins, the VPU requests a number of DMA buffers from the caller. The caller (in this case, `imxvpudec`)
-has to allocate at least this many DMA buffers. Once done, these DMA buffers are registered with the VPU
-decoder instance. From that moment on, decoding continues, but it is *not* possible to register additional
-DMA buffers afterwards. This means that the `imxvpudec` decoder element has to use a fixed-size pool. If all
-of the pool's buffers are queued up somewhere, and do not get released, a deadlock might occur, since then,
-the VPU decode has nowhere to decode to (all registered DMA buffers are occupied). This is a fundamental
-problem of incompatible approaches: the VPU's fixed size buffer pool on one side, and the much more flexible
-and dynamic nature of complex GStreamer pipelines on the other. For regular video watching, this is not a
-problem, but it may be if lots of branching and queuing is used in custom designed complex pipelines.
-
-
-VPU encoder notes
------------------
-
-The h.264 encoder only supports the baseline profile. Also, the encoded output always uses the h.264
-Annex B byte stream format. It can optionally insert access unit delimiter NALUs.
-
-
 Available plugins
 -----------------
 
@@ -175,6 +142,8 @@ You'll need a GStreamer 1.2 installation, and the [libimxvpuapi library](https:/
 Also, the `videoparsersbad` plugin from the `gst-plugins-bad` package in GStreamer is needed, since
 this plugin contains video parsers like `h264parse`, `mpegvideoparse` (for MPEG1 and MPEG2), and
 `mpeg4videoparse` (for MPEG4).
+You must also use a Linux kernel with i.MX additions for the VPU, GPU, IPU, PxP subsystems. Mainline kernels do not
+contain these (yet).
 
 
 Building and installing
@@ -215,3 +184,15 @@ Finally, to install, run:
 
     ./waf install
 
+Further notes on how to build for some Linux distributions:
+
+* [Debian / Ubuntu build instructions](docs/debian-ubuntu.md)
+
+* Arch Linux ARM build instructions:
+
+* Yocto / OpenEmbedded build instructions:
+  An OpenEmbedded recipe for gstreamer-imx is included in [meta-fsl-arm](http://git.yoctoproject.org/cgit/cgit.cgi/meta-fsl-arm).
+  Also check out the [Freescale Github space](http://freescale.github.io/).
+  Add the meta-fsl-arm layer to your setup's `bblayers.conf`. Then it should be possiblet to
+  build the `gstreamer1.0-plugins-imx` recipe. This will also automatically build libimxvpuapi,
+  which too has a recipe in meta-fsl-arm.
