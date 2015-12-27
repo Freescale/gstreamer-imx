@@ -32,7 +32,7 @@ Features
   The PxP, IPU, and G2D units in the imx SoC can perform these operations in one step. This is exposed
   via the pxp/ipu/g2d video transform elements. Not only are conversions much faster this way, they are also
   compatible with the zerocopy feature explained above.
-* Deinterlacing via the imxipusink and imxpuvideotransform elements
+* Deinterlacing via the imxipusink and imxipuvideotransform elements
 * G2D/IPU/PxP compositor, compatible with the upstream compositor
   The imxipu/pxp/g2dcompositor elements mimic the properties of the compositor in GStreamer 1.5 and above.
   Command lines which use that compositor can make use of hardware-accelerated compositing simply by

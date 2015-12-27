@@ -18,8 +18,9 @@ VPU operation freezes, and "VPU blocking: timeout" messages appear
 ------------------------------------------------------------------
 This is typically caused by an overclocked VPU or a problem in the imx-vpu library.
 
-The VPU is clocked at 327 MHz by default. Some configurations clock the VPU at 352 MHz, and can exhibit
-VPU timeout problems (most often occurring when using the `imxvpuenc_h264` h.264 encoder element).
+The VPU is clocked at 266 MHz by default (according to the VPU documentation). Some configurations clock
+the VPU at 352 MHz, and can exhibit VPU timeout problems (most often occurring when using the `imxvpuenc_h264`
+h.264 encoder element).
 
 imx-vpu versions prior to 5.4.31 also have been observed to cause VPU timeouts. These seem to be related
 to the 5.4.31 fix described as: "Fix VPU blocked in BWB module".
@@ -229,3 +230,24 @@ Why isn't AC-3 supported in `imxuniaudiodec`?
 
 Again, for licensing reasons. Freescale/NXP will not hand out the AC-3 decoder unless there is a license
 agreement with Dolby.
+
+
+I see bits and pieces in the code which are Android specific. Does this mean Android is supported?
+--------------------------------------------------------------------------------------------------
+
+So far, gstreamer-imx support for Android is not finished. Therefore, gstreamer-imx currently does
+not yet list Android support as one of its features. This is planned for a future release.
+Code for rendering with OpenGL ES to an Android surface is in place, and other build script
+improvements have been made, but the libtool .la file generation (needed by GStreamer's Cerbero)
+isn't finished, and Cerbero scripts for gstreamer-imx aren't fully completed yet.
+
+Here is a rough overview: Android applications that use GStreamer typically use static linking
+to add the GStreamer libraries and plugins. The result is one big binary. Therefore, gstreamer-imx
+too needs to be linked statically. Also, the Freescale imx-vpu library needs to be linked against.
+It is already present in the Freescale Android rootfs. One way to perform the linking is to copy
+the imx-vpu libraries from the rootfs to the Cerbero build's lib/ directory, and the headers to its
+include/ directory (from the imx-vpu Freescale package). libimxvpuapi also needs to be built,
+but this one can already be built statically with the `--enable-static` configure switch.
+
+[This article](http://blogs.s-osg.org/kickstart-gstreamer-android-development-6-easy-steps/) is
+a very good starting point about how to build GStreamer for Android and use it in apps.
