@@ -7,7 +7,7 @@ import re
 top = '.'
 out = 'build'
 
-gstimx_version = "0.11.1"
+gstimx_version = "0.12.0"
 
 # the code inside fragment deliberately does an unsafe implicit cast float->char to trigger a
 # compiler warning; sometimes, gcc does not tell about an unsupported parameter *unless* the
