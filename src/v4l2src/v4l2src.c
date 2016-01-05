@@ -450,8 +450,12 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 			pixel_format = gst_video_format_to_string(gst_fmt);
 	}
 
-	if (fmt.fmt.pix.field == V4L2_FIELD_INTERLACED)
+	if (fmt.fmt.pix.field == V4L2_FIELD_INTERLACED ||
+		fmt.fmt.pix.field == V4L2_FIELD_INTERLACED_TB ||
+		fmt.fmt.pix.field == V4L2_FIELD_INTERLACED_BT)
+	{
 		interlace_mode = "interleaved";
+	}
 
 	return gst_caps_new_simple("video/x-raw",
 			"format", G_TYPE_STRING, pixel_format,
