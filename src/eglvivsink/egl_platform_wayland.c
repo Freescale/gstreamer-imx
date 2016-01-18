@@ -377,8 +377,6 @@ static void redraw(GstImxEglVivSinkEGLPlatform *platform)
 	wl_surface_set_opaque_region(platform->surface, region);
 	wl_region_destroy(region);
 
-	/* Finally, do the actual commit to the server */
-	wl_surface_commit(platform->main_surface);
 	eglSwapBuffers(platform->egl_display, platform->egl_surface);
 }
 
