@@ -46,7 +46,8 @@ enum
 	PROP_WINDOW_Y_COORD,
 	PROP_WINDOW_WIDTH,
 	PROP_WINDOW_HEIGHT,
-	PROP_BORDERLESS_WINDOW
+	PROP_BORDERLESS_WINDOW,
+	PROP_WAYLAND_SUBSURFACE,
 };
 
 
@@ -58,6 +59,7 @@ enum
 #define DEFAULT_WINDOW_WIDTH 0
 #define DEFAULT_WINDOW_HEIGHT 0
 #define DEFAULT_BORDERLESS_WINDOW FALSE
+#define DEFAULT_WAYLAND_SUBSURFACE TRUE
 
 
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
@@ -225,6 +227,17 @@ void gst_imx_egl_viv_sink_class_init(GstImxEglVivSinkClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
+	g_object_class_install_property(
+		object_class,
+		PROP_WAYLAND_SUBSURFACE,
+		g_param_spec_boolean(
+			"wayland-subsurface",
+			"Wayland subsurface",
+			"Enable/Disable wayland subsurface, disabling saves memory but setting window x/y coords might not work",
+			DEFAULT_WAYLAND_SUBSURFACE,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -236,6 +249,7 @@ void gst_imx_egl_viv_sink_init(GstImxEglVivSink *egl_viv_sink)
 	egl_viv_sink->fullscreen = DEFAULT_FULLSCREEN;
 	egl_viv_sink->force_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
 	egl_viv_sink->native_display_name = DEFAULT_NATIVE_DISPLAY;
+	egl_viv_sink->use_wayland_subsurface = DEFAULT_WAYLAND_SUBSURFACE;
 	g_mutex_init(&(egl_viv_sink->renderer_access_mutex));
 }
 
@@ -454,6 +468,23 @@ static void gst_imx_egl_viv_sink_set_property(GObject *object, guint prop_id, GV
 			break;
 		}
 
+		case PROP_WAYLAND_SUBSURFACE:
+		{
+			gboolean b = g_value_get_boolean(value);
+
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			{
+				if (b != egl_viv_sink->use_wayland_subsurface)
+				{
+					egl_viv_sink->use_wayland_subsurface = b;
+					if (egl_viv_sink->gles2_renderer != NULL)
+						gst_imx_egl_viv_sink_gles2_renderer_set_use_wayland_subsurface(egl_viv_sink->gles2_renderer, b);
+				}
+			}
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+
+			break;
+		}
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -512,6 +543,12 @@ static void gst_imx_egl_viv_sink_get_property(GObject *object, guint prop_id, GV
 		case PROP_BORDERLESS_WINDOW:
 			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
 			g_value_set_boolean(value, egl_viv_sink->borderless_window);
+			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
+			break;
+
+		case PROP_WAYLAND_SUBSURFACE:
+			g_mutex_lock(&(egl_viv_sink->renderer_access_mutex));
+			g_value_set_boolean(value, egl_viv_sink->use_wayland_subsurface);
 			g_mutex_unlock(&(egl_viv_sink->renderer_access_mutex));
 			break;
 
@@ -621,6 +658,7 @@ static gboolean gst_imx_egl_viv_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_window_coords(egl_viv_sink->gles2_renderer, egl_viv_sink->window_x_coord, egl_viv_sink->window_y_coord);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_window_size(egl_viv_sink->gles2_renderer, egl_viv_sink->window_width, egl_viv_sink->window_height);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_borderless_window(egl_viv_sink->gles2_renderer, egl_viv_sink->borderless_window);
+		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_set_use_wayland_subsurface(egl_viv_sink->gles2_renderer, egl_viv_sink->use_wayland_subsurface);
 		ret = ret && gst_imx_egl_viv_sink_gles2_renderer_start(egl_viv_sink->gles2_renderer);
 	}
 	else

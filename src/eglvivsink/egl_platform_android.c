@@ -131,7 +131,7 @@ void gst_imx_egl_viv_sink_egl_platform_destroy(GstImxEglVivSinkEGLPlatform *plat
 }
 
 
-gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, guintptr window_handle, G_GNUC_UNUSED gboolean event_handling, G_GNUC_UNUSED GstVideoInfo *video_info, G_GNUC_UNUSED gboolean fullscreen, gint x_coord, gint y_coord, G_GNUC_UNUSED guint width, G_GNUC_UNUSED guint height, G_GNUC_UNUSED gboolean borderless)
+gboolean gst_imx_egl_viv_sink_egl_platform_init_window(GstImxEglVivSinkEGLPlatform *platform, guintptr window_handle, G_GNUC_UNUSED gboolean event_handling, G_GNUC_UNUSED GstVideoInfo *video_info, G_GNUC_UNUSED gboolean fullscreen, gint x_coord, gint y_coord, G_GNUC_UNUSED guint width, G_GNUC_UNUSED guint height, G_GNUC_UNUSED gboolean borderless, G_GNUC_UNUSED gboolean use_subsurface)
 {
 	EGLint num_configs, format;
 	EGLConfig config;

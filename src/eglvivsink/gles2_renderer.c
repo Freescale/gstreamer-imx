@@ -21,6 +21,7 @@ struct _GstImxEglVivSinkGLES2Renderer
 	gboolean fullscreen;
 	gint manual_x_coord, manual_y_coord, manual_width, manual_height;
 	gboolean borderless;
+	gboolean use_subsurface;
 
 	gboolean display_scale_needs_update;
 	float display_scale_w, display_scale_h;
@@ -141,7 +142,8 @@ static gpointer gst_imx_egl_viv_sink_gles2_renderer_thread(gpointer thread_data)
 			renderer->fullscreen,
 			renderer->manual_x_coord, renderer->manual_y_coord,
 			renderer->manual_width, renderer->manual_height,
-			renderer->borderless
+			renderer->borderless,
+			renderer->use_subsurface
 		))
 		{
 			GST_ERROR("could not open window");
@@ -868,6 +870,7 @@ GstImxEglVivSinkGLES2Renderer* gst_imx_egl_viv_sink_gles2_renderer_create(char c
 	renderer->manual_width = 0;
 	renderer->manual_height = 0;
 	renderer->borderless = FALSE;
+	renderer->use_subsurface = TRUE;
 
 	renderer->current_frame = NULL;
 
@@ -1175,6 +1178,15 @@ gboolean gst_imx_egl_viv_sink_gles2_renderer_set_borderless_window(GstImxEglVivS
 	renderer->borderless = borderless_window;
 	GLES2_RENDERER_UNLOCK(renderer);
 	return renderer->thread_started ? gst_imx_egl_viv_sink_egl_platform_set_borderless(renderer->egl_platform, borderless_window) : TRUE;
+}
+
+gboolean gst_imx_egl_viv_sink_gles2_renderer_set_use_wayland_subsurface(GstImxEglVivSinkGLES2Renderer *renderer, gboolean use_subsurface)
+{
+	GLES2_RENDERER_LOCK(renderer);
+	renderer->use_subsurface = use_subsurface;
+	GLES2_RENDERER_UNLOCK(renderer);
+	/* This property can't be changed when the pipe is running */
+	return renderer->thread_started ? FALSE : TRUE;
 }
 
 

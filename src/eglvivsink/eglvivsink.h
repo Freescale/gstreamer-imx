@@ -54,6 +54,7 @@ struct _GstImxEglVivSink
 	gint window_x_coord, window_y_coord;
 	guint window_width, window_height;
 	gboolean borderless_window;
+	gboolean use_wayland_subsurface;
 	gchar *native_display_name;
 	GMutex renderer_access_mutex;
 };
