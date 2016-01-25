@@ -131,6 +131,8 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 		return -1;
 	}
 
+	v4l2src->is_tvin = FALSE;
+
 	if (ioctl(fd_v4l, VIDIOC_G_STD, &std_id) < 0)
 	{
 		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed: %s", strerror(errno));
@@ -150,6 +152,8 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 				v4l2src->fps_n = (!v4l2src->fps_n || v4l2src->fps_n > 30) ? 30 : v4l2src->fps_n;
 			else
 				v4l2src->fps_n = (!v4l2src->fps_n || v4l2src->fps_n > 25) ? 25 : v4l2src->fps_n;
+
+			v4l2src->is_tvin = TRUE;
 
 			GST_DEBUG_OBJECT(v4l2src, "found TV decoder, adjusted fps %d/%d", v4l2src->fps_n, v4l2src->fps_d);
 		}
@@ -389,6 +393,13 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		default:
 			gst_fmt = gst_video_format_from_fourcc(fmt.fmt.pix.pixelformat);
 			pixel_format = gst_video_format_to_string(gst_fmt);
+	}
+
+	if (v4l2src->is_tvin && !fmt.fmt.pix.field)
+	{
+		fmt.fmt.pix.field = V4L2_FIELD_INTERLACED;
+
+		GST_DEBUG_OBJECT(v4l2src, "TV decoder fix up: field = V4L2_FIELD_INTERLACED");
 	}
 
 	if (fmt.fmt.pix.field == V4L2_FIELD_INTERLACED ||
