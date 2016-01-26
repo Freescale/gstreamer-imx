@@ -139,6 +139,14 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	}
 	else
 	{
+		gint count = 10;
+
+		while (std_id == V4L2_STD_ALL && --count >= 0)
+		{
+			g_usleep(G_USEC_PER_SEC / 10);
+			ioctl(fd_v4l, VIDIOC_G_STD, &std_id);
+		}
+
 		if (ioctl(fd_v4l, VIDIOC_S_STD, &std_id) < 0)
 		{
 			GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_STD failed");
