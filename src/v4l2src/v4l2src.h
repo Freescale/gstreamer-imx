@@ -46,6 +46,7 @@ struct _GstImxV4l2VideoSrc
 
 	GstImxFDObject *fd_obj_v4l;
 
+	gboolean is_tvin;
 	gint capture_width;
 	gint capture_height;
 	guint32 count;
