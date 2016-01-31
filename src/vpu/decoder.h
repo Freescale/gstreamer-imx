@@ -105,4 +105,7 @@ struct _GstImxVpuDecoderClass
 GType gst_imx_vpu_decoder_get_type(void);
 
 
+G_END_DECLS
+
+
 #endif

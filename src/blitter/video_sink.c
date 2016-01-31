@@ -929,14 +929,14 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 	if (ioctl(fd, FBIOGET_FSCREENINFO, &fb_fix) == -1)
 	{
 		close(fd);
-		GST_ERROR_OBJECT(blitter_video_sink, "could not open get fixed screen info: %s", strerror(errno));
+		GST_ERROR_OBJECT(blitter_video_sink, "could not get fixed screen info: %s", strerror(errno));
 		return FALSE;
 	}
 
 	if (ioctl(fd, FBIOGET_VSCREENINFO, &fb_var) == -1)
 	{
 		close(fd);
-		GST_ERROR_OBJECT(blitter_video_sink, "could not open get variable screen info: %s", strerror(errno));
+		GST_ERROR_OBJECT(blitter_video_sink, "could not get variable screen info: %s", strerror(errno));
 		return FALSE;
 	}
 
