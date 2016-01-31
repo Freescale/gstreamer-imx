@@ -5,23 +5,26 @@
   This yields several benefits:
   * Overall:
     * Code is considerably clearer and easier to maintain
-    * libimxvpuapi logging fully integrated into the GStreamer logging framework
+    * libimxvpuapi logging fully integrated into the GStreamer logging
+      framework
   * Encoder related:
     * imxvpuenc_h264 inserts SPS/PPS data in front of I/IDR frames
-    * imxvpuenc_mjpeg's quality factor actually has an effect, and is equivalent
-      to the libjpeg's quality factor (it is used in exactly the same way to scale
-      the quantization matrix' coefficients)
-    * the encoder's output buffers no longer have to use DMA memory; they use
-      regular system memory instead
+    * imxvpuenc_mjpeg's quality factor actually has an effect, and is
+      equivalent to the libjpeg's quality factor (it is used in exactly the
+      same way to scale the quantization matrix' coefficients)
+    * the encoder's output buffers no longer have to use DMA memory; they
+      use regular system memory instead
   * Decoder related:
-    * new support in imxvpudec (referred to as "chroma interleaving") for NV12,
-      NV16, NV24 as output formats as an alternative to the I420, Y42B, Y444 formats
-    * Removed all of the system frame number tracking code, since it is unnecessary;
-      Instead, the libimxvpuapi's context fields are used to associate input/output
-      frames with GstVideoCodecFrame system frame numbers
+    * new support in imxvpudec (referred to as "chroma interleaving") for
+      NV12, NV16, NV24 as output formats as an alternative to the I420,
+      Y42B, Y444 formats
+    * Removed all of the system frame number tracking code, since it is
+      unnecessary; Instead, the libimxvpuapi's context fields are used to
+      associate input/output frames with GstVideoCodecFrame system frame
+      numbers
 
-* vpu: Add missing buffer pool unref'ing, which lead to memory leaks (similar to
-  the leak fix for the IPU)
+* vpu: Add missing buffer pool unref'ing, which lead to memory leaks
+  (similar to the leak fix for the IPU)
 
 * imxv4l2src fixes and enhancements:
   * Add crop metadata to be able to let video transform and sink elements
@@ -32,12 +35,13 @@
   * Implement autofocus control based on GstPhotography, and make the
     gstphotography library an imxv4l2videosrc dependency; if not found, it
     will not be built
-  * Add missing break in switch-case block that lead to incorrect GLib warnings
+  * Add missing break in switch-case block that lead to incorrect GLib
+    warnings
   * Make sure the buffer array is freed *after* releasing all buffers
-    Previously, segmentation faults occasionally happened due to attempts to
-    access buffers that were freed before
-  * Use the framerate from the standard (PAL/NTSC/SECAM) and query the actual
-    fps the hardware uses
+    Previously, segmentation faults occasionally happened due to attempts
+    to access buffers that were freed before
+  * Use the framerate from the standard (PAL/NTSC/SECAM) and query the
+    actual fps the hardware uses
 
 * eglvivsink fixes and enhancements:
   * Remove extra g_free() calls, which lead to runtime errors
@@ -45,21 +49,24 @@
   * Add Android platform
   * Manually retrieve VIV direct texture functions
     With this and the link dependency elimination, this means that for
-    platforms except the framebuffer one, no Vivante specific headers and libraries
-    are needed anymore
+    platforms except the framebuffer one, no Vivante specific headers and
+    libraries are needed anymore
   * Fix blocking issue in the Wayland platform mainloop
-    wl_display_dispatch can block, so wl_display_dispatch_pending is used instead.
-    Since the platform code uses wl_display_read_events, the wl_display_dispatch
-    usage was anyway incorrect (according to the Wayland client API documentation).
+    wl_display_dispatch can block, so wl_display_dispatch_pending is used
+    instead. Since the platform code uses wl_display_read_events, the
+    wl_display_dispatch usage was anyway incorrect (according to the
+    Wayland client API documentation).
 
-* Improved and expanded documentation; there is now an FAQ page as well as explanations
-  for zerocopy and the blitter architecture as well as build instructions for popular
-  Linux embedded distributions
+* Improved and expanded documentation; there is now an FAQ page as well as
+  explanations for zerocopy and the blitter architecture as well as build
+  instructions for popular Linux embedded distributions
 
-* pxp: NV16 *is* supported after all (it was actually a bug in GStreamer pre-1.5.91)
-  NOTE: this does not break compatibility with GStreamer versions older than 1.5.91
+* pxp: NV16 *is* supported after all (it was actually a bug in GStreamer
+  pre-1.5.91)
+  NOTE: this does not break compatibility with GStreamer versions older
+  than 1.5.91
 
-* compositor: Update backported aggregator code to the GStreamer 1.6 version
+* compositor: Update backported aggregator code to GStreamer 1.6
 
 * blitter fixes and enhancements:
   * Error handling improvements
@@ -67,19 +74,20 @@
   * Add missing compositor dependency to blitter base
 
 * uniaudio fixes and enhancements:
-  * Only build the uniaudio plugin if at least one codec was found during configuration
+  * Only build the uniaudio plugin if at least one codec was found during
+    configuration
   * Disable plugin if the gstaudio library is not available
   * Add AAC profile field to the sink caps with GStreamer >= 1.4.4
     The uniaudio AAC decoder only supports LC (low-complexity) AAC streams.
-    GStreamer's aacparse has a "profile" field in the caps since version 1.4.4.
-    With this field, it is possible to limit the uniaudio AAC decoder to LC.
-    This way, GStreamer can auto-select a different AAC decoder for streams that
-    use other a profile other than the LC one.
+    GStreamer's aacparse has a "profile" field in the caps since version
+    1.4.4. With this field, it is possible to limit the uniaudio AAC
+    decoder to LC. This way, GStreamer can auto-select a different AAC
+    decoder for streams that use other a profile other than the LC one.
 
 * Fix wscripts for better Android support
 
-* ipu: Increase fill frame width from 8 to 64 pixels to make IPU fill operations
-  work with pre-3.14 Freescale kernels
+* ipu: Increase fill frame width from 8 to 64 pixels to make IPU fill
+  operations work with pre-3.14 Freescale kernels
 
 * g2d: Use padding pixels when setting surface parameters
   This fixes G2D failures with frame sizes that aren't aligned
