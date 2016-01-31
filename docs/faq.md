@@ -43,6 +43,20 @@ is allocated through the VPU, IPU, G2D, PxP APIs. Enabled CMA debugging will pri
 every CMA call in the kernel log. In the kernel configuration, `CONFIG_CMA_DEBUG` must be set to `y` to
 enable CMA debugging.
 
+If you have been using `imxeglvivsink` as the video sink, try using `imxipuvideosink` or `imxg2dvideosink`
+instead for tests. Some GPU driver releases do have memory leaks. The IPU however is not a part of the
+GPU. Therefore, if no memory leaks appear (or they are significantly reduced) by running the GStreamer
+pipeline with `imxipuvideosink` instead of `imxeglvivsink`, it is clear that the GPU drivers are the cause.
+`imxg2dvideosink` too can be tried, but it is recommended to try `imxipuvideosink` first for these tests,
+since G2D is the API for the GPU's 2D core, so it isn't really separate from the GPU (just separate from
+its 3D core).
+
+Similarly, if the GPU was somehow involved in your application (for example, in Qt5 based programs),
+check if upgrading the GPU driver fixes the issues.
+
+NOTE: There is a known memory leak in the imx-gpu-viv driver package version 5.0.11.p4.4. It affects
+OpenGL ES, and therefore `imxeglvivsink`, but not `imxg2dvideosink`. Upgrading is strongly recommended.
+
 
 Video tearing is visible
 ------------------------
