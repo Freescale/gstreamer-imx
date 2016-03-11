@@ -164,7 +164,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	meta->mem = mmap(NULL, meta->vbuffer.length,
 			PROT_READ | PROT_WRITE, MAP_SHARED, GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l),
 			meta->vbuffer.m.offset);
-	g_assert(meta->mem);
+	g_assert(meta->mem != MAP_FAILED);
 
 	/* Need to query twice to get the physical address */
 	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QUERYBUF, &meta->vbuffer) < 0)
