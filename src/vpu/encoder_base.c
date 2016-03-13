@@ -45,7 +45,7 @@ enum
 #define DEFAULT_BITRATE           0
 #define DEFAULT_SLICE_SIZE        0
 #define DEFAULT_INTRA_REFRESH     0
-#define DEFAULT_ME_SEARCH_RANGE   0
+#define DEFAULT_ME_SEARCH_RANGE   IMX_VPU_ENC_ME_SEARCH_RANGE_256x128
 
 #define GST_IMX_VPU_ENCODER_ALLOCATOR_MEM_TYPE "ImxVpuEncMemory2"
 
@@ -82,6 +82,8 @@ static gboolean gst_imx_vpu_encoder_base_set_bitrate(GstImxVpuEncoderBase *vpu_e
 
 static void* gst_imx_vpu_encoder_base_acquire_output_buffer(void *context, size_t size, void **acquired_handle);
 static void gst_imx_vpu_encoder_base_finish_output_buffer(void *context, void *acquired_handle);
+
+GType gst_imx_vpu_encoder_me_search_range_get_type(void);
 
 
 
@@ -167,11 +169,11 @@ static void gst_imx_vpu_encoder_base_class_init(GstImxVpuEncoderBaseClass *klass
 	g_object_class_install_property(
 		object_class,
 		PROP_ME_SEARCH_RANGE,
-		g_param_spec_uint(
+		g_param_spec_enum(
 			"me-search-range",
-			"Mot. Est. Search Range",
-			"Search range for motion estimation (0 = maximum search range 256x128)",
-			0, 3,
+			"Motion estimation search range",
+			"Search range for motion estimation",
+			gst_imx_vpu_encoder_me_search_range_get_type(),
 			DEFAULT_ME_SEARCH_RANGE,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
@@ -236,7 +238,7 @@ static void gst_imx_vpu_encoder_base_set_property(GObject *object, guint prop_id
 			vpu_encoder_base->intra_refresh = g_value_get_uint(value);
 			break;
 		case PROP_ME_SEARCH_RANGE:
-			vpu_encoder_base->me_search_range = g_value_get_uint(value);
+			vpu_encoder_base->me_search_range = g_value_get_enum(value);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -264,7 +266,7 @@ static void gst_imx_vpu_encoder_base_get_property(GObject *object, guint prop_id
 			g_value_set_uint(value, vpu_encoder_base->intra_refresh);
 			break;
 		case PROP_ME_SEARCH_RANGE:
-			g_value_set_uint(value, vpu_encoder_base->me_search_range);
+			g_value_set_enum(value, vpu_encoder_base->me_search_range);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -846,6 +848,31 @@ static void gst_imx_vpu_encoder_base_finish_output_buffer(void *context, void *a
 	GstBuffer *buffer = vpu_encoder_base->output_buffer;
 	GST_LOG_OBJECT(vpu_encoder_base, "finished output buffer %p with %zu byte", (gpointer)buffer, vpu_encoder_base->output_buffer_map_info.size);
 	gst_buffer_unmap(buffer, &(vpu_encoder_base->output_buffer_map_info));
+}
+
+
+GType gst_imx_vpu_encoder_me_search_range_get_type(void)
+{
+	static GType gst_imx_vpu_encoder_me_search_range_type = 0;
+
+	if (!gst_imx_vpu_encoder_me_search_range_type)
+	{
+		static GEnumValue me_search_ranges[] =
+		{
+			{ IMX_VPU_ENC_ME_SEARCH_RANGE_256x128, "256x128 blocks", "256x128" },
+			{ IMX_VPU_ENC_ME_SEARCH_RANGE_128x64, "128x64 blocks", "128x64" },
+			{ IMX_VPU_ENC_ME_SEARCH_RANGE_64x32, "64x32 blocks", "64x32" },
+			{ IMX_VPU_ENC_ME_SEARCH_RANGE_32x32, "32x32 blocks", "32x32" },
+			{ 0, NULL, NULL },
+		};
+
+		gst_imx_vpu_encoder_me_search_range_type = g_enum_register_static(
+			"ImxVpuEncMESearchRanges",
+			me_search_ranges
+		);
+	}
+
+	return gst_imx_vpu_encoder_me_search_range_type;
 }
 
 
