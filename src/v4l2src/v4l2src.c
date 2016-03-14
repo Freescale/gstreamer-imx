@@ -447,13 +447,11 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 {
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(src);
 	GstCaps *caps;
-	const gchar *pixel_format = "I420";
 	const gchar *interlace_mode = "progressive";
 
 	GST_INFO_OBJECT(v4l2src, "get caps filter %" GST_PTR_FORMAT, (gpointer)filter);
 
 	caps = gst_caps_new_simple("video/x-raw",
-			"format", G_TYPE_STRING, pixel_format,
 			"width", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 			"height", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 			"interlace-mode", G_TYPE_STRING, interlace_mode,
