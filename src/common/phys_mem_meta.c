@@ -62,7 +62,7 @@ static gboolean gst_imx_phys_mem_meta_transform(GstBuffer *dest, GstMeta *meta, 
 		GstMetaTransformCopy *copy = data;
 		gboolean do_copy = FALSE;
 
-		if (!(copy->region)) // TODO: is this check correct?
+		if (copy->region)
 		{
 			GST_LOG("not copying metadata: only a region is being copied (not the entire block)");
 		}
