@@ -463,7 +463,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 
 	if (vpu_decoder->decoder == NULL)
 	{
-		GST_ERROR_OBJECT(decoder, "decoder was not created");
+		GST_ELEMENT_ERROR(decoder, LIBRARY, INIT, ("VPU decoder was not created"), (NULL));
 		return GST_FLOW_ERROR;
 	}
 
@@ -646,7 +646,28 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 
 			out_buffer = gst_video_decoder_allocate_output_buffer(decoder);
 			if (out_buffer == NULL)
+			{
+				/* Unref output frame, since get_frame() refs it */
+				gst_video_codec_frame_unref(out_frame);
+
+				/* Manually mark the framebuffer as "displayed". Since
+				 * no buffer could be allocated, it cannot really be
+				 * displayed, but the decoder doesn't know that. To
+				 * clean up properly, return it to the VPU pool by marking
+				 * it as displayed. */
+				imx_vpu_dec_mark_framebuffer_as_displayed(vpu_decoder->decoder, decoded_frame.framebuffer);
+
+				/* Frame is not "unfinished" anymore, but also can't be
+				 * shown. Remove it from the unfinished frame table. */
+				gst_imx_vpu_decoder_remove_from_unfinished_frame_table(vpu_decoder, out_frame);
+
+				/* Drop the frame, since it cannot be shown */
+				gst_video_decoder_drop_frame(decoder, out_frame);
+
+				GST_ELEMENT_WARNING(decoder, STREAM, DECODE, ("could not allocate buffer for output frame, dropping frame"), ("output gstframe %p with number #%" G_GUINT32_FORMAT, (gpointer)out_frame, system_frame_number));
+
 				return GST_FLOW_ERROR;
+			}
 
 			GST_LOG_OBJECT(vpu_decoder, "output gstbuffer: %p imxvpu framebuffer: %p", out_buffer, decoded_frame.framebuffer);
 
