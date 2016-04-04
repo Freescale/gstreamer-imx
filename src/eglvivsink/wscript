@@ -50,6 +50,7 @@ valid_egl_platforms = ['fb', 'x11', 'wayland', 'android']
 
 
 def options(opt):
+	opt.add_option('--disable-eglvivsink', action = 'store_true', default = False, help = 'disable eglvivsink plugin [default: enabled]')
 	opt.add_option('--egl-platform', action='store', default='x11', help='EGL platform to build for (valid values: ' + ' '.join(valid_egl_platforms) + ')')
 
 
@@ -81,6 +82,12 @@ def check_dependencies(conf, platform):
 
 def configure(conf):
 	from waflib.Build import Logs
+
+	if conf.options.disable_eglvivsink:
+		return
+
+	if not conf.env['WITH_GSTVIDEO']:
+		return
 
 	platform = conf.options.egl_platform
 	if conf.env['BUILD_FOR_ANDROID']:

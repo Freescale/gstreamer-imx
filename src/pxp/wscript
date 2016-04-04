@@ -1,7 +1,17 @@
 #!/usr/bin/env python
 
 
+def options(opt):
+	opt.add_option('--disable-pxp', action = 'store_true', default = False, help = 'disable PXP plugin [default: enabled]')
+
+
 def configure(conf):
+	if conf.options.disable_pxp:
+		return
+
+	if not conf.env['WITH_GSTVIDEO']:
+		return
+
 	from waflib.Build import Logs
 	if conf.check_cc(fragment = '''
 		#include <linux/pxp_device.h>

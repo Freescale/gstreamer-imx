@@ -1,12 +1,23 @@
 #!/usr/bin/env python
 
 
+def options(opt):
+	opt.add_option('--disable-v4l2src', action = 'store_true', default = False, help = 'disable v4l2src plugin [default: enabled]')
+
+
 def configure(conf):
-	pass
+	if conf.options.disable_v4l2src:
+		return
+
+	if not conf.env['WITH_GSTVIDEO']:
+		return
+
+	if conf.env['WITH_GSTPHOTOGRAPHY']:
+		conf.env['V4L2SRC_ENABLED'] = 1
 
 
 def build(bld):
-	if bld.env['WITH_GSTPHOTOGRAPHY']:
+	if bld.env['V4L2SRC_ENABLED']:
 		bld(
 			features = ['c', bld.env['CLIBTYPE']],
 			includes = ['.', '../..'],

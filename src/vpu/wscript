@@ -4,7 +4,17 @@
 from waflib import Logs
 
 
+def options(opt):
+	opt.add_option('--disable-vpu', action = 'store_true', default = False, help = 'disable VPU plugin [default: enabled]')
+
+
 def configure(conf):
+	if conf.options.disable_vpu:
+		return
+
+	if not conf.env['WITH_GSTVIDEO']:
+		return
+
 	if conf.check_cfg(package = 'libimxvpuapi', uselib_store = 'IMXVPUAPI', args = '--cflags --libs', mandatory = 0):
 		Logs.pprint('GREEN', 'found installed imxvpuapi library - VPU elements will be built')
 		conf.env['BUILD_VPU_ELEMENTS'] = 1

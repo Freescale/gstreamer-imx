@@ -49,15 +49,21 @@ def add_compiler_flags(conf, env, flags, lang, compiler, uselib = ''):
 
 
 def options(opt):
-	opt.add_option('--enable-debug', action = 'store_true', default = False, help = 'enable debug build [default: %default]')
+	opt.add_option('--enable-debug', action = 'store_true', default = False, help = 'enable debug build [default: disabled]')
 	opt.add_option('--with-package-name', action = 'store', default = "Unknown package release", help = 'specify package name to use in plugin [default: %default]')
 	opt.add_option('--with-package-origin', action = 'store', default = "Unknown package origin", help = 'specify package origin URL to use in plugin [default: %default]')
 	opt.add_option('--plugin-install-path', action = 'store', default = "${PREFIX}/lib/gstreamer-1.0", help = 'where to install the plugin for GStreamer 1.0 [default: %default]')
 	opt.add_option('--kernel-headers', action = 'store', default = None, help = 'specify path to the kernel headers')
-	opt.add_option('--build-for-android', action = 'store_true', default = False, help = 'build with Android support [default: %default]')
+	opt.add_option('--build-for-android', action = 'store_true', default = False, help = 'build with Android support [default: no Android support]')
 	opt.load('compiler_c')
 	opt.load('gnu_dirs')
+	opt.recurse('src/g2d')
+	opt.recurse('src/pxp')
+	opt.recurse('src/ipu')
+	opt.recurse('src/vpu')
 	opt.recurse('src/eglvivsink')
+	opt.recurse('src/v4l2src')
+	opt.recurse('src/audio')
 
 
 def check_linux_headers(conf):
@@ -162,7 +168,12 @@ def configure(conf):
 	conf.check_cfg(package = 'gstreamer-base-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_BASE', args = '--cflags --libs', mandatory = 1)
 	if conf.check_cfg(package = 'gstreamer-audio-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_AUDIO', args = '--cflags --libs', mandatory = 0):
 		conf.env['WITH_GSTAUDIO'] = True
-	conf.check_cfg(package = 'gstreamer-video-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 1)
+	else:
+		Logs.pprint('RED', 'could not find gstaudio library - not building audio plugins')
+	if conf.check_cfg(package = 'gstreamer-video-1.0 >= 1.2.0', uselib_store = 'GSTREAMER_VIDEO', args = '--cflags --libs', mandatory = 0):
+		conf.env['WITH_GSTVIDEO'] = True
+	else:
+		Logs.pprint('RED', 'could not find gstvideo library - not building video plugins')
 	if conf.check_cc(lib = 'gstphotography-1.0', uselib_store = 'GSTPHOTOGRAPHY', mandatory = 0):
 		conf.env['WITH_GSTPHOTOGRAPHY'] = True
 

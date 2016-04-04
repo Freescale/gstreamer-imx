@@ -5,6 +5,11 @@ import os, re
 from waflib import Logs, Errors
 
 
+def options(opt):
+	opt.add_option('--disable-uniaudiodec', action = 'store_true', default = False, help = 'disable uniaudio decoder [default: enabled]')
+	opt.add_option('--disable-mp3encoder', action = 'store_true', default = False, help = 'disable mp3 encoder [default: enabled]')
+
+
 def add_fslcodec(conf, desc, codec_name, arm_core, gstcaps):
 	try:
 		orig_codec_fn = "lib_%s_wrap_%s_elinux.so" % (codec_name, arm_core)
@@ -70,13 +75,17 @@ def configure_mp3_encoder(conf):
 
 
 def configure(conf):
+	if conf.options.disable_uniaudiodec and conf.options.disable_mp3encoder:
+		return
+
 	if not conf.env['WITH_GSTAUDIO']:
-		Logs.pprint('RED', 'could not find gstaudio library - not building audio plugins')
 		return
 
 	if conf.check_cfg(package = 'libfslaudiocodec', uselib_store = 'FSLAUDIOCODEC', args = '--cflags --libs', mandatory = 0):
-		configure_uniaudio_decoder(conf)
-		configure_mp3_encoder(conf)
+		if not conf.options.disable_uniaudiodec:
+			configure_uniaudio_decoder(conf)
+		if not conf.options.disable_mp3encoder:
+			configure_mp3_encoder(conf)
 	else:
 		Logs.pprint('RED', 'audio plugins will not be built - libfslaudiocodec package not found')
 
