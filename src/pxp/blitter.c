@@ -110,7 +110,7 @@ static void gst_imx_pxp_blitter_init(GstImxPxPBlitter *pxp_blitter)
 
 	if (!gst_imx_pxp_open())
 	{
-		GST_ELEMENT_ERROR(pxp_blitter, RESOURCE, OPEN_READ_WRITE, ("could not open PxP device"), (NULL));
+		GST_ERROR_OBJECT(pxp_blitter, "could not open PxP device");
 		return;
 	}
 
@@ -126,7 +126,7 @@ static void gst_imx_pxp_blitter_init(GstImxPxPBlitter *pxp_blitter)
 
 	if ((ret = ioctl(gst_imx_pxp_get_fd(), PXP_IOC_GET_CHAN, &(pxp_blitter->priv->pxp_channel.handle))) != 0)
 	{
-		GST_ELEMENT_ERROR(pxp_blitter, RESOURCE, OPEN_READ_WRITE, ("could not request PxP channel"), ("%s", strerror(errno)));
+		GST_ERROR_OBJECT(pxp_blitter, "could not request PxP channel: %s",  strerror(errno));
 		gst_imx_pxp_close();
 		return;
 	}
@@ -146,7 +146,10 @@ GstImxPxPBlitter* gst_imx_pxp_blitter_new(void)
 
 	allocator = gst_imx_pxp_allocator_new();
 	if (allocator == NULL)
+	{
+		GST_ERROR("could not create allocator");
 		return NULL;
+	}
 
 	pxp_blitter = (GstImxPxPBlitter *)g_object_new(gst_imx_pxp_blitter_get_type(), NULL);
 	pxp_blitter->allocator = gst_object_ref_sink(allocator);

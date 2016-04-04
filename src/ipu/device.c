@@ -55,6 +55,7 @@ gboolean gst_imx_ipu_open(void)
 		if (ipu_fd < 0)
 		{
 			GST_ERROR("could not open /dev/mxc_ipu: %s", strerror(errno));
+			g_mutex_unlock(&inst_counter_mutex);
 			return FALSE;
 		}
 

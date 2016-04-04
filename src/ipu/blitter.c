@@ -101,7 +101,7 @@ static void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 {
 	if (!gst_imx_ipu_open())
 	{
-		GST_ELEMENT_ERROR(ipu_blitter, RESOURCE, OPEN_READ_WRITE, ("could not open IPU device"), (NULL));
+		GST_ERROR_OBJECT(ipu_blitter, "could not open IPU device");
 		return;
 	}
 

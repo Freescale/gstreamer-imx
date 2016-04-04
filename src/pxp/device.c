@@ -44,6 +44,7 @@ gboolean gst_imx_pxp_open(void)
 		if (pxp_fd < 0)
 		{
 			GST_ERROR("could not open /dev/pxp_device: %s", strerror(errno));
+			g_mutex_unlock(&inst_counter_mutex);
 			return FALSE;
 		}
 
