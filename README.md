@@ -7,7 +7,7 @@ About
 This is a set of [GStreamer 1.0](http://gstreamer.freedesktop.org/) plugins for Freescale's
 i.MX platform, which make use of the i.MX multimedia capabilities.
 
-Currently, this software has been tested only with the i.MX6 SoC family.
+Currently, this software has been tested only with the i.MX6 and i.MX7 SoC families.
 
 
 License
