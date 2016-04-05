@@ -10,28 +10,28 @@
 G_BEGIN_DECLS
 
 
-typedef struct _GstImxCompositor GstImxCompositor;
-typedef struct _GstImxCompositorClass GstImxCompositorClass;
-typedef struct _GstImxCompositorPad GstImxCompositorPad;
-typedef struct _GstImxCompositorPadClass GstImxCompositorPadClass;
+typedef struct _GstImxVideoCompositor GstImxVideoCompositor;
+typedef struct _GstImxVideoCompositorClass GstImxVideoCompositorClass;
+typedef struct _GstImxVideoCompositorPad GstImxVideoCompositorPad;
+typedef struct _GstImxVideoCompositorPadClass GstImxVideoCompositorPadClass;
 
 
-#define GST_TYPE_IMX_COMPOSITOR             (gst_imx_compositor_get_type())
-#define GST_IMX_COMPOSITOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_COMPOSITOR, GstImxCompositor))
-#define GST_IMX_COMPOSITOR_CAST(obj)        ((GstImxCompositor *)(obj))
-#define GST_IMX_COMPOSITOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_COMPOSITOR, GstImxCompositorClass))
-#define GST_IS_IMX_COMPOSITOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_COMPOSITOR))
-#define GST_IS_IMX_COMPOSITOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_COMPOSITOR))
+#define GST_TYPE_IMX_VIDEO_COMPOSITOR             (gst_imx_video_compositor_get_type())
+#define GST_IMX_VIDEO_COMPOSITOR(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_VIDEO_COMPOSITOR, GstImxVideoCompositor))
+#define GST_IMX_VIDEO_COMPOSITOR_CAST(obj)        ((GstImxVideoCompositor *)(obj))
+#define GST_IMX_VIDEO_COMPOSITOR_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_VIDEO_COMPOSITOR, GstImxVideoCompositorClass))
+#define GST_IS_IMX_VIDEO_COMPOSITOR(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_VIDEO_COMPOSITOR))
+#define GST_IS_IMX_VIDEO_COMPOSITOR_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_VIDEO_COMPOSITOR))
 
-#define GST_TYPE_IMX_COMPOSITOR_PAD             (gst_imx_compositor_pad_get_type())
-#define GST_IMX_COMPOSITOR_PAD(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_COMPOSITOR_PAD, GstImxCompositorPad))
-#define GST_IMX_COMPOSITOR_PAD_CAST(obj)        ((GstImxCompositorPad *)(obj))
-#define GST_IMX_COMPOSITOR_PAD_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_COMPOSITOR_PAD, GstImxCompositorPadClass))
-#define GST_IS_IMX_COMPOSITOR_PAD(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_COMPOSITOR_PAD))
-#define GST_IS_IMX_COMPOSITOR_PAD_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_COMPOSITOR_PAD))
+#define GST_TYPE_IMX_VIDEO_COMPOSITOR_PAD             (gst_imx_video_compositor_pad_get_type())
+#define GST_IMX_VIDEO_COMPOSITOR_PAD(obj)             (G_TYPE_CHECK_INSTANCE_CAST((obj), GST_TYPE_IMX_VIDEO_COMPOSITOR_PAD, GstImxVideoCompositorPad))
+#define GST_IMX_VIDEO_COMPOSITOR_PAD_CAST(obj)        ((GstImxVideoCompositorPad *)(obj))
+#define GST_IMX_VIDEO_COMPOSITOR_PAD_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST((klass), GST_TYPE_IMX_VIDEO_COMPOSITOR_PAD, GstImxVideoCompositorPadClass))
+#define GST_IS_IMX_VIDEO_COMPOSITOR_PAD(obj)          (G_TYPE_CHECK_INSTANCE_TYPE((obj), GST_TYPE_IMX_VIDEO_COMPOSITOR_PAD))
+#define GST_IS_IMX_VIDEO_COMPOSITOR_PAD_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_VIDEO_COMPOSITOR_PAD))
 
 
-struct _GstImxCompositor
+struct _GstImxVideoCompositor
 {
 	GstImxBPVideoAggregator parent;
 	guint overall_width, overall_height;
@@ -44,7 +44,7 @@ struct _GstImxCompositor
 
 
 /**
- * GstImxCompositorClass:
+ * GstImxVideoCompositorClass:
  *
  * The compositor base class takes N input video streams and composes them into
  * one output video stream. Input video streams can have different sizes, formats,
@@ -89,19 +89,19 @@ struct _GstImxCompositor
  *                          alpha 255 equals 100% opacity; alpha 0 means 100% transparency.
  *                          Returns TRUE if it successfully completed, FALSE otherwise.
  */
-struct _GstImxCompositorClass
+struct _GstImxVideoCompositorClass
 {
 	GstImxBPVideoAggregatorClass parent_class;
 
-	GstAllocator* (*get_phys_mem_allocator)(GstImxCompositor *compositor);
-	gboolean (*set_output_frame)(GstImxCompositor *compositor, GstBuffer *output_frame);
-	gboolean (*set_output_video_info)(GstImxCompositor *compositor, GstVideoInfo const *info);
-	gboolean (*fill_region)(GstImxCompositor *compositor, GstImxRegion const *region, guint32 color);
-	gboolean (*draw_frame)(GstImxCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha);
+	GstAllocator* (*get_phys_mem_allocator)(GstImxVideoCompositor *compositor);
+	gboolean (*set_output_frame)(GstImxVideoCompositor *compositor, GstBuffer *output_frame);
+	gboolean (*set_output_video_info)(GstImxVideoCompositor *compositor, GstVideoInfo const *info);
+	gboolean (*fill_region)(GstImxVideoCompositor *compositor, GstImxRegion const *region, guint32 color);
+	gboolean (*draw_frame)(GstImxVideoCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha);
 };
 
 
-struct _GstImxCompositorPad
+struct _GstImxVideoCompositorPad
 {
 	GstImxBPVideoAggregatorPad parent;
 
@@ -117,14 +117,14 @@ struct _GstImxCompositorPad
 };
 
 
-struct _GstImxCompositorPadClass
+struct _GstImxVideoCompositorPadClass
 {
 	GstImxBPVideoAggregatorPadClass parent_class;
 };
 
 
-GType gst_imx_compositor_get_type(void);
-GType gst_imx_compositor_pad_get_type(void);
+GType gst_imx_video_compositor_get_type(void);
+GType gst_imx_video_compositor_pad_get_type(void);
 
 
 G_END_DECLS

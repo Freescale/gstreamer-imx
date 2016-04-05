@@ -7,13 +7,13 @@
 #include "../common/phys_mem_buffer_pool.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(imx_compositor_debug);
-#define GST_CAT_DEFAULT imx_compositor_debug
+GST_DEBUG_CATEGORY_STATIC(imx_video_compositor_debug);
+#define GST_CAT_DEFAULT imx_video_compositor_debug
 
 
 
 
-/********** GstImxCompositorPad **********/
+/********** GstImxVideoCompositorPad **********/
 
 
 enum
@@ -49,19 +49,19 @@ enum
 #define DEFAULT_PAD_FILL_COLOR (0xFF000000)
 
 
-G_DEFINE_TYPE(GstImxCompositorPad, gst_imx_compositor_pad, GST_TYPE_VIDEO_AGGREGATOR_PAD)
+G_DEFINE_TYPE(GstImxVideoCompositorPad, gst_imx_video_compositor_pad, GST_TYPE_VIDEO_AGGREGATOR_PAD)
 
 
-static void gst_imx_compositor_pad_compute_outer_region(GstImxCompositorPad *compositor_pad);
-static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor_pad, GstImxRegion const *source_region);
+static void gst_imx_video_compositor_pad_compute_outer_region(GstImxVideoCompositorPad *compositor_pad);
+static void gst_imx_video_compositor_pad_update_canvas(GstImxVideoCompositorPad *compositor_pad, GstImxRegion const *source_region);
 
-static gboolean gst_imx_compositor_pad_flush(GstImxBPAggregatorPad *aggpad, GstImxBPAggregator *aggregator);
+static gboolean gst_imx_video_compositor_pad_flush(GstImxBPAggregatorPad *aggpad, GstImxBPAggregator *aggregator);
 
-static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
-static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static void gst_imx_video_compositor_pad_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_video_compositor_pad_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
 
-static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
+static void gst_imx_video_compositor_pad_class_init(GstImxVideoCompositorPadClass *klass)
 {
 	GObjectClass *object_class;
 	GstImxBPAggregatorPadClass *aggregator_pad_class;
@@ -71,10 +71,10 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 	aggregator_pad_class = GST_IMXBP_AGGREGATOR_PAD_CLASS(klass);
 	videoaggregator_pad_class = GST_IMXBP_VIDEO_AGGREGATOR_PAD_CLASS(klass);
 
-	object_class->set_property  = GST_DEBUG_FUNCPTR(gst_imx_compositor_pad_set_property);
-	object_class->get_property  = GST_DEBUG_FUNCPTR(gst_imx_compositor_pad_get_property);
+	object_class->set_property  = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_pad_set_property);
+	object_class->get_property  = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_pad_get_property);
 
-	aggregator_pad_class->flush = GST_DEBUG_FUNCPTR(gst_imx_compositor_pad_flush);
+	aggregator_pad_class->flush = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_pad_flush);
 
 	/* Explicitely set these to NULL to force the base class
 	 * to not try any software-based colorspace conversions
@@ -241,7 +241,7 @@ static void gst_imx_compositor_pad_class_init(GstImxCompositorPadClass *klass)
 }
 
 
-static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
+static void gst_imx_video_compositor_pad_init(GstImxVideoCompositorPad *compositor_pad)
 {
 	memset(&(compositor_pad->canvas), 0, sizeof(GstImxCanvas));
 	compositor_pad->canvas.inner_rotation = DEFAULT_PAD_ROTATION;
@@ -259,7 +259,7 @@ static void gst_imx_compositor_pad_init(GstImxCompositorPad *compositor_pad)
 }
 
 
-static void gst_imx_compositor_pad_compute_outer_region(GstImxCompositorPad *compositor_pad)
+static void gst_imx_video_compositor_pad_compute_outer_region(GstImxVideoCompositorPad *compositor_pad)
 {
 	GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
 
@@ -284,19 +284,19 @@ static void gst_imx_compositor_pad_compute_outer_region(GstImxCompositorPad *com
 }
 
 
-static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor_pad, GstImxRegion const *source_region)
+static void gst_imx_video_compositor_pad_update_canvas(GstImxVideoCompositorPad *compositor_pad, GstImxRegion const *source_region)
 {
-	GstImxCompositor *compositor;
+	GstImxVideoCompositor *compositor;
 	GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
 
 	/* Catch redundant calls */
 	if (!(compositor_pad->canvas_needs_update))
 		return;
 
-	compositor = GST_IMX_COMPOSITOR(gst_pad_get_parent_element(GST_PAD(compositor_pad)));
+	compositor = GST_IMX_VIDEO_COMPOSITOR(gst_pad_get_parent_element(GST_PAD(compositor_pad)));
 
 	/* (Re)compute the outer region */
-	gst_imx_compositor_pad_compute_outer_region(compositor_pad);
+	gst_imx_video_compositor_pad_compute_outer_region(compositor_pad);
 
 	/* (Re)computer the inner region */
 	gst_imx_canvas_calculate_inner_region(&(compositor_pad->canvas), info);
@@ -320,9 +320,9 @@ static void gst_imx_compositor_pad_update_canvas(GstImxCompositorPad *compositor
 }
 
 
-static gboolean gst_imx_compositor_pad_flush(GstImxBPAggregatorPad *aggpad, GstImxBPAggregator *aggregator)
+static gboolean gst_imx_video_compositor_pad_flush(GstImxBPAggregatorPad *aggpad, GstImxBPAggregator *aggregator)
 {
-	GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD(aggpad);
+	GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD(aggpad);
 	GST_DEBUG_OBJECT(aggregator, "resetting internal compositor pad flags");
 	compositor_pad->last_frame_with_cropdata = TRUE;
 	compositor_pad->canvas_needs_update = TRUE;
@@ -330,12 +330,12 @@ static gboolean gst_imx_compositor_pad_flush(GstImxBPAggregatorPad *aggpad, GstI
 }
 
 
-static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+static void gst_imx_video_compositor_pad_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
-	GstImxCompositor *compositor;
-	GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD(object);
+	GstImxVideoCompositor *compositor;
+	GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD(object);
 
-	compositor = GST_IMX_COMPOSITOR(gst_pad_get_parent_element(GST_PAD(compositor_pad)));
+	compositor = GST_IMX_VIDEO_COMPOSITOR(gst_pad_get_parent_element(GST_PAD(compositor_pad)));
 
 	switch (prop_id)
 	{
@@ -414,9 +414,9 @@ static void gst_imx_compositor_pad_set_property(GObject *object, guint prop_id, 
 }
 
 
-static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void gst_imx_video_compositor_pad_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
-	GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD(object);
+	GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD(object);
 
 	switch (prop_id)
 	{
@@ -481,7 +481,7 @@ static void gst_imx_compositor_pad_get_property(GObject *object, guint prop_id, 
 
 
 
-/********** GstImxCompositor **********/
+/********** GstImxVideoCompositor **********/
 
 enum
 {
@@ -494,49 +494,49 @@ enum
 
 
 
-G_DEFINE_ABSTRACT_TYPE(GstImxCompositor, gst_imx_compositor, GST_TYPE_VIDEO_AGGREGATOR)
+G_DEFINE_ABSTRACT_TYPE(GstImxVideoCompositor, gst_imx_video_compositor, GST_TYPE_VIDEO_AGGREGATOR)
 
 
-static void gst_imx_compositor_dispose(GObject *object);
-static void gst_imx_compositor_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
-static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static void gst_imx_video_compositor_dispose(GObject *object);
+static void gst_imx_video_compositor_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_video_compositor_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
-static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstQuery *query);
-static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstEvent *event);
-//static gboolean gst_imx_compositor_stop(GstImxBPAggregator *aggregator);
+static gboolean gst_imx_video_compositor_sink_query(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstQuery *query);
+static gboolean gst_imx_video_compositor_sink_event(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstEvent *event);
+//static gboolean gst_imx_video_compositor_stop(GstImxBPAggregator *aggregator);
 
-static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer);
-static GstFlowReturn gst_imx_compositor_get_output_buffer(GstImxBPVideoAggregator *videoaggregator, GstBuffer **outbuffer);
-static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps);
+static GstFlowReturn gst_imx_video_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer);
+static GstFlowReturn gst_imx_video_compositor_get_output_buffer(GstImxBPVideoAggregator *videoaggregator, GstBuffer **outbuffer);
+static gboolean gst_imx_video_compositor_negotiated_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps);
 
-static GstBufferPool* gst_imx_compositor_create_bufferpool(GstImxCompositor *compositor, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params);
-static void gst_imx_compositor_update_overall_region(GstImxCompositor *compositor);
+static GstBufferPool* gst_imx_video_compositor_create_bufferpool(GstImxVideoCompositor *compositor, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params);
+static void gst_imx_video_compositor_update_overall_region(GstImxVideoCompositor *compositor);
 
 
-static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
+static void gst_imx_video_compositor_class_init(GstImxVideoCompositorClass *klass)
 {
 	GObjectClass *object_class;
 	GstImxBPAggregatorClass *aggregator_class;
 	GstImxBPVideoAggregatorClass *video_aggregator_class;
 
-	GST_DEBUG_CATEGORY_INIT(imx_compositor_debug, "imxvideocompositor", 0, "i.MX Video compositor");
+	GST_DEBUG_CATEGORY_INIT(imx_video_compositor_debug, "imxvideocompositor", 0, "i.MX Video compositor");
 
 	object_class = G_OBJECT_CLASS(klass);
 	aggregator_class = GST_IMXBP_AGGREGATOR_CLASS(klass);
 	video_aggregator_class = GST_IMXBP_VIDEO_AGGREGATOR_CLASS(klass);
 
-	object_class->dispose       = GST_DEBUG_FUNCPTR(gst_imx_compositor_dispose);
-	object_class->set_property  = GST_DEBUG_FUNCPTR(gst_imx_compositor_set_property);
-	object_class->get_property  = GST_DEBUG_FUNCPTR(gst_imx_compositor_get_property);
+	object_class->dispose       = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_dispose);
+	object_class->set_property  = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_set_property);
+	object_class->get_property  = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_get_property);
 
-	aggregator_class->sink_query    = GST_DEBUG_FUNCPTR(gst_imx_compositor_sink_query);
-	aggregator_class->sink_event    = GST_DEBUG_FUNCPTR(gst_imx_compositor_sink_event);
-//	aggregator_class->stop          = GST_DEBUG_FUNCPTR(gst_imx_compositor_stop);
-	aggregator_class->sinkpads_type = gst_imx_compositor_pad_get_type();
+	aggregator_class->sink_query    = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_sink_query);
+	aggregator_class->sink_event    = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_sink_event);
+//	aggregator_class->stop          = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_stop);
+	aggregator_class->sinkpads_type = gst_imx_video_compositor_pad_get_type();
 
-	video_aggregator_class->aggregate_frames  = GST_DEBUG_FUNCPTR(gst_imx_compositor_aggregate_frames);
-	video_aggregator_class->get_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_compositor_get_output_buffer);
-	video_aggregator_class->negotiated_caps   = GST_DEBUG_FUNCPTR(gst_imx_compositor_negotiated_caps);
+	video_aggregator_class->aggregate_frames  = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_aggregate_frames);
+	video_aggregator_class->get_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_get_output_buffer);
+	video_aggregator_class->negotiated_caps   = GST_DEBUG_FUNCPTR(gst_imx_video_compositor_negotiated_caps);
 	video_aggregator_class->preserve_update_caps_result = FALSE;
 
 	klass->get_phys_mem_allocator = NULL;
@@ -559,7 +559,7 @@ static void gst_imx_compositor_class_init(GstImxCompositorClass *klass)
 }
 
 
-static void gst_imx_compositor_init(GstImxCompositor *compositor)
+static void gst_imx_video_compositor_init(GstImxVideoCompositor *compositor)
 {
 	compositor->overall_width = 0;
 	compositor->overall_height = 0;
@@ -570,9 +570,9 @@ static void gst_imx_compositor_init(GstImxCompositor *compositor)
 }
 
 
-static void gst_imx_compositor_dispose(GObject *object)
+static void gst_imx_video_compositor_dispose(GObject *object)
 {
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(object);
+	GstImxVideoCompositor *compositor = GST_IMX_VIDEO_COMPOSITOR(object);
 
 	if (compositor->dma_bufferpool != NULL)
 	{
@@ -580,13 +580,13 @@ static void gst_imx_compositor_dispose(GObject *object)
 		compositor->dma_bufferpool = NULL;
 	}
 
-	G_OBJECT_CLASS(gst_imx_compositor_parent_class)->dispose(object);
+	G_OBJECT_CLASS(gst_imx_video_compositor_parent_class)->dispose(object);
 }
 
 
-static void gst_imx_compositor_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+static void gst_imx_video_compositor_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(object);
+	GstImxVideoCompositor *compositor = GST_IMX_VIDEO_COMPOSITOR(object);
 
 	switch (prop_id)
 	{
@@ -601,9 +601,9 @@ static void gst_imx_compositor_set_property(GObject *object, guint prop_id, GVal
 }
 
 
-static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+static void gst_imx_video_compositor_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
 {
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(object);
+	GstImxVideoCompositor *compositor = GST_IMX_VIDEO_COMPOSITOR(object);
 
 	switch (prop_id)
 	{
@@ -618,7 +618,7 @@ static void gst_imx_compositor_get_property(GObject *object, guint prop_id, GVal
 }
 
 
-static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstQuery *query)
+static gboolean gst_imx_video_compositor_sink_query(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstQuery *query)
 {
 	switch (GST_QUERY_TYPE(query))
 	{
@@ -672,14 +672,14 @@ static gboolean gst_imx_compositor_sink_query(GstImxBPAggregator *aggregator, Gs
 		}
 
 		default:
-			return GST_IMXBP_AGGREGATOR_CLASS(gst_imx_compositor_parent_class)->sink_query(aggregator, pad, query);
+			return GST_IMXBP_AGGREGATOR_CLASS(gst_imx_video_compositor_parent_class)->sink_query(aggregator, pad, query);
 	}
 }
 
 
-static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstEvent *event)
+static gboolean gst_imx_video_compositor_sink_event(GstImxBPAggregator *aggregator, GstImxBPAggregatorPad *pad, GstEvent *event)
 {
-	gboolean ret = GST_IMXBP_AGGREGATOR_CLASS(gst_imx_compositor_parent_class)->sink_event(aggregator, pad, event);
+	gboolean ret = GST_IMXBP_AGGREGATOR_CLASS(gst_imx_video_compositor_parent_class)->sink_event(aggregator, pad, event);
 
 	/* If new caps came in one of the sinkpads, this pad's canvas might
 	 * need to be changed now (for example, if the new caps have different
@@ -689,7 +689,7 @@ static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, Gs
 	 * processing the event (ret is FALSE in that case). */
 	if (ret && (GST_EVENT_TYPE(event) == GST_EVENT_CAPS))
 	{
-		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD(pad);
+		GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD(pad);
 		compositor_pad->canvas_needs_update = TRUE;
 	}
 
@@ -698,14 +698,14 @@ static gboolean gst_imx_compositor_sink_event(GstImxBPAggregator *aggregator, Gs
 
 
 #if 0
-static gboolean gst_imx_compositor_stop(GstImxBPAggregator *aggregator)
+static gboolean gst_imx_video_compositor_stop(GstImxBPAggregator *aggregator)
 {
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
+	GstImxVideoCompositor *compositor = GST_IMX_VIDEO_COMPOSITOR(videoaggregator);
 
 	walk = GST_ELEMENT(videoaggregator)->sinkpads;
 	while (walk != NULL)
 	{
-		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
+		GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD_CAST(walk->data);
 		compositor_pad->last_frame_with_cropdata = TRUE;
 		compositor_pad->canvas_needs_update = TRUE;
 		walk = g_list_next(walk);
@@ -714,12 +714,12 @@ static gboolean gst_imx_compositor_stop(GstImxBPAggregator *aggregator)
 #endif
 
 
-static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer)
+static GstFlowReturn gst_imx_video_compositor_aggregate_frames(GstImxBPVideoAggregator *videoaggregator, GstBuffer *outbuffer)
 {
 	GstFlowReturn ret = GST_FLOW_OK;
 	GList *walk;
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
-	GstImxCompositorClass *klass = GST_IMX_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(videoaggregator));
+	GstImxVideoCompositor *compositor = GST_IMX_VIDEO_COMPOSITOR(videoaggregator);
+	GstImxVideoCompositorClass *klass = GST_IMX_VIDEO_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(videoaggregator));
 
 	g_assert(klass->set_output_frame != NULL);
 	g_assert(klass->fill_region != NULL);
@@ -741,13 +741,13 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 
 	/* Update the overall region first if necessary to ensure that it is valid
 	 * and that the region_fill_necessary flag is set to the proper value */
-	gst_imx_compositor_update_overall_region(compositor);
+	gst_imx_video_compositor_update_overall_region(compositor);
 
 	GST_LOG_OBJECT(compositor, "aggregating frames, region_fill_necessary: %d", (gint)(compositor->region_fill_necessary));
 
 	/* Check if the overall region needs to be filled. This is the case if none
 	 * of the input frames completely cover the overall region with 100% alpha
-	 * (this is determined by gst_imx_compositor_update_overall_region() ) */
+	 * (this is determined by gst_imx_video_compositor_update_overall_region() ) */
 	if (!(compositor->region_fill_necessary) || klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color))
 	{
 		/* Lock object to ensure nothing is changed during composition */
@@ -759,7 +759,7 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 		walk = GST_ELEMENT(videoaggregator)->sinkpads;
 		while (walk != NULL)
 		{
-			GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
+			GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD_CAST(walk->data);
 
 			if (compositor_pad->pad_is_new)
 			{
@@ -776,7 +776,7 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 				 * if most update calls happen outside of the object
 				 * lock (the overall_region_valid flag ensures redundant
 				 * calls don't compute anything). */
-				gst_imx_compositor_update_overall_region(compositor);
+				gst_imx_video_compositor_update_overall_region(compositor);
 
 				break;
 			}
@@ -790,7 +790,7 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 		while (walk != NULL)
 		{
 			GstImxBPVideoAggregatorPad *videoaggregator_pad = walk->data;
-			GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(videoaggregator_pad);
+			GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD_CAST(videoaggregator_pad);
 
 			/* If there actually is a buffer, draw it
 			 * Sometimes, pads don't deliver data right from the start;
@@ -834,7 +834,7 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 
 					/* Update canvas and input region if necessary */
 					if (compositor_pad->canvas_needs_update)
-						gst_imx_compositor_pad_update_canvas(compositor_pad, &(compositor_pad->last_source_region));
+						gst_imx_video_compositor_pad_update_canvas(compositor_pad, &(compositor_pad->last_source_region));
 				}
 				else
 				{
@@ -845,7 +845,7 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 
 					/* Update the pad's canvas if necessary,
 					 * to ensure there is a valid canvas to draw to */
-					gst_imx_compositor_pad_update_canvas(compositor_pad, NULL);
+					gst_imx_video_compositor_pad_update_canvas(compositor_pad, NULL);
 				}
 
 				GST_LOG_OBJECT(
@@ -895,9 +895,9 @@ static GstFlowReturn gst_imx_compositor_aggregate_frames(GstImxBPVideoAggregator
 }
 
 
-static GstFlowReturn gst_imx_compositor_get_output_buffer(GstImxBPVideoAggregator *videoaggregator, GstBuffer **outbuffer)
+static GstFlowReturn gst_imx_video_compositor_get_output_buffer(GstImxBPVideoAggregator *videoaggregator, GstBuffer **outbuffer)
 {
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
+	GstImxVideoCompositor *compositor = GST_IMX_VIDEO_COMPOSITOR(videoaggregator);
 	GstBufferPool *pool = compositor->dma_bufferpool;
 
 	/* Return a DMA buffer from the pool. The output buffers produced by
@@ -910,10 +910,10 @@ static GstFlowReturn gst_imx_compositor_get_output_buffer(GstImxBPVideoAggregato
 }
 
 
-static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps)
+static gboolean gst_imx_video_compositor_negotiated_caps(GstImxBPVideoAggregator *videoaggregator, GstCaps *caps)
 {
 	GstVideoInfo info;
-	GstImxCompositor *compositor = GST_IMX_COMPOSITOR(videoaggregator);
+	GstImxVideoCompositor *compositor = GST_IMX_VIDEO_COMPOSITOR(videoaggregator);
 
 	/* Output caps have been negotiated. Set up a suitable DMA buffer pool
 	 * (cleaning up any old buffer pool first) and inform subclass about
@@ -932,18 +932,18 @@ static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *vide
 	GST_DEBUG_OBJECT(videoaggregator, "negotiated width/height: %u/%u", compositor->overall_width, compositor->overall_height);
 
 	/* Update the overall region based on the new overall width/height */
-	gst_imx_compositor_update_overall_region(compositor);
+	gst_imx_video_compositor_update_overall_region(compositor);
 
 	/* Cleanup old buffer pool */
 	if (compositor->dma_bufferpool != NULL)
 		gst_object_unref(GST_OBJECT(compositor->dma_bufferpool));
 
 	/* And get the new one */
-	compositor->dma_bufferpool = gst_imx_compositor_create_bufferpool(compositor, caps, 0, 0, 0, NULL, NULL);
+	compositor->dma_bufferpool = gst_imx_video_compositor_create_bufferpool(compositor, caps, 0, 0, 0, NULL, NULL);
 
 	if (compositor->dma_bufferpool != NULL)
 	{
-		GstImxCompositorClass *klass = GST_IMX_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(compositor));
+		GstImxVideoCompositorClass *klass = GST_IMX_VIDEO_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(compositor));
 
 		/* Inform subclass about the new output video info */
 		if (klass->set_output_video_info != NULL)
@@ -956,14 +956,14 @@ static gboolean gst_imx_compositor_negotiated_caps(GstImxBPVideoAggregator *vide
 }
 
 
-static GstBufferPool* gst_imx_compositor_create_bufferpool(GstImxCompositor *compositor, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params)
+static GstBufferPool* gst_imx_video_compositor_create_bufferpool(GstImxVideoCompositor *compositor, GstCaps *caps, guint size, guint min_buffers, guint max_buffers, GstAllocator *allocator, GstAllocationParams *alloc_params)
 {
 	GstBufferPool *pool;
 	GstStructure *config;
-	GstImxCompositorClass *klass;
+	GstImxVideoCompositorClass *klass;
 
 	g_assert(compositor != NULL);
-	klass = GST_IMX_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(compositor));
+	klass = GST_IMX_VIDEO_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(compositor));
 
 	g_assert(klass->get_phys_mem_allocator != NULL);
 
@@ -1001,7 +1001,7 @@ static GstBufferPool* gst_imx_compositor_create_bufferpool(GstImxCompositor *com
 }
 
 
-static void gst_imx_compositor_update_overall_region(GstImxCompositor *compositor)
+static void gst_imx_video_compositor_update_overall_region(GstImxVideoCompositor *compositor)
 {
 	GList *walk;
 	gboolean first = TRUE;
@@ -1032,12 +1032,12 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 		walk = GST_ELEMENT(compositor)->sinkpads;
 		while (walk != NULL)
 		{
-			GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
+			GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD_CAST(walk->data);
 			GstImxRegion *outer_region = &(compositor_pad->canvas.outer_region);
 
 			/* Update the outer region, since the xpos/ypos/width/height pad properties
 			 * might have changed */
-			gst_imx_compositor_pad_compute_outer_region(compositor_pad);
+			gst_imx_video_compositor_pad_compute_outer_region(compositor_pad);
 
 			/* The pad canvasses are *not* updated here. This is because in order for
 			 * these updates to be done, a valid overall region needs to exist first.
@@ -1076,7 +1076,7 @@ static void gst_imx_compositor_update_overall_region(GstImxCompositor *composito
 	walk = GST_ELEMENT(compositor)->sinkpads;
 	while (walk != NULL)
 	{
-		GstImxCompositorPad *compositor_pad = GST_IMX_COMPOSITOR_PAD_CAST(walk->data);
+		GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD_CAST(walk->data);
 		GstImxRegion *outer_region = &(compositor_pad->canvas.outer_region);
 
 		/* Check if the outer region completely contains the overall region */

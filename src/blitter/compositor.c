@@ -7,18 +7,18 @@ GST_DEBUG_CATEGORY_STATIC(imx_blitter_compositor_debug);
 #define GST_CAT_DEFAULT imx_blitter_compositor_debug
 
 
-G_DEFINE_ABSTRACT_TYPE(GstImxBlitterCompositor, gst_imx_blitter_compositor, GST_TYPE_IMX_COMPOSITOR)
+G_DEFINE_ABSTRACT_TYPE(GstImxBlitterCompositor, gst_imx_blitter_compositor, GST_TYPE_IMX_VIDEO_COMPOSITOR)
 
 
 static void gst_imx_blitter_compositor_dispose(GObject *object);
 
 static GstStateChangeReturn gst_imx_blitter_compositor_change_state(GstElement *element, GstStateChange transition);
 
-GstAllocator* gst_imx_blitter_compositor_get_phys_mem_allocator(GstImxCompositor *compositor);
-gboolean gst_imx_blitter_compositor_set_output_frame(GstImxCompositor *compositor, GstBuffer *output_frame);
-gboolean gst_imx_blitter_compositor_set_output_video_info(GstImxCompositor *compositor, GstVideoInfo const *info);
-gboolean gst_imx_blitter_compositor_fill_region(GstImxCompositor *compositor, GstImxRegion const *region, guint32 color);
-gboolean gst_imx_blitter_compositor_draw_frame(GstImxCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha);
+GstAllocator* gst_imx_blitter_compositor_get_phys_mem_allocator(GstImxVideoCompositor *compositor);
+gboolean gst_imx_blitter_compositor_set_output_frame(GstImxVideoCompositor *compositor, GstBuffer *output_frame);
+gboolean gst_imx_blitter_compositor_set_output_video_info(GstImxVideoCompositor *compositor, GstVideoInfo const *info);
+gboolean gst_imx_blitter_compositor_fill_region(GstImxVideoCompositor *compositor, GstImxRegion const *region, guint32 color);
+gboolean gst_imx_blitter_compositor_draw_frame(GstImxVideoCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha);
 
 
 
@@ -28,13 +28,13 @@ gboolean gst_imx_blitter_compositor_draw_frame(GstImxCompositor *compositor, Gst
 static void gst_imx_blitter_compositor_class_init(GstImxBlitterCompositorClass *klass)
 {
 	GObjectClass *object_class;
-	GstImxCompositorClass *parent_class;
+	GstImxVideoCompositorClass *parent_class;
 	GstElementClass *element_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_blitter_compositor_debug, "imxblittercompositor", 0, "Freescale i.MX blitter compositor base class");
 
 	object_class = G_OBJECT_CLASS(klass);
-	parent_class = GST_IMX_COMPOSITOR_CLASS(klass);
+	parent_class = GST_IMX_VIDEO_COMPOSITOR_CLASS(klass);
 	element_class = GST_ELEMENT_CLASS(klass);
 
 	object_class->dispose = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_dispose);
@@ -132,7 +132,7 @@ static GstStateChangeReturn gst_imx_blitter_compositor_change_state(GstElement *
 }
 
 
-GstAllocator* gst_imx_blitter_compositor_get_phys_mem_allocator(GstImxCompositor *compositor)
+GstAllocator* gst_imx_blitter_compositor_get_phys_mem_allocator(GstImxVideoCompositor *compositor)
 {
 	GstImxBlitterCompositor *blitter_compositor = GST_IMX_BLITTER_COMPOSITOR(compositor);
 	g_assert(blitter_compositor->blitter != NULL);
@@ -141,7 +141,7 @@ GstAllocator* gst_imx_blitter_compositor_get_phys_mem_allocator(GstImxCompositor
 }
 
 
-gboolean gst_imx_blitter_compositor_set_output_frame(GstImxCompositor *compositor, GstBuffer *output_frame)
+gboolean gst_imx_blitter_compositor_set_output_frame(GstImxVideoCompositor *compositor, GstBuffer *output_frame)
 {
 	GstImxBlitterCompositor *blitter_compositor = GST_IMX_BLITTER_COMPOSITOR(compositor);
 	g_assert(blitter_compositor->blitter != NULL);
@@ -150,7 +150,7 @@ gboolean gst_imx_blitter_compositor_set_output_frame(GstImxCompositor *composito
 }
 
 
-gboolean gst_imx_blitter_compositor_set_output_video_info(GstImxCompositor *compositor, GstVideoInfo const *info)
+gboolean gst_imx_blitter_compositor_set_output_video_info(GstImxVideoCompositor *compositor, GstVideoInfo const *info)
 {
 	GstImxBlitterCompositor *blitter_compositor = GST_IMX_BLITTER_COMPOSITOR(compositor);
 	g_assert(blitter_compositor->blitter != NULL);
@@ -159,7 +159,7 @@ gboolean gst_imx_blitter_compositor_set_output_video_info(GstImxCompositor *comp
 }
 
 
-gboolean gst_imx_blitter_compositor_fill_region(GstImxCompositor *compositor, GstImxRegion const *region, guint32 color)
+gboolean gst_imx_blitter_compositor_fill_region(GstImxVideoCompositor *compositor, GstImxRegion const *region, guint32 color)
 {
 	GstImxBlitterCompositor *blitter_compositor = GST_IMX_BLITTER_COMPOSITOR(compositor);
 	g_assert(blitter_compositor->blitter != NULL);
@@ -168,7 +168,7 @@ gboolean gst_imx_blitter_compositor_fill_region(GstImxCompositor *compositor, Gs
 }
 
 
-gboolean gst_imx_blitter_compositor_draw_frame(GstImxCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha)
+gboolean gst_imx_blitter_compositor_draw_frame(GstImxVideoCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer *input_frame, guint8 alpha)
 {
 	gboolean ret = TRUE;
 	GstImxBlitterCompositor *blitter_compositor = GST_IMX_BLITTER_COMPOSITOR(compositor);

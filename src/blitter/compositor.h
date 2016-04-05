@@ -22,7 +22,7 @@ typedef struct _GstImxBlitterCompositorClass GstImxBlitterCompositorClass;
 
 struct _GstImxBlitterCompositor
 {
-	GstImxCompositor parent;
+	GstImxVideoCompositor parent;
 	GstImxBlitter *blitter;
 };
 
@@ -52,7 +52,7 @@ struct _GstImxBlitterCompositor
  */
 struct _GstImxBlitterCompositorClass
 {
-	GstImxCompositorClass parent_class;
+	GstImxVideoCompositorClass parent_class;
 	gboolean (*start)(GstImxBlitterCompositor *blitter_video_sink);
 	gboolean (*stop)(GstImxBlitterCompositor *blitter_video_sink);
 	GstImxBlitter* (*create_blitter)(GstImxBlitterCompositor *blitter_compositor);
