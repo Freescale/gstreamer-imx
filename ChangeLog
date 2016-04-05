@@ -1,3 +1,34 @@
+==== version 0.12.1 (2016-04-06) ====
+
+* compositor: Rename ImxCompositor(Pad) to ImxVideoCompositor(Pad)
+
+* Add switches to wscript configuration to enable/disable plugins
+  Until now, all plugins were built (unless their dependencies were
+  missing). On some i.MX machines, some features are missing. For
+  example, the i.MX7 has no VPU. To ensure deterministic builds, it is
+  useful to selectively disable plugins in the build.
+
+* ipu+pxp: : Fix deadlocks and incorrect logging in case of init error
+  This was causing a freeze if for example one tries to use PxP elements
+  on an i.MX6 Dual/Quad
+
+* imxv4l2videosrc fixes and enhancements:
+  * fixes to interlacing support (incl. workarounds for analog TV input)
+  * remove format restriction in get_caps function
+    this removes the limitation on I420 formats
+  * simplified determination of fps (necessary due to driver limitations)
+
+* eglvivsink: wayland: Do not commit before buffers are swapped
+  This fixes eglSwapBuffer swaps with damaged frames
+
+* Documentation additions
+  Adds GPU memory leak notess to the FAQ
+
+* vpu: encoder: Expose motion estimation range as property
+
+* vpu: decoder: Drop output frame if its buffer cannot be allocated
+
+
 ==== version 0.12.0 (2015-12-29) ====
 
 * vpu: Completely rewritten plugin code
