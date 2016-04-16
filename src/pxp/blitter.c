@@ -309,7 +309,6 @@ static gboolean gst_imx_pxp_blitter_fill_region(GstImxBlitter *blitter, GstImxRe
 
 static gboolean gst_imx_pxp_blitter_blit(GstImxBlitter *blitter, guint8 alpha)
 {
-	gboolean ret = TRUE;
 	GstImxPxPBlitter *pxp_blitter = GST_IMX_PXP_BLITTER(blitter);
 	
 	if (!(pxp_blitter->priv->pxp_channel_requested))
@@ -318,8 +317,9 @@ static gboolean gst_imx_pxp_blitter_blit(GstImxBlitter *blitter, guint8 alpha)
 		return FALSE;
 	}
 
-	if (ret && (pxp_blitter->visibility_mask & GST_IMX_CANVAS_VISIBILITY_FLAG_REGION_INNER))
+	if (pxp_blitter->visibility_mask & GST_IMX_CANVAS_VISIBILITY_FLAG_REGION_INNER)
 	{
+		int ret;
 		struct pxp_config_data *pconf = &(pxp_blitter->priv->pxp_config);
 
 		pconf->proc_data.scaling =
@@ -349,7 +349,7 @@ static gboolean gst_imx_pxp_blitter_blit(GstImxBlitter *blitter, guint8 alpha)
 		}
 	}
 
-	return ret;
+	return TRUE;
 }
 
 
