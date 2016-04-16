@@ -1289,7 +1289,7 @@ static GstFlowReturn gst_imx_blitter_video_transform_transform_frame(GstBaseTran
 
 	if (!blitter_video_transform->inout_info_set)
 	{
-		GST_ELEMENT_ERROR(transform, CORE, NOT_IMPLEMENTED, (NULL), ("unknown format"));
+		GST_ELEMENT_ERROR(transform, CORE, NEGOTIATION, (NULL), ("unknown format"));
 		return GST_FLOW_NOT_NEGOTIATED;
 	}
 
@@ -1301,10 +1301,29 @@ static GstFlowReturn gst_imx_blitter_video_transform_transform_frame(GstBaseTran
 
 	GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
 
-	ret = ret && gst_imx_blitter_set_input_frame(blitter_video_transform->blitter, in);
-	ret = ret && gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, out);
-	ret = ret && gst_imx_blitter_blit(blitter_video_transform->blitter, 255);
-	ret = ret && gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, NULL);
+	if (ret && !gst_imx_blitter_set_input_frame(blitter_video_transform->blitter, in))
+	{
+		GST_ERROR_OBJECT(transform, "could not set input frame");
+		ret = FALSE;
+	}
+
+	if (ret && !gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, out))
+	{
+		GST_ERROR_OBJECT(transform, "could not set output frame");
+		ret = FALSE;
+	}
+
+	if (ret && !gst_imx_blitter_blit(blitter_video_transform->blitter, 255))
+	{
+		GST_ERROR_OBJECT(transform, "blitting operation failed");
+		ret = FALSE;
+	}
+
+	if (ret && !gst_imx_blitter_set_output_frame(blitter_video_transform->blitter, NULL))
+	{
+		GST_ERROR_OBJECT(transform, "could not reset output frame");
+		ret = FALSE;
+	}
 
 	GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 
