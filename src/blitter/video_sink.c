@@ -999,6 +999,11 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 	fb_width = fb_var.xres;
 	fb_height = fb_var.yres;
 	fb_format = gst_imx_blitter_video_sink_get_format_from_fb(blitter_video_sink, &fb_var, &fb_fix);
+	if (fb_format == GST_VIDEO_FORMAT_UNKNOWN)
+	{
+		GST_ELEMENT_ERROR(blitter_video_sink, RESOURCE, OPEN_READ_WRITE, ("framebuffer has unknown format"), (NULL));
+		return FALSE;
+	}
 
 
 	/* Construct framebuffer and add meta to it
@@ -1206,6 +1211,15 @@ static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitte
 				else if ((rofs == 24) && (gofs == 16) && (bofs == 8) && (aofs == 0))
 					fmt = GST_VIDEO_FORMAT_ABGR;
 			}
+			else if ((rlen == 8) && (glen == 8) && (blen == 8) && (alen == 0))
+			{
+				if ((rofs == 0) && (gofs == 8) && (bofs == 16))
+					fmt = GST_VIDEO_FORMAT_RGBx;
+				else if ((rofs == 16) && (gofs == 8) && (bofs == 0))
+					fmt = GST_VIDEO_FORMAT_BGRx;
+				else if ((rofs == 24) && (gofs == 16) && (bofs == 8))
+					fmt = GST_VIDEO_FORMAT_xBGR;
+			}
 			break;
 		}
 		default:
@@ -1214,11 +1228,11 @@ static GstVideoFormat gst_imx_blitter_video_sink_get_format_from_fb(GstImxBlitte
 
 	GST_INFO_OBJECT(
 		blitter_video_sink,
-		"framebuffer uses %u bpp (sizes: r %u g %u b %u  offsets: r %u g %u b %u) => format %s",
+		"framebuffer uses %u bpp (sizes: r %u g %u b %u a %u  offsets: r %u g %u b %u a %u) => format %s",
 		fb_var->bits_per_pixel,
-		rlen, glen, blen,
-		rofs, gofs, bofs,
-		gst_video_format_to_string(fmt)
+		rlen, glen, blen, alen,
+		rofs, gofs, bofs, aofs,
+		(fmt == GST_VIDEO_FORMAT_UNKNOWN) ? "<UNKNOWN>" : gst_video_format_to_string(fmt)
 	);
 
 	return fmt;
