@@ -114,77 +114,110 @@ static gboolean gst_imx_v4l2src_set_focus_mode(GstPhotography *photo,
 static gboolean gst_imx_v4l2src_get_focus_mode(GstPhotography *photo,
 		GstPhotographyFocusMode *focus_mode);
 
+static gboolean gst_imx_v4l2src_is_tvin(GstImxV4l2VideoSrc *v4l2src, gint fd_v4l)
+{
+	v4l2_std_id std_id = V4L2_STD_UNKNOWN;
+	gint count = 10;
+
+	if (ioctl(fd_v4l, VIDIOC_QUERYSTD, &std_id) < 0)
+		GST_WARNING_OBJECT(v4l2src, "VIDIOC_QUERYSTD failed: %s", strerror(errno));
+
+	if (ioctl(fd_v4l, VIDIOC_G_STD, &std_id) < 0)
+	{
+		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed: %s", strerror(errno));
+		return FALSE;
+	}
+
+	while (std_id == V4L2_STD_ALL && --count >= 0)
+	{
+		g_usleep(G_USEC_PER_SEC / 10);
+		if (ioctl(fd_v4l, VIDIOC_G_STD, &std_id) < 0)
+			break;
+	}
+
+	if (ioctl(fd_v4l, VIDIOC_S_STD, &std_id) < 0)
+		GST_WARNING_OBJECT(v4l2src, "VIDIOC_S_STD failed: %s", strerror(errno));
+
+	if (std_id == V4L2_STD_UNKNOWN)
+		return FALSE;
+
+	if (std_id & V4L2_STD_525_60)
+		v4l2src->fps_n = (!v4l2src->fps_n || v4l2src->fps_n > 30) ? 30 : v4l2src->fps_n;
+	else
+		v4l2src->fps_n = (!v4l2src->fps_n || v4l2src->fps_n > 25) ? 25 : v4l2src->fps_n;
+
+	GST_DEBUG_OBJECT(v4l2src,
+		"found TV decoder: adjusted fps = %d/%d, std_id = %#" G_GINT64_MODIFIER "x",
+		v4l2src->fps_n, v4l2src->fps_d, std_id);
+
+	return TRUE;
+}
+
 static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 {
 	struct v4l2_format fmt = {0};
+	struct v4l2_fmtdesc fmtdesc = {0};
 	struct v4l2_streamparm parm = {0};
 	struct v4l2_frmsizeenum fszenum = {0};
-	v4l2_std_id std_id = V4L2_STD_UNKNOWN;
+	struct v4l2_capability cap;
 	gint input;
 	gint fd_v4l;
 
 	fd_v4l = open(v4l2src->devicename, O_RDWR, 0);
 	if (fd_v4l < 0)
 	{
-		GST_ERROR_OBJECT(v4l2src, "Unable to open %s",
-				v4l2src->devicename);
+		GST_ERROR_OBJECT(v4l2src, "Unable to open %s", v4l2src->devicename);
 		return -1;
 	}
 
-	v4l2src->is_tvin = FALSE;
-
-	if (ioctl(fd_v4l, VIDIOC_G_STD, &std_id) < 0)
-	{
-		GST_WARNING_OBJECT(v4l2src, "VIDIOC_G_STD failed: %s", strerror(errno));
+	if (ioctl (fd_v4l, VIDIOC_QUERYCAP, &cap) < 0) {
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_QUERYCAP failed: %s", strerror(errno));
+		goto fail;
 	}
-	else
-	{
-		gint count = 10;
 
-		while (std_id == V4L2_STD_ALL && --count >= 0)
-		{
-			g_usleep(G_USEC_PER_SEC / 10);
-			ioctl(fd_v4l, VIDIOC_G_STD, &std_id);
-		}
-
-		if (ioctl(fd_v4l, VIDIOC_S_STD, &std_id) < 0)
-		{
-			GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_STD failed");
-			close(fd_v4l);
-			return -1;
-		}
-
-		if (std_id)
-		{
-			if (std_id & V4L2_STD_525_60)
-				v4l2src->fps_n = (!v4l2src->fps_n || v4l2src->fps_n > 30) ? 30 : v4l2src->fps_n;
-			else
-				v4l2src->fps_n = (!v4l2src->fps_n || v4l2src->fps_n > 25) ? 25 : v4l2src->fps_n;
-
-			v4l2src->is_tvin = TRUE;
-
-			GST_DEBUG_OBJECT(v4l2src, "found TV decoder, adjusted fps %d/%d", v4l2src->fps_n, v4l2src->fps_d);
-		}
+	if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) {
+		GST_ERROR_OBJECT(v4l2src, "%s is no video capture device", v4l2src->devicename);
+		goto fail;
 	}
+
+	if (!(cap.capabilities & V4L2_CAP_STREAMING)) {
+		GST_ERROR_OBJECT(v4l2src, "%s does not support streaming i/o", v4l2src->devicename);
+		goto fail;
+	}
+
+	v4l2src->is_tvin = gst_imx_v4l2src_is_tvin(v4l2src, fd_v4l);
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (ioctl(fd_v4l, VIDIOC_G_FMT, &fmt) < 0)
 	{
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
-		close(fd_v4l);
-		return -1;
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed: %s", strerror(errno));
+		goto fail;
 	}
 
-	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d  field = %d  std id = %#" G_GINT64_MODIFIER "x", fmt.fmt.pix.pixelformat, fmt.fmt.pix.field, std_id);
+	if (!fmt.fmt.pix.pixelformat)
+	{
+		fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		fmtdesc.index = 0;
+		if (ioctl(fd_v4l, VIDIOC_ENUM_FMT, &fmtdesc) < 0)
+		{
+			GST_ERROR_OBJECT(v4l2src, "VIDIOC_ENUM_FMT failed: %s", strerror(errno));
+			goto fail;
+		}
+
+		fmt.fmt.pix.pixelformat = fmtdesc.pixelformat;
+	}
+
+	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d  field = %d",
+		fmt.fmt.pix.pixelformat, fmt.fmt.pix.field);
 
 	fszenum.index = v4l2src->capture_mode;
 	fszenum.pixel_format = fmt.fmt.pix.pixelformat;
 	if (ioctl(fd_v4l, VIDIOC_ENUM_FRAMESIZES, &fszenum) < 0)
 	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_ENUM_FRAMESIZES failed: %s", strerror(errno));
-		close(fd_v4l);
-		return -1;
+		goto fail;
 	}
+
 	v4l2src->capture_width = fszenum.discrete.width;
 	v4l2src->capture_height = fszenum.discrete.height;
 	GST_INFO_OBJECT(v4l2src, "capture mode %d: %dx%d",
@@ -195,8 +228,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	if (ioctl(fd_v4l, VIDIOC_S_INPUT, &input) < 0)
 	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_INPUT failed: %s", strerror(errno));
-		close(fd_v4l);
-		return -1;
+		goto fail;
 	}
 
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -206,19 +238,17 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	if (ioctl(fd_v4l, VIDIOC_S_PARM, &parm) < 0)
 	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_PARM failed: %s", strerror(errno));
-		close(fd_v4l);
-		return -1;
+		goto fail;
 	}
 
 	/* Get the actual frame period if possible */
 	if (parm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME)
 	{
-		/* Try the timeperframe capability */
-
 		v4l2src->fps_n = parm.parm.capture.timeperframe.denominator;
 		v4l2src->fps_d = parm.parm.capture.timeperframe.numerator;
 
-		GST_DEBUG_OBJECT(v4l2src, "V4L2_CAP_TIMEPERFRAME capability present; fps: %d/%d", v4l2src->fps_n, v4l2src->fps_d);
+		GST_DEBUG_OBJECT(v4l2src, "V4L2_CAP_TIMEPERFRAME capability present: fps = %d/%d",
+			v4l2src->fps_n, v4l2src->fps_d);
 	}
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -230,11 +260,14 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 	if (ioctl(fd_v4l, VIDIOC_S_FMT, &fmt) < 0)
 	{
 		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_FMT failed: %s", strerror(errno));
-		close(fd_v4l);
-		return -1;
+		goto fail;
 	}
 
 	return fd_v4l;
+
+fail:
+	close(fd_v4l);
+	return -1;
 }
 
 static gboolean gst_imx_v4l2src_start(GstBaseSrc *src)
@@ -257,7 +290,7 @@ static gboolean gst_imx_v4l2src_start(GstBaseSrc *src)
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0)
 	{
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed: %s", strerror(errno));
 		return FALSE;
 	}
 
@@ -328,7 +361,7 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0)
 	{
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed: %s", strerror(errno));
 		return FALSE;
 	}
 
@@ -380,13 +413,13 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 {
 	GstVideoFormat gst_fmt;
 	const gchar *pixel_format = NULL;
-	const gchar *interlace_mode = "progressive";
+	const gchar *interlace_mode = NULL;
 	struct v4l2_format fmt;
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(v4l2src->fd_obj_v4l), VIDIOC_G_FMT, &fmt) < 0)
 	{
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed");
+		GST_ERROR_OBJECT(v4l2src, "VIDIOC_G_FMT failed: %s", strerror(errno));
 		return NULL;
 	}
 
@@ -410,11 +443,15 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		GST_DEBUG_OBJECT(v4l2src, "TV decoder fix up: field = V4L2_FIELD_INTERLACED");
 	}
 
-	if (fmt.fmt.pix.field == V4L2_FIELD_INTERLACED ||
-		fmt.fmt.pix.field == V4L2_FIELD_INTERLACED_TB ||
-		fmt.fmt.pix.field == V4L2_FIELD_INTERLACED_BT)
+	switch (fmt.fmt.pix.field)
 	{
-		interlace_mode = "interleaved";
+		case V4L2_FIELD_INTERLACED:
+		case V4L2_FIELD_INTERLACED_TB:
+		case V4L2_FIELD_INTERLACED_BT:
+			interlace_mode = "interleaved";
+			break;
+		default:
+			interlace_mode = "progressive";
 	}
 
 	return gst_caps_new_simple("video/x-raw",
