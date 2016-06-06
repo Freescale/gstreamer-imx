@@ -285,4 +285,7 @@ gboolean gst_imx_blitter_blit(GstImxBlitter *blitter, guint8 alpha);
 void gst_imx_blitter_flush(GstImxBlitter *blitter);
 
 
+G_END_DECLS
+
+
 #endif

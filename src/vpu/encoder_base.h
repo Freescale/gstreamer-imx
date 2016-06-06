@@ -152,4 +152,7 @@ GType gst_imx_vpu_encoder_base_get_type(void);
 ImxVpuEncOpenParams const * gst_imx_vpu_encoder_base_get_open_params(GstImxVpuEncoderBase *vpu_encoder_base);
 
 
+G_END_DECLS
+
+
 #endif

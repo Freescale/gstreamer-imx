@@ -138,4 +138,7 @@ struct _GstImxBlitterVideoSinkClass
 GType gst_imx_blitter_video_sink_get_type(void);
 
 
+G_END_DECLS
+
+
 #endif
