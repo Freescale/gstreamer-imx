@@ -431,6 +431,9 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		case V4L2_PIX_FMT_YUYV: /* Special Case for handling YUYV */
 			pixel_format = "YUY2";
 			break;
+		case V4L2_PIX_FMT_Y16: /* Special Case for handling YUYV */
+			pixel_format = "GRAY16_LE";
+			break;
 		default:
 			gst_fmt = gst_video_format_from_fourcc(fmt.fmt.pix.pixelformat);
 			pixel_format = gst_video_format_to_string(gst_fmt);
