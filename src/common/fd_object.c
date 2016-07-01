@@ -9,7 +9,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_fd_object_debug);
 GType gst_imx_fd_object_api_get_type(void)
 {
 	static volatile GType type;
-	static gchar const *tags[] = { "resource", "filedecriptor", NULL };
+	static gchar const *tags[] = { "resource", "filedescriptor", NULL };
 
 	if (g_once_init_enter(&type))
 	{
