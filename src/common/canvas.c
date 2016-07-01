@@ -3,10 +3,12 @@
 
 GType gst_imx_canvas_inner_rotation_get_type(void)
 {
-	static GType gst_imx_canvas_inner_rotation_type = 0;
+	static volatile GType gst_imx_canvas_inner_rotation_type = 0;
 
-	if (!gst_imx_canvas_inner_rotation_type)
+	if (g_once_init_enter(&gst_imx_canvas_inner_rotation_type))
 	{
+		GType _type;
+
 		static GEnumValue rotation_values[] =
 		{
 			{ GST_IMX_CANVAS_INNER_ROTATION_NONE, "No rotation", "none" },
@@ -18,10 +20,12 @@ GType gst_imx_canvas_inner_rotation_get_type(void)
 			{ 0, NULL, NULL },
 		};
 
-		gst_imx_canvas_inner_rotation_type = g_enum_register_static(
+		_type = g_enum_register_static(
 			"ImxCanvasInnerRotation",
 			rotation_values
 		);
+
+		g_once_init_leave(&gst_imx_canvas_inner_rotation_type, _type);
 	}
 
 	return gst_imx_canvas_inner_rotation_type;
