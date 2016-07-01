@@ -439,7 +439,7 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			UNIA_SET_PARAMETER(UNIA_CODEC_DATA, "codec data");
 			gst_buffer_unmap(codec_data, &map);
 
-			GST_DEBUG_OBJECT(dec, "codec data: %lu byte", parameter.codecData.size);
+			GST_DEBUG_OBJECT(dec, "codec data: %" G_GUINT32_FORMAT " byte", (guint32)(parameter.codecData.size));
 		}
 	}
 
@@ -489,7 +489,7 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 		uint32 out_size = 0;
 
 		if (buffer != NULL)
-			GST_TRACE_OBJECT(dec, "feeding %lu bytes to the decoder", in_size);
+			GST_TRACE_OBJECT(dec, "feeding %" G_GUINT32_FORMAT " bytes to the decoder", (guint32)in_size);
 		else
 			GST_TRACE_OBJECT(dec, "draining decoder");
 
@@ -500,7 +500,7 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 			&out_buf, &out_size
 		);
 
-		GST_TRACE_OBJECT(dec, "decode_frame:  return 0x%x  offset %lu  out_size %lu", (unsigned int)dec_ret, offset, out_size);
+		GST_TRACE_OBJECT(dec, "decode_frame:  return 0x%x  offset %" G_GUINT32_FORMAT "  out_size %" G_GUINT32_FORMAT, (unsigned int)dec_ret, (guint32)offset, (guint32)out_size);
 
 		if ((out_buf != NULL) && (out_size > 0))
 		{
@@ -560,7 +560,7 @@ static GstFlowReturn gst_imx_audio_uniaudio_dec_handle_frame(GstAudioDecoder *de
 			return gst_audio_decoder_finish_frame(dec, NULL, 1);
 		}
 
-		GST_DEBUG_OBJECT(imx_audio_uniaudio_dec, "output sample width: %lu  depth: %lu", parameter.outputFormat.width, parameter.outputFormat.depth);
+		GST_DEBUG_OBJECT(imx_audio_uniaudio_dec, "output sample width: %" G_GUINT32_FORMAT "  depth: %" G_GUINT32_FORMAT, (guint32)(parameter.outputFormat.width), (guint32)(parameter.outputFormat.depth));
 		pcm_fmt = gst_audio_format_build_integer(TRUE, G_BYTE_ORDER, parameter.outputFormat.width, parameter.outputFormat.depth);
 
 		GST_DEBUG_OBJECT(imx_audio_uniaudio_dec, "setting output format to: %s  %d Hz  %d channels", gst_audio_format_to_string(pcm_fmt), (gint)(parameter.outputFormat.samplerate), (gint)(parameter.outputFormat.channels));
