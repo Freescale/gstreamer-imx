@@ -423,21 +423,104 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		return NULL;
 	}
 
+	/* switch/case table taken from gst-plugins-good/sys/v4l2/gstv4l2object.c */
 	switch (fmt.fmt.pix.pixelformat)
 	{
-		case V4L2_PIX_FMT_YUV420: /* Special Case for handling YU12 */
-			pixel_format = "I420";
+		case V4L2_PIX_FMT_GREY:
+			gst_fmt = GST_VIDEO_FORMAT_GRAY8;
 			break;
-		case V4L2_PIX_FMT_YUYV: /* Special Case for handling YUYV */
-			pixel_format = "YUY2";
+		case V4L2_PIX_FMT_Y16:
+			gst_fmt = GST_VIDEO_FORMAT_GRAY16_LE;
 			break;
-		case V4L2_PIX_FMT_Y16: /* Special Case for handling YUYV */
-			pixel_format = "GRAY16_LE";
+		case V4L2_PIX_FMT_Y16_BE:
+			gst_fmt = GST_VIDEO_FORMAT_GRAY16_BE;
+			break;
+		case V4L2_PIX_FMT_XRGB555:
+		case V4L2_PIX_FMT_RGB555:
+			gst_fmt = GST_VIDEO_FORMAT_RGB15;
+			break;
+		case V4L2_PIX_FMT_XRGB555X:
+		case V4L2_PIX_FMT_RGB555X:
+			gst_fmt = GST_VIDEO_FORMAT_BGR15;
+			break;
+		case V4L2_PIX_FMT_RGB565:
+			gst_fmt = GST_VIDEO_FORMAT_RGB16;
+			break;
+		case V4L2_PIX_FMT_RGB24:
+			gst_fmt = GST_VIDEO_FORMAT_RGB;
+			break;
+		case V4L2_PIX_FMT_BGR24:
+			gst_fmt = GST_VIDEO_FORMAT_BGR;
+			break;
+		case V4L2_PIX_FMT_XRGB32:
+		case V4L2_PIX_FMT_RGB32:
+			gst_fmt = GST_VIDEO_FORMAT_xRGB;
+			break;
+		case V4L2_PIX_FMT_XBGR32:
+		case V4L2_PIX_FMT_BGR32:
+			gst_fmt = GST_VIDEO_FORMAT_BGRx;
+			break;
+		case V4L2_PIX_FMT_ABGR32:
+			gst_fmt = GST_VIDEO_FORMAT_BGRA;
+			break;
+		case V4L2_PIX_FMT_ARGB32:
+			gst_fmt = GST_VIDEO_FORMAT_ARGB;
+			break;
+		case V4L2_PIX_FMT_NV12:
+		case V4L2_PIX_FMT_NV12M:
+			gst_fmt = GST_VIDEO_FORMAT_NV12;
+			break;
+		case V4L2_PIX_FMT_NV12MT:
+			gst_fmt = GST_VIDEO_FORMAT_NV12_64Z32;
+			break;
+		case V4L2_PIX_FMT_NV21:
+		case V4L2_PIX_FMT_NV21M:
+			gst_fmt = GST_VIDEO_FORMAT_NV21;
+			break;
+		case V4L2_PIX_FMT_YVU410:
+			gst_fmt = GST_VIDEO_FORMAT_YVU9;
+			break;
+		case V4L2_PIX_FMT_YUV410:
+			gst_fmt = GST_VIDEO_FORMAT_YUV9;
+			break;
+		case V4L2_PIX_FMT_YUV420:
+		case V4L2_PIX_FMT_YUV420M:
+			gst_fmt = GST_VIDEO_FORMAT_I420;
+			break;
+		case V4L2_PIX_FMT_YUYV:
+			gst_fmt = GST_VIDEO_FORMAT_YUY2;
+			break;
+		case V4L2_PIX_FMT_YVU420:
+			gst_fmt = GST_VIDEO_FORMAT_YV12;
+			break;
+		case V4L2_PIX_FMT_UYVY:
+			gst_fmt = GST_VIDEO_FORMAT_UYVY;
+			break;
+		case V4L2_PIX_FMT_YUV411P:
+			gst_fmt = GST_VIDEO_FORMAT_Y41B;
+			break;
+		case V4L2_PIX_FMT_YUV422P:
+			gst_fmt = GST_VIDEO_FORMAT_Y42B;
+			break;
+		case V4L2_PIX_FMT_YVYU:
+			gst_fmt = GST_VIDEO_FORMAT_YVYU;
+			break;
+		case V4L2_PIX_FMT_NV16:
+		case V4L2_PIX_FMT_NV16M:
+			gst_fmt = GST_VIDEO_FORMAT_NV16;
+			break;
+		case V4L2_PIX_FMT_NV61:
+		case V4L2_PIX_FMT_NV61M:
+			gst_fmt = GST_VIDEO_FORMAT_NV61;
+			break;
+		case V4L2_PIX_FMT_NV24:
+			gst_fmt = GST_VIDEO_FORMAT_NV24;
 			break;
 		default:
 			gst_fmt = gst_video_format_from_fourcc(fmt.fmt.pix.pixelformat);
-			pixel_format = gst_video_format_to_string(gst_fmt);
 	}
+
+	pixel_format = gst_video_format_to_string(gst_fmt);
 
 	if (v4l2src->is_tvin && !fmt.fmt.pix.field)
 	{
