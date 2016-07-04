@@ -129,14 +129,6 @@ def configure(conf):
 	add_compiler_flags(conf, conf.env, ['-Wno-cpp'], 'C', 'C', 'KERNEL_HEADERS')
 
 
-	# configure objdump utility
-	try:
-		conf.env['OBJDUMP'] = os.environ['OBJDUMP']
-		conf.msg(msg = 'Checking for program objdump', result = conf.env['OBJDUMP'])
-	except KeyError as e:
-		conf.env['OBJDUMP'] = conf.find_program('objdump', var = 'OBJDUMP')
-
-
 	# some extra output for Android
 	conf.msg('Building for Android', result = 'yes' if conf.options.build_for_android else 'no', color = 'GREEN' if conf.options.build_for_android else 'YELLOW')
 	if conf.options.build_for_android:
