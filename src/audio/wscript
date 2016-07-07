@@ -21,7 +21,11 @@ def configure_audio_codec_path(conf):
 
 
 def configure_mp3_encoder(conf):
-	if conf.check_cc(lib = '_mp3_enc_arm12_elinux', uselib_store = 'FSLAUDIOCODEC', mandatory = 0):
+	# The "uselib = 'FSLAUDIOCODEC'" part applies the libdir
+	# from the pkg-config .pc file to the check_cc() call,
+	# which might be necessary if the encoder library is not
+	# in a default location
+	if conf.check_cc(lib = '_mp3_enc_arm12_elinux', uselib = 'FSLAUDIOCODEC', uselib_store = 'FSLAUDIOCODEC', mandatory = 0):
 		conf.env['MP3_ENCODER_ENABLED'] = 1
 		conf.define('WITH_MP3_ENCODER', 1)
 		Logs.pprint('GREEN', 'mp3 encoder will be built')
