@@ -299,8 +299,12 @@ static gboolean gst_imx_v4l2src_start(GstBaseSrc *src)
 	GST_DEBUG_OBJECT(v4l2src, "sizeimage = %d", fmt.fmt.pix.sizeimage);
 	GST_DEBUG_OBJECT(v4l2src, "pixelformat = %d", fmt.fmt.pix.pixelformat);
 
-	v4l2src->time_per_frame = gst_util_uint64_scale_int(GST_SECOND,
-			v4l2src->fps_d, v4l2src->fps_n);
+	/* Explanation for this line:
+	 * fps = fps_n/fps_d
+	 * time_per_frame = 1s / fps
+	 * -> time_per_frame = 1s / (fps_n/fps_d) = 1s * fps_d / fps_n
+	 */
+	v4l2src->time_per_frame = gst_util_uint64_scale_int(GST_SECOND, v4l2src->fps_d, v4l2src->fps_n);
 	v4l2src->count = 0;
 
 	g_mutex_lock(&v4l2src->af_mutex);
