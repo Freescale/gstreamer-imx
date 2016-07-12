@@ -10,63 +10,22 @@ def options(opt):
 	opt.add_option('--disable-mp3encoder', action = 'store_true', default = False, help = 'disable mp3 encoder [default: enabled]')
 
 
-def add_fslcodec(conf, desc, codec_name, arm_core, gstcaps):
-	try:
-		orig_codec_fn = "lib_%s_wrap_%s_elinux.so" % (codec_name, arm_core)
-		objdump_out = conf.cmd_and_log('%s -p "%s"' % (conf.env['OBJDUMP'], os.path.join(conf.env['UNIAUDIO_BUILD_CODEC_PATH'], orig_codec_fn)), env = dict(os.environ)).splitlines()
-		soname_line = reduce(lambda a,b : a or b, map(lambda x: x if x.find('SONAME') != -1 else None, objdump_out))
-		soname_line = soname_line.strip()
-		soname = re.search('SONAME\s*(\S*)', soname_line).group(1)
-		codec_fn = orig_codec_fn
-
-		path = conf.env['UNIAUDIO_TARGET_CODEC_PATH']
-		fullpath = os.path.join(path, soname)
-		suffix = "%s_%s" % (codec_name.upper(), arm_core.upper())
-		conf.env['CODEC_ENTRIES'] += [ { "filename": fullpath, "gstcaps": gstcaps } ]
-		Logs.pprint('NORMAL', '  added %s decoder (soname: %s)' % (desc, soname))
-	except Errors.WafError as e:
-		Logs.pprint('NORMAL', '  could not add %s decoder' % desc)
-
-
-def configure_uniaudio_decoder(conf):
+def configure_audio_codec_path(conf):
 	fslcodec_libdirvar = conf.check_cfg(package = 'libfslaudiocodec', args = '--variable=libdir', msg = 'Searching fslcodec plugin directory', okmsg = 'found', errmsg = 'not found', mandatory = 0).strip()
 	if not fslcodec_libdirvar:
-		Logs.pprint('RED', 'could not find fslcodec plugin directory - not building uniaudio decoder')
+		Logs.pprint('RED', 'could not find fsl codec path')
 		return
 
-	conf.env['UNIAUDIO_BUILD_CODEC_PATH'] = os.path.join(conf.env['LIBPATH_FSLAUDIOCODEC'][0], 'wrap')
-	conf.env['UNIAUDIO_TARGET_CODEC_PATH'] = os.path.join(fslcodec_libdirvar, 'wrap')
-
-	# GStreamer's aacparse element does not have a profile caps field in GStreamer versions older than 1.4.4,
-	# so the field cannot be added for these versions (otherwise the decoder's caps would be incompatible
-	# with aacparse's)
-	aac_profile_lc_field = ""
-	gst_version = conf.env['GSTREAMER_VERSION']
-	if gst_version[0] >= 1 and gst_version[1] >= 4 and gst_version[2] >= 4:
-		Logs.pprint('NORMAL', 'GStreamer version is >= 1.4.4 - adding profile field to AAC caps')
-		aac_profile_lc_field = ", profile=(string)lc"
-
-	conf.env['CODEC_ENTRIES'] = []
-	add_fslcodec(conf, "AAC LC", "aacd", "arm12", "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}" + aac_profile_lc_field)
-	add_fslcodec(conf, "MP3", "mp3d", "arm12", "audio/mpeg, mpegversion=(int)1, layer=(int)3, parsed=(boolean)true")
-	add_fslcodec(conf, "Vorbis", "vorbisd", "arm12", "audio/x-vorbis")
-	add_fslcodec(conf, "narrowband AMR", "nbamrd", "arm11", "audio/AMR")
-	add_fslcodec(conf, "wideband AMR", "wbamrd", "arm12", "audio/AMR-WB")
-	add_fslcodec(conf, "WMA", "wma10d", "arm12", "audio/x-wma, wmaversion = (int)[ 1, 4 ]")
-
-	null_terminator = "{ NULL, NULL }"
-	if conf.env['CODEC_ENTRIES']:
-		codec_str = ','.join(map(lambda x: "{ \"%s\", \"%s\" }" % (x["filename"], x["gstcaps"]), conf.env['CODEC_ENTRIES']))
-		conf.define('UNIAUDIO_CODEC_ENTRIES', "{ %s, %s }" % (codec_str, null_terminator), quote = False)
-		conf.env['UNIAUDIO_DECODER_ENABLED'] = 1
-		conf.define('WITH_UNIAUDIO_DECODER', 1)
-		Logs.pprint('GREEN', 'uniaudio decoder will be built')
-	else:
-		Logs.pprint('RED', 'no fslcodec plugins found - not building uniaudio decoder')
+	conf.define("IMX_AUDIO_CODEC_PATH", fslcodec_libdirvar)
+	conf.env["IMX_AUDIO_CODEC_PATH"] = fslcodec_libdirvar
 
 
 def configure_mp3_encoder(conf):
-	if conf.check_cc(lib = '_mp3_enc_arm12_elinux', uselib_store = 'FSLAUDIOCODEC', mandatory = 0):
+	# The "uselib = 'FSLAUDIOCODEC'" part applies the libdir
+	# from the pkg-config .pc file to the check_cc() call,
+	# which might be necessary if the encoder library is not
+	# in a default location
+	if conf.check_cc(lib = '_mp3_enc_arm12_elinux', uselib = 'FSLAUDIOCODEC', uselib_store = 'FSLAUDIOCODEC', mandatory = 0):
 		conf.env['MP3_ENCODER_ENABLED'] = 1
 		conf.define('WITH_MP3_ENCODER', 1)
 		Logs.pprint('GREEN', 'mp3 encoder will be built')
@@ -82,8 +41,17 @@ def configure(conf):
 		return
 
 	if conf.check_cfg(package = 'libfslaudiocodec', uselib_store = 'FSLAUDIOCODEC', args = '--cflags --libs', mandatory = 0):
+		configure_audio_codec_path(conf)
+
 		if not conf.options.disable_uniaudiodec:
-			configure_uniaudio_decoder(conf)
+			if conf.env['IMX_AUDIO_CODEC_PATH']:
+				Logs.pprint('GREEN', 'uniaudio decoder will be built')
+				conf.env['UNIAUDIO_DECODER_ENABLED'] = 1
+				conf.define('WITH_UNIAUDIO_DECODER', 1)
+			else:
+				Logs.pprint('RED', 'no imx-codec path found - not building uniaudio decoder')
+
+
 		if not conf.options.disable_mp3encoder:
 			configure_mp3_encoder(conf)
 	else:

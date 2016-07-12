@@ -40,18 +40,38 @@ static void gst_imx_audio_uniaudio_codec_unload_codec(GstImxAudioUniaudioCodec *
 
 typedef struct
 {
+	gchar const *desc;
 	gchar const *filename;
 	gchar const *gstcaps;
 }
 codec_entry;
 
 
+/* GStreamer's aacparse element does not have a profile caps field in GStreamer versions older than 1.4.4,
+ * so the field cannot be added for these versions (otherwise the decoder's caps would be incompatible
+ * with aacparse's) */
+#if GST_CHECK_VERSION(1, 4, 4)
+#define AAC_CAPS "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}, profile=(string)lc"
+#else
+#define AAC_CAPS "audio/mpeg, mpegversion=(int)4, framed=(boolean)true, stream-format=(string){raw,adts,adif}"
+#endif
+
+
+static codec_entry const codec_entries[] =
+{
+	{ "AAC LC", "lib_aacd_wrap_arm12_elinux.so.3", AAC_CAPS },
+	{ "MP3", "lib_mp3d_wrap_arm12_elinux.so.3", "audio/mpeg, mpegversion=(int)1, layer=(int)3, parsed=(boolean)true" },
+	{ "Vorbis", "lib_vorbisd_wrap_arm12_elinux.so.3", "audio/x-vorbis" },
+	{ "narrowband AMR", "lib_nbamrd_wrap_arm11_elinux.so.1", "audio/AMR" },
+	{ "wideband AMR", "lib_wbamrd_wrap_arm12_elinux.so.1", "audio/AMR-WB" },
+	{ "WMA", "lib_wma10d_wrap_arm12_elinux.so", "audio/x-wma, wmaversion = (int)[ 1, 4 ]" },
+	{ NULL, NULL }
+};
 
 
 static gpointer gst_imx_audio_uniaudio_codec_table_init_internal(G_GNUC_UNUSED gpointer data)
 {
 	codec_entry const *entry;
-	static codec_entry const codec_entries[] = UNIAUDIO_CODEC_ENTRIES;
 
 	GST_DEBUG_CATEGORY_INIT(imx_audio_uniaudio_codec_debug, "imxuniaudiocodec", 0, "Freescale i.MX uniaudio codecs");
 
@@ -61,7 +81,7 @@ static gpointer gst_imx_audio_uniaudio_codec_table_init_internal(G_GNUC_UNUSED g
 	for (entry = codec_entries; entry->filename != NULL; ++entry)
 	{
 		GstCaps *caps = gst_caps_from_string(entry->gstcaps);
-		GST_DEBUG("Caps: %" GST_PTR_FORMAT, (gpointer)caps);
+		GST_DEBUG("Adding codec \"%s\" with caps %" GST_PTR_FORMAT, entry->desc, (gpointer)caps);
 		if (gst_imx_audio_uniaudio_codec_add_codec(entry->filename, gst_caps_ref(caps)))
 			gst_caps_append(codec_table_caps, caps);
 	}
@@ -87,15 +107,21 @@ static gboolean gst_imx_audio_uniaudio_codec_add_codec(gchar const *library_file
 
 static GstImxAudioUniaudioCodec* gst_imx_audio_uniaudio_codec_load_codec(gchar const *library_filename, GstCaps *caps)
 {
+	gchar *full_filename = NULL;
 	GstImxAudioUniaudioCodec *codec = g_malloc0(sizeof(GstImxAudioUniaudioCodec));
 
-	GST_DEBUG("trying to load library %s", library_filename);
+	full_filename = g_strdup_printf("%s/wrap/%s", IMX_AUDIO_CODEC_PATH, library_filename);
+
+	GST_DEBUG("trying to load library %s", full_filename);
 	
-	if ((codec->dlhandle = dlopen(library_filename, RTLD_LAZY | RTLD_LOCAL)) == NULL)
+	if ((codec->dlhandle = dlopen(full_filename, RTLD_LAZY | RTLD_LOCAL)) == NULL)
 	{
-		GST_ERROR("loading library %s failed: %s", library_filename, dlerror());
-		gst_imx_audio_uniaudio_codec_unload_codec(codec);
-		return NULL;
+		GST_INFO("failed to load library %s with full filename %s: %s - trying filename only", library_filename, full_filename, dlerror());
+		if ((codec->dlhandle = dlopen(library_filename, RTLD_LAZY | RTLD_LOCAL)) == NULL)
+		{
+			GST_ERROR("loading library %s failed: %s", library_filename, dlerror());
+			goto error;
+		}
 	}
 
 	codec->caps = gst_caps_copy(caps);
@@ -104,8 +130,7 @@ static GstImxAudioUniaudioCodec* gst_imx_audio_uniaudio_codec_load_codec(gchar c
 	if (codec->query_interface == NULL)
 	{
 		GST_ERROR("getting %s function from library %s failed: %s", UNIA_CODEC_ENTRYPOINT_FUNCTION, library_filename, dlerror());
-		gst_imx_audio_uniaudio_codec_unload_codec(codec);
-		return NULL;
+		goto error;
 	}
 
 #define INIT_CODEC_FUNCTION(ID, DESC, FUNC) \
@@ -115,8 +140,7 @@ static GstImxAudioUniaudioCodec* gst_imx_audio_uniaudio_codec_load_codec(gchar c
 		if (ret != ACODEC_SUCCESS) \
 		{ \
 			GST_ERROR("loading %s from library %s failed", DESC, library_filename); \
-			gst_imx_audio_uniaudio_codec_unload_codec(codec); \
-			return NULL; \
+			goto error; \
 		} \
 	} \
 	while (0)
@@ -132,7 +156,15 @@ static GstImxAudioUniaudioCodec* gst_imx_audio_uniaudio_codec_load_codec(gchar c
 
 #undef INIT_CODEC_FUNCTION
 
+done:
+	g_free(full_filename);
 	return codec;
+
+error:
+	gst_imx_audio_uniaudio_codec_unload_codec(codec);
+	codec = NULL;
+
+	goto done;
 }
 
 
