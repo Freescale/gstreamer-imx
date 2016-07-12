@@ -435,7 +435,9 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		case V4L2_PIX_FMT_Y16_BE:
 			gst_fmt = GST_VIDEO_FORMAT_GRAY16_BE;
 			break;
+#ifdef V4L2_PIX_FMT_XRGB555
 		case V4L2_PIX_FMT_XRGB555:
+#endif
 		case V4L2_PIX_FMT_RGB555:
 			gst_fmt = GST_VIDEO_FORMAT_RGB15;
 			break;
