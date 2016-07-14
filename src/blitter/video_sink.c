@@ -291,6 +291,7 @@ static void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_vide
 	blitter_video_sink->framebuffer = NULL;
 	blitter_video_sink->framebuffer_fd = -1;
 	blitter_video_sink->current_fb_page = 0;
+	blitter_video_sink->old_fb_page = 1;
 	blitter_video_sink->use_vsync = DEFAULT_USE_VSYNC;
 	blitter_video_sink->input_crop = DEFAULT_INPUT_CROP;
 	blitter_video_sink->last_frame_with_cropdata = FALSE;
@@ -388,10 +389,16 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			blitter_video_sink->use_vsync = b;
 			if (!b && (blitter_video_sink->blitter != NULL))
 			{
+				/* Since the MXC framebuffer driver has the hardcoded
+				 * assumption that three pages are used, it is necessary
+				 * to set the number of output pages to 3, even though
+				 * 2 would theoretically be enough */
+
 				blitter_video_sink->current_fb_page = 0;
-				gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, 0);
+				blitter_video_sink->old_fb_page = 1;
+				gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, blitter_video_sink->current_fb_page);
 				gst_imx_blitter_video_sink_flip_to_selected_fb_page(blitter_video_sink);
-				gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, b ? 2 : 1);
+				gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, b ? 3 : 1);
 			}
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 
@@ -872,15 +879,25 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	if (blitter_video_sink->use_vsync)
 	{
 		/* Select which page to write/blit to */
-		gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, blitter_video_sink->current_fb_page);
+		++blitter_video_sink->old_fb_page;
+		blitter_video_sink->old_fb_page %= 3;
+		gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, blitter_video_sink->old_fb_page);
 
 		/* The actual blitting */
 		gst_imx_blitter_blit(blitter_video_sink->blitter, 255);
+		/* Flush the blitter to make sure it does not use any cached output
+		 * information (for example, the physical address of the previously
+		 * selected fb page) */
+		gst_imx_blitter_flush(blitter_video_sink->blitter);
+
+		/* Move the current_fb_page index to the next page. See the explanation
+		 * at the set_property PROP_USE_VSYNC block for the reason why three
+		 * pages are expected instead of 2. */
+		blitter_video_sink->current_fb_page++;
+		blitter_video_sink->current_fb_page %= 3;
 
 		/* Flip pages now */
 		gst_imx_blitter_video_sink_flip_to_selected_fb_page(blitter_video_sink);
-
-		blitter_video_sink->current_fb_page = 1 - blitter_video_sink->current_fb_page;
 	}
 	else
 	{
@@ -952,10 +969,12 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 	if (blitter_video_sink->use_vsync)
 	{
 		/* Check how many pages can currently be used. If this number is
-		 * less than 2, reconfigure the framebuffer to allow for 2 pages. */
+		 * less than 3, reconfigure the framebuffer to allow for 3 pages.
+		 * See the explanation at the set_property PROP_USE_VSYNC block
+		 * for the reason why three pages are expected instead of 2. */
 
 		guint cur_num_pages = fb_var.yres_virtual / fb_var.yres;
-		if (cur_num_pages < 2)
+		if (cur_num_pages < 3)
 		{
 			GST_INFO_OBJECT(
 				blitter_video_sink,
@@ -963,7 +982,7 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 				fb_var.xres, fb_var.yres,
 				fb_var.xres_virtual, fb_var.yres_virtual
 			);
-			if (!gst_imx_blitter_video_sink_reconfigure_fb(blitter_video_sink, 2))
+			if (!gst_imx_blitter_video_sink_reconfigure_fb(blitter_video_sink, 3))
 			{
 				GST_ERROR_OBJECT(blitter_video_sink, "could not reconfigure framebuffer");
 				close(fd);
@@ -1038,7 +1057,7 @@ static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitter
 	{
 		ret = ret && gst_imx_blitter_set_output_video_info(blitter_video_sink->blitter, &(blitter_video_sink->output_video_info));
 		ret = ret && gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer);
-		ret = ret && gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 2 : 1);
+		ret = ret && gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 3 : 1);
 	}
 
 	if (!ret)
@@ -1316,7 +1335,7 @@ static gboolean gst_imx_blitter_video_sink_acquire_blitter(GstImxBlitterVideoSin
 		return FALSE;
 	}
 
-	if (!gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 2 : 1))
+	if (!gst_imx_blitter_set_num_output_pages(blitter_video_sink->blitter, blitter_video_sink->use_vsync ? 3 : 1))
 	{
 		GST_ERROR_OBJECT(blitter_video_sink, "could not set the number of output pages");
 		return FALSE;

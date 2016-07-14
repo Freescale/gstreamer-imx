@@ -74,6 +74,7 @@ struct _GstImxBlitterVideoSink
 	guint32 original_fb_virt_height;
 	/* Pages for page flipping and vsync */
 	guint current_fb_page;
+	guint old_fb_page;
 	gboolean use_vsync;
 	gboolean input_crop;
 	gboolean last_frame_with_cropdata;
