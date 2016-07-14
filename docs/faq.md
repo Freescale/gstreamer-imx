@@ -72,6 +72,17 @@ the tearing effects. If `imxeglvivsink` is used, the `FB_MULTI_BUFFER` environme
 set to `2`. This instructs the Vivante EGL libraries to set up the framebuffer in a way that is similar
 to what the blitter-based sinks do.
 
+Note that the framebuffer is reconfigured to fit three pages, not two. The reason for this is a hardcoded
+assumption in the i.MX MXC framebuffer kernel driver. Its logic requires the presence of three pages.
+Flipping between just two causes subtle tearing problems. So, instead, the flipping cycles through three
+pages.
+
+Furthermore, the framebuffer is only reconfigured if it can't hold three pages. If it can, it won't
+reconfigure. In some cases this might be desirable, for example, when combining blitter-based video sinks
+with a Qt5 application by drawing Qt5 content on an overlayed framebuffer and the video frame on the
+bottom framebuffer. (See [this Github issue](https://github.com/Freescale/gstreamer-imx/issues/98) for
+an example.)
+
 In X11, vsync is not doable from the gstreamer-imx side. It would require changes to the existing i.MX6
 X11 driver. So far, no such change has been made, meaning that as of now, tearing-free video playback
 in X11 is not possible.
