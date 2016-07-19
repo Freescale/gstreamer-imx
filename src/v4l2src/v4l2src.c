@@ -436,9 +436,11 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		case V4L2_PIX_FMT_Y16:
 			gst_fmt = GST_VIDEO_FORMAT_GRAY16_LE;
 			break;
+#ifdef V4L2_PIX_FMT_Y16_BE
 		case V4L2_PIX_FMT_Y16_BE:
 			gst_fmt = GST_VIDEO_FORMAT_GRAY16_BE;
 			break;
+#endif
 #ifdef V4L2_PIX_FMT_XRGB555
 		case V4L2_PIX_FMT_XRGB555:
 #endif
@@ -458,20 +460,28 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		case V4L2_PIX_FMT_BGR24:
 			gst_fmt = GST_VIDEO_FORMAT_BGR;
 			break;
+#ifdef V4L2_PIX_FMT_XRGB32
 		case V4L2_PIX_FMT_XRGB32:
+#endif
 		case V4L2_PIX_FMT_RGB32:
 			gst_fmt = GST_VIDEO_FORMAT_xRGB;
 			break;
+#ifdef V4L2_PIX_FMT_XBGR32
 		case V4L2_PIX_FMT_XBGR32:
+#endif
 		case V4L2_PIX_FMT_BGR32:
 			gst_fmt = GST_VIDEO_FORMAT_BGRx;
 			break;
+#ifdef V4L2_PIX_FMT_ABGR32
 		case V4L2_PIX_FMT_ABGR32:
 			gst_fmt = GST_VIDEO_FORMAT_BGRA;
 			break;
+#endif
+#ifdef V4L2_PIX_FMT_ARGB32
 		case V4L2_PIX_FMT_ARGB32:
 			gst_fmt = GST_VIDEO_FORMAT_ARGB;
 			break;
+#endif
 		case V4L2_PIX_FMT_NV12:
 		case V4L2_PIX_FMT_NV12M:
 			gst_fmt = GST_VIDEO_FORMAT_NV12;
@@ -512,11 +522,15 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 			gst_fmt = GST_VIDEO_FORMAT_YVYU;
 			break;
 		case V4L2_PIX_FMT_NV16:
+#ifdef V4L2_PIX_FMT_NV16M
 		case V4L2_PIX_FMT_NV16M:
+#endif
 			gst_fmt = GST_VIDEO_FORMAT_NV16;
 			break;
 		case V4L2_PIX_FMT_NV61:
+#ifdef V4L2_PIX_FMT_NV61M
 		case V4L2_PIX_FMT_NV61M:
+#endif
 			gst_fmt = GST_VIDEO_FORMAT_NV61;
 			break;
 		case V4L2_PIX_FMT_NV24:
