@@ -1,3 +1,29 @@
+==== version 0.12.2 (2016-07-25) ====
+
+* imxv4l2videosrc:
+  * Stricter checks for video device capabilities
+  * Add support for more video formats like 8/16-bit grayscale
+
+* pxp: Fix incorrect return code which broke blitter with GStreamer 1.8
+
+* blitter:
+  * Improvements in error logging
+  * Fixes for RGBx framebuffer format detection
+  * Fix for subtle tearing problem by implementing triple buffering
+
+* audio:
+  * Replace objdump-based scan during build configuration
+    Codec filenames are instead moved to the C code; the libdir
+    path of the libfslaudiocodec.pc file is used to know where on
+    the target the files are placed
+  * Explicitely add the libfslaudiocodec.pc libdir to the MP3 encoder
+    Fixes build errors in buildroot
+  * Minor logging fixes
+
+* misc:
+  * Proper check for region copies in phys_mem_meta
+  * Add missing G_END_DECLS lines in headers
+
 ==== version 0.12.1 (2016-04-06) ====
 
 * compositor: Rename ImxCompositor(Pad) to ImxVideoCompositor(Pad)
