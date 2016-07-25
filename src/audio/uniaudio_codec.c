@@ -119,7 +119,7 @@ static GstImxAudioUniaudioCodec* gst_imx_audio_uniaudio_codec_load_codec(gchar c
 		GST_INFO("failed to load library %s with full filename %s: %s - trying filename only", library_filename, full_filename, dlerror());
 		if ((codec->dlhandle = dlopen(library_filename, RTLD_LAZY | RTLD_LOCAL)) == NULL)
 		{
-			GST_ERROR("loading library %s failed: %s", library_filename, dlerror());
+			GST_INFO("loading library %s failed: %s - not adding to codecs", library_filename, dlerror());
 			goto error;
 		}
 	}
