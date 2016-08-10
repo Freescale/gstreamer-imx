@@ -88,6 +88,7 @@ struct _GstImxVpuDecoder
 	GstVideoCodecState *current_output_state;
 	GstAllocator *phys_mem_allocator;
 	guint num_additional_framebuffers;
+	gboolean disable_reorder;
 	gint chroma_interleave;
 
 	GHashTable *unfinished_frames_table;

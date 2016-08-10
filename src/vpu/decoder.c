@@ -38,11 +38,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_decoder_debug);
 enum
 {
 	PROP_0,
-	PROP_NUM_ADDITIONAL_FRAMEBUFFERS
+	PROP_NUM_ADDITIONAL_FRAMEBUFFERS,
+	PROP_DISABLE_REORDER
 };
 
 
 #define DEFAULT_NUM_ADDITIONAL_FRAMEBUFFERS 0
+#define DEFAULT_DISABLE_REORDER FALSE
 
 
 #define GST_IMX_VPU_DECODER_ALLOCATOR_MEM_TYPE "ImxVpuDecMemory2"
@@ -186,6 +188,18 @@ static void gst_imx_vpu_decoder_class_init(GstImxVpuDecoderClass *klass)
 		)
 	);
 
+	g_object_class_install_property(
+		object_class,
+		PROP_DISABLE_REORDER,
+		g_param_spec_boolean(
+			"disable-reorder",
+			"Disable frame reordering",
+			"Disable frame reordering",
+			DEFAULT_DISABLE_REORDER,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+
 	gst_element_class_set_static_metadata(
 		element_class,
 		"Freescale VPU video decoder",
@@ -205,6 +219,7 @@ static void gst_imx_vpu_decoder_init(GstImxVpuDecoder *vpu_decoder)
 	vpu_decoder->current_output_state = NULL;
 	vpu_decoder->phys_mem_allocator = NULL;
 	vpu_decoder->num_additional_framebuffers = DEFAULT_NUM_ADDITIONAL_FRAMEBUFFERS;
+	vpu_decoder->disable_reorder = DEFAULT_DISABLE_REORDER;
 	vpu_decoder->unfinished_frames_table = NULL;
 	vpu_decoder->fatal_error = FALSE;
 }
@@ -1037,6 +1052,11 @@ static void gst_imx_vpu_decoder_set_property(GObject *object, guint prop_id, con
 
 			break;
 		}
+		case PROP_DISABLE_REORDER:
+		{
+			vpu_decoder->disable_reorder = g_value_get_boolean(value);
+			break;
+		}
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -1052,6 +1072,9 @@ static void gst_imx_vpu_decoder_get_property(GObject *object, guint prop_id, GVa
 	{
 		case PROP_NUM_ADDITIONAL_FRAMEBUFFERS:
 			g_value_set_uint(value, vpu_decoder->num_additional_framebuffers);
+			break;
+		case PROP_DISABLE_REORDER:
+			g_value_set_boolean(value, vpu_decoder->disable_reorder);
 			break;
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
@@ -1168,7 +1191,9 @@ gboolean gst_imx_vpu_decoder_fill_param_set(GstImxVpuDecoder *vpu_decoder, GstVi
 		s = gst_caps_get_structure(state->caps, structure_nr);
 		name = gst_structure_get_name(s);
 
-		open_params->enable_frame_reordering = 1;
+		if (!vpu_decoder->disable_reorder) {
+			open_params->enable_frame_reordering = 1;
+		}
 
 		if (g_strcmp0(name, "video/x-h264") == 0)
 		{
