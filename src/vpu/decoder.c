@@ -1391,9 +1391,10 @@ static int gst_imx_vpu_decoder_initial_info_callback(G_GNUC_UNUSED ImxVpuDecoder
 		}
 
 		GST_VIDEO_INFO_INTERLACE_MODE(&(state->info)) = new_initial_info->interlacing ? GST_VIDEO_INTERLACE_MODE_INTERLEAVED : GST_VIDEO_INTERLACE_MODE_PROGRESSIVE;
-		gst_video_decoder_set_output_state(GST_VIDEO_DECODER(vpu_decoder), fmt, state->info.width, state->info.height, state);
-		gst_video_codec_state_unref(vpu_decoder->current_output_state);
+		state = gst_video_decoder_set_output_state(GST_VIDEO_DECODER(vpu_decoder), fmt, state->info.width, state->info.height, state);
+		gst_video_codec_state_unref(state);
 
+		gst_video_codec_state_unref(vpu_decoder->current_output_state);
 		vpu_decoder->current_output_state = NULL;
 	}
 
