@@ -120,6 +120,7 @@ G_DEFINE_TYPE(GstImxVpuDecoder, gst_imx_vpu_decoder, GST_TYPE_VIDEO_DECODER)
 static gboolean gst_imx_vpu_decoder_start(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_decoder_stop(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_decoder_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state);
+static gboolean gst_imx_vpu_decoder_sink_event(GstVideoDecoder *decoder, GstEvent *event);
 static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *cur_frame);
 static gboolean gst_imx_vpu_decoder_flush(GstVideoDecoder *decoder);
 static GstFlowReturn gst_imx_vpu_decoder_finish(GstVideoDecoder *decoder);
@@ -164,6 +165,7 @@ static void gst_imx_vpu_decoder_class_init(GstImxVpuDecoderClass *klass)
 	base_class->start             = GST_DEBUG_FUNCPTR(gst_imx_vpu_decoder_start);
 	base_class->stop              = GST_DEBUG_FUNCPTR(gst_imx_vpu_decoder_stop);
 	base_class->set_format        = GST_DEBUG_FUNCPTR(gst_imx_vpu_decoder_set_format);
+	base_class->sink_event        = GST_DEBUG_FUNCPTR(gst_imx_vpu_decoder_sink_event);
 	base_class->handle_frame      = GST_DEBUG_FUNCPTR(gst_imx_vpu_decoder_handle_frame);
 	base_class->flush             = GST_DEBUG_FUNCPTR(gst_imx_vpu_decoder_flush);
 	base_class->finish            = GST_DEBUG_FUNCPTR(gst_imx_vpu_decoder_finish);
@@ -444,6 +446,46 @@ static gboolean gst_imx_vpu_decoder_set_format(GstVideoDecoder *decoder, GstVide
 	GST_INFO_OBJECT(decoder, "setting format finished");
 
 	return TRUE;
+}
+
+
+static gboolean gst_imx_vpu_decoder_sink_event(GstVideoDecoder *decoder, GstEvent *event)
+{
+	GstImxVpuDecoder *vpu_decoder = GST_IMX_VPU_DECODER(decoder);
+
+	switch (GST_EVENT_TYPE(event))
+	{
+		case GST_EVENT_FLUSH_START:
+		{
+			if (G_UNLIKELY(vpu_decoder->decoder_context == NULL))
+				break;
+
+			GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_decoder->decoder_context);
+			GST_DEBUG_OBJECT(vpu_decoder, "Enabling no_wait mode in decoder context after flushing started");
+			gst_imx_vpu_decoder_context_set_no_wait(vpu_decoder->decoder_context, TRUE);
+			GST_IMX_VPU_DECODER_CONTEXT_UNLOCK(vpu_decoder->decoder_context);
+
+			break;
+		}
+
+		case GST_EVENT_FLUSH_STOP:
+		{
+			if (G_UNLIKELY(vpu_decoder->decoder_context == NULL))
+				break;
+
+			GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_decoder->decoder_context);
+			GST_DEBUG_OBJECT(vpu_decoder, "Enabling no_wait mode in decoder context after flushing ended");
+			gst_imx_vpu_decoder_context_set_no_wait(vpu_decoder->decoder_context, FALSE);
+			GST_IMX_VPU_DECODER_CONTEXT_UNLOCK(vpu_decoder->decoder_context);
+
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return GST_VIDEO_DECODER_CLASS(gst_imx_vpu_decoder_parent_class)->sink_event(decoder, event);
 }
 
 
