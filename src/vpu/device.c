@@ -45,9 +45,8 @@ gboolean gst_imx_vpu_decoder_load()
 {
 	gboolean ret;
 
-	imx_vpu_setup_heap_allocator_functions();
-
 	g_mutex_lock(&load_mutex);
+	imx_vpu_setup_heap_allocator_functions();
 	ret = (imx_vpu_dec_load() == IMX_VPU_DEC_RETURN_CODE_OK);
 	g_mutex_unlock(&load_mutex);
 
@@ -67,9 +66,8 @@ gboolean gst_imx_vpu_encoder_load()
 {
 	gboolean ret;
 
-	imx_vpu_setup_heap_allocator_functions();
-
 	g_mutex_lock(&load_mutex);
+	imx_vpu_setup_heap_allocator_functions();
 	ret = (imx_vpu_enc_load() == IMX_VPU_ENC_RETURN_CODE_OK);
 	g_mutex_unlock(&load_mutex);
 
