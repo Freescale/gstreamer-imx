@@ -529,12 +529,14 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 #endif
 			gst_fmt = GST_VIDEO_FORMAT_NV16;
 			break;
+#ifdef GST_VIDEO_FORMAT_NV61
 		case V4L2_PIX_FMT_NV61:
 #ifdef V4L2_PIX_FMT_NV61M
 		case V4L2_PIX_FMT_NV61M:
 #endif
 			gst_fmt = GST_VIDEO_FORMAT_NV61;
 			break;
+#endif
 		case V4L2_PIX_FMT_NV24:
 			gst_fmt = GST_VIDEO_FORMAT_NV24;
 			break;
