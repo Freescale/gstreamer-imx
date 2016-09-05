@@ -46,6 +46,8 @@ struct _GstImxVpuEncoderH264
 	guint idr_interval;
 	gboolean produce_access_units;
 	guint frame_count;
+	ImxVpuDMABuffer *cbcr_buffer;
+	unsigned long cbcr_physaddr;
 };
 
 

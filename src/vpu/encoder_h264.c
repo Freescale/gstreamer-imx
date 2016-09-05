@@ -49,7 +49,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
 		"video/x-raw,"
-		"format = (string) { I420, NV12 }, "
+		"format = (string) { I420, NV12, GRAY8 }, "
 		"width = (int) [ 48, 1920, 8 ], "
 		"height = (int) [ 32, 1080, 8 ], "
 		"framerate = (fraction) [ 0, MAX ]"
@@ -77,6 +77,7 @@ gboolean gst_imx_vpu_encoder_h264_set_open_params(GstImxVpuEncoderBase *vpu_enco
 GstCaps* gst_imx_vpu_encoder_h264_get_output_caps(GstImxVpuEncoderBase *vpu_encoder_base);
 gboolean gst_imx_vpu_encoder_h264_set_frame_enc_params(GstImxVpuEncoderBase *vpu_encoder_base, ImxVpuEncParams *enc_params);
 gboolean gst_imx_vpu_encoder_h264_process_output_buffer(GstImxVpuEncoderBase *vpu_encoder_base, GstVideoCodecFrame *frame, GstBuffer **output_buffer);
+gboolean gst_imx_vpu_encoder_h264_close(GstImxVpuEncoderBase *vpu_encoder_base);
 
 
 
@@ -102,6 +103,7 @@ static void gst_imx_vpu_encoder_h264_class_init(GstImxVpuEncoderH264Class *klass
 	encoder_base_class->get_output_caps       = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_h264_get_output_caps);
 	encoder_base_class->set_frame_enc_params  = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_h264_set_frame_enc_params);
 	encoder_base_class->process_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_h264_process_output_buffer);
+	encoder_base_class->close		  = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_h264_close);
 
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_sink_template));
 	gst_element_class_add_pad_template(element_class, gst_static_pad_template_get(&static_src_template));
@@ -191,6 +193,21 @@ gboolean gst_imx_vpu_encoder_h264_set_open_params(GstImxVpuEncoderBase *vpu_enco
 {
 	GstCaps *template_caps, *allowed_caps;
 	GstImxVpuEncoderH264 *vpu_encoder_h264 = GST_IMX_VPU_ENCODER_H264(vpu_encoder_base);
+	GstVideoFormat fmt = GST_VIDEO_INFO_FORMAT(&(input_state->info));
+
+	if (fmt == GST_VIDEO_FORMAT_GRAY8)
+	{
+		open_params->color_format = IMX_VPU_COLOR_FORMAT_YUV400;
+		if (vpu_encoder_h264->cbcr_buffer == 0)
+		{
+#define CBCR_PLANE_SIZE	(1920 * 1080 / 4)
+			vpu_encoder_h264->cbcr_buffer = imx_vpu_dma_buffer_allocate(imx_vpu_enc_get_default_allocator(), CBCR_PLANE_SIZE, 1, 0);
+			vpu_encoder_h264->cbcr_physaddr = imx_vpu_dma_buffer_get_physical_address(vpu_encoder_h264->cbcr_buffer);
+			void *mapped_virtual_address = imx_vpu_dma_buffer_map(vpu_encoder_h264->cbcr_buffer, IMX_VPU_MAPPING_FLAG_WRITE);
+			memset(mapped_virtual_address, 128, CBCR_PLANE_SIZE);
+			imx_vpu_dma_buffer_unmap(vpu_encoder_h264->cbcr_buffer);
+		}
+	}
 
 	/* Default h.264 open params are already set by the imx_vpu_enc_set_default_open_params()
 	 * call in the base class */
@@ -256,6 +273,16 @@ GstCaps* gst_imx_vpu_encoder_h264_get_output_caps(GstImxVpuEncoderBase *vpu_enco
 gboolean gst_imx_vpu_encoder_h264_set_frame_enc_params(GstImxVpuEncoderBase *vpu_encoder_base, ImxVpuEncParams *enc_params)
 {
 	GstImxVpuEncoderH264 *vpu_encoder_h264 = GST_IMX_VPU_ENCODER_H264(vpu_encoder_base);
+	ImxVpuFramebuffer *input_framebuffer = &vpu_encoder_base->input_framebuffer;
+
+
+	if (input_framebuffer->cb_offset == 0 && input_framebuffer->cr_offset == 0)
+	{
+		unsigned long y_physaddr = imx_vpu_dma_buffer_get_physical_address(vpu_encoder_base->input_frame.framebuffer->dma_buffer);
+		size_t cbcr_offset = vpu_encoder_h264->cbcr_physaddr - y_physaddr;
+		input_framebuffer->cb_offset = cbcr_offset;
+		input_framebuffer->cr_offset = cbcr_offset;
+	}
 
 	enc_params->quant_param = vpu_encoder_h264->quant_param;
 	if (vpu_encoder_h264->idr_interval > 0)
@@ -294,6 +321,20 @@ gboolean gst_imx_vpu_encoder_h264_process_output_buffer(GstImxVpuEncoderBase *vp
 	}
 
 	gst_buffer_unmap(*output_buffer, &map_info);
+
+	return TRUE;
+}
+
+gboolean gst_imx_vpu_encoder_h264_close(GstImxVpuEncoderBase *vpu_encoder_base)
+{
+	GstImxVpuEncoderH264 *vpu_encoder_h264 = GST_IMX_VPU_ENCODER_H264(vpu_encoder_base);
+
+	if (vpu_encoder_h264->cbcr_physaddr)
+	{
+		imx_vpu_dma_buffer_deallocate(vpu_encoder_h264->cbcr_buffer);
+		vpu_encoder_h264->cbcr_buffer = 0;
+		vpu_encoder_h264->cbcr_physaddr = 0;
+	}
 
 	return TRUE;
 }
