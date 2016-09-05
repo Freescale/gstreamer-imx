@@ -316,6 +316,14 @@ static gboolean gst_imx_vpu_encoder_base_start(GstVideoEncoder *encoder)
 static gboolean gst_imx_vpu_encoder_base_stop(GstVideoEncoder *encoder)
 {
 	GstImxVpuEncoderBase *vpu_encoder_base = GST_IMX_VPU_ENCODER_BASE(encoder);
+	GstImxVpuEncoderBaseClass *klass;
+
+	klass = GST_IMX_VPU_ENCODER_BASE_CLASS(G_OBJECT_GET_CLASS(vpu_encoder_base));
+	/* Let the derived class terminate cleanly */
+	if ((klass->close != NULL) && !klass->close(vpu_encoder_base))
+	{
+		GST_ERROR_OBJECT(vpu_encoder_base, "derived class could not terminate cleanly");
+	}
 
 	gst_imx_vpu_encoder_base_close(vpu_encoder_base);
 

@@ -130,6 +130,9 @@ struct _GstImxVpuEncoderBase
  *                         *output_buffer must point to this new buffer, and the previous
  *                         *output_buffer must be unref'd.
  *                         Returns TRUE if the call succeeded, and FALSE otherwise.
+ * @close:		   Optional.
+ *                         Free all the private allocations done by the subclass
+ *                         Returns TRUE if the call succeeded, and FALSE otherwise.
  */
 struct _GstImxVpuEncoderBaseClass
 {
@@ -141,6 +144,7 @@ struct _GstImxVpuEncoderBaseClass
 	GstCaps* (*get_output_caps)(GstImxVpuEncoderBase *vpu_encoder_base);
 	gboolean (*set_frame_enc_params)(GstImxVpuEncoderBase *vpu_encoder_base, ImxVpuEncParams *enc_params);
 	gboolean (*process_output_buffer)(GstImxVpuEncoderBase *vpu_encoder_base, GstVideoCodecFrame *frame, GstBuffer **output_buffer);
+	gboolean (*close)(GstImxVpuEncoderBase *vpu_encoder_base);
 };
 
 
