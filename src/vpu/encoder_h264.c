@@ -49,7 +49,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
 		"video/x-raw,"
-		"format = (string) { I420, NV12 }, "
+		"format = (string) { I420, NV12, GRAY8 }, "
 		"width = (int) [ 48, 1920, 8 ], "
 		"height = (int) [ 32, 1080, 8 ], "
 		"framerate = (fraction) [ 0, MAX ]"
@@ -191,6 +191,10 @@ gboolean gst_imx_vpu_encoder_h264_set_open_params(GstImxVpuEncoderBase *vpu_enco
 {
 	GstCaps *template_caps, *allowed_caps;
 	GstImxVpuEncoderH264 *vpu_encoder_h264 = GST_IMX_VPU_ENCODER_H264(vpu_encoder_base);
+	GstVideoFormat fmt = GST_VIDEO_INFO_FORMAT(&(input_state->info));
+
+	if (fmt == GST_VIDEO_FORMAT_GRAY8)
+		vpu_encoder_base->need_dummy_cbcr_plane = 1;
 
 	/* Default h.264 open params are already set by the imx_vpu_enc_set_default_open_params()
 	 * call in the base class */

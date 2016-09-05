@@ -99,6 +99,11 @@ struct _GstImxVpuEncoderBase
 	 * is allocated and mapped to receive the encoded data. */
 	GstBuffer *output_buffer;
 	GstMapInfo output_buffer_map_info;
+
+	/* These allow zerocopy GRAY8->I420 "conversion" */
+	gboolean need_dummy_cbcr_plane;
+	ImxVpuDMABuffer *cbcr_plane;
+	unsigned long cbcr_physaddr;
 };
 
 

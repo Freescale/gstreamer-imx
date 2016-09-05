@@ -41,7 +41,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
 		"video/x-raw,"
-		"format = (string) { I420, NV12 }, "
+		"format = (string) { I420, NV12, GRAY8 }, "
 		"width = (int) [ 48, 1920, 8 ], "
 		"height = (int) [ 32, 1080, 8 ], "
 		"framerate = (fraction) [ 0, MAX ]"
@@ -68,6 +68,7 @@ G_DEFINE_TYPE(GstImxVpuEncoderMPEG4, gst_imx_vpu_encoder_mpeg4, GST_TYPE_IMX_VPU
 static void gst_imx_vpu_encoder_mpeg4_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_vpu_encoder_mpeg4_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
+static gboolean gst_imx_vpu_encoder_mpeg4_set_open_params(GstImxVpuEncoderBase *vpu_encoder_base, GstVideoCodecState *input_state, ImxVpuEncOpenParams *open_params);
 static GstCaps* gst_imx_vpu_encoder_mpeg4_get_output_caps(GstImxVpuEncoderBase *vpu_encoder_base);
 static gboolean gst_imx_vpu_encoder_mpeg4_set_frame_enc_params(GstImxVpuEncoderBase *vpu_encoder_base, ImxVpuEncParams *enc_params);
 
@@ -91,6 +92,7 @@ static void gst_imx_vpu_encoder_mpeg4_class_init(GstImxVpuEncoderMPEG4Class *kla
 
 	encoder_base_class->codec_format = IMX_VPU_CODEC_FORMAT_MPEG4;
 
+	encoder_base_class->set_open_params       = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_mpeg4_set_open_params);
 	encoder_base_class->get_output_caps       = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_mpeg4_get_output_caps);
 	encoder_base_class->set_frame_enc_params  = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_mpeg4_set_frame_enc_params);
 
@@ -155,6 +157,17 @@ static void gst_imx_vpu_encoder_mpeg4_get_property(GObject *object, guint prop_i
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
 	}
+}
+
+
+gboolean gst_imx_vpu_encoder_mpeg4_set_open_params(GstImxVpuEncoderBase *vpu_encoder_base, GstVideoCodecState *input_state, G_GNUC_UNUSED ImxVpuEncOpenParams *open_params)
+{
+	GstVideoFormat fmt = GST_VIDEO_INFO_FORMAT(&(input_state->info));
+
+	if (fmt == GST_VIDEO_FORMAT_GRAY8)
+		vpu_encoder_base->need_dummy_cbcr_plane = 1;
+
+	return TRUE;
 }
 
 
