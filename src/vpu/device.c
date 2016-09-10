@@ -114,13 +114,11 @@ void imx_vpu_setup_logging(void)
 
 static void imx_vpu_setup_heap_allocator_functions(void)
 {
-	g_mutex_lock(&load_mutex);
 	if (!head_functions_set_up)
 	{
 		imx_vpu_set_heap_allocator_functions(imx_vpu_heap_alloc_func, imx_vpu_heap_free_func, NULL);
 		head_functions_set_up = TRUE;
 	}
-	g_mutex_unlock(&load_mutex);
 }
 
 
