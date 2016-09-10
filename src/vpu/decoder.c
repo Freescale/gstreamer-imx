@@ -105,7 +105,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	GST_PAD_ALWAYS,
 	GST_STATIC_CAPS(
 		"video/x-raw,"
-		"format = (string) { I420, Y42B, Y444, NV12, NV16, NV24 }, "
+		"format = (string) { I420, Y42B, Y444, NV12, NV16, NV24, GRAY8 }, "
 		"width = (int) [ 16, MAX ], "
 		"height = (int) [ 16, MAX ], "
 		"framerate = (fraction) [ 0, MAX ], "
@@ -410,6 +410,7 @@ static gboolean gst_imx_vpu_decoder_set_format(GstVideoDecoder *decoder, GstVide
 				case GST_VIDEO_FORMAT_I420:
 				case GST_VIDEO_FORMAT_Y42B:
 				case GST_VIDEO_FORMAT_Y444:
+				case GST_VIDEO_FORMAT_GRAY8:
 					open_params.chroma_interleave = 0;
 					break;
 				case GST_VIDEO_FORMAT_NV12:
@@ -922,7 +923,10 @@ static gboolean gst_imx_vpu_decoder_decide_allocation(GstVideoDecoder *decoder, 
 	gst_query_parse_allocation(query, &outcaps, NULL);
 
 	if (outcaps == NULL)
+	{
+		GST_DEBUG_OBJECT(decoder, "can't decide allocation since there are no output caps");
 		return FALSE;
+	}
 
 	gst_video_info_init(&vinfo);
 	gst_video_info_from_caps(&vinfo, outcaps);

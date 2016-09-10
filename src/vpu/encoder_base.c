@@ -364,7 +364,10 @@ static gboolean gst_imx_vpu_encoder_base_set_format(GstVideoEncoder *encoder, Gs
 	memset(&(vpu_encoder_base->open_params), 0, sizeof(ImxVpuEncOpenParams));
 	imx_vpu_enc_set_default_open_params(klass->codec_format, &(vpu_encoder_base->open_params));
 
-	vpu_encoder_base->open_params.color_format = IMX_VPU_COLOR_FORMAT_YUV420; /* derived classes can set a different format */
+	/* Fill the open params. (Derived classes can set different values.) */
+
+	/* All encoders except MJPEG support only grayscale and 4:2:0 color formats */
+	vpu_encoder_base->open_params.color_format = (GST_VIDEO_INFO_FORMAT(&(state->info)) == GST_VIDEO_FORMAT_GRAY8) ? IMX_VPU_COLOR_FORMAT_YUV400 : IMX_VPU_COLOR_FORMAT_YUV420;
 	vpu_encoder_base->open_params.frame_width = GST_VIDEO_INFO_WIDTH(&(state->info));
 	vpu_encoder_base->open_params.frame_height = GST_VIDEO_INFO_HEIGHT(&(state->info));
 	vpu_encoder_base->open_params.frame_rate_numerator = GST_VIDEO_INFO_FPS_N(&(state->info));
