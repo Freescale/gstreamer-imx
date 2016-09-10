@@ -474,7 +474,7 @@ static gboolean gst_imx_vpu_decoder_sink_event(GstVideoDecoder *decoder, GstEven
 				break;
 
 			GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_decoder->decoder_context);
-			GST_DEBUG_OBJECT(vpu_decoder, "Enabling no_wait mode in decoder context after flushing ended");
+			GST_DEBUG_OBJECT(vpu_decoder, "Disabling no_wait mode in decoder context after flushing ended");
 			gst_imx_vpu_decoder_context_set_no_wait(vpu_decoder->decoder_context, FALSE);
 			GST_IMX_VPU_DECODER_CONTEXT_UNLOCK(vpu_decoder->decoder_context);
 
