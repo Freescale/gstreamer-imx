@@ -38,7 +38,7 @@ static void gst_imx_vpu_framebuffer_meta_free(GstMeta *meta, G_GNUC_UNUSED GstBu
 GType gst_imx_vpu_framebuffer_meta_api_get_type(void)
 {
 	static volatile GType type;
-	static gchar const *tags[] = { "imx_vpu", NULL };
+	static gchar const *tags[] = { "memory", "imx_vpu", NULL };
 
 	if (g_once_init_enter(&type))
 	{
