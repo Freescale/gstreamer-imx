@@ -259,6 +259,11 @@ static gboolean gst_imx_audio_mp3_enc_start(GstAudioEncoder *audioencoder)
 	int i;
 	GstImxAudioMp3Enc *imx_audio_mp3_enc = GST_IMX_AUDIO_MP3_ENC(audioencoder);
 
+	/* Make sure no leftover stale states are present */
+	memset(&(imx_audio_mp3_enc->config), 0, sizeof(MP3E_Encoder_Config));
+	memset(&(imx_audio_mp3_enc->param), 0, sizeof(MP3E_Encoder_Parameter));
+	memset(&(imx_audio_mp3_enc->allocated_blocks), 0, sizeof(gpointer) * ENC_NUM_MEM_BLOCKS);
+
 	ret = mp3e_query_mem(&(imx_audio_mp3_enc->config));
 	if (ret != MP3E_SUCCESS)
 	{
@@ -296,6 +301,9 @@ static gboolean gst_imx_audio_mp3_enc_stop(GstAudioEncoder *audioencoder)
 		gpointer ptr = imx_audio_mp3_enc->allocated_blocks[i];
 		if (ptr != NULL)
 		{
+			MP3E_Mem_Alloc_Info *alloc_info = &(imx_audio_mp3_enc->config.mem_info[i]);
+			GST_DEBUG_OBJECT(audioencoder, "freeing memory block with %d byte and alignment %d", alloc_info->size, alloc_info->align);
+
 			g_free(ptr);
 			imx_audio_mp3_enc->allocated_blocks[i] = NULL;
 		}
