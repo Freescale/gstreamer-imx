@@ -43,7 +43,7 @@ struct _GstImxIpuBlitterPrivate
 
 static guint const fill_frame_width = 64;
 static guint const fill_frame_height = 8;
-static GstVideoFormat const format = GST_VIDEO_FORMAT_RGBx;
+static GstVideoFormat const fill_frame_format = GST_VIDEO_FORMAT_RGBx;
 
 
 static void gst_imx_ipu_blitter_finalize(GObject *object);
@@ -513,7 +513,7 @@ static gboolean gst_imx_ipu_blitter_allocate_internal_fill_frame(GstImxIpuBlitte
 	 * be configured to input frame sizes. Plus, the pool wouldn't yield any benefits here. */
 	ipu_blitter->fill_frame = gst_buffer_new_allocate(
 		ipu_blitter->allocator,
-		fill_frame_width * fill_frame_height * gst_imx_ipu_video_bpp(format),
+		fill_frame_width * fill_frame_height * gst_imx_ipu_video_bpp(fill_frame_format),
 		NULL
 	);
 
@@ -533,7 +533,7 @@ static gboolean gst_imx_ipu_blitter_allocate_internal_fill_frame(GstImxIpuBlitte
 	ipu_blitter->priv->fill_task.input.width = fill_frame_width;
 	ipu_blitter->priv->fill_task.input.height = fill_frame_height;
 	ipu_blitter->priv->fill_task.input.paddr = (dma_addr_t)(phys_mem->phys_addr);
-	ipu_blitter->priv->fill_task.input.format = gst_imx_ipu_blitter_get_v4l_format(format);
+	ipu_blitter->priv->fill_task.input.format = gst_imx_ipu_blitter_get_v4l_format(fill_frame_format);
 
 	return TRUE;
 }
