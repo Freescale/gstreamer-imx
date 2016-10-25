@@ -317,6 +317,13 @@ static gboolean gst_imx_vpu_encoder_base_stop(GstVideoEncoder *encoder)
 {
 	GstImxVpuEncoderBase *vpu_encoder_base = GST_IMX_VPU_ENCODER_BASE(encoder);
 
+	if (vpu_encoder_base->cbcr_physaddr)
+	{
+		imx_vpu_dma_buffer_deallocate(vpu_encoder_base->cbcr_plane);
+		vpu_encoder_base->cbcr_plane = 0;
+		vpu_encoder_base->cbcr_physaddr = 0;
+	}
+
 	gst_imx_vpu_encoder_base_close(vpu_encoder_base);
 
 	if (vpu_encoder_base->bitstream_buffer != NULL)
@@ -418,6 +425,20 @@ static gboolean gst_imx_vpu_encoder_base_set_format(GstVideoEncoder *encoder, Gs
 	{
 		GST_ERROR_OBJECT(vpu_encoder_base, "derived class could not set open params");
 		return FALSE;
+	}
+
+	if (vpu_encoder_base->need_dummy_cbcr_plane)
+	{
+		if (vpu_encoder_base->cbcr_plane == 0)
+		{
+			unsigned int cbcr_plane_size = vpu_encoder_base->open_params.frame_width * vpu_encoder_base->open_params.frame_height / 4;
+
+			vpu_encoder_base->cbcr_plane = imx_vpu_dma_buffer_allocate(imx_vpu_enc_get_default_allocator(), cbcr_plane_size, 1, 0);
+			vpu_encoder_base->cbcr_physaddr = imx_vpu_dma_buffer_get_physical_address(vpu_encoder_base->cbcr_plane);
+			void *mapped_virtual_address = imx_vpu_dma_buffer_map(vpu_encoder_base->cbcr_plane, IMX_VPU_MAPPING_FLAG_WRITE);
+			memset(mapped_virtual_address, 128, cbcr_plane_size);
+			imx_vpu_dma_buffer_unmap(vpu_encoder_base->cbcr_plane);
+		}
 	}
 
 
@@ -640,6 +661,15 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 		vpu_encoder_base->input_dmabuffer.fd = -1;
 		vpu_encoder_base->input_dmabuffer.physical_address = phys_mem_meta->phys_addr;
 		vpu_encoder_base->input_dmabuffer.size = gst_buffer_get_size(input_buffer);
+
+		/* If asked by the subclass, provide constant cb- and cr-planes */
+		if (vpu_encoder_base->cbcr_physaddr)
+		{
+			unsigned long y_physaddr = imx_vpu_dma_buffer_get_physical_address(vpu_encoder_base->input_frame.framebuffer->dma_buffer);
+			size_t cbcr_offset = vpu_encoder_base->cbcr_physaddr - y_physaddr;
+			vpu_encoder_base->input_framebuffer.cb_offset = cbcr_offset;
+			vpu_encoder_base->input_framebuffer.cr_offset = cbcr_offset;
+		}
 	}
 
 

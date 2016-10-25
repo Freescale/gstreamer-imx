@@ -191,6 +191,10 @@ gboolean gst_imx_vpu_encoder_h264_set_open_params(GstImxVpuEncoderBase *vpu_enco
 {
 	GstCaps *template_caps, *allowed_caps;
 	GstImxVpuEncoderH264 *vpu_encoder_h264 = GST_IMX_VPU_ENCODER_H264(vpu_encoder_base);
+	GstVideoFormat fmt = GST_VIDEO_INFO_FORMAT(&(input_state->info));
+
+	if (fmt == GST_VIDEO_FORMAT_GRAY8)
+		vpu_encoder_base->need_dummy_cbcr_plane = 1;
 
 	/* Default h.264 open params are already set by the imx_vpu_enc_set_default_open_params()
 	 * call in the base class */
