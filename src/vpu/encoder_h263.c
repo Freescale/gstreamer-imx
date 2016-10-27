@@ -42,8 +42,8 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	GST_STATIC_CAPS(
 		"video/x-raw,"
 		"format = (string) { I420, NV12, GRAY8 }, "
-		"width = (int) [ 48, 1920, 8 ], "
-		"height = (int) [ 32, 1080, 8 ], "
+		"width = (int) [ 48, 1920 ], "
+		"height = (int) [ 32, 1080 ], "
 		"framerate = (fraction) [ 0, MAX ]"
 	)
 );
@@ -55,8 +55,8 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	GST_STATIC_CAPS(
 		"video/x-h263, "
 		"variant = (string) itu, "
-		"width = (int) [ 48, 1920, 8 ], "
-		"height = (int) [ 32, 1080, 8 ], "
+		"width = (int) [ 48, 1920 ], "
+		"height = (int) [ 32, 1080 ], "
 		"framerate = (fraction) [ 0, MAX ]; "
 	)
 );
