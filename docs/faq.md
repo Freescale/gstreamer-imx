@@ -276,3 +276,10 @@ but this one can already be built statically with the `--enable-static` configur
 
 [This article](http://blogs.s-osg.org/kickstart-gstreamer-android-development-6-easy-steps/) is
 a very good starting point about how to build GStreamer for Android and use it in apps.
+
+
+I get an "unsupported format BGR" error with `imxg2dvideosink`
+--------------------------------------------------------------
+
+G2D does not support 24 bpp formats. Check if the framebuffer is configured to use a 24 or 32 bpp
+format. The `fbset` tool shows the framebuffer configuration, including the bits per pixel.
