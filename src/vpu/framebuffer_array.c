@@ -78,10 +78,13 @@ static void gst_imx_vpu_framebuffer_array_finalize(GObject *object)
 			ImxVpuFramebuffer *framebuffer = &(framebuffer_array->framebuffers[i]);
 			GstImxPhysMemory *memory = gst_imx_vpu_framebuffer_array_get_gst_phys_memory(framebuffer);
 
-			GST_DEBUG_OBJECT(object, "freeing gstmemory block %p with physical address %" GST_IMX_PHYS_ADDR_FORMAT " and ref count %d", (gpointer)memory, memory->phys_addr, GST_MINI_OBJECT_REFCOUNT_VALUE(memory));
+			if(memory != NULL)
+			{
+				GST_DEBUG_OBJECT(object, "freeing gstmemory block %p with physical address %" GST_IMX_PHYS_ADDR_FORMAT " and ref count %d", (gpointer)memory, memory->phys_addr, GST_MINI_OBJECT_REFCOUNT_VALUE(memory));
 
-			/* at this point, the memory's refcount is 1, so unref'ing will deallocate it */
-			gst_memory_unref((GstMemory *)memory);
+				/* at this point, the memory's refcount is 1, so unref'ing will deallocate it */
+				gst_memory_unref((GstMemory *)memory);
+			}
 		}
 
 		g_slice_free1(sizeof(ImxVpuFramebuffer) * framebuffer_array->num_framebuffers, framebuffer_array->framebuffers);
@@ -112,6 +115,7 @@ GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat 
 	);
 
 	framebuffer_array->framebuffers = (ImxVpuFramebuffer *)g_slice_alloc(sizeof(ImxVpuFramebuffer) * num_framebuffers);
+	memset(framebuffer_array->framebuffers, 0, sizeof(ImxVpuFramebuffer) * num_framebuffers);
 	framebuffer_array->num_framebuffers = num_framebuffers;
 
 	framebuffer_array->allocator = (GstAllocator *)gst_object_ref(GST_OBJECT(phys_mem_allocator));
@@ -131,7 +135,7 @@ GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat 
 		);
 
 		if (memory == NULL)
-			return FALSE;
+			goto cleanup;
 
 		/* When filling in the params, use "memory" as the user-defined context parameter
 		 * This is useful to be able to later determine which memory block this framebuffer
@@ -153,6 +157,10 @@ GstImxVpuFramebufferArray * gst_imx_vpu_framebuffer_array_new(ImxVpuColorFormat 
 	}
 
 	return framebuffer_array;
+
+cleanup:
+	gst_object_unref(GST_OBJECT(framebuffer_array));
+	return NULL;
 }
 
 
