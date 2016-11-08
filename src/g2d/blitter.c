@@ -277,7 +277,7 @@ static gboolean gst_imx_g2d_blitter_fill_region(GstImxBlitter *blitter, GstImxRe
 		return FALSE;
 	}
 
-	g2d_blitter->background_surface.clrcolor = color;
+	g2d_blitter->background_surface.clrcolor = color | 0xFF000000;
 	g2d_blitter->background_surface.left   = region->x1;
 	g2d_blitter->background_surface.top    = region->y1;
 	g2d_blitter->background_surface.right  = region->x2;
@@ -372,7 +372,7 @@ static gboolean gst_imx_g2d_blitter_blit(GstImxBlitter *blitter, guint8 alpha)
 		 * fill it with the fill color, and blit it with blending. */
 		if (empty_alpha == 255)
 		{
-			g2d_blitter->empty_surface.clrcolor = g2d_blitter->fill_color & 0x00FFFFFF;
+			g2d_blitter->empty_surface.clrcolor = (g2d_blitter->fill_color & 0x00FFFFFF) | 0xFF000000;
 
 			if (g2d_clear(g2d_blitter->handle, empty_surf) != 0)
 			{
@@ -392,7 +392,7 @@ static gboolean gst_imx_g2d_blitter_blit(GstImxBlitter *blitter, guint8 alpha)
 			g2d_blitter->empty_surface.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
 			g2d_blitter->empty_surface.global_alpha = empty_alpha;
 
-			g2d_blitter->fill_surface.clrcolor = g2d_blitter->fill_color & 0x00FFFFFF;
+			g2d_blitter->fill_surface.clrcolor = (g2d_blitter->fill_color & 0x00FFFFFF) | 0xFF000000;
 			if (g2d_clear(g2d_blitter->handle, &(g2d_blitter->fill_surface)) != 0)
 			{
 				GST_ERROR_OBJECT(g2d_blitter, "clearing fill surface failed");
