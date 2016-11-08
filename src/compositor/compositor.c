@@ -1078,14 +1078,32 @@ static void gst_imx_video_compositor_update_overall_region(GstImxVideoCompositor
 	{
 		GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD_CAST(walk->data);
 		GstImxRegion *outer_region = &(compositor_pad->canvas.outer_region);
+		GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
 
 		/* Check if the outer region completely contains the overall region */
 		if (gst_imx_region_contains(&(compositor->overall_region), outer_region) == GST_IMX_REGION_CONTAINS_FULL)
 		{
-			/* disable filling if this outer region is opaque
-			 * (because it will completely cover the overall region) */
-			compositor->region_fill_necessary = (compositor_pad->alpha < 1.0);
-			break;
+			/* The outer region completely contains the inner region.
+			 * If the video frames are opaque, then this means that
+			 * their pixels will fully overwrite the entire overall
+			 * region, so it does not have to be initially filled
+			 * with the background color. This is used as a way for
+			 * improving performance. Even if there are multiple
+			 * input video streams which each have outer regions
+			 * that fully contain the overall region, all it takes
+			 * is for just one of these to be 100% opaque, and the
+			 * region fill is not necessary. So, if such a fully
+			 * opaque region that completely covers the overall
+			 * region is found, exit the loop immediately, otherwise
+			 * keep looking at the other pads.
+			 *
+			 * Also, blending may be necessary even if alpha is 1.0,
+			 * since video frames might themselves have alpha values
+			 * per-pixel (GST_VIDEO_INFO_HAS_ALPHA() returns TRUE in
+			 * this case then). */
+			compositor->region_fill_necessary = (compositor_pad->alpha < 1.0) || GST_VIDEO_INFO_HAS_ALPHA(info);
+			if (!compositor->region_fill_necessary)
+				break;
 		}
 
 		walk = g_list_next(walk);
