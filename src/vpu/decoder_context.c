@@ -64,7 +64,7 @@ static void gst_imx_vpu_decoder_context_finalize(GObject *object)
 	g_mutex_clear(&(decoder_context->mutex));
 	g_cond_clear(&(decoder_context->cond));
 
-	if(decoder_context->framebuffer_array != NULL)
+	if (decoder_context->framebuffer_array != NULL)
 		gst_object_unref(GST_OBJECT(decoder_context->framebuffer_array));
 
 	G_OBJECT_CLASS(gst_imx_vpu_decoder_context_parent_class)->finalize(object);
