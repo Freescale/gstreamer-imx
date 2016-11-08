@@ -15,7 +15,7 @@ def configure(conf):
 	if not conf.env['WITH_GSTVIDEO']:
 		return
 
-	if conf.check_cfg(package = 'libimxvpuapi', uselib_store = 'IMXVPUAPI', args = '--cflags --libs', mandatory = 0):
+	if conf.check_cfg(package = 'libimxvpuapi >= 0.10.3', uselib_store = 'IMXVPUAPI', args = '--cflags --libs', mandatory = 0):
 		Logs.pprint('GREEN', 'found installed imxvpuapi library - VPU elements will be built')
 		conf.env['BUILD_VPU_ELEMENTS'] = 1
 	else:
