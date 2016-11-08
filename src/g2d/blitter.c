@@ -60,6 +60,7 @@ static gboolean gst_imx_g2d_blitter_allocate_internal_fill_frame(GstImxG2DBlitte
 static gboolean gst_imx_g2d_blitter_set_surface_params(GstImxG2DBlitter *g2d_blitter, GstBuffer *video_frame, struct g2d_surface *surface, GstVideoInfo const *info);
 static void gst_imx_g2d_blitter_set_output_rotation(GstImxG2DBlitter *g2d_blitter, GstImxCanvasInnerRotation rotation);
 static GstImxG2DFormatDetails const * gst_imx_g2d_blitter_get_format_details(GstVideoFormat gst_format);
+static gboolean gst_imx_g2d_blitter_g2d_format_has_alpha_channel(enum g2d_format format);
 
 
 
@@ -332,10 +333,21 @@ static gboolean gst_imx_g2d_blitter_blit(GstImxBlitter *blitter, guint8 alpha)
 		return FALSE;
 	}
 
-	if (alpha != 255)
+	/* Enable blending if either the global alpha is <255 or if the
+	 * input frames have an alpha channel, since G2D can also perform
+	 * per-pixel blending (the total alpha is the multiplicative combination
+	 * of both global and per-pixel alpha).
+	 */
+	if ((alpha != 255) || gst_imx_g2d_blitter_g2d_format_has_alpha_channel(g2d_blitter->input_surface.format))
 	{
 		g2d_enable(g2d_blitter->handle, G2D_BLEND);
-		g2d_enable(g2d_blitter->handle, G2D_GLOBAL_ALPHA);
+		/* If blending shall be used because the input has an alpha
+		 * channel & the global alpah is 255, then it is unnecessary
+		 * to enable global alpha */
+		if (alpha == 255)
+			g2d_disable(g2d_blitter->handle, G2D_GLOBAL_ALPHA);
+		else
+			g2d_enable(g2d_blitter->handle, G2D_GLOBAL_ALPHA);
 	}
 	else
 	{
@@ -609,4 +621,17 @@ static GstImxG2DFormatDetails const * gst_imx_g2d_blitter_get_format_details(Gst
 	}
 
 #undef FORMAT_DETAILS
+}
+
+
+static gboolean gst_imx_g2d_blitter_g2d_format_has_alpha_channel(enum g2d_format format)
+{
+	switch (format)
+	{
+		case G2D_RGBA8888:
+		case G2D_BGRA8888:
+			return TRUE;
+		default:
+			return FALSE;
+	}
 }
