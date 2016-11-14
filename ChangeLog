@@ -1,3 +1,41 @@
+==== version 0.12.3 (2016-11-13) ====
+
+* imxv4l2videosrc:
+  * Add checks for V4L XRGB555X and GStreamer NV61 pixel formats
+  * Add UYVY support and make it the new default
+    UYVY works better with IPU-based deinterlacing, since with I420,
+    deinterlaced frames may exhibit a green band at the bottom, which
+    is apparently an IPU bug related to the plane offsets.
+
+* vpu:
+  * Fix leak causd by missing GstVideoCodecState unref
+  * Release decoder context GCond during flush to fix potential deadlock
+  * Add memory tag to VPU framebuffer meta to avoid meta related crashes
+  * Add support for GRAY8 frames as a "fake grayscale mode"
+    Grayscale is actually encoded as I420, with the U and V planes
+    filled with 0x80 bytes. This feature also makes libimxvpuapi 0.10.3
+    the new minimum requirement.
+  * Remove 8-pixel alignment from width & height sinkcaps
+  * Framebuffer array: fix memory leak if we got out of memory
+
+* g2d:
+  * Always enable blending if the input frames have an alpha channel
+    G2D automatically makes use not only of global alpha, but also of
+    per-pixel alpha. Therefore, it makes sense to enable blending even
+    if global alpha is set to 255, as long as the input frames have an
+    alpha channel. Such blending is useful for composing a video frame
+    with some partially-transparent overlays for example (not to be
+    confused with hardware overlays though).
+
+* audio:
+  * Fix SIGFPE when restarting mp3 encoder
+
+* compositor:
+  * Clear output also if the input format has an alpha channel
+
+* misc:
+  * Update waf to 1.9.3 to fix compilation with Python 3.4+
+
 ==== version 0.12.2 (2016-07-25) ====
 
 * imxv4l2videosrc:
