@@ -65,7 +65,7 @@ static codec_entry const codec_entries[] =
 	{ "narrowband AMR", "lib_nbamrd_wrap_arm11_elinux.so.1", "audio/AMR" },
 	{ "wideband AMR", "lib_wbamrd_wrap_arm12_elinux.so.1", "audio/AMR-WB" },
 	{ "WMA", "lib_wma10d_wrap_arm12_elinux.so", "audio/x-wma, wmaversion = (int)[ 1, 4 ]" },
-	{ NULL, NULL }
+	{ NULL, NULL, NULL }
 };
 
 
