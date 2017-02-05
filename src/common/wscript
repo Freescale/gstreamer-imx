@@ -17,3 +17,15 @@ def build(bld):
 	)
 	if bld.env['BUILD_FOR_ANDROID']:
 		obj.install_path = os.path.join(bld.env['PREFIX'], 'lib')
+
+	bld(
+		source = 'gstimxcommon.pc.in',
+		target = 'gstimxcommon.pc',
+		VERSION = bld.env['GSTIMX_VERSION'],
+        LIBS = '-lgstimxcommon',
+		CFLAGS = '-Wall'
+	)
+
+	bld.install_files('${PREFIX}/include/gstreamer-1.0/gst/allocators/imx', 'phys_mem_allocator.h')
+	bld.install_files('${PREFIX}/include/gstreamer-1.0/gst/allocators/imx', 'phys_mem_addr.h')
+	bld.install_files('${PREFIX}/include/gstreamer-1.0/gst/allocators/imx', 'phys_mem_meta.h')
