@@ -82,8 +82,10 @@ static gpointer gst_imx_audio_uniaudio_codec_table_init_internal(G_GNUC_UNUSED g
 	{
 		GstCaps *caps = gst_caps_from_string(entry->gstcaps);
 		GST_DEBUG("Adding codec \"%s\" with caps %" GST_PTR_FORMAT, entry->desc, (gpointer)caps);
-		if (gst_imx_audio_uniaudio_codec_add_codec(entry->filename, gst_caps_ref(caps)))
+		if (gst_imx_audio_uniaudio_codec_add_codec(entry->filename, caps))
 			gst_caps_append(codec_table_caps, caps);
+		else
+			gst_caps_unref(caps);
 	}
 
 	return NULL;
@@ -93,7 +95,6 @@ static gpointer gst_imx_audio_uniaudio_codec_table_init_internal(G_GNUC_UNUSED g
 static gboolean gst_imx_audio_uniaudio_codec_add_codec(gchar const *library_filename, GstCaps *caps)
 {
 	GstImxAudioUniaudioCodec *codec = gst_imx_audio_uniaudio_codec_load_codec(library_filename, caps);
-	gst_caps_unref(caps);
 
 	if (codec != NULL)
 	{
