@@ -238,6 +238,7 @@ gboolean gst_imx_blitter_set_num_output_pages(GstImxBlitter *blitter, guint num_
  * if @set_input_frame succeeded, FALSE otherwise.
  */
 gboolean gst_imx_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *frame);
+gboolean gst_imx_blitter_set_input_frame_and_cache(GstImxBlitter *blitter, GstBuffer **frame);
 /* Sets the output frame.
  *
  * Internally, this calls @set_output_frame, and returns its return value.

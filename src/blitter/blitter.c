@@ -170,8 +170,7 @@ gboolean gst_imx_blitter_set_num_output_pages(GstImxBlitter *blitter, guint num_
 		return TRUE;
 }
 
-
-gboolean gst_imx_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *frame)
+static gboolean gst_imx_blitter_set_input_frame_internal(GstImxBlitter *blitter, GstBuffer **frame, gboolean cache)
 {
 	gboolean ret;
 	GstImxPhysMemMeta *phys_mem_meta;
@@ -181,10 +180,10 @@ gboolean gst_imx_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *fram
 	klass = GST_IMX_BLITTER_CLASS(G_OBJECT_GET_CLASS(blitter));
 	g_assert(klass->set_input_frame != NULL);
 
-	if (frame == NULL)
+	if (*frame == NULL)
 		return klass->set_input_frame(blitter, NULL);
 
-	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(frame);
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(*frame);
 
 	if ((phys_mem_meta == NULL) || (phys_mem_meta->phys_addr == 0))
 	{
@@ -246,7 +245,7 @@ gboolean gst_imx_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *fram
 		{
 			GstVideoFrame input_vidframe, internal_input_vidframe;
 
-			gst_video_frame_map(&input_vidframe, &(blitter->input_video_info), frame, GST_MAP_READ);
+			gst_video_frame_map(&input_vidframe, &(blitter->input_video_info), *frame, GST_MAP_READ);
 			gst_video_frame_map(&internal_input_vidframe, &(blitter->input_video_info), internal_input_frame, GST_MAP_WRITE);
 
 			/* gst_video_frame_copy() makes sure stride and plane offset values from both frames are respected */
@@ -259,19 +258,30 @@ gboolean gst_imx_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *fram
 			gst_video_frame_unmap(&input_vidframe);
 		}
 
+                /* Replace the frame for future use */
+		if (cache)
+			gst_buffer_replace(frame, internal_input_frame);
 		ret = klass->set_input_frame(blitter, internal_input_frame);
-
 		gst_buffer_unref(internal_input_frame);
 	}
 	else
 	{
 		GST_TRACE_OBJECT(blitter, "input frame uses DMA memory - setting it directly as input frame");
-		ret = klass->set_input_frame(blitter, frame);
+		ret = klass->set_input_frame(blitter, *frame);
 	}
 
 	return ret;
 }
 
+gboolean gst_imx_blitter_set_input_frame_and_cache(GstImxBlitter *blitter, GstBuffer **frame)
+{
+	return gst_imx_blitter_set_input_frame_internal(blitter, frame, TRUE);
+}
+
+gboolean gst_imx_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *frame)
+{
+	return gst_imx_blitter_set_input_frame_internal(blitter, &frame, FALSE);
+}
 
 gboolean gst_imx_blitter_set_output_frame(GstImxBlitter *blitter, GstBuffer *frame)
 {

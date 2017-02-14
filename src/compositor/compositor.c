@@ -866,7 +866,7 @@ static GstFlowReturn gst_imx_video_compositor_aggregate_frames(GstImxBPVideoAggr
 					&(videoaggregator_pad->info),
 					&(compositor_pad->source_subset),
 					&(compositor_pad->canvas),
-					videoaggregator_pad->buffer,
+					&videoaggregator_pad->buffer,
 					(guint8)(compositor_pad->alpha * 255.0)
 				))
 				{
