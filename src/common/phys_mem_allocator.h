@@ -20,14 +20,14 @@
 #ifndef GST_IMX_COMMON_PHYS_MEM_ALLOCATOR_H
 #define GST_IMX_COMMON_PHYS_MEM_ALLOCATOR_H
 
+#include <config.h>
+
 #include <gst/gst.h>
 #include <gst/gstallocator.h>
 
 #include "phys_mem_addr.h"
 
-
 G_BEGIN_DECLS
-
 
 typedef struct _GstImxPhysMemAllocator GstImxPhysMemAllocator;
 typedef struct _GstImxPhysMemAllocatorClass GstImxPhysMemAllocatorClass;

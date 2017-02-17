@@ -166,6 +166,8 @@ def configure(conf):
 		conf.env['WITH_GSTVIDEO'] = True
 	else:
 		Logs.pprint('RED', 'could not find gstvideo library - not building video plugins')
+	if conf.check_cfg(package = 'gstreamer-bad-allocators-1.0', uselib_store = 'GSTREAMER_BAD_ALLOCATORS', args = '--cflags --libs', mandatory = 0):
+		conf.env['WITH_GSTBADALLOCATORS'] = True
 	if conf.check_cc(lib = 'gstphotography-1.0', uselib_store = 'GSTPHOTOGRAPHY', mandatory = 0):
 		conf.env['WITH_GSTPHOTOGRAPHY'] = True
 
@@ -187,8 +189,11 @@ def configure(conf):
 	conf.define('PACKAGE_BUGREPORT', "https://github.com/Freescale/gstreamer-imx")
 	conf.define('VERSION', gstimx_version)
 
+	if conf.env['WITH_GSTBADALLOCATORS']:
+		conf.define('WITH_GSTBADALLOCATORS', 1)
+
 	conf.env['GSTIMX_VERSION'] = gstimx_version
-	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_AUDIO', 'GSTREAMER_VIDEO', 'PTHREAD', 'M']
+	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_AUDIO', 'GSTREAMER_VIDEO', 'GSTREAMER_BAD_ALLOCATORS', 'PTHREAD', 'M']
 
 
 	conf.recurse('src/common')
