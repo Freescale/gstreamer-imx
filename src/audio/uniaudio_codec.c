@@ -65,7 +65,7 @@ static codec_entry const codec_entries[] =
 	{ "narrowband AMR", "lib_nbamrd_wrap_arm11_elinux.so.1", "audio/AMR" },
 	{ "wideband AMR", "lib_wbamrd_wrap_arm12_elinux.so.1", "audio/AMR-WB" },
 	{ "WMA", "lib_wma10d_wrap_arm12_elinux.so", "audio/x-wma, wmaversion = (int)[ 1, 4 ]" },
-	{ NULL, NULL }
+	{ NULL, NULL, NULL }
 };
 
 
@@ -82,8 +82,10 @@ static gpointer gst_imx_audio_uniaudio_codec_table_init_internal(G_GNUC_UNUSED g
 	{
 		GstCaps *caps = gst_caps_from_string(entry->gstcaps);
 		GST_DEBUG("Adding codec \"%s\" with caps %" GST_PTR_FORMAT, entry->desc, (gpointer)caps);
-		if (gst_imx_audio_uniaudio_codec_add_codec(entry->filename, gst_caps_ref(caps)))
+		if (gst_imx_audio_uniaudio_codec_add_codec(entry->filename, caps))
 			gst_caps_append(codec_table_caps, caps);
+		else
+			gst_caps_unref(caps);
 	}
 
 	return NULL;
@@ -93,7 +95,6 @@ static gpointer gst_imx_audio_uniaudio_codec_table_init_internal(G_GNUC_UNUSED g
 static gboolean gst_imx_audio_uniaudio_codec_add_codec(gchar const *library_filename, GstCaps *caps)
 {
 	GstImxAudioUniaudioCodec *codec = gst_imx_audio_uniaudio_codec_load_codec(library_filename, caps);
-	gst_caps_unref(caps);
 
 	if (codec != NULL)
 	{
@@ -125,6 +126,9 @@ static GstImxAudioUniaudioCodec* gst_imx_audio_uniaudio_codec_load_codec(gchar c
 	}
 
 	codec->caps = gst_caps_copy(caps);
+#if GST_CHECK_VERSION(1, 10, 0)
+	GST_MINI_OBJECT_FLAG_SET(codec->caps, GST_MINI_OBJECT_FLAG_MAY_BE_LEAKED);
+#endif
 
 	codec->query_interface = dlsym(codec->dlhandle, UNIA_CODEC_ENTRYPOINT_FUNCTION);
 	if (codec->query_interface == NULL)
