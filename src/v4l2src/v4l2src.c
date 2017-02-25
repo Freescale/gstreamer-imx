@@ -537,9 +537,11 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		case V4L2_PIX_FMT_NV12M:
 			gst_fmt = GST_VIDEO_FORMAT_NV12;
 			break;
+#if GST_CHECK_VERSION(1, 3, 1)
 		case V4L2_PIX_FMT_NV12MT:
 			gst_fmt = GST_VIDEO_FORMAT_NV12_64Z32;
 			break;
+#endif
 		case V4L2_PIX_FMT_NV21:
 		case V4L2_PIX_FMT_NV21M:
 			gst_fmt = GST_VIDEO_FORMAT_NV21;
