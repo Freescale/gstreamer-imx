@@ -15,10 +15,14 @@
  * License along with this library; if not, write to the Free
  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
-
+#include <config.h>
 
 #include <string.h>
 #include "phys_mem_allocator.h"
+
+#ifdef WITH_GSTBADALLOCATORS
+#include <gst/allocators/gstphysmemory.h>
+#endif
 
 
 GST_DEBUG_CATEGORY_STATIC(imx_phys_mem_allocator_debug);
@@ -34,9 +38,27 @@ static GstMemory* gst_imx_phys_mem_allocator_copy(GstMemory *mem, gssize offset,
 static GstMemory* gst_imx_phys_mem_allocator_share(GstMemory *mem, gssize offset, gssize size);
 static gboolean gst_imx_phys_mem_allocator_is_span(GstMemory *mem1, GstMemory *mem2, gsize *offset);
 
+#ifdef WITH_GSTBADALLOCATORS
 
+static guintptr gst_imx_phys_mem_allocator_get_phys_addr(GstPhysMemoryAllocator *allocator, GstMemory *mem)
+{
+  if (!gst_imx_is_phys_memory(mem))
+    return 0;
+
+  return ((GstImxPhysMemory *)mem)->phys_addr;
+}
+
+static void gst_imx_phys_mem_allocator_iface_init(gpointer g_iface)
+{
+  GstPhysMemoryAllocatorInterface *iface = g_iface;
+
+  iface->get_phys_addr = gst_imx_phys_mem_allocator_get_phys_addr;
+}
+
+G_DEFINE_ABSTRACT_TYPE_WITH_CODE(GstImxPhysMemAllocator, gst_imx_phys_mem_allocator, GST_TYPE_ALLOCATOR, G_IMPLEMENT_INTERFACE(GST_TYPE_PHYS_MEMORY_ALLOCATOR, gst_imx_phys_mem_allocator_iface_init))
+#else
 G_DEFINE_ABSTRACT_TYPE(GstImxPhysMemAllocator, gst_imx_phys_mem_allocator, GST_TYPE_ALLOCATOR)
-
+#endif
 
 void gst_imx_phys_mem_allocator_class_init(GstImxPhysMemAllocatorClass *klass)
 {
