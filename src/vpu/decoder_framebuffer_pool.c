@@ -216,7 +216,7 @@ static void gst_imx_vpu_decoder_framebuffer_pool_release_buffer(GstBufferPool *p
 
 	GST_IMX_VPU_DECODER_CONTEXT_LOCK(vpu_pool->decoder_context);
 
-	if ((vpu_meta = GST_IMX_VPU_FRAMEBUFFER_META_GET(buffer)) != NULL)
+	if ((vpu_meta = GST_IMX_VPU_FRAMEBUFFER_META_GET(buffer)) != NULL && vpu_meta->framebuffer)
 		gst_imx_vpu_decoder_context_mark_as_displayed(vpu_pool->decoder_context, vpu_meta->framebuffer);
 	else
 		GST_DEBUG_OBJECT(pool, "nothing to mark - there is no VPU metadata for buffer %p", (gpointer)buffer);
