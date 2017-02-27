@@ -829,7 +829,7 @@ static gboolean gst_imx_vpu_encoder_flush(GstVideoEncoder *encoder)
 	ImxVpuEncReturnCodes ret;
 	GstImxVpuEncoderBase *vpu_encoder_base = GST_IMX_VPU_ENCODER_BASE(encoder);
 
-	if ((ret = imx_vpu_enc_flush(vpu_encoder_base->encoder)) != IMX_VPU_ENC_RETURN_CODE_OK)
+	if (vpu_encoder_base->encoder && ((ret = imx_vpu_enc_flush(vpu_encoder_base->encoder)) != IMX_VPU_ENC_RETURN_CODE_OK))
 		GST_ERROR_OBJECT(vpu_encoder_base, "could not flush encoder: %s", imx_vpu_enc_error_string(ret));
 
 	return ret == IMX_VPU_ENC_RETURN_CODE_OK;
