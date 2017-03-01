@@ -258,7 +258,16 @@ static gboolean gst_imx_blitter_set_input_frame_internal(GstImxBlitter *blitter,
 			gst_video_frame_unmap(&input_vidframe);
 		}
 
-                /* Replace the frame for future use */
+                /* Replace the frame for future use. This is a trick to effectively implement caching.
+		 * In some cases, one frame may be used multiple times, for example if stream A has a
+		 * frame rate of 10 fps, stream B 30 fps, and both shall be composed together - the
+		 * frames from stream A will be used 3 times each. If these frames are not placed in
+		 * DMA memory, they would be copied by the code above ... every time. So, instead,
+		 * update the input frame, replacing it with the temporary copy that was created above.
+		 * This copy *is* in DMA memory, so if it is used again in a subsequent output frame
+		 * by the composer, then the if check above will see that it is DMA memory
+		 * (= there will be a physical address), and therefore the frame can be used directly,
+		 * without the CPU having to copy its pixels. */
 		if (cache)
 			gst_buffer_replace(frame, internal_input_frame);
 		ret = klass->set_input_frame(blitter, internal_input_frame);

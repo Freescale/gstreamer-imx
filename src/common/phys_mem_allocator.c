@@ -42,17 +42,17 @@ static gboolean gst_imx_phys_mem_allocator_is_span(GstMemory *mem1, GstMemory *m
 
 static guintptr gst_imx_phys_mem_allocator_get_phys_addr(GstPhysMemoryAllocator *allocator, GstMemory *mem)
 {
-  if (!gst_imx_is_phys_memory(mem))
-    return 0;
+	if (!gst_imx_is_phys_memory(mem))
+		return 0;
 
-  return ((GstImxPhysMemory *)mem)->phys_addr;
+	return ((GstImxPhysMemory *)mem)->phys_addr;
 }
 
 static void gst_imx_phys_mem_allocator_iface_init(gpointer g_iface)
 {
-  GstPhysMemoryAllocatorInterface *iface = g_iface;
+	GstPhysMemoryAllocatorInterface *iface = g_iface;
 
-  iface->get_phys_addr = gst_imx_phys_mem_allocator_get_phys_addr;
+	iface->get_phys_addr = gst_imx_phys_mem_allocator_get_phys_addr;
 }
 
 G_DEFINE_ABSTRACT_TYPE_WITH_CODE(GstImxPhysMemAllocator, gst_imx_phys_mem_allocator, GST_TYPE_ALLOCATOR, G_IMPLEMENT_INTERFACE(GST_TYPE_PHYS_MEMORY_ALLOCATOR, gst_imx_phys_mem_allocator_iface_init))
