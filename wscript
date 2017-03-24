@@ -64,6 +64,7 @@ def options(opt):
 	opt.recurse('src/eglvivsink')
 	opt.recurse('src/v4l2src')
 	opt.recurse('src/audio')
+	opt.recurse('src/g2dpango')
 
 
 def check_linux_headers(conf):
@@ -212,6 +213,7 @@ def configure(conf):
 	if not conf.options.build_for_android:
 		conf.recurse('src/v4l2src')
 	conf.recurse('src/audio')
+	conf.recurse('src/g2dpango')
 
 
 	conf.write_config_header('config.h')
@@ -231,4 +233,5 @@ def build(bld):
 	bld.recurse('src/audio')
 	bld.recurse('src/blitter')
 	bld.recurse('src/compositor')
+	bld.recurse('src/g2dpango')
 
