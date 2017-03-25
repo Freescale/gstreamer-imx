@@ -85,6 +85,8 @@ struct _GstImxBlitterVideoSink
 	GstVideoInfo input_video_info, output_video_info;
 
 	gboolean is_paused;
+	gboolean drop;
+	gboolean drop_changed;
 
 	/* The canvas encompasses the visible screen, or the window
 	 * defined by the window_* values above
