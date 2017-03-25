@@ -33,6 +33,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_encoder_base_debug);
 enum
 {
 	PROP_0,
+	PROP_DROP,
 	PROP_GOP_SIZE,
 	PROP_BITRATE,
 	PROP_SLICE_SIZE,
@@ -41,6 +42,7 @@ enum
 };
 
 
+#define DEFAULT_DROP              FALSE
 #define DEFAULT_GOP_SIZE          16
 #define DEFAULT_BITRATE           0
 #define DEFAULT_SLICE_SIZE        0
@@ -71,6 +73,7 @@ static void gst_imx_vpu_encoder_base_get_property(GObject *object, guint prop_id
 static gboolean gst_imx_vpu_encoder_base_start(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_encoder_base_stop(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_encoder_base_set_format(GstVideoEncoder *encoder, GstVideoCodecState *state);
+static gboolean gst_imx_vpu_encoder_base_sink_event(GstVideoEncoder *encoder, GstEvent *event);
 static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *frame);
 #ifdef ENABLE_PROPOSE_ALLOCATION
 static gboolean gst_imx_vpu_encoder_base_propose_allocation(GstVideoEncoder *encoder, GstQuery *query);
@@ -107,6 +110,7 @@ static void gst_imx_vpu_encoder_base_class_init(GstImxVpuEncoderBaseClass *klass
 	video_encoder_class->start              = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_base_start);
 	video_encoder_class->stop               = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_base_stop);
 	video_encoder_class->set_format         = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_base_set_format);
+	video_encoder_class->sink_event         = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_base_sink_event);
 	video_encoder_class->handle_frame       = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_base_handle_frame);
 #ifdef ENABLE_PROPOSE_ALLOCATION
 	video_encoder_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_encoder_base_propose_allocation);
@@ -117,7 +121,19 @@ static void gst_imx_vpu_encoder_base_class_init(GstImxVpuEncoderBaseClass *klass
 	klass->set_open_params = NULL;
 	klass->set_frame_enc_params = NULL;
 	klass->process_output_buffer = NULL;
+	klass->sink_event = NULL;
 
+	g_object_class_install_property(
+		object_class,
+		PROP_DROP,
+		g_param_spec_boolean(
+			"drop",
+			"Drop",
+			"Drop frames",
+			DEFAULT_DROP,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 	g_object_class_install_property(
 		object_class,
 		PROP_GOP_SIZE,
@@ -199,6 +215,7 @@ static void gst_imx_vpu_encoder_base_init(GstImxVpuEncoderBase *vpu_encoder_base
 
 	gst_video_info_init(&(vpu_encoder_base->video_info));
 
+	vpu_encoder_base->drop             = DEFAULT_DROP;
 	vpu_encoder_base->gop_size         = DEFAULT_GOP_SIZE;
 	vpu_encoder_base->bitrate          = DEFAULT_BITRATE;
 	vpu_encoder_base->slice_size       = DEFAULT_SLICE_SIZE;
@@ -219,6 +236,9 @@ static void gst_imx_vpu_encoder_base_set_property(GObject *object, guint prop_id
 
 	switch (prop_id)
 	{
+		case PROP_DROP:
+			vpu_encoder_base->drop = g_value_get_boolean(value);
+			break;
 		case PROP_GOP_SIZE:
 			vpu_encoder_base->gop_size = g_value_get_uint(value);
 			break;
@@ -253,6 +273,9 @@ static void gst_imx_vpu_encoder_base_get_property(GObject *object, guint prop_id
 
 	switch (prop_id)
 	{
+		case PROP_DROP:
+			g_value_set_boolean(value, vpu_encoder_base->drop);
+			break;
 		case PROP_GOP_SIZE:
 			g_value_set_uint(value, vpu_encoder_base->gop_size);
 			break;
@@ -501,6 +524,23 @@ static gboolean gst_imx_vpu_encoder_base_set_format(GstVideoEncoder *encoder, Gs
 }
 
 
+static gboolean gst_imx_vpu_encoder_base_sink_event(GstVideoEncoder *encoder, GstEvent *event)
+{
+	GstImxVpuEncoderBaseClass *klass;
+	GstImxVpuEncoderBase *vpu_encoder_base;
+	gboolean ret;
+
+	vpu_encoder_base = GST_IMX_VPU_ENCODER_BASE(encoder);
+	klass = GST_IMX_VPU_ENCODER_BASE_CLASS(G_OBJECT_GET_CLASS(vpu_encoder_base));
+
+	ret = TRUE;
+	if (klass->sink_event != NULL)
+		ret = klass->sink_event(encoder, event);
+
+	return ret && GST_VIDEO_ENCODER_CLASS(gst_imx_vpu_encoder_base_parent_class)->sink_event(encoder, event);
+}
+
+
 static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *input_frame)
 {
 	GstImxPhysMemMeta *phys_mem_meta;
@@ -512,6 +552,12 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 	vpu_encoder_base = GST_IMX_VPU_ENCODER_BASE(encoder);
 	klass = GST_IMX_VPU_ENCODER_BASE_CLASS(G_OBJECT_GET_CLASS(vpu_encoder_base));
 
+	if (vpu_encoder_base->drop)
+	{
+		input_frame->output_buffer = NULL; /* necessary to make finish_frame() drop the frame */
+		gst_video_encoder_finish_frame(encoder, input_frame);
+		return GST_FLOW_OK;
+	}
 
 	/* Get access to the input buffer's physical address */
 
