@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <linux/videodev2.h>
 #include "v4l2src.h"
+#include "v4l2sink.h"
 #include "v4l2_buffer_pool.h"
 
 #define DEFAULT_CAPTURE_MODE 0
@@ -1444,7 +1445,9 @@ static void gst_imx_v4l2src_photography_init(gpointer g_iface, gpointer iface_da
 static gboolean plugin_init(GstPlugin *plugin)
 {
 	return gst_element_register(plugin, "imxv4l2videosrc", GST_RANK_PRIMARY,
-			gst_imx_v4l2src_get_type());
+			gst_imx_v4l2src_get_type()) &&
+		gst_element_register(plugin, "imxv4l2videosink", GST_RANK_PRIMARY,
+			gst_imx_v4l2sink_get_type());
 }
 
 GST_PLUGIN_DEFINE(
