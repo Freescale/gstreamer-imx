@@ -49,6 +49,7 @@ enum
 	IMX_V4L2SRC_0,
 	IMX_V4L2SRC_CAPTURE_MODE,
 	IMX_V4L2SRC_FRAMERATE_NUM,
+	IMX_V4L2SRC_FRAMERATE,
 	IMX_V4L2SRC_INPUT,
 	IMX_V4L2SRC_DEVICE,
 	IMX_V4L2SRC_QUEUE_SIZE,
@@ -688,6 +689,11 @@ static void gst_imx_v4l2src_set_property(GObject *object, guint prop_id,
 			v4l2src->fps_n = g_value_get_int(value);
 			break;
 
+		case IMX_V4L2SRC_FRAMERATE:
+			v4l2src->fps_n = gst_value_get_fraction_numerator(value);
+			v4l2src->fps_d = gst_value_get_fraction_denominator(value);
+			break;
+
 		case IMX_V4L2SRC_INPUT:
 			v4l2src->input = g_value_get_int(value);
 			break;
@@ -764,6 +770,10 @@ static void gst_imx_v4l2src_get_property(GObject *object, guint prop_id,
 
 		case IMX_V4L2SRC_FRAMERATE_NUM:
 			g_value_set_int(value, v4l2src->fps_n);
+			break;
+
+		case IMX_V4L2SRC_FRAMERATE:
+			gst_value_set_fraction(value, v4l2src->fps_n, v4l2src->fps_d);
 			break;
 
 		case IMX_V4L2SRC_INPUT:
@@ -951,9 +961,18 @@ static void gst_imx_v4l2src_class_init(GstImxV4l2VideoSrcClass *klass)
 
 	g_object_class_install_property(gobject_class, IMX_V4L2SRC_FRAMERATE_NUM,
 			g_param_spec_int("fps-n", "FPS numerator",
-				"Numerator of the framerate at which"
+				"(Obsolete; use fps property instead) "
+				"Numerator of the framerate at which "
 				"the input stream is to be captured",
 				0, G_MAXINT, DEFAULT_FRAMERATE_NUM,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property(gobject_class, IMX_V4L2SRC_FRAMERATE,
+			gst_param_spec_fraction("fps", "FPS",
+				"Framerate at which "
+				"the input stream is to be captured",
+				0, 1, G_MAXINT, 1,
+				DEFAULT_FRAMERATE_NUM, DEFAULT_FRAMERATE_DEN,
 				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 	g_object_class_install_property(gobject_class, IMX_V4L2SRC_INPUT,
