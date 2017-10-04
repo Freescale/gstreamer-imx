@@ -76,6 +76,7 @@ struct _GstImxBlitterVideoSink
 	guint current_fb_page;
 	guint old_fb_page;
 	gboolean use_vsync;
+	gboolean clear_at_null;
 	gboolean input_crop;
 	gboolean last_frame_with_cropdata;
 

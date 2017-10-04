@@ -45,6 +45,7 @@ enum
 	PROP_FORCE_ASPECT_RATIO,
 	PROP_FBDEV_NAME,
 	PROP_USE_VSYNC,
+	PROP_CLEAR_AT_NULL,
 	PROP_INPUT_CROP,
 	PROP_OUTPUT_ROTATION,
 	PROP_WINDOW_X_COORD,
@@ -61,6 +62,7 @@ enum
 #define DEFAULT_FORCE_ASPECT_RATIO TRUE
 #define DEFAULT_FBDEV_NAME "/dev/fb0"
 #define DEFAULT_USE_VSYNC FALSE
+#define DEFAULT_CLEAR_AT_NULL FALSE
 #define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_OUTPUT_ROTATION GST_IMX_CANVAS_INNER_ROTATION_NONE
 #define DEFAULT_WINDOW_X_COORD 0
@@ -87,6 +89,7 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 
 static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink);
 static void gst_imx_blitter_video_sink_close_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink);
+static gboolean gst_imx_blitter_video_sink_clear_fb_pages(GstImxBlitterVideoSink *blitter_video_sink);
 static gboolean gst_imx_blitter_video_sink_select_fb_page(GstImxBlitterVideoSink *blitter_video_sink, guint page);
 static gboolean gst_imx_blitter_video_sink_flip_to_selected_fb_page(GstImxBlitterVideoSink *blitter_video_sink);
 static gboolean gst_imx_blitter_video_sink_set_virtual_fb_height(GstImxBlitterVideoSink *blitter_video_sink, guint32 virtual_fb_height);
@@ -159,6 +162,17 @@ static void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *k
 			"Use VSync",
 			"Enable and use verticeal synchronization to eliminate tearing",
 			DEFAULT_USE_VSYNC,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_CLEAR_AT_NULL,
+		g_param_spec_boolean(
+			"clear-at-null",
+			"Clear at null",
+			"Clear the screen by filling it with black pixels when switching to the NULL state",
+			DEFAULT_CLEAR_AT_NULL,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -293,6 +307,7 @@ static void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_vide
 	blitter_video_sink->current_fb_page = 0;
 	blitter_video_sink->old_fb_page = 1;
 	blitter_video_sink->use_vsync = DEFAULT_USE_VSYNC;
+	blitter_video_sink->clear_at_null = DEFAULT_CLEAR_AT_NULL;
 	blitter_video_sink->input_crop = DEFAULT_INPUT_CROP;
 	blitter_video_sink->last_frame_with_cropdata = FALSE;
 
@@ -405,6 +420,14 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			break;
 		}
 
+		case PROP_CLEAR_AT_NULL:
+		{
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->clear_at_null = g_value_get_boolean(value);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
+			break;
+		}
+
 		case PROP_INPUT_CROP:
 		{
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
@@ -514,6 +537,12 @@ static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_
 		case PROP_USE_VSYNC:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			g_value_set_boolean(value, blitter_video_sink->use_vsync);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
+			break;
+
+		case PROP_CLEAR_AT_NULL:
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_boolean(value, blitter_video_sink->clear_at_null);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
@@ -665,6 +694,9 @@ static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *
 		case GST_STATE_CHANGE_READY_TO_NULL:
 		{
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+
+			if (blitter_video_sink->clear_at_null)
+				gst_imx_blitter_video_sink_clear_fb_pages(blitter_video_sink);
 
 			if ((klass->stop != NULL) && !(klass->stop(blitter_video_sink)))
 				GST_ERROR_OBJECT(blitter_video_sink, "stop() failed");
@@ -1101,6 +1133,30 @@ static void gst_imx_blitter_video_sink_close_framebuffer_device(GstImxBlitterVid
 	close(blitter_video_sink->framebuffer_fd);
 	blitter_video_sink->framebuffer = NULL;
 	blitter_video_sink->framebuffer_fd = -1;
+}
+
+
+static gboolean gst_imx_blitter_video_sink_clear_fb_pages(GstImxBlitterVideoSink *blitter_video_sink)
+{
+	guint i;
+	gboolean ret = TRUE;
+	GstImxPhysMemMeta *phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(blitter_video_sink->framebuffer);
+	gst_imx_phys_addr_t prev_phys_addr = phys_mem_meta->phys_addr;
+	guint num_pages = blitter_video_sink->use_vsync ? 3 : 1;
+
+	if (blitter_video_sink->framebuffer_fd == -1)
+		return FALSE;
+
+	for (i = 0; i < num_pages; ++i)
+	{
+		gst_imx_blitter_video_sink_select_fb_page(blitter_video_sink, i);
+		gst_imx_blitter_fill_region(blitter_video_sink->blitter, &(blitter_video_sink->framebuffer_region), 0x00000000);
+	}
+
+	phys_mem_meta->phys_addr = prev_phys_addr;
+	gst_imx_blitter_set_output_frame(blitter_video_sink->blitter, blitter_video_sink->framebuffer);
+
+	return ret;
 }
 
 
