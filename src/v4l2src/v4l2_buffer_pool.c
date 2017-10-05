@@ -42,6 +42,13 @@ GType gst_imx_v4l2_meta_api_get_type(void)
 	return type;
 }
 
+static gboolean gst_imx_v4l2_meta_init(GstMeta *meta, G_GNUC_UNUSED gpointer params, G_GNUC_UNUSED GstBuffer *buffer)
+{
+	GstImxV4l2Meta *v4l2meta = (GstImxV4l2Meta *)meta;
+	v4l2meta->mem = NULL;
+	return TRUE;
+}
+
 const GstMetaInfo *gst_imx_v4l2_meta_get_info(void)
 {
 	static const GstMetaInfo *meta_info = NULL;
@@ -52,7 +59,7 @@ const GstMetaInfo *gst_imx_v4l2_meta_get_info(void)
 				gst_imx_v4l2_meta_api_get_type(),
 				"GstImxV4l2Meta",
 				sizeof(GstImxV4l2Meta),
-				(GstMetaInitFunction)NULL,
+				(GstMetaInitFunction)gst_imx_v4l2_meta_init,
 				(GstMetaFreeFunction)NULL,
 				(GstMetaTransformFunction)NULL);
 		g_once_init_leave(&meta_info, meta);
