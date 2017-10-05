@@ -43,6 +43,7 @@
 #define DEFAULT_FRAMERATE_DEN 1
 #define DEFAULT_INPUT 1
 #define DEFAULT_DEVICE "/dev/video0"
+#define DEFAULT_NUM_ADDITIONAL_BUFFERS 1
 #define DEFAULT_QUEUE_SIZE 6
 #define DEFAULT_CROP_META_X 0
 #define DEFAULT_CROP_META_Y 0
@@ -57,6 +58,7 @@ enum
 	IMX_V4L2SRC_FRAMERATE,
 	IMX_V4L2SRC_INPUT,
 	IMX_V4L2SRC_DEVICE,
+	IMX_V4L2SRC_NUM_ADDITIONAL_BUFFERS,
 	IMX_V4L2SRC_QUEUE_SIZE,
 	IMX_V4L2SRC_CROP_META_X,
 	IMX_V4L2SRC_CROP_META_Y,
@@ -411,9 +413,9 @@ static gboolean gst_imx_v4l2src_decide_allocation(GstBaseSrc *bsrc,
 	}
 
 	if (min != 0)
-		/* Need an extra buffer to capture while other buffers
+		/* Need additional buffers to capture while other buffers
 		 * are downstream */
-		min += 1;
+		min += v4l2src->num_additional_buffers;
 	else
 		min = v4l2src->queue_size;
 
@@ -709,6 +711,10 @@ static void gst_imx_v4l2src_set_property(GObject *object, guint prop_id,
 			v4l2src->devicename = g_strdup(g_value_get_string(value));
 			break;
 
+		case IMX_V4L2SRC_NUM_ADDITIONAL_BUFFERS:
+			v4l2src->num_additional_buffers = g_value_get_uint(value);
+			break;
+
 		case IMX_V4L2SRC_QUEUE_SIZE:
 			v4l2src->queue_size = g_value_get_int(value);
 			break;
@@ -787,6 +793,10 @@ static void gst_imx_v4l2src_get_property(GObject *object, guint prop_id,
 
 		case IMX_V4L2SRC_DEVICE:
 			g_value_set_string(value, v4l2src->devicename);
+			break;
+
+		case IMX_V4L2SRC_NUM_ADDITIONAL_BUFFERS:
+			g_value_set_uint(value, v4l2src->num_additional_buffers);
 			break;
 
 		case IMX_V4L2SRC_QUEUE_SIZE:
@@ -910,6 +920,7 @@ static void gst_imx_v4l2src_init(GstImxV4l2VideoSrc *v4l2src)
 	v4l2src->fps_d = DEFAULT_FRAMERATE_DEN;
 	v4l2src->input = DEFAULT_INPUT;
 	v4l2src->devicename = g_strdup(DEFAULT_DEVICE);
+	v4l2src->num_additional_buffers = DEFAULT_NUM_ADDITIONAL_BUFFERS;
 	v4l2src->queue_size = DEFAULT_QUEUE_SIZE;
 	v4l2src->fd_obj_v4l = NULL;
 	v4l2src->metaCropX = DEFAULT_CROP_META_X;
@@ -989,6 +1000,13 @@ static void gst_imx_v4l2src_class_init(GstImxV4l2VideoSrcClass *klass)
 	g_object_class_install_property(gobject_class, IMX_V4L2SRC_DEVICE,
 			g_param_spec_string("device", "Device", "Device location",
 				DEFAULT_DEVICE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+	g_object_class_install_property(gobject_class, IMX_V4L2SRC_NUM_ADDITIONAL_BUFFERS,
+			g_param_spec_uint("num-additional-buffers", "Number of additional buffers",
+				"Number of additional V4L2 buffers to allocate in the buffer pool "
+				"(only used if the allocation query's min value is nonzero)",
+				1, G_MAXUINT, DEFAULT_NUM_ADDITIONAL_BUFFERS,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
 	g_object_class_install_property(gobject_class, IMX_V4L2SRC_QUEUE_SIZE,
 			g_param_spec_int("queue-size", "Queue size",

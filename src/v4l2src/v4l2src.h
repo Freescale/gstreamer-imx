@@ -62,6 +62,7 @@ struct _GstImxV4l2VideoSrc
 	gint fps_d;
 	gint input;
 	char *devicename;
+	guint num_additional_buffers;
 	int queue_size;
 	guint metaCropX;
 	guint metaCropY;
