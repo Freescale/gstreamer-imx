@@ -180,7 +180,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 
 	/* XXX: This is only required for the tw6869 driver */
 	ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QUERYCAP, &cap);
-	if (strncmp(cap.card, "tw6869", 6) == 0)
+	if (strncmp((char const *)(cap.card), "tw6869", 6) == 0)
 		phys_mem_meta->phys_addr = (*(__u32 *)meta->mem);
 	else {
 		phys_mem_meta->phys_addr = meta->vbuffer.m.offset;

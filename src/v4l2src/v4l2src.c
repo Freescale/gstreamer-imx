@@ -19,6 +19,10 @@
 
 #include <config.h>
 
+// The GstPhotography interface is marked as unstable, though it has remained
+// stable in several versions now
+#define GST_USE_UNSTABLE_API
+
 #include <gst/gst.h>
 #include <gst/base/gstpushsrc.h>
 #include <gst/interfaces/photography.h>
@@ -1082,12 +1086,12 @@ static void gst_imx_v4l2src_class_init(GstImxV4l2VideoSrcClass *klass)
 }
 
 /* GstURIHandler interface */
-static GstURIType gst_imx_v4l2src_uri_get_type(GType type)
+static GstURIType gst_imx_v4l2src_uri_get_type(G_GNUC_UNUSED GType type)
 {
 	return GST_URI_SRC;
 }
 
-static const gchar *const * gst_imx_v4l2src_uri_get_protocols(GType type)
+static const gchar *const * gst_imx_v4l2src_uri_get_protocols(G_GNUC_UNUSED GType type)
 {
 	static const gchar *protocols[] = { "imxv4l2", NULL };
 
@@ -1105,7 +1109,7 @@ static gchar * gst_imx_v4l2src_uri_get_uri(GstURIHandler * handler)
 }
 
 static gboolean gst_imx_v4l2src_uri_set_uri(GstURIHandler * handler,
-		const gchar * uri, GError ** error)
+		const gchar * uri, G_GNUC_UNUSED GError ** error)
 {
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(handler);
 	const gchar *device = "/dev/video0";
@@ -1118,7 +1122,7 @@ static gboolean gst_imx_v4l2src_uri_set_uri(GstURIHandler * handler,
 	return TRUE;
 }
 
-static void gst_imx_v4l2src_uri_handler_init(gpointer g_iface, gpointer iface_data)
+static void gst_imx_v4l2src_uri_handler_init(gpointer g_iface, G_GNUC_UNUSED gpointer iface_data)
 {
 	GstURIHandlerInterface *iface = (GstURIHandlerInterface *) g_iface;
 
@@ -1383,7 +1387,7 @@ static void gst_imx_v4l2src_af_check_status(GstImxV4l2VideoSrc *v4l2src)
 	}
 }
 
-static gboolean gst_imx_v4l2src_af_status_cb(GstClock *clock, GstClockTime time,
+static gboolean gst_imx_v4l2src_af_status_cb(G_GNUC_UNUSED GstClock *clock, G_GNUC_UNUSED GstClockTime time,
 		GstClockID id, gpointer user_data)
 {
 	GstImxV4l2VideoSrc *v4l2src = GST_IMX_V4L2SRC(user_data);
@@ -1451,7 +1455,7 @@ static gboolean gst_imx_v4lsrc_prepare_for_capture(GstPhotography *photo,
 	return TRUE;
 }
 
-static void gst_imx_v4l2src_photography_init(gpointer g_iface, gpointer iface_data)
+static void gst_imx_v4l2src_photography_init(gpointer g_iface, G_GNUC_UNUSED gpointer iface_data)
 {
 	GstPhotographyInterface *iface = (GstPhotographyInterface *) g_iface;
 
