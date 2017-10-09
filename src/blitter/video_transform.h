@@ -87,6 +87,8 @@ struct _GstImxBlitterVideoTransform
 
 	/* Output canvas. Aspect ratio is *not* kept. */
 	GstImxCanvas canvas;
+	/* If true, then the output canvas needs to be updated. */
+	gboolean canvas_needs_update;
 
 	/* If true, crop rectangles in videocrop metas will be supported */
 	gboolean input_crop;

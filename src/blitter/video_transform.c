@@ -31,11 +31,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_blitter_video_transform_debug);
 enum
 {
 	PROP_0,
-	PROP_INPUT_CROP
+	PROP_INPUT_CROP,
+	PROP_OUTPUT_ROTATION
 };
 
 
 #define DEFAULT_INPUT_CROP TRUE
+#define DEFAULT_OUTPUT_ROTATION GST_IMX_CANVAS_INNER_ROTATION_NONE
 
 
 G_DEFINE_ABSTRACT_TYPE(GstImxBlitterVideoTransform, gst_imx_blitter_video_transform, GST_TYPE_BASE_TRANSFORM)
@@ -127,6 +129,18 @@ void gst_imx_blitter_video_transform_class_init(GstImxBlitterVideoTransformClass
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
+	g_object_class_install_property(
+		object_class,
+		PROP_OUTPUT_ROTATION,
+		g_param_spec_enum(
+			"output-rotation",
+			"Output rotation",
+			"Output rotation in 90-degree steps",
+			gst_imx_canvas_inner_rotation_get_type(),
+			DEFAULT_OUTPUT_ROTATION,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -140,6 +154,8 @@ void gst_imx_blitter_video_transform_init(GstImxBlitterVideoTransform *blitter_v
 	blitter_video_transform->inout_info_set = FALSE;
 	gst_video_info_init(&(blitter_video_transform->input_video_info));
 	gst_video_info_init(&(blitter_video_transform->output_video_info));
+
+	blitter_video_transform->canvas_needs_update = TRUE;
 
 	blitter_video_transform->input_crop = DEFAULT_INPUT_CROP;
 	blitter_video_transform->last_frame_with_cropdata = FALSE;
@@ -184,6 +200,15 @@ static void gst_imx_blitter_video_transform_set_property(GObject *object, guint 
 			break;
 		}
 
+		case PROP_OUTPUT_ROTATION:
+		{
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
+			blitter_video_transform->canvas.inner_rotation = g_value_get_enum(value);
+			blitter_video_transform->canvas_needs_update = TRUE;
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
+			break;
+		}
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -200,6 +225,12 @@ static void gst_imx_blitter_video_transform_get_property(GObject *object, guint 
 		case PROP_INPUT_CROP:
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
 			g_value_set_boolean(value, blitter_video_transform->input_crop);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
+			break;
+
+		case PROP_OUTPUT_ROTATION:
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
+			g_value_set_enum(value, blitter_video_transform->canvas.inner_rotation);
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 			break;
 
@@ -259,6 +290,7 @@ static GstStateChangeReturn gst_imx_blitter_video_transform_change_state(GstElem
 		case GST_STATE_CHANGE_PAUSED_TO_READY:
 		{
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(blitter_video_transform);
+			blitter_video_transform->canvas_needs_update = TRUE;
 			blitter_video_transform->last_frame_with_cropdata = FALSE;
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(blitter_video_transform);
 			break;
@@ -1176,7 +1208,7 @@ static GstFlowReturn gst_imx_blitter_video_transform_prepare_output_buffer(GstBa
 	GstImxBlitterVideoTransform *blitter_video_transform = GST_IMX_BLITTER_VIDEO_TRANSFORM(transform);
 	GstImxBlitterVideoTransformClass *klass = GST_IMX_BLITTER_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(transform));
 	GstVideoCropMeta *video_crop_meta;
-	gboolean update_canvas = FALSE;
+	gboolean update_canvas = blitter_video_transform->canvas_needs_update;
 
 	/* If either there is no input buffer or in- and output info are not equal,
 	 * it is clear there can be no passthrough mode */
@@ -1246,6 +1278,8 @@ static GstFlowReturn gst_imx_blitter_video_transform_prepare_output_buffer(GstBa
 
 		gst_imx_blitter_set_input_region(blitter_video_transform->blitter, &source_subset);
 		gst_imx_blitter_set_output_canvas(blitter_video_transform->blitter, canvas);
+
+		blitter_video_transform->canvas_needs_update = FALSE;
 	}
 
 	if ((input != NULL) && passthrough)
