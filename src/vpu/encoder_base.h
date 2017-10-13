@@ -89,6 +89,7 @@ struct _GstImxVpuEncoderBase
 	GstVideoInfo video_info;
 
 	/* These are set by the GObject properties of the encoder */
+	gboolean drop;
 	guint gop_size;
 	guint bitrate;
 	gint slice_size;
@@ -141,6 +142,7 @@ struct _GstImxVpuEncoderBaseClass
 	GstCaps* (*get_output_caps)(GstImxVpuEncoderBase *vpu_encoder_base);
 	gboolean (*set_frame_enc_params)(GstImxVpuEncoderBase *vpu_encoder_base, ImxVpuEncParams *enc_params);
 	gboolean (*process_output_buffer)(GstImxVpuEncoderBase *vpu_encoder_base, GstVideoCodecFrame *frame, GstBuffer **output_buffer);
+	gboolean (*sink_event)(GstVideoEncoder *encoder, GstEvent *event);
 };
 
 

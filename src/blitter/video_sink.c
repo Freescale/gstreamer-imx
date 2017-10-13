@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <linux/fb.h>
 #include <sys/ioctl.h>
+#include <sys/mman.h>
 #include <errno.h>
 
 #include <gst/gst.h>
@@ -42,6 +43,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_blitter_video_sink_debug);
 enum
 {
 	PROP_0,
+	PROP_DROP,
 	PROP_FORCE_ASPECT_RATIO,
 	PROP_FBDEV_NAME,
 	PROP_USE_VSYNC,
@@ -59,6 +61,7 @@ enum
 };
 
 
+#define DEFAULT_DROP FALSE
 #define DEFAULT_FORCE_ASPECT_RATIO TRUE
 #define DEFAULT_FBDEV_NAME "/dev/fb0"
 #define DEFAULT_USE_VSYNC FALSE
@@ -85,6 +88,7 @@ static GstStateChangeReturn gst_imx_blitter_video_sink_change_state(GstElement *
 static gboolean gst_imx_blitter_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
 static gboolean gst_imx_blitter_video_sink_event(GstBaseSink *sink, GstEvent *event);
 static gboolean gst_imx_blitter_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query);
+static void gst_imx_blitter_video_sink_clear_framebuffer(GstImxBlitterVideoSink *blitter_video_sink);
 static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf);
 
 static gboolean gst_imx_blitter_video_sink_open_framebuffer_device(GstImxBlitterVideoSink *blitter_video_sink);
@@ -132,6 +136,17 @@ static void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *k
 	klass->stop           = NULL;
 	klass->create_blitter = NULL;
 
+	g_object_class_install_property(
+		object_class,
+		PROP_DROP,
+		g_param_spec_boolean(
+			"drop",
+			"Drop",
+			"Drop frames",
+			DEFAULT_DROP,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 	g_object_class_install_property(
 		object_class,
 		PROP_FORCE_ASPECT_RATIO,
@@ -315,6 +330,8 @@ static void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_vide
 	gst_video_info_init(&(blitter_video_sink->output_video_info));
 
 	blitter_video_sink->is_paused = FALSE;
+	blitter_video_sink->drop = DEFAULT_DROP;
+	blitter_video_sink->drop_changed = FALSE;
 
 	memset(&(blitter_video_sink->canvas), 0, sizeof(GstImxCanvas));
 	blitter_video_sink->canvas.keep_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
@@ -353,6 +370,10 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 
 	switch (prop_id)
 	{
+		case PROP_DROP:
+			blitter_video_sink->drop = g_value_get_boolean(value);
+			blitter_video_sink->drop_changed = TRUE;
+			break;
 		case PROP_FORCE_ASPECT_RATIO:
 		{
 			gboolean b = g_value_get_boolean(value);
@@ -522,6 +543,9 @@ static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_
 
 	switch (prop_id)
 	{
+		case PROP_DROP:
+			g_value_set_boolean(value, blitter_video_sink->drop);
+			break;
 		case PROP_FORCE_ASPECT_RATIO:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			g_value_set_boolean(value, blitter_video_sink->canvas.keep_aspect_ratio);
@@ -841,11 +865,40 @@ static gboolean gst_imx_blitter_video_sink_propose_allocation(GstBaseSink *sink,
 	return TRUE;
 }
 
+static void gst_imx_blitter_video_sink_clear_framebuffer(GstImxBlitterVideoSink *blitter_video_sink)
+{
+	if (blitter_video_sink == NULL)
+		return;
+
+	if (blitter_video_sink->framebuffer_fd == -1)
+		return;
+
+	const int line_size = blitter_video_sink->fb_var.xres * blitter_video_sink->fb_var.bits_per_pixel / 8;
+	const int buffer_size = line_size * blitter_video_sink->fb_var.yres;
+	unsigned char* fb_mem = mmap(NULL,
+				buffer_size,
+				PROT_READ | PROT_WRITE,
+				MAP_SHARED,
+				blitter_video_sink->framebuffer_fd,
+				0);
+	if (fb_mem != NULL)
+		memset(fb_mem, 0, buffer_size);
+}
 
 static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *buf)
 {
 	GstImxBlitterVideoSink *blitter_video_sink = GST_IMX_BLITTER_VIDEO_SINK_CAST(video_sink);
 	GstVideoCropMeta *video_crop_meta;
+
+	if (blitter_video_sink->drop_changed) {
+		blitter_video_sink->drop_changed = FALSE;
+		gst_imx_blitter_video_sink_clear_framebuffer(blitter_video_sink);
+	}
+
+	if (blitter_video_sink->drop)
+	{
+		return GST_FLOW_OK;
+	}
 
 	GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 
@@ -1112,6 +1165,8 @@ static void gst_imx_blitter_video_sink_close_framebuffer_device(GstImxBlitterVid
 		return;
 
 	GST_INFO_OBJECT(blitter_video_sink, "closing framebuffer %s with FD %d", blitter_video_sink->framebuffer_name, blitter_video_sink->framebuffer_fd);
+
+	gst_imx_blitter_video_sink_clear_framebuffer(blitter_video_sink);
 
 	if (blitter_video_sink->blitter != NULL)
 	{
