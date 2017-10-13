@@ -98,7 +98,7 @@ gst_imx_get_bits_per_pixel(GstVideoFormat gst_format)
  *    clipped properly during blitting (if wrapping is disabled)
  */
 
-GST_DEBUG_CATEGORY (pango_debug);
+GST_DEBUG_CATEGORY_EXTERN (pango_debug);
 #define GST_CAT_DEFAULT pango_debug
 
 #define DEFAULT_PROP_TEXT 	""
@@ -3074,36 +3074,3 @@ gst_imx_g2d_base_text_overlay_change_state (GstElement * element,
 
   return ret;
 }
-
-static gboolean
-plugin_init (GstPlugin * plugin)
-{
-  if (!gst_element_register (plugin, "imxg2dtextoverlay", GST_RANK_NONE,
-          GST_TYPE_IMX_G2D_TEXT_OVERLAY) ||
-      !gst_element_register (plugin, "imxg2dtimeoverlay", GST_RANK_NONE,
-          GST_TYPE_IMX_G2D_TIME_OVERLAY) ||
-      !gst_element_register (plugin, "imxg2dclockoverlay", GST_RANK_NONE,
-          GST_TYPE_IMX_G2D_CLOCK_OVERLAY) ||
-      !gst_element_register (plugin, "imxg2dtextrender", GST_RANK_NONE,
-          GST_TYPE_IMX_G2D_TEXT_RENDER)) {
-    return FALSE;
-  }
-
-  /*texttestsrc_plugin_init(module, plugin); */
-
-  GST_DEBUG_CATEGORY_INIT (pango_debug, "imxg2dpango", 0, "IMX G2D Pango elements");
-
-  return TRUE;
-}
-
-GST_PLUGIN_DEFINE(
-    GST_VERSION_MAJOR,
-    GST_VERSION_MINOR,
-    imxg2dpango,
-    "Pango-based G2D text rendering and overlay elements for the Freescale i.MX",
-    plugin_init,
-    VERSION,
-    "LGPL",
-    GST_PACKAGE_NAME,
-    GST_PACKAGE_ORIGIN
-)

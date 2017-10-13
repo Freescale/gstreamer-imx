@@ -64,7 +64,6 @@ def options(opt):
 	opt.recurse('src/eglvivsink')
 	opt.recurse('src/v4l2src')
 	opt.recurse('src/audio')
-	opt.recurse('src/g2dpango')
 
 
 def check_linux_headers(conf):
@@ -171,6 +170,7 @@ def configure(conf):
 		conf.env['WITH_GSTBADALLOCATORS'] = True
 	if conf.check_cc(lib = 'gstphotography-1.0', uselib_store = 'GSTPHOTOGRAPHY', mandatory = 0):
 		conf.env['WITH_GSTPHOTOGRAPHY'] = True
+
 	if conf.check_cfg(package = 'pango >= 1.40.0', uselib_store = 'PANGO', args = '--cflags --libs', mandatory = 0):
 		conf.env['WITH_PANGO'] = True
 	if conf.check_cfg(package = 'cairo >= 1.14.0', uselib_store = 'CAIRO', args = '--cflags --libs', mandatory = 0):
@@ -213,7 +213,6 @@ def configure(conf):
 	if not conf.options.build_for_android:
 		conf.recurse('src/v4l2src')
 	conf.recurse('src/audio')
-	conf.recurse('src/g2dpango')
 
 
 	conf.write_config_header('config.h')
@@ -233,5 +232,4 @@ def build(bld):
 	bld.recurse('src/audio')
 	bld.recurse('src/blitter')
 	bld.recurse('src/compositor')
-	bld.recurse('src/g2dpango')
 

@@ -3,6 +3,7 @@
 
 def options(opt):
 	opt.add_option('--disable-g2d', action = 'store_true', default = False, help = 'disable G2D plugin [default: enabled]')
+	opt.recurse('pango')
 
 
 def configure(conf):
@@ -20,15 +21,21 @@ def configure(conf):
 	else:
 		Logs.pprint('RED', 'G2D elements will not be built - headers and/or libraries not found')
 
+	conf.recurse('pango')
+
+
 
 def build(bld):
+	pango_source = []
+	if bld.env['G2D_PANGO_ELEMENTS_ENABLED']:
+		pango_source += bld.path.ant_glob('pango/*.c')
 	if bld.env['G2D_ELEMENTS_ENABLED']:
 		bld(
 			features = ['c', bld.env['CLIBTYPE']],
 			includes = ['.', '../..'],
-			uselib = bld.env['COMMON_USELIB'] + ['IMXG2D'],
+			uselib = bld.env['COMMON_USELIB'] + ['PANGO', 'CAIRO', 'PANGOCAIRO', 'IMXG2D'],
 			use = ['gstimxcommon', 'gstimxblitter', 'gstimxcompositor'],
 			target = 'gstimxg2d',
-			source = bld.path.ant_glob('*.c'),
+			source = bld.path.ant_glob('*.c') + pango_source,
 			install_path = bld.env['PLUGIN_INSTALL_PATH']
 		)

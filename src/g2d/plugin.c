@@ -23,6 +23,14 @@
 #include "video_transform.h"
 #include "compositor.h"
 
+#ifdef WITH_G2D_PANGO_ELEMENTS
+GST_DEBUG_CATEGORY(pango_debug);
+#include "pango/textoverlay.h"
+#include "pango/timeoverlay.h"
+#include "pango/clockoverlay.h"
+#include "pango/textrender.h"
+#endif
+
 
 
 static gboolean plugin_init(GstPlugin *plugin)
@@ -32,6 +40,15 @@ static gboolean plugin_init(GstPlugin *plugin)
 	ret = ret && gst_element_register(plugin, "imxg2dvideosink", GST_RANK_PRIMARY + 1, gst_imx_g2d_video_sink_get_type());
 	ret = ret && gst_element_register(plugin, "imxg2dvideotransform", GST_RANK_PRIMARY + 1, gst_imx_g2d_video_transform_get_type());
 	ret = ret && gst_element_register(plugin, "imxg2dcompositor", GST_RANK_NONE, gst_imx_g2d_compositor_get_type());
+
+#ifdef WITH_G2D_PANGO_ELEMENTS
+	GST_DEBUG_CATEGORY_INIT (pango_debug, "imxg2dpango", 0, "IMX G2D Pango elements");
+
+	ret = ret && gst_element_register(plugin, "imxg2dtextoverlay", GST_RANK_NONE, GST_TYPE_IMX_G2D_TEXT_OVERLAY);
+	ret = ret && gst_element_register(plugin, "imxg2dtimeoverlay", GST_RANK_NONE, GST_TYPE_IMX_G2D_TIME_OVERLAY);
+	ret = ret && gst_element_register(plugin, "imxg2dclockoverlay", GST_RANK_NONE, GST_TYPE_IMX_G2D_CLOCK_OVERLAY);
+	ret = ret && gst_element_register(plugin, "imxg2dtextrender", GST_RANK_NONE, GST_TYPE_IMX_G2D_TEXT_RENDER);
+#endif
 
 	return ret;
 }
