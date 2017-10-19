@@ -25,12 +25,31 @@ GST_DEBUG_CATEGORY_STATIC(imx_g2d_allocator_debug);
 #define GST_CAT_DEFAULT imx_g2d_allocator_debug
 
 
+/* In earlier version, cacheable memory was used. However,
+ * it appears that some G2D versions have bugs related to
+ * cacheable allocation:
+ *
+ * https://github.com/Freescale/gstreamer-imx/issues/172
+ * https://github.com/Freescale/gstreamer-imx/issues/169
+ *
+ * For this reason, we disable cacheable allocation by default. */
+/*#define USE_CACHEABLE_ALLOCATION*/
+
+
+#ifdef USE_CACHEABLE_ALLOCATION
+#define G2D_CACHEABLE_PARAM
+#else
+#define G2D_CACHEABLE_PARAM G_GNUC_UNUSED
+#endif
+
 
 static void gst_imx_g2d_allocator_finalize(GObject *object);
 
 static gboolean gst_imx_g2d_alloc_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size);
 static gboolean gst_imx_g2d_free_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory);
+#ifdef USE_CACHEABLE_ALLOCATION
 static void gst_imx_g2d_cache_op(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, enum g2d_cache_mode cache_mode);
+#endif
 static gpointer gst_imx_g2d_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size, GstMapFlags flags);
 static void gst_imx_g2d_unmap_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory);
 
@@ -51,8 +70,12 @@ GstAllocator* gst_imx_g2d_allocator_new(void)
 
 static gboolean gst_imx_g2d_alloc_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, gssize size)
 {
-	/* allocate cacheable physically contiguous memory block */
+	/* allocate physically contiguous memory block */
+#ifdef USE_CACHEABLE_ALLOCATION
 	struct g2d_buf *buf = g2d_alloc(size, 1);
+#else
+	struct g2d_buf *buf = g2d_alloc(size, 0);
+#endif
 
 	if (buf == NULL)
 	{
@@ -93,7 +116,8 @@ static gboolean gst_imx_g2d_free_phys_mem(GstImxPhysMemAllocator *allocator, Gst
 }
 
 
-static void gst_imx_g2d_cache_op(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, enum g2d_cache_mode cache_mode)
+#ifdef USE_CACHEABLE_ALLOCATION
+static void gst_imx_g2d_cache_op(G2D_CACHEABLE_PARAM GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, enum g2d_cache_mode cache_mode)
 {
 	gchar const *desc = NULL;
 	struct g2d_buf *buf = (struct g2d_buf *)(memory->internal);
@@ -115,26 +139,31 @@ static void gst_imx_g2d_cache_op(GstImxPhysMemAllocator *allocator, GstImxPhysMe
 		GST_ERROR_OBJECT(allocator, "%s cacheable memory failed, vaddr %p paddr %" GST_IMX_PHYS_ADDR_FORMAT, desc, memory->mapped_virt_addr, memory->phys_addr);
 	}
 }
+#endif
 
 
-static gpointer gst_imx_g2d_map_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, G_GNUC_UNUSED gssize size, GstMapFlags flags)
+static gpointer gst_imx_g2d_map_phys_mem(G2D_CACHEABLE_PARAM GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory, G_GNUC_UNUSED gssize size, G2D_CACHEABLE_PARAM GstMapFlags flags)
 {
+#ifdef USE_CACHEABLE_ALLOCATION
 	/* invalidate cache in map() if the MAP_READ flag is set
 	 * to ensure any data that is read from the mapped memory
 	 * is up to date */
 	if (flags & GST_MAP_READ)
 		gst_imx_g2d_cache_op(allocator, memory, G2D_CACHE_INVALIDATE);
+#endif
 
 	return memory->mapped_virt_addr;
 }
 
 
-static void gst_imx_g2d_unmap_phys_mem(GstImxPhysMemAllocator *allocator, GstImxPhysMemory *memory)
+static void gst_imx_g2d_unmap_phys_mem(G2D_CACHEABLE_PARAM GstImxPhysMemAllocator *allocator, G2D_CACHEABLE_PARAM GstImxPhysMemory *memory)
 {
+#ifdef USE_CACHEABLE_ALLOCATION
 	/* clean cache in map() if the MAP_WRITE flag is set
 	 * to ensure the cache gets filled with up to date data */
 	if (memory->mapping_flags & GST_MAP_WRITE)
 		gst_imx_g2d_cache_op(allocator, memory, G2D_CACHE_CLEAN);
+#endif
 }
 
 
