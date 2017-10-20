@@ -16,8 +16,10 @@ def configure(conf):
 		return
 
 	from waflib.Build import Logs
-	if conf.check_cc(mandatory = 0, libpath = [conf.options.g2d_libs], lib = 'g2d', uselib_store = 'IMXG2D') and \
-	   conf.check_cc(mandatory = 0, includes = [conf.options.g2d_includes], header_name = 'g2d.h', uselib_store = 'IMXG2D'):
+	g2d_libpath = [conf.options.g2d_libs] if conf.options.g2d_libs else []
+	g2d_includes = [conf.options.g2d_includes] if conf.options.g2d_includes else []
+	if conf.check_cc(mandatory = 0, libpath = g2d_libpath, lib = 'g2d', uselib_store = 'IMXG2D') and \
+	   conf.check_cc(mandatory = 0, includes = g2d_includes, header_name = 'g2d.h', uselib_store = 'IMXG2D'):
 		Logs.pprint('GREEN', 'G2D elements will be built')
 		conf.env['G2D_ELEMENTS_ENABLED'] = 1
 	else:
