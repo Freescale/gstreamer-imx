@@ -2,6 +2,8 @@
 
 
 def options(opt):
+	opt.add_option('--g2d-includes', action = 'store', default = '', help = 'path to the directory where the g2d.h header is')
+	opt.add_option('--g2d-libs', action = 'store', default = '', help = 'path to the directory where the g2d library is')
 	opt.add_option('--disable-g2d', action = 'store_true', default = False, help = 'disable G2D plugin [default: enabled]')
 	opt.recurse('pango')
 
@@ -14,8 +16,8 @@ def configure(conf):
 		return
 
 	from waflib.Build import Logs
-	if conf.check_cc(mandatory = 0, lib = 'g2d', uselib_store = 'IMXG2D') and \
-	   conf.check_cc(mandatory = 0, header_name = 'g2d.h', uselib_store = 'IMXG2D'):
+	if conf.check_cc(mandatory = 0, libpath = [conf.options.g2d_libs], lib = 'g2d', uselib_store = 'IMXG2D') and \
+	   conf.check_cc(mandatory = 0, includes = [conf.options.g2d_includes], header_name = 'g2d.h', uselib_store = 'IMXG2D'):
 		Logs.pprint('GREEN', 'G2D elements will be built')
 		conf.env['G2D_ELEMENTS_ENABLED'] = 1
 	else:
