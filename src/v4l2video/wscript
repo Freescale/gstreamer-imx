@@ -1,0 +1,48 @@
+#!/usr/bin/env python
+
+
+def options(opt):
+	opt.add_option('--disable-imxv4l2video', action = 'store_true', default = False, help = 'disable imxv4l2video plugin [default: enabled]')
+	opt.add_option('--disable-imxv4l2videosrc', action = 'store_true', default = False, help = 'disable imxv4l2videosrc element [default: enabled]')
+	opt.add_option('--disable-imxv4l2videosink', action = 'store_true', default = False, help = 'disable imxv4l2videosink element [default: enabled]')
+
+
+def configure(conf):
+	from waflib.Build import Logs
+
+	if conf.options.disable_imxv4l2video or not conf.env['WITH_GSTPHOTOGRAPHY']:
+		return
+
+	if not conf.env['WITH_GSTPHOTOGRAPHY']:
+		return
+
+	if not conf.env['WITH_GSTVIDEO']:
+		return
+
+	conf.env['IMXV4L2SRCFILES'] = []
+
+	if not conf.options.disable_imxv4l2videosrc:
+		Logs.pprint('GREEN', 'building imxv4l2videosrc element')
+		conf.env['IMXV4L2SRCFILES'] += ['v4l2src.c']
+
+	if not conf.options.disable_imxv4l2videosink:
+		Logs.pprint('GREEN', 'building imxv4l2videosink element')
+		conf.env['IMXV4L2SRCFILES'] += ['v4l2sink.c']
+
+	if not conf.env['IMXV4L2SRCFILES']:
+		Logs.pprint('YELLOW', 'imxv4l2video plugin enabled, but all elements disabled - not building plugin')
+		return
+
+
+def build(bld):
+	if bld.env['IMXV4L2SRCFILES']:
+		bld(
+			features = ['c', bld.env['CLIBTYPE']],
+			includes = ['.', '../..'],
+			uselib = bld.env['COMMON_USELIB'],
+			use = 'gstimxcommon GSTPHOTOGRAPHY',
+			target = 'gstimxv4l2video',
+			source = ['v4l2_buffer_pool.c'] + bld.env['IMXV4L2SRCFILES'],
+			install_path = bld.env['PLUGIN_INSTALL_PATH']
+		)
+

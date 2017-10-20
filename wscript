@@ -62,7 +62,7 @@ def options(opt):
 	opt.recurse('src/ipu')
 	opt.recurse('src/vpu')
 	opt.recurse('src/eglvivsink')
-	opt.recurse('src/v4l2src')
+	opt.recurse('src/v4l2video')
 	opt.recurse('src/audio')
 
 
@@ -211,7 +211,7 @@ def configure(conf):
 	conf.recurse('src/vpu')
 	conf.recurse('src/eglvivsink')
 	if not conf.options.build_for_android:
-		conf.recurse('src/v4l2src')
+		conf.recurse('src/v4l2video')
 	conf.recurse('src/audio')
 
 
@@ -228,7 +228,7 @@ def build(bld):
 	bld.recurse('src/vpu')
 	bld.recurse('src/eglvivsink')
 	if not bld.env['BUILD_FOR_ANDROID']:
-		bld.recurse('src/v4l2src')
+		bld.recurse('src/v4l2video')
 	bld.recurse('src/audio')
 	bld.recurse('src/blitter')
 	bld.recurse('src/compositor')
