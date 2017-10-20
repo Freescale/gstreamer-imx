@@ -20,6 +20,14 @@
 #ifndef GST_IMX_V4L2SRC_H
 #define GST_IMX_V4L2SRC_H
 
+// The GstPhotography interface is marked as unstable, though it has remained
+// stable in several versions now
+#define GST_USE_UNSTABLE_API
+
+#include <gst/gst.h>
+#include <gst/base/base.h>
+#include <gst/video/video.h>
+#include <gst/interfaces/photography.h>
 #include "../common/fd_object.h"
 
 G_BEGIN_DECLS

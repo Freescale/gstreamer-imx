@@ -19,13 +19,7 @@
 
 #include <config.h>
 
-// The GstPhotography interface is marked as unstable, though it has remained
-// stable in several versions now
-#define GST_USE_UNSTABLE_API
-
 #include <gst/gst.h>
-#include <gst/base/gstpushsrc.h>
-#include <gst/interfaces/photography.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <string.h>
@@ -35,7 +29,6 @@
 #include <errno.h>
 #include <linux/videodev2.h>
 #include "v4l2src.h"
-#include "v4l2sink.h"
 #include "v4l2_buffer_pool.h"
 
 #define DEFAULT_CAPTURE_MODE 0
@@ -1482,23 +1475,3 @@ static void gst_imx_v4l2src_photography_init(gpointer g_iface, G_GNUC_UNUSED gpo
 	iface->set_autofocus = gst_imx_v4l2src_set_autofocus;
 	iface->prepare_for_capture = gst_imx_v4lsrc_prepare_for_capture;
 }
-
-static gboolean plugin_init(GstPlugin *plugin)
-{
-	return gst_element_register(plugin, "imxv4l2videosrc", GST_RANK_PRIMARY,
-			gst_imx_v4l2src_get_type()) &&
-		gst_element_register(plugin, "imxv4l2videosink", GST_RANK_PRIMARY,
-			gst_imx_v4l2sink_get_type());
-}
-
-GST_PLUGIN_DEFINE(
-		GST_VERSION_MAJOR,
-		GST_VERSION_MINOR,
-		imxv4l2videosrc,
-		"GStreamer i.MX V4L2 CSI video source",
-		plugin_init,
-		VERSION,
-		"LGPL",
-		GST_PACKAGE_NAME,
-		GST_PACKAGE_ORIGIN
-)
