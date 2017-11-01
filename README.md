@@ -127,12 +127,57 @@ Available plugins
 * `imxg2dvideosink` : video sink using the GPU's 2D core (through the G2D API) to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxg2dvideotransform` : video transform element using the GPU's 2D core (through the G2D API), capable of scaling, rotating (in 90 degree steps), flipping frames, and converting between color spaces
 * `imxg2dcompositor` : video compositor element using the IPU for combining multiple input video streams into one output video stream
+* `imxg2dtextoverlay` : Adds text strings on top of a video buffer using Pango and G2D
+* `imxg2dtimeoverlay` : Overlays buffer time stamps on a video stream using Pango and G2D
+* `imxg2dclockoverlay` : Overlays the current clock time on a video stream using Pango and G2D
+* `imxg2dtextrender` : Renders a text string to an image bitmap using Pango and G2D
 * `imxpxpvideosink` : video sink using the PxP engine to output to Framebuffer (may not work well if X11 or Wayland are running)
 * `imxpxpvideotransform` : video transform element using the PxP engine, capable of scaling, rotating (in 90 degree steps), flipping frames, and converting between color spaces
 * `imxeglvivsink` : custom OpenGL ES 2.x based video sink; using the Vivante direct textures, which allow for smooth playback
 * `imxv4l2videosrc` : customized Video4Linux source with i.MX specific tweaks
+* `imxv4l2videosink` : customized Video4Linux sink with i.MX specific tweaks
 * `imxuniaudiodec` : audio decoder plugin based on Freescale's unified audio (UniAudio) architecture
 * `imxmp3audioenc` : MP3 audio encoder plugin based on Freescale's MP3 encoder
+
+
+Pango text overlay elements
+---------------------------
+
+The `imxg2dtextoverlay`, `imxg2dtimeoverlay`, `imxg2dclockoverlay`, `imxg2dtextrender` elements render text using
+Pango and G2D. Currently these elements do _not_ support non-physically contiguous buffers. This means that for
+example this pipeline won't work:
+
+    videotestsrc ! imxg2dtimeoverlay ! imxg2dvideosink
+
+For this reason, it is necessary to make sure that the video stream is made of physically contiguous buffers
+(allocated with an allocator derived from GstPhysMemAllocator). Captured frames from `imxv4l2videosrc`, decoded
+frames from `imxvpudec`, and transformed frames from any of the blitter-based transform elements will deliver
+this type of buffers (however, the transform elements will do so only if they actually have something to transform;
+if they switch to passthrough, data will be left untouched). This limitation will be lifted in later versions.
+
+
+V4L2 elements
+-------------
+
+There are two V4L2 elements, `imxv4l2videosrc` and `imxg2dvideosink`. Both are necessary because they allow for
+using physical memory addresses for the captured frames, thus enabling zerocopy. `imxv4l2videosrc` extract such
+an address for each captured frame, while `imxg2dvideosink` draws the frame via DMA using that address. Note
+however that `imxg2dvideosink` does _not_ support non-physically contiguous frames. This is because it is currently
+not possible to allocate any temporary input DMA buffer inside `imxg2dvideosink` (due to a lack of an appropriate
+allocator).
+
+
+Integration with GStreamer and other external elements
+------------------------------------------------------
+
+There are two ways how gstreamer-imx video streams can be integrated into external elements:
+
+* Use gstimxcommon: This library has been made public. This way, it is possible to use its headers to get
+  access to the physical memory address of DMA-memory allocated buffers.
+  NOTE: The ABI of this library is not yet stable, and may change.
+* Use GstPhysMemory from gst-plugins-bad: This new interface from -bad is used inside gstreamer-imx if the
+  GStreamer version it is built against has the new gstreamer-bad-allocators library.
+  If so, then GstImxPhysMemAllocator will implement this interface.
 
 
 Dependencies
@@ -191,8 +236,8 @@ Further notes on how to build for some Linux distributions:
 * Arch Linux ARM build instructions:
 
 * Yocto / OpenEmbedded build instructions:
-  An OpenEmbedded recipe for gstreamer-imx is included in [meta-fsl-arm](http://git.yoctoproject.org/cgit/cgit.cgi/meta-fsl-arm).
+  An OpenEmbedded recipe for gstreamer-imx is included in [meta-freescale](https://git.yoctoproject.org/cgit/cgit.cgi/meta-freescale).
   Also check out the [Freescale Github space](http://freescale.github.io/).
-  Add the meta-fsl-arm layer to your setup's `bblayers.conf`. Then it should be possiblet to
+  Add the meta-freescale layer to your setup's `bblayers.conf`. Then it should be possiblet to
   build the `gstreamer1.0-plugins-imx` recipe. This will also automatically build libimxvpuapi,
-  which too has a recipe in meta-fsl-arm.
+  which too has a recipe in meta-freescale.
