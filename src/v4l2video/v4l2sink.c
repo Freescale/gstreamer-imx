@@ -26,6 +26,12 @@
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
 
+// Kernels older than 4.2 do not have V4L2 headers with this macro.
+// (It was introduced in linux in commit e01dfc01914ab .)
+#ifndef V4L2_COLORSPACE_DEFAULT
+#define V4L2_COLORSPACE_DEFAULT 0
+#endif
+
 #include "../common/phys_mem_allocator.h"
 
 static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
