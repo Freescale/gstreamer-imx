@@ -146,6 +146,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	GstVideoInfo *info;
 	GstVideoCropMeta *meta_crop;
 	struct v4l2_capability cap = {0};
+	gboolean is_mxc_v4l2, is_tw6869;
 
 	buf = gst_buffer_new();
 	if (buf == NULL)
@@ -157,6 +158,7 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 	GST_DEBUG_OBJECT(pool, "alloc %u %p", pool->num_allocated, (gpointer)buf);
 
 	meta = GST_IMX_V4L2_META_ADD(buf);
+	memset(&(meta->vbuffer), 0, sizeof(meta->vbuffer));
 	meta->vbuffer.index = pool->num_allocated;
 	meta->vbuffer.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	meta->vbuffer.memory = V4L2_MEMORY_MMAP;
@@ -183,17 +185,28 @@ static GstFlowReturn gst_imx_v4l2_buffer_pool_alloc_buffer(GstBufferPool *bpool,
 		return GST_FLOW_ERROR;
 	}
 
-	phys_mem_meta = GST_IMX_PHYS_MEM_META_ADD(buf);
-
-	/* XXX: This is only required for the tw6869 driver */
 	ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QUERYCAP, &cap);
-	if (strncmp((char const *)(cap.card), "tw6869", 6) == 0)
-		phys_mem_meta->phys_addr = (*(__u32 *)meta->mem);
-	else {
-		phys_mem_meta->phys_addr = meta->vbuffer.m.offset;
+	GST_DEBUG_OBJECT(pool, "driver name: \"%s\"  card type: \"%s\"", cap.driver, cap.card);
+	is_mxc_v4l2 = (strncmp((char const *)(cap.driver), "mxc_v4l2", 8) == 0);
+	is_tw6869 = (strncmp((char const *)(cap.card), "tw6869", 6) == 0);
+	if (is_mxc_v4l2 || is_tw6869)
+	{
+		phys_mem_meta = GST_IMX_PHYS_MEM_META_ADD(buf);
 
-		/* Safeguard to catch data loss if in any future i.MX version the types do not match */
-		g_assert(meta->vbuffer.m.offset == (__u32)(phys_mem_meta->phys_addr));
+		/* XXX: This is only required for the tw6869 driver */
+		if (is_tw6869)
+			phys_mem_meta->phys_addr = (*(__u32 *)meta->mem);
+		else {
+			phys_mem_meta->phys_addr = meta->vbuffer.m.offset;
+
+			/* Safeguard to catch data loss if in any future i.MX version the types do not match */
+			g_assert(meta->vbuffer.m.offset == (__u32)(phys_mem_meta->phys_addr));
+		}
+		GST_LOG_OBJECT(pool, "vbuffer virt addr %p phys addr %" GST_IMX_PHYS_ADDR_FORMAT, meta->mem, phys_mem_meta->phys_addr);
+	}
+	else
+	{
+		GST_LOG_OBJECT(pool, "vbuffer virt addr %p no physaddr", meta->mem);
 	}
 
 	if (pool->add_videometa)

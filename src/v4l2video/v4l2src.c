@@ -228,10 +228,7 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 
 	input = v4l2src->input;
 	if (ioctl(fd_v4l, VIDIOC_S_INPUT, &input) < 0)
-	{
-		GST_ERROR_OBJECT(v4l2src, "VIDIOC_S_INPUT failed: %s", strerror(errno));
-		goto fail;
-	}
+		GST_WARNING_OBJECT(v4l2src, "VIDIOC_S_INPUT failed: %s", strerror(errno));
 
 	parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	parm.parm.capture.timeperframe.numerator = v4l2src->fps_d;
