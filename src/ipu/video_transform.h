@@ -23,6 +23,7 @@
 
 #include <gst/gst.h>
 #include "../blitter/video_transform.h"
+#include "blitter.h"
 
 
 G_BEGIN_DECLS
@@ -45,6 +46,7 @@ struct _GstImxIpuVideoTransform
 
 	GstImxBlitter *blitter;
 	gboolean deinterlacing_enabled;
+	GstImxIpuBlitterDeinterlaceMethod deinterlacing_method;
 };
 
 

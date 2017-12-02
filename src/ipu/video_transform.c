@@ -30,7 +30,8 @@ GST_DEBUG_CATEGORY_STATIC(imx_ipu_video_transform_debug);
 enum
 {
 	PROP_0,
-	PROP_DEINTERLACE
+	PROP_DEINTERLACE,
+	PROP_DEINTERLACE_METHOD
 };
 
 
@@ -116,6 +117,18 @@ static void gst_imx_ipu_video_transform_class_init(GstImxIpuVideoTransformClass 
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
+	g_object_class_install_property(
+		object_class,
+		PROP_DEINTERLACE_METHOD,
+		g_param_spec_enum(
+			"deinterlace-method",
+			"Deinterlace method",
+			"Deinterlace method to use",
+			gst_imx_ipu_blitter_deinterlace_method_get_type(),
+			GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT_METHOD,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -123,6 +136,7 @@ static void gst_imx_ipu_video_transform_init(GstImxIpuVideoTransform *ipu_video_
 {
 	ipu_video_transform->blitter = NULL;
 	ipu_video_transform->deinterlacing_enabled = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
+	ipu_video_transform->deinterlacing_method = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT_METHOD;
 }
 
 
@@ -138,6 +152,14 @@ static void gst_imx_ipu_video_transform_set_property(GObject *object, guint prop
 			ipu_video_transform->deinterlacing_enabled = g_value_get_boolean(value);
 			if (ipu_video_transform->blitter != NULL)
 				gst_imx_ipu_blitter_enable_deinterlacing((GstImxIpuBlitter *)(ipu_video_transform->blitter), ipu_video_transform->deinterlacing_enabled);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
+			break;
+
+		case PROP_DEINTERLACE_METHOD:
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
+			ipu_video_transform->deinterlacing_method = g_value_get_enum(value);
+			if (ipu_video_transform->blitter != NULL)
+				gst_imx_ipu_blitter_set_deinterlacing_method((GstImxIpuBlitter *)(ipu_video_transform->blitter), ipu_video_transform->deinterlacing_method);
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
 			break;
 
@@ -157,6 +179,12 @@ static void gst_imx_ipu_video_transform_get_property(GObject *object, guint prop
 		case PROP_DEINTERLACE:
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
 			g_value_set_boolean(value, ipu_video_transform->deinterlacing_enabled);
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
+			break;
+
+		case PROP_DEINTERLACE_METHOD:
+			GST_IMX_BLITTER_VIDEO_TRANSFORM_LOCK(ipu_video_transform);
+			g_value_set_enum(value, ipu_video_transform->deinterlacing_method);
 			GST_IMX_BLITTER_VIDEO_TRANSFORM_UNLOCK(ipu_video_transform);
 			break;
 
@@ -180,6 +208,7 @@ static gboolean gst_imx_ipu_video_transform_start(GstImxBlitterVideoTransform *b
 
 	ipu_video_transform->blitter = (GstImxBlitter *)gst_object_ref(blitter);
 	gst_imx_ipu_blitter_enable_deinterlacing((GstImxIpuBlitter *)(ipu_video_transform->blitter), ipu_video_transform->deinterlacing_enabled);
+	gst_imx_ipu_blitter_set_deinterlacing_method((GstImxIpuBlitter *)(ipu_video_transform->blitter), ipu_video_transform->deinterlacing_method);
 
 	return TRUE;
 }

@@ -70,6 +70,8 @@ static guint32 gst_imx_ipu_blitter_get_v4l_format(GstVideoFormat format);
 static int gst_imx_ipu_video_bpp(GstVideoFormat fmt);
 static void gst_imx_ipu_blitter_set_output_rotation(GstImxIpuBlitter *ipu_blitter, GstImxCanvasInnerRotation rotation);
 
+static int gst_imx_ipu_blitter_deinterlace_method_to_ipu_task(GstImxIpuBlitterDeinterlaceMethod method);
+
 
 
 
@@ -110,6 +112,7 @@ static void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 	ipu_blitter->allocator = NULL;
 	ipu_blitter->input_frame = NULL;
 	ipu_blitter->output_frame = NULL;
+	ipu_blitter->last_frame = NULL;
 	ipu_blitter->use_entire_input_frame = TRUE;
 
 	ipu_blitter->priv = g_slice_alloc(sizeof(GstImxIpuBlitterPrivate));
@@ -124,6 +127,7 @@ static void gst_imx_ipu_blitter_init(GstImxIpuBlitter *ipu_blitter)
 	ipu_blitter->num_cleared_output_pages = 0;
 
 	ipu_blitter->deinterlacing_enabled = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
+	ipu_blitter->deinterlacing_method = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT_METHOD;
 }
 
 
@@ -155,6 +159,12 @@ void gst_imx_ipu_blitter_enable_deinterlacing(GstImxIpuBlitter *ipu_blitter, gbo
 }
 
 
+void gst_imx_ipu_blitter_set_deinterlacing_method(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterDeinterlaceMethod method)
+{
+	ipu_blitter->deinterlacing_method = method;
+}
+
+
 static void gst_imx_ipu_blitter_finalize(GObject *object)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(object);
@@ -165,6 +175,8 @@ static void gst_imx_ipu_blitter_finalize(GObject *object)
 		gst_buffer_unref(ipu_blitter->output_frame);
 	if (ipu_blitter->fill_frame != NULL)
 		gst_buffer_unref(ipu_blitter->fill_frame);
+	if (ipu_blitter->last_frame != NULL)
+		gst_buffer_unref(ipu_blitter->last_frame);
 
 	if (ipu_blitter->allocator != NULL)
 		gst_object_unref(ipu_blitter->allocator);
@@ -263,6 +275,7 @@ static gboolean gst_imx_ipu_blitter_set_num_output_pages(GstImxBlitter *blitter,
 static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBlitter *blitter, GstBuffer *input_frame)
 {
 	GstImxIpuBlitter *ipu_blitter = GST_IMX_IPU_BLITTER(blitter);
+	gst_buffer_replace(&(ipu_blitter->last_frame), ipu_blitter->input_frame);
 	gst_buffer_replace(&(ipu_blitter->input_frame), input_frame);
 
 	if (ipu_blitter->input_frame != NULL)
@@ -317,12 +330,24 @@ static gboolean gst_imx_ipu_blitter_set_input_frame(GstImxBlitter *blitter, GstB
 				ipu_blitter->priv->main_task.input.deinterlace.field_fmt = IPU_DEINTERLACE_FIELD_BOTTOM;
 			}
 
-			ipu_blitter->priv->main_task.input.deinterlace.motion = HIGH_MOTION;
+			ipu_blitter->priv->main_task.input.deinterlace.motion = gst_imx_ipu_blitter_deinterlace_method_to_ipu_task(ipu_blitter->deinterlacing_method);
 		}
 		else
 			ipu_blitter->priv->main_task.input.deinterlace.motion = MED_MOTION;
 
 		gst_imx_ipu_blitter_set_task_params(ipu_blitter, input_frame, &(ipu_blitter->priv->main_task), &(ipu_blitter->input_video_info), TRUE);
+
+		if (ipu_blitter->priv->main_task.input.deinterlace.enable && (ipu_blitter->deinterlacing_method != GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_HIGH_MOTION) && (ipu_blitter->last_frame != NULL))
+		{
+			GstImxPhysMemMeta *phys_mem_meta;
+			phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(ipu_blitter->last_frame);
+			g_assert((phys_mem_meta != NULL) && (phys_mem_meta->phys_addr != 0));
+
+			ipu_blitter->priv->main_task.input.paddr_n = ipu_blitter->priv->main_task.input.paddr;
+			ipu_blitter->priv->main_task.input.paddr = (dma_addr_t)(phys_mem_meta->phys_addr);
+		}
+		else
+			ipu_blitter->priv->main_task.input.deinterlace.motion = HIGH_MOTION;
 
 		if (ipu_blitter->use_entire_input_frame)
 		{
@@ -644,4 +669,42 @@ static void gst_imx_ipu_blitter_set_output_rotation(GstImxIpuBlitter *ipu_blitte
 			ipu_blitter->priv->main_task.output.rotate = IPU_ROTATE_VERT_FLIP;
 			break;
 	}
+}
+
+
+static int gst_imx_ipu_blitter_deinterlace_method_to_ipu_task(GstImxIpuBlitterDeinterlaceMethod method)
+{
+	switch (method)
+	{
+		case GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_LOW_MOTION:    return LOW_MOTION;
+		case GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_HIGH_MOTION:   return HIGH_MOTION;
+		case GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_MEDIAN_FILTER: return MED_MOTION;
+		default: return MED_MOTION;
+	}
+}
+
+
+
+
+GType gst_imx_ipu_blitter_deinterlace_method_get_type(void)
+{
+	static GType gst_imx_ipu_blitter_deinterlace_method_type = 0;
+
+	if (!gst_imx_ipu_blitter_deinterlace_method_type)
+	{
+		static GEnumValue deinterlace_method_values[] =
+		{
+			{ GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_LOW_MOTION, "Low-motion deinterlacing", "low-motion" },
+			{ GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_HIGH_MOTION, "High-motion deinterlacing", "high-motion" },
+			{ GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_MEDIAN_FILTER, "Median-filter deinterlacing", "median-filter" },
+			{ 0, NULL, NULL },
+		};
+
+		gst_imx_ipu_blitter_deinterlace_method_type = g_enum_register_static(
+			"ImxIpuBlitterDeinterlaceMethod",
+			deinterlace_method_values
+		);
+	}
+
+	return gst_imx_ipu_blitter_deinterlace_method_type;
 }

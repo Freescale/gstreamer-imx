@@ -30,7 +30,8 @@ GST_DEBUG_CATEGORY_STATIC(imx_ipu_video_sink_debug);
 enum
 {
 	PROP_0,
-	PROP_DEINTERLACE
+	PROP_DEINTERLACE,
+	PROP_DEINTERLACE_METHOD
 };
 
 
@@ -97,6 +98,18 @@ void gst_imx_ipu_video_sink_class_init(GstImxIpuVideoSinkClass *klass)
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
+	g_object_class_install_property(
+		object_class,
+		PROP_DEINTERLACE_METHOD,
+		g_param_spec_enum(
+			"deinterlace-method",
+			"Deinterlace method",
+			"Deinterlace method to use",
+			gst_imx_ipu_blitter_deinterlace_method_get_type(),
+			GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT_METHOD,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -104,6 +117,7 @@ void gst_imx_ipu_video_sink_init(G_GNUC_UNUSED GstImxIpuVideoSink *ipu_video_sin
 {
 	ipu_video_sink->blitter = NULL;
 	ipu_video_sink->deinterlacing_enabled = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT;
+	ipu_video_sink->deinterlacing_method = GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT_METHOD;
 }
 
 
@@ -121,6 +135,14 @@ static void gst_imx_ipu_video_sink_set_property(GObject *object, guint prop_id, 
 			ipu_video_sink->deinterlacing_enabled = g_value_get_boolean(value);
 			if (ipu_video_sink->blitter != NULL)
 				gst_imx_ipu_blitter_enable_deinterlacing((GstImxIpuBlitter *)(ipu_video_sink->blitter), ipu_video_sink->deinterlacing_enabled);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
+			break;
+
+		case PROP_DEINTERLACE_METHOD:
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
+			ipu_video_sink->deinterlacing_method = g_value_get_enum(value);
+			if (ipu_video_sink->blitter != NULL)
+				gst_imx_ipu_blitter_set_deinterlacing_method((GstImxIpuBlitter *)(ipu_video_sink->blitter), ipu_video_sink->deinterlacing_method);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
 			break;
 
@@ -143,6 +165,12 @@ static void gst_imx_ipu_video_sink_get_property(GObject *object, guint prop_id, 
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
 			break;
 
+		case PROP_DEINTERLACE_METHOD:
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(ipu_video_sink);
+			g_value_set_enum(value, ipu_video_sink->deinterlacing_method);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(ipu_video_sink);
+			break;
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -162,6 +190,7 @@ static gboolean gst_imx_ipu_video_sink_start(GstImxBlitterVideoSink *blitter_vid
 
 	ipu_video_sink->blitter = (GstImxBlitter *)gst_object_ref(blitter);
 	gst_imx_ipu_blitter_enable_deinterlacing((GstImxIpuBlitter *)(ipu_video_sink->blitter), ipu_video_sink->deinterlacing_enabled);
+	gst_imx_ipu_blitter_set_deinterlacing_method((GstImxIpuBlitter *)(ipu_video_sink->blitter), ipu_video_sink->deinterlacing_method);
 
 	return TRUE;
 }

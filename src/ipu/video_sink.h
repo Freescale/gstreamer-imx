@@ -46,6 +46,7 @@ struct _GstImxIpuVideoSink
 
 	GstImxBlitter *blitter;
 	gboolean deinterlacing_enabled;
+	GstImxIpuBlitterDeinterlaceMethod deinterlacing_method;
 };
 
 

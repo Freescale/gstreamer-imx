@@ -75,6 +75,16 @@ typedef struct _GstImxIpuBlitterPrivate GstImxIpuBlitterPrivate;
 
 
 #define GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT  FALSE
+#define GST_IMX_IPU_BLITTER_DEINTERLACE_DEFAULT_METHOD  GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_HIGH_MOTION
+
+
+typedef enum
+{
+	GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_LOW_MOTION,
+	GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_HIGH_MOTION,
+	GST_IMX_IPU_BLITTER_DEINTERLACE_METHOD_MEDIAN_FILTER
+}
+GstImxIpuBlitterDeinterlaceMethod;
 
 
 struct _GstImxIpuBlitter
@@ -84,6 +94,7 @@ struct _GstImxIpuBlitter
 	GstVideoInfo input_video_info, output_video_info;
 	GstAllocator *allocator;
 	GstBuffer *input_frame, *output_frame, *fill_frame;
+	GstBuffer *last_frame;
 	gboolean use_entire_input_frame;
 
 	GstImxIpuBlitterPrivate *priv;
@@ -97,6 +108,7 @@ struct _GstImxIpuBlitter
 	guint num_output_pages, num_cleared_output_pages;
 
 	gboolean deinterlacing_enabled;
+	GstImxIpuBlitterDeinterlaceMethod deinterlacing_method;
 };
 
 
@@ -107,10 +119,12 @@ struct _GstImxIpuBlitterClass
 
 
 GType gst_imx_ipu_blitter_get_type(void);
+GType gst_imx_ipu_blitter_deinterlace_method_get_type(void);
 
 GstImxIpuBlitter* gst_imx_ipu_blitter_new(void);
 
 void gst_imx_ipu_blitter_enable_deinterlacing(GstImxIpuBlitter *ipu_blitter, gboolean enable);
+void gst_imx_ipu_blitter_set_deinterlacing_method(GstImxIpuBlitter *ipu_blitter, GstImxIpuBlitterDeinterlaceMethod method);
 
 
 G_END_DECLS
