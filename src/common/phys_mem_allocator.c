@@ -38,6 +38,8 @@ static GstMemory* gst_imx_phys_mem_allocator_copy(GstMemory *mem, gssize offset,
 static GstMemory* gst_imx_phys_mem_allocator_share(GstMemory *mem, gssize offset, gssize size);
 static gboolean gst_imx_phys_mem_allocator_is_span(GstMemory *mem1, GstMemory *mem2, gsize *offset);
 
+static GMutex map_phys_mutex;
+
 #ifdef WITH_GSTBADALLOCATORS
 
 static guintptr gst_imx_phys_mem_allocator_get_phys_addr(GstPhysMemoryAllocator *allocator, GstMemory *mem)
@@ -153,9 +155,11 @@ static GstImxPhysMemory* gst_imx_phys_mem_allocator_alloc_internal(GstAllocator 
 
 	if ((offset > 0) && (flags & GST_MEMORY_FLAG_ZERO_PREFIXED))
 	{
+		g_mutex_lock(&map_phys_mutex);
 		gpointer ptr = klass->map_phys_mem(phys_mem_alloc, phys_mem, maxsize, GST_MAP_WRITE);
 		memset(ptr, 0, offset);
 		klass->unmap_phys_mem(phys_mem_alloc, phys_mem);
+		g_mutex_unlock(&map_phys_mutex);
 	}
 
 	return phys_mem;
@@ -256,6 +260,7 @@ static GstMemory* gst_imx_phys_mem_allocator_copy(GstMemory *mem, gssize offset,
 		gpointer srcptr, destptr;
 		GstImxPhysMemAllocatorClass *klass = GST_IMX_PHYS_MEM_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(mem->allocator));
 
+		g_mutex_lock(&map_phys_mutex);
 		srcptr = klass->map_phys_mem(phys_mem_alloc, (GstImxPhysMemory *)mem, mem->maxsize, GST_MAP_READ);
 		destptr = klass->map_phys_mem(phys_mem_alloc, copy, mem->maxsize, GST_MAP_WRITE);
 
@@ -263,6 +268,7 @@ static GstMemory* gst_imx_phys_mem_allocator_copy(GstMemory *mem, gssize offset,
 
 		klass->unmap_phys_mem(phys_mem_alloc, copy);
 		klass->unmap_phys_mem(phys_mem_alloc, (GstImxPhysMemory *)mem);
+		g_mutex_unlock(&map_phys_mutex);
 	}
 
 	GST_INFO_OBJECT(
