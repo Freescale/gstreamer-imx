@@ -89,7 +89,7 @@ static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 		"variant = (string) itu; "
 
 		/* IMX_VPU_CODEC_FORMAT_MJPEG */
-		"image/jpeg; "
+		//"image/jpeg; "
 
 		/* IMX_VPU_CODEC_FORMAT_WMV3 and IMX_VPU_CODEC_FORMAT_WVC1 */
 		"video/x-wmv, "
