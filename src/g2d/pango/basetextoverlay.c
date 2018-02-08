@@ -175,7 +175,7 @@ enum
 
 #define BASE_TEXT_OVERLAY_CAPS \
   "video/x-raw," \
-  "format = (string) { BGRx, RGBx, xRGB, xBGR, RGBA, BGRA, ARGB, ABGR, RGB, BGR, RGB16, BGR16 } "
+  "format = (string) { RGBx, xRGB, RGBA, ARGB, RGB } "
 
 static GstStaticCaps sw_template_caps =
 GST_STATIC_CAPS (BASE_TEXT_OVERLAY_CAPS);

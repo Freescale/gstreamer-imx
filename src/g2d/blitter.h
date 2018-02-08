@@ -43,10 +43,7 @@ typedef struct _GstImxG2DBlitterClass GstImxG2DBlitterClass;
 #define GST_IMX_G2D_SINK_VIDEO_FORMATS \
 	" { " \
 	"   RGBx " \
-	" , BGRx " \
 	" , RGBA " \
-	" , BGRA " \
-	" , RGB16 " \
 	" , NV12 " \
 	" , NV21 " \
 	" , I420 " \
@@ -68,10 +65,7 @@ typedef struct _GstImxG2DBlitterClass GstImxG2DBlitterClass;
 #define GST_IMX_G2D_SRC_VIDEO_FORMATS \
 	" { " \
 	"   RGBx " \
-	" , BGRx " \
 	" , RGBA " \
-	" , BGRA " \
-	" , RGB16 " \
 	" } "
 
 #define GST_IMX_G2D_BLITTER_SRC_CAPS \
