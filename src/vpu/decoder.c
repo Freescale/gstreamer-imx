@@ -605,7 +605,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 		return GST_FLOW_ERROR;
 	}
 	else if (exit_early)
-		return GST_FLOW_OK;
+		return GST_FLOW_EOS;
 
 	GST_LOG_OBJECT(vpu_decoder, "decoding succeeded with output code %#x", output_code);
 
