@@ -439,6 +439,8 @@ static gboolean gst_imx_audio_uniaudio_dec_set_format(GstAudioDecoder *dec, GstC
 			UNIA_SET_PARAMETER(UNIA_CODEC_DATA, "codec data");
 			gst_buffer_unmap(codec_data, &map);
 
+			imx_audio_uniaudio_dec->codec_data = codec_data;
+
 			GST_DEBUG_OBJECT(dec, "codec data: %" G_GUINT32_FORMAT " byte", (guint32)(parameter.codecData.size));
 		}
 	}

@@ -33,6 +33,7 @@
 #include "clockoverlay.h"
 #include "textrender.h"
 #include "../common/phys_mem_meta.h"
+#include "../common/phys_mem_allocator.h"
 #include <string.h>
 #include <math.h>
 
@@ -360,6 +361,7 @@ gst_imx_g2d_base_text_overlay_get_type (void)
       sizeof (GstImxG2DBaseTextOverlay),
       0,
       (GInstanceInitFunc) gst_imx_g2d_base_text_overlay_init,
+      NULL,
     };
 
     g_once_init_leave ((gsize *) & type,
@@ -1890,7 +1892,6 @@ gst_imx_g2d_base_text_overlay_render_pangocairo (GstImxG2DBaseTextOverlay * over
   gdouble outline_offset = 0.0;
   gint xpad = 0, ypad = 0;
   GstBuffer *buffer;
-  GstMapInfo map;
 
   g_mutex_lock (GST_IMX_G2D_BASE_TEXT_OVERLAY_GET_CLASS (overlay)->pango_lock);
 
@@ -2203,7 +2204,6 @@ gst_imx_g2d_base_text_overlay_set_surface_params(GstImxG2DBaseTextOverlay *overl
   GstImxPhysMemMeta *phys_mem_meta;
   GstVideoFormat format;
   guint width, height, stride, n_planes;
-  guint i;
 
   g_assert_nonnull(buffer);
 
