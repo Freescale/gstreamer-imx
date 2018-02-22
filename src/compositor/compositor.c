@@ -744,7 +744,6 @@ static GstFlowReturn gst_imx_video_compositor_aggregate_frames(GstImxBPVideoAggr
 	gst_imx_video_compositor_update_overall_region(compositor);
 
 	GST_LOG_OBJECT(compositor, "aggregating frames, region_fill_necessary: %d", (gint)(compositor->region_fill_necessary));
-
 	/* Check if the overall region needs to be filled. This is the case if none
 	 * of the input frames completely cover the overall region with 100% alpha
 	 * (this is determined by gst_imx_video_compositor_update_overall_region() ) */
@@ -1077,11 +1076,23 @@ static void gst_imx_video_compositor_update_overall_region(GstImxVideoCompositor
 	while (walk != NULL)
 	{
 		GstImxVideoCompositorPad *compositor_pad = GST_IMX_VIDEO_COMPOSITOR_PAD_CAST(walk->data);
-		GstImxRegion *outer_region = &(compositor_pad->canvas.outer_region);
+		GstImxRegion outer_region = compositor_pad->canvas.outer_region;
 		GstVideoInfo *info = &(GST_IMXBP_VIDEO_AGGREGATOR_PAD(compositor_pad)->info);
 
+		/* Flip width/height if a transposing rotation is done
+		 * FIXME: Is this correct? Does this take all the
+		 * transformations into account, e.g. should
+		 * gst_imx_canvas_calculate_inner_region() be used instead?
+		 */
+		if (compositor_pad->canvas.inner_rotation == GST_IMX_CANVAS_INNER_ROTATION_90_DEGREES ||
+		    compositor_pad->canvas.inner_rotation == GST_IMX_CANVAS_INNER_ROTATION_270_DEGREES)
+		{
+			outer_region.x2 = compositor_pad->canvas.outer_region.x1 + (compositor_pad->canvas.outer_region.y2 - compositor_pad->canvas.outer_region.y1);
+			outer_region.y2 = compositor_pad->canvas.outer_region.y1 + (compositor_pad->canvas.outer_region.x2 - compositor_pad->canvas.outer_region.x1);
+		}
+
 		/* Check if the outer region completely contains the overall region */
-		if (gst_imx_region_contains(&(compositor->overall_region), outer_region) == GST_IMX_REGION_CONTAINS_FULL)
+		if (gst_imx_region_contains(&(compositor->overall_region), &outer_region) == GST_IMX_REGION_CONTAINS_FULL)
 		{
 			/* The outer region completely contains the inner region.
 			 * If the video frames are opaque, then this means that
