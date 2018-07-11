@@ -997,6 +997,8 @@ static GstBufferPool* gst_imx_video_compositor_create_bufferpool(GstImxVideoComp
 	gst_buffer_pool_config_add_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 	gst_buffer_pool_set_config(pool, config);
 
+	gst_object_unref(allocator);
+
 	return pool;
 }
 
