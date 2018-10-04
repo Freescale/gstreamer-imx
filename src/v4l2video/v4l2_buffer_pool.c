@@ -299,13 +299,13 @@ static void gst_imx_v4l2_buffer_pool_release_buffer(GstBufferPool *bpool, GstBuf
 
 	GST_DEBUG_OBJECT(pool, "qbuf %u %p", meta->vbuffer.index, (gpointer)buf);
 
+	pool->buffers[meta->vbuffer.index] = buf;
 	if (ioctl(GST_IMX_FD_OBJECT_GET_FD(pool->fd_obj_v4l), VIDIOC_QBUF, &meta->vbuffer) < 0)
 	{
 		GST_ERROR("VIDIOC_QBUF error: %s",
 				g_strerror(errno));
 		return;
 	}
-	pool->buffers[meta->vbuffer.index] = buf;
 }
 
 static gboolean gst_imx_v4l2_buffer_pool_start(GstBufferPool *bpool)
