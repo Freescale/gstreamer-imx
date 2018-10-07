@@ -595,8 +595,6 @@ static GstFlowReturn gst_imx_vpu_encoder_base_handle_frame(GstVideoEncoder *enco
 				caps = gst_video_info_to_caps(&(vpu_encoder_base->video_info));
 				vpu_encoder_base->internal_input_bufferpool = gst_imx_phys_mem_buffer_pool_new(FALSE);
 
-				gst_object_ref(vpu_encoder_base->phys_mem_allocator);
-
 				config = gst_buffer_pool_get_config(vpu_encoder_base->internal_input_bufferpool);
 				gst_buffer_pool_config_set_params(config, caps, vpu_encoder_base->video_info.size, 2, 0);
 				gst_buffer_pool_config_set_allocator(config, vpu_encoder_base->phys_mem_allocator, NULL);

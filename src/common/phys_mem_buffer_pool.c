@@ -175,7 +175,7 @@ static gboolean gst_imx_phys_mem_buffer_pool_set_config(GstBufferPool *pool, Gst
 
 	imx_phys_mem_pool->add_video_meta = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
-	imx_phys_mem_pool->allocator = allocator;
+	imx_phys_mem_pool->allocator = gst_object_ref(allocator);
 
 	return GST_BUFFER_POOL_CLASS(gst_imx_phys_mem_buffer_pool_parent_class)->set_config(pool, config);
 }
