@@ -3011,9 +3011,9 @@ wait_for_text_buf:
 
 missing_timestamp:
   {
-    GST_WARNING_OBJECT (overlay, "buffer without timestamp, discarding");
-    gst_buffer_unref (buffer);
-    return GST_FLOW_OK;
+    GST_WARNING_OBJECT (overlay, "buffer without timestamp, no overlay");
+    ret = gst_pad_push (overlay->srcpad, buffer);
+    return ret;
   }
 
 flushing:
