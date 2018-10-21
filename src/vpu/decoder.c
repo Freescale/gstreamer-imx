@@ -744,7 +744,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 					case IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_FIRST:
 						GST_LOG_OBJECT(vpu_decoder, "interlaced frame, 1 field, bottom field first");
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
-						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_TFF);
+						GST_BUFFER_FLAG_UNSET(out_buffer, GST_VIDEO_BUFFER_FLAG_TFF);
 						break;
 
 					default:
