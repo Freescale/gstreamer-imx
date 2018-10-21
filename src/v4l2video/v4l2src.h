@@ -55,6 +55,8 @@ struct _GstImxV4l2VideoSrc
 	GstImxFDObject *fd_obj_v4l;
 
 	gboolean is_tvin;
+	gboolean interlaced;
+	gboolean top_field_first;
 	gint capture_width;
 	gint capture_height;
 	guint32 count;
