@@ -147,6 +147,13 @@ static gboolean gst_imx_v4l2src_is_tvin(GstImxV4l2VideoSrc *v4l2src, gint fd_v4l
 	else
 		v4l2src->fps_n = (!v4l2src->fps_n || v4l2src->fps_n > 25) ? 25 : v4l2src->fps_n;
 
+	/* M/NTSC transmits the bottom field first,
+	 * all other standards the top field first */
+	if (std_id & V4L2_STD_NTSC)
+		v4l2src->top_field_first = FALSE;
+	else
+		v4l2src->top_field_first = TRUE;
+
 	GST_DEBUG_OBJECT(v4l2src,
 		"found TV decoder: adjusted fps = %d/%d, std_id = %#" G_GINT64_MODIFIER "x",
 		v4l2src->fps_n, v4l2src->fps_d, std_id);
@@ -457,6 +464,17 @@ static GstFlowReturn gst_imx_v4l2src_fill(GstPushSrc *src, GstBuffer *buf)
 
 	GST_BUFFER_TIMESTAMP(buf) = ts;
 	GST_BUFFER_DURATION(buf) = v4l2src->time_per_frame;
+
+	if (v4l2src->interlaced) {
+		GST_BUFFER_FLAG_SET(buf, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+		if (v4l2src->top_field_first)
+			GST_BUFFER_FLAG_SET(buf, GST_VIDEO_BUFFER_FLAG_TFF);
+		else
+			GST_BUFFER_FLAG_UNSET(buf, GST_VIDEO_BUFFER_FLAG_TFF);
+	}
+	else
+		GST_BUFFER_FLAG_UNSET(buf, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+
 	return GST_FLOW_OK;
 }
 
@@ -607,9 +625,11 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		case V4L2_FIELD_INTERLACED:
 		case V4L2_FIELD_INTERLACED_TB:
 		case V4L2_FIELD_INTERLACED_BT:
+			v4l2src->interlaced = TRUE;
 			interlace_mode = "interleaved";
 			break;
 		default:
+			v4l2src->interlaced = FALSE;
 			interlace_mode = "progressive";
 	}
 
