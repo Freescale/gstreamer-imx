@@ -748,7 +748,7 @@ static GstFlowReturn gst_imx_video_compositor_aggregate_frames(GstImxBPVideoAggr
 	/* Check if the overall region needs to be filled. This is the case if none
 	 * of the input frames completely cover the overall region with 100% alpha
 	 * (this is determined by gst_imx_video_compositor_update_overall_region() ) */
-	if (!(compositor->region_fill_necessary) || klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color))
+	if (!(compositor->region_fill_necessary) || klass->fill_region(compositor, &(compositor->overall_region), compositor->background_color | 0xFF000000))
 	{
 		/* Lock object to ensure nothing is changed during composition */
 		GST_OBJECT_LOCK(compositor);

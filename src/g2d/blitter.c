@@ -277,7 +277,7 @@ static gboolean gst_imx_g2d_blitter_fill_region(GstImxBlitter *blitter, GstImxRe
 		return FALSE;
 	}
 
-	g2d_blitter->background_surface.clrcolor = color | 0xFF000000;
+	g2d_blitter->background_surface.clrcolor = color;
 	g2d_blitter->background_surface.left   = region->x1;
 	g2d_blitter->background_surface.top    = region->y1;
 	g2d_blitter->background_surface.right  = region->x2;
