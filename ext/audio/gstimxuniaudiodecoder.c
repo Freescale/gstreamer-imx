@@ -124,7 +124,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 );
 
 
-G_DEFINE_TYPE(GstImxAudioUniaudioDec, gst_imx_audio_uniaudio_dec, GST_TYPE_AUDIO_DECODER);
+G_DEFINE_TYPE(GstImxAudioUniaudioDec, gst_imx_audio_uniaudio_dec, GST_TYPE_AUDIO_DECODER)
 
 
 static void gst_imx_audio_uniaudio_dec_finalize(GObject *object);

@@ -131,7 +131,7 @@ G_DEFINE_TYPE_WITH_CODE(
 	GstImxIonAllocator, gst_imx_ion_allocator, GST_TYPE_DMABUF_ALLOCATOR,
 	G_IMPLEMENT_INTERFACE(GST_TYPE_PHYS_MEMORY_ALLOCATOR,    gst_imx_ion_allocator_phys_mem_allocator_iface_init)
 	G_IMPLEMENT_INTERFACE(GST_TYPE_IMX_DMA_BUFFER_ALLOCATOR, gst_imx_ion_allocator_dma_buffer_allocator_iface_init)
-);
+)
 
 static void gst_imx_ion_allocator_dispose(GObject *object);
 static void gst_imx_ion_allocator_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);

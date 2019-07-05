@@ -23,6 +23,7 @@
 #include <gst/gst.h>
 #include <imxvpuapi2/imxvpuapi2.h>
 #include "gst/imx/gstimxdmabufferallocator.h"
+#include "gstimxvpudeccontext.h"
 
 
 G_BEGIN_DECLS
@@ -83,7 +84,7 @@ G_BEGIN_DECLS
 #define GST_BUFFER_POOL_OPTION_IMX_VPU_DEC_BUFFER_POOL "GstBufferPoolOptionImxVpuDecBufferPool"
 
 
-typedef struct _GstImxVpuDecContext GstImxVpuDecContext;
+struct _GstImxVpuDecContext;
 
 typedef struct _GstImxVpuDecBufferPool GstImxVpuDecBufferPool;
 typedef struct _GstImxVpuDecBufferPoolClass GstImxVpuDecBufferPoolClass;

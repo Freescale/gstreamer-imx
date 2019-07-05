@@ -38,7 +38,7 @@ struct _GstImxVpuEncH264Class
 };
 
 
-G_DEFINE_TYPE(GstImxVpuEncH264, gst_imx_vpu_enc_h264, GST_TYPE_IMX_VPU_ENC);
+G_DEFINE_TYPE(GstImxVpuEncH264, gst_imx_vpu_enc_h264, GST_TYPE_IMX_VPU_ENC)
 
 
 gboolean gst_imx_vpu_enc_h264_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncOpenParams *open_params);

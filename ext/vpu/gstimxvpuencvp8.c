@@ -38,7 +38,7 @@ struct _GstImxVpuEncVP8Class
 };
 
 
-G_DEFINE_TYPE(GstImxVpuEncVP8, gst_imx_vpu_enc_vp8, GST_TYPE_IMX_VPU_ENC);
+G_DEFINE_TYPE(GstImxVpuEncVP8, gst_imx_vpu_enc_vp8, GST_TYPE_IMX_VPU_ENC)
 
 
 gboolean gst_imx_vpu_enc_vp8_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncOpenParams *open_params);

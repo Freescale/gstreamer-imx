@@ -401,7 +401,7 @@ GstImxVpuDecBufferPool* gst_imx_vpu_dec_buffer_pool_new(ImxVpuApiDecStreamInfo *
 
 static gboolean mark_meta_pooled(GstBuffer *buffer, GstMeta **meta, gpointer user_data)
 {
-	GST_DEBUG_OBJECT(GST_BUFFER_POOL(user_data), "marking meta %p as POOLED in buffer %p", *meta, buffer);
+	GST_DEBUG_OBJECT(GST_BUFFER_POOL(user_data), "marking meta %p as POOLED in buffer %p", (gpointer)(*meta), (gpointer)buffer);
 	GST_META_FLAG_SET(*meta, GST_META_FLAG_POOLED);
 	GST_META_FLAG_SET(*meta, GST_META_FLAG_LOCKED);
 	return TRUE;

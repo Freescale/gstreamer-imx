@@ -23,6 +23,7 @@
 #include <gst/video/video.h>
 #include <gst/video/gstvideoencoder.h>
 #include <imxvpuapi2/imxvpuapi2.h>
+#include "gstimxvpucommon.h"
 
 
 G_BEGIN_DECLS
@@ -41,8 +42,6 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxVpuEnc GstImxVpuEnc;
 typedef struct _GstImxVpuEncClass GstImxVpuEncClass;
-
-typedef struct _GstImxVpuCodecDetails GstImxVpuCodecDetails;
 
 
 struct _GstImxVpuEnc

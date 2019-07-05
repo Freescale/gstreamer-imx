@@ -59,7 +59,7 @@ struct _GstImxVpuEncH263Class
 };
 
 
-G_DEFINE_TYPE(GstImxVpuEncH263, gst_imx_vpu_enc_h263, GST_TYPE_IMX_VPU_ENC);
+G_DEFINE_TYPE(GstImxVpuEncH263, gst_imx_vpu_enc_h263, GST_TYPE_IMX_VPU_ENC)
 
 
 static void gst_imx_vpu_enc_h263_set_encoder_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);

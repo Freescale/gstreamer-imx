@@ -62,7 +62,7 @@ struct _GstImxVpuEncMPEG4Class
 };
 
 
-G_DEFINE_TYPE(GstImxVpuEncMPEG4, gst_imx_vpu_enc_mpeg4, GST_TYPE_IMX_VPU_ENC);
+G_DEFINE_TYPE(GstImxVpuEncMPEG4, gst_imx_vpu_enc_mpeg4, GST_TYPE_IMX_VPU_ENC)
 
 
 static void gst_imx_vpu_enc_mpeg4_set_encoder_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);

@@ -158,7 +158,7 @@ static GstImxPhysMemWrapper* gst_imx_phys_mem_wrapper_new(GstBuffer *phys_mem_gs
 
 
 
-G_DEFINE_ABSTRACT_TYPE(GstImxVpuEnc, gst_imx_vpu_enc, GST_TYPE_VIDEO_ENCODER);
+G_DEFINE_ABSTRACT_TYPE(GstImxVpuEnc, gst_imx_vpu_enc, GST_TYPE_VIDEO_ENCODER)
 
 
 static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);

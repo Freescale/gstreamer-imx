@@ -38,7 +38,7 @@ struct _GstImxVpuEncJPEGClass
 };
 
 
-G_DEFINE_TYPE(GstImxVpuEncJPEG, gst_imx_vpu_enc_jpeg, GST_TYPE_IMX_VPU_ENC);
+G_DEFINE_TYPE(GstImxVpuEncJPEG, gst_imx_vpu_enc_jpeg, GST_TYPE_IMX_VPU_ENC)
 
 
 GstCaps* gst_imx_vpu_enc_jpeg_get_output_caps(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncStreamInfo const *stream_info);

@@ -73,7 +73,7 @@ G_DEFINE_TYPE_WITH_CODE(
 	GstImxDefaultAllocator, gst_imx_default_allocator, GST_TYPE_ALLOCATOR,
 	G_IMPLEMENT_INTERFACE(GST_TYPE_PHYS_MEMORY_ALLOCATOR,    gst_imx_default_allocator_phys_mem_allocator_iface_init)
 	G_IMPLEMENT_INTERFACE(GST_TYPE_IMX_DMA_BUFFER_ALLOCATOR, gst_imx_default_allocator_dma_buffer_allocator_iface_init)
-);
+)
 
 static void gst_imx_default_allocator_dispose(GObject *object);
 

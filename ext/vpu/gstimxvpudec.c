@@ -123,7 +123,7 @@ struct _GstImxVpuDecClass
 };
 
 
-G_DEFINE_ABSTRACT_TYPE(GstImxVpuDec, gst_imx_vpu_dec, GST_TYPE_VIDEO_DECODER);
+G_DEFINE_ABSTRACT_TYPE(GstImxVpuDec, gst_imx_vpu_dec, GST_TYPE_VIDEO_DECODER)
 
 
 static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder);
@@ -402,7 +402,7 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 			}
 			else
 			{
-				GST_ERROR_OBJECT(imx_vpu_dec, "unexpected type for 'format' field in allowed_srccaps structure %" GST_PTR_FORMAT, structure);
+				GST_ERROR_OBJECT(imx_vpu_dec, "unexpected type for 'format' field in allowed_srccaps structure %" GST_PTR_FORMAT, (gpointer)structure);
 				ret = FALSE;
 				goto finish;
 			}
