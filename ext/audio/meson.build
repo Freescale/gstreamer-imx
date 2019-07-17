@@ -5,6 +5,7 @@ endif
 
 # Check for the libfslaudiocodec library to build the uniaudiodec element
 libfslaudiocodec_dep = dependency('libfslaudiocodec', required : get_option('uniaudiodec'))
+fslcodec_libdirvar = ''
 if libfslaudiocodec_dep.found()
 	fslcodec_libdirvar = libimxdmabuffer_dep.get_pkgconfig_variable('libdir', default : '')
 	if fslcodec_libdirvar != ''
