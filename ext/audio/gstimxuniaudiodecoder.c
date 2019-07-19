@@ -18,8 +18,17 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <gst/gst.h>
+#include <gst/base/gstadapter.h>
+#include <gst/audio/gstaudiodecoder.h>
 #include "gstimxuniaudiodecoder.h"
 #include "gstimxuniaudiocodec.h"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#include <fsl_unia.h>
+#pragma GCC diagnostic pop
+
 
 
 GST_DEBUG_CATEGORY_STATIC(imx_audio_uniaudio_dec_debug);
@@ -107,7 +116,29 @@ static uint32 const * uniaudio_channel_maps[] =
 	uniaudio_channel_map_7_1_surround
 };
 
+
 #define CHANNEL_MAPS_SIZE (sizeof(uniaudio_channel_maps) / sizeof(gint32 *))
+
+
+struct _GstImxAudioUniaudioDec
+{
+	GstAudioDecoder parent;
+	GstImxAudioUniaudioCodec *codec;
+	UniACodec_Handle handle;
+	gboolean has_audioinfo_set;
+	GstAudioChannelPosition *original_channel_positions, *reordered_channel_positions;
+	GstAudioFormat pcm_format;
+	guint num_channels;
+	GstAdapter *out_adapter;
+	guint skip_header_counter, num_vorbis_headers;
+	GstBuffer *codec_data;
+};
+
+
+struct _GstImxAudioUniaudioDecClass
+{
+	GstAudioDecoderClass parent_class;
+};
 
 
 static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
