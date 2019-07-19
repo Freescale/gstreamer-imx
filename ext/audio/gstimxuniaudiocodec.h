@@ -20,7 +20,11 @@
 #define GST_IMX_AUDIO_UNIAUDIO_CODEC_H
 
 #include <gst/gst.h>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 #include <fsl_unia.h>
+#pragma GCC diagnostic pop
 
 
 G_BEGIN_DECLS

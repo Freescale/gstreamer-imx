@@ -122,7 +122,11 @@ static GstImxAudioUniaudioCodec* gst_imx_audio_uniaudio_codec_load_codec(gchar c
 	GST_MINI_OBJECT_FLAG_SET(codec->caps, GST_MINI_OBJECT_FLAG_MAY_BE_LEAKED);
 #endif
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 	codec->query_interface = dlsym(codec->dlhandle, UNIA_CODEC_ENTRYPOINT_FUNCTION);
+#pragma GCC diagnostic pop
+
 	if (codec->query_interface == NULL)
 	{
 		GST_ERROR("getting %s function from library %s failed: %s", UNIA_CODEC_ENTRYPOINT_FUNCTION, library_filename, dlerror());
