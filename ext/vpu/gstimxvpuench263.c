@@ -221,10 +221,10 @@ gboolean gst_imx_vpu_enc_h263_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuA
 	GstImxVpuEncH263 *imx_vpu_enc_h263 = GST_IMX_VPU_ENC_H263_CAST(imx_vpu_enc);
 
 	GST_OBJECT_LOCK(imx_vpu_enc_h263);
-	open_params->format_specific_params.h263_params.enable_annex_i = imx_vpu_enc_h263->enable_annex_i;
-	open_params->format_specific_params.h263_params.enable_annex_j = imx_vpu_enc_h263->enable_annex_j;
-	open_params->format_specific_params.h263_params.enable_annex_k = imx_vpu_enc_h263->enable_annex_k;
-	open_params->format_specific_params.h263_params.enable_annex_t = imx_vpu_enc_h263->enable_annex_t;
+	open_params->format_specific_open_params.h263_open_params.enable_annex_i = imx_vpu_enc_h263->enable_annex_i;
+	open_params->format_specific_open_params.h263_open_params.enable_annex_j = imx_vpu_enc_h263->enable_annex_j;
+	open_params->format_specific_open_params.h263_open_params.enable_annex_k = imx_vpu_enc_h263->enable_annex_k;
+	open_params->format_specific_open_params.h263_open_params.enable_annex_t = imx_vpu_enc_h263->enable_annex_t;
 	GST_OBJECT_UNLOCK(imx_vpu_enc_h263);
 
 	return TRUE;

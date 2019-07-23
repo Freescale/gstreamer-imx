@@ -72,7 +72,7 @@ gboolean gst_imx_vpu_enc_h264_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuA
 	GstStructure *s;
 	gchar const *str;
 	GstCaps *allowed_srccaps;
-	ImxVpuApiEncH264Params *h264_params = &(open_params->format_specific_params.h264_params);
+	ImxVpuApiEncH264OpenParams *h264_params = &(open_params->format_specific_open_params.h264_open_params);
 
 	allowed_srccaps = gst_pad_get_allowed_caps(GST_VIDEO_DECODER_SRC_PAD(imx_vpu_enc));
 
@@ -157,9 +157,9 @@ GstCaps* gst_imx_vpu_enc_h264_get_output_caps(G_GNUC_UNUSED GstImxVpuEnc *imx_vp
 	GstCaps *caps;
 	gchar const *alignment_str, *level_str, *profile_str;
 
-	alignment_str = (stream_info->format_specific_params.h264_params.enable_access_unit_delimiters) ? "au" : "nal";
+	alignment_str = (stream_info->format_specific_open_params.h264_open_params.enable_access_unit_delimiters) ? "au" : "nal";
 
-	switch (stream_info->format_specific_params.h264_params.level)
+	switch (stream_info->format_specific_open_params.h264_open_params.level)
 	{
 		case IMX_VPU_API_H264_LEVEL_1:   level_str = "1";   break;
 		case IMX_VPU_API_H264_LEVEL_1B:  level_str = "1b";  break;
@@ -184,7 +184,7 @@ GstCaps* gst_imx_vpu_enc_h264_get_output_caps(G_GNUC_UNUSED GstImxVpuEnc *imx_vp
 		default: g_assert_not_reached();
 	}
 
-	switch (stream_info->format_specific_params.h264_params.profile)
+	switch (stream_info->format_specific_open_params.h264_open_params.profile)
 	{
 		case IMX_VPU_API_H264_PROFILE_CONSTRAINED_BASELINE: profile_str = "constrained-baseline"; break;
 		case IMX_VPU_API_H264_PROFILE_BASELINE:             profile_str = "baseline";             break;

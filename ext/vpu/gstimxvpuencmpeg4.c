@@ -250,11 +250,11 @@ gboolean gst_imx_vpu_enc_mpeg4_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpu
 	GstImxVpuEncMPEG4 *imx_vpu_enc_mpeg4 = GST_IMX_VPU_ENC_MPEG4_CAST(imx_vpu_enc);
 
 	GST_OBJECT_LOCK(imx_vpu_enc_mpeg4);
-	open_params->format_specific_params.mpeg4_params.enable_data_partitioning = imx_vpu_enc_mpeg4->enable_data_partitioning;
-	open_params->format_specific_params.mpeg4_params.enable_reversible_vlc    = imx_vpu_enc_mpeg4->enable_reversible_vlc;
-	open_params->format_specific_params.mpeg4_params.intra_dc_vlc_thr         = imx_vpu_enc_mpeg4->intra_dc_vlc_thr;
-	open_params->format_specific_params.mpeg4_params.enable_hec               = imx_vpu_enc_mpeg4->enable_hec;
-	open_params->format_specific_params.mpeg4_params.version_id               = imx_vpu_enc_mpeg4->version_id;
+	open_params->format_specific_open_params.mpeg4_open_params.enable_data_partitioning = imx_vpu_enc_mpeg4->enable_data_partitioning;
+	open_params->format_specific_open_params.mpeg4_open_params.enable_reversible_vlc    = imx_vpu_enc_mpeg4->enable_reversible_vlc;
+	open_params->format_specific_open_params.mpeg4_open_params.intra_dc_vlc_thr         = imx_vpu_enc_mpeg4->intra_dc_vlc_thr;
+	open_params->format_specific_open_params.mpeg4_open_params.enable_hec               = imx_vpu_enc_mpeg4->enable_hec;
+	open_params->format_specific_open_params.mpeg4_open_params.version_id               = imx_vpu_enc_mpeg4->version_id;
 	GST_OBJECT_UNLOCK(imx_vpu_enc_mpeg4);
 
 	return TRUE;

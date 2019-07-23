@@ -72,7 +72,7 @@ gboolean gst_imx_vpu_enc_vp8_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuAp
 	GstStructure *s;
 	gchar const *str;
 	GstCaps *allowed_srccaps;
-	ImxVpuApiEncVP8Params *vp8_params = &(open_params->format_specific_params.vp8_params);
+	ImxVpuApiEncVP8OpenParams *vp8_params = &(open_params->format_specific_open_params.vp8_open_params);
 
 	allowed_srccaps = gst_pad_get_allowed_caps(GST_VIDEO_DECODER_SRC_PAD(imx_vpu_enc));
 
@@ -121,7 +121,7 @@ GstCaps* gst_imx_vpu_enc_vp8_get_output_caps(G_GNUC_UNUSED GstImxVpuEnc *imx_vpu
 {
 	gchar const *profile_str;
 
-	switch (stream_info->format_specific_params.vp8_params.profile)
+	switch (stream_info->format_specific_open_params.vp8_open_params.profile)
 	{
 		case IMX_VPU_API_VP8_PROFILE_0: profile_str = "0"; break;
 		case IMX_VPU_API_VP8_PROFILE_1: profile_str = "1"; break;
