@@ -1545,7 +1545,7 @@ static void derived_class_init(void *klass)
 	imx_vpu_dec_class->requires_codec_data = codec_details->requires_codec_data;
 
 	longname = g_strdup_printf("i.MX VPU %s video decoder", codec_details->desc_name);
-	classification = g_strdup("Codec/Decoder/Video");
+	classification = g_strdup("Codec/Decoder/Video/Hardware");
 	description = g_strdup_printf("Hardware-accelerated %s video decoding using the i.MX VPU codec", codec_details->desc_name);
 	author = g_strdup("Carlos Rafael Giani <crg7475@mailbox.org>");
 	gst_element_class_set_metadata(element_class, longname, classification, description, author);
