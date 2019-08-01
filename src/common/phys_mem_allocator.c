@@ -20,7 +20,7 @@
 #include <string.h>
 #include "phys_mem_allocator.h"
 
-#ifdef WITH_GSTBADALLOCATORS
+#if GST_CHECK_VERSION(1, 14, 0) || defined(WITH_GSTBADALLOCATORS)
 #include <gst/allocators/gstphysmemory.h>
 #endif
 
@@ -38,9 +38,9 @@ static GstMemory* gst_imx_phys_mem_allocator_copy(GstMemory *mem, gssize offset,
 static GstMemory* gst_imx_phys_mem_allocator_share(GstMemory *mem, gssize offset, gssize size);
 static gboolean gst_imx_phys_mem_allocator_is_span(GstMemory *mem1, GstMemory *mem2, gsize *offset);
 
-#ifdef WITH_GSTBADALLOCATORS
+#if GST_CHECK_VERSION(1, 14, 0) || defined(WITH_GSTBADALLOCATORS)
 
-static guintptr gst_imx_phys_mem_allocator_get_phys_addr(GstPhysMemoryAllocator *allocator, GstMemory *mem)
+static guintptr gst_imx_phys_mem_allocator_get_phys_addr(G_GNUC_UNUSED GstPhysMemoryAllocator *allocator, GstMemory *mem)
 {
 	if (!gst_imx_is_phys_memory(mem))
 		return 0;
