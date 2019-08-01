@@ -1353,6 +1353,7 @@ static int gst_imx_vpu_decoder_initial_info_callback(G_GNUC_UNUSED ImxVpuDecoder
 		gst_imx_vpu_decoder_context_set_decoder_as_gone(vpu_decoder->decoder_context);
 	}
 
+	new_initial_info->min_num_required_framebuffers += vpu_decoder->num_additional_framebuffers;
 	vpu_decoder->decoder_context = gst_imx_vpu_decoder_context_new(vpu_decoder->decoder, new_initial_info, vpu_decoder->chroma_interleave, (GstImxPhysMemAllocator *)(vpu_decoder->phys_mem_allocator));
 
 	if (vpu_decoder->decoder_context == NULL)
