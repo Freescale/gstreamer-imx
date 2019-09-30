@@ -1126,7 +1126,10 @@ static void gst_imx_vpu_decoder_close(GstImxVpuDecoder *vpu_decoder)
 static void gst_imx_vpu_decoder_close_and_clear_decoder_context(GstImxVpuDecoder *vpu_decoder)
 {
 	if (vpu_decoder->decoder_context == NULL)
+	{	
+		gst_imx_vpu_decoder_close(vpu_decoder);
 		return;
+	}
 
 	GST_INFO_OBJECT(vpu_decoder, "Clearing decoder context");
 
