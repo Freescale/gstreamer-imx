@@ -599,6 +599,7 @@ void gst_imx_vpu_api_setup_logging(void)
 
 static void imx_vpu_api_logging_func(ImxVpuApiLogLevel level, char const *file, int const line, char const *fn, const char *format, ...)
 {
+#ifndef GST_DISABLE_GST_DEBUG
 	GstDebugLevel gst_level;
 	va_list args;
 
@@ -616,4 +617,11 @@ static void imx_vpu_api_logging_func(ImxVpuApiLogLevel level, char const *file, 
 	va_start(args, format);
 	gst_debug_log_valist(imx_vpu_api_debug, gst_level, file, fn, line, NULL, format, args);
 	va_end(args);
+#else
+	(void)level;
+	(void)file;
+	(void)line;
+	(void)fn;
+	(void)format;
+#endif
 }
