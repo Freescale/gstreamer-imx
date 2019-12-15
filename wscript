@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 
 from waflib.Build import BuildContext, CleanContext, InstallContext, UninstallContext, Logs
