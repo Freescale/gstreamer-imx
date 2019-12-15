@@ -152,7 +152,8 @@ def configure(conf):
 
 	# test for GStreamer libraries
 
-	gst_version_str = conf.check_cfg(package = 'gstreamer-1.0 >= 1.2.0', modversion = "gstreamer-1.0", uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
+	conf.check_cfg(package = 'gstreamer-1.0 >= 1.2.0', uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
+	gst_version_str = conf.check_cfg(modversion = "gstreamer-1.0", uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
 	gst_version = [int(x) for x in re.match('(\d*)\.(\d*)\.(\d*)', gst_version_str).groups()]
 	conf.env['GSTREAMER_VERSION'] = gst_version
 
