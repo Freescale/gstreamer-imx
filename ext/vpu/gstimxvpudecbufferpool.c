@@ -167,7 +167,7 @@ static gboolean gst_imx_vpu_dec_buffer_pool_set_config(GstBufferPool *pool, GstS
 
 	if (!gst_video_info_from_caps(&info, caps))
 	{
-		GST_ERROR_OBJECT(pool, "caps cannot be parsed for video info");
+		GST_ERROR_OBJECT(pool, "caps cannot be parsed as video info");
 		return FALSE;
 	}
 
