@@ -575,5 +575,8 @@ GstAllocator* gst_imx_ion_allocator_new(void)
 
 	GST_DEBUG_OBJECT(imx_ion_allocator, "created new ION i.MX DMA allocator %s", GST_OBJECT_NAME(imx_ion_allocator));
 
+	/* Clear floating flag */
+	gst_object_ref_sink(GST_OBJECT(imx_ion_allocator));
+
 	return imx_ion_allocator;
 }
