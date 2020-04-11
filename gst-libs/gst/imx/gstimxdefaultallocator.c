@@ -367,6 +367,8 @@ GstAllocator* gst_imx_default_allocator_new(void)
 		return NULL;
 	}
 
+	GST_DEBUG_OBJECT(imx_default_allocator, "created new default i.MX DMA allocator %s", GST_OBJECT_NAME(imx_default_allocator));
+
 	/* Clear floating flag */
 	gst_object_ref_sink(GST_OBJECT(imx_default_allocator));
 

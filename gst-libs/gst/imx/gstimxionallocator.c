@@ -571,5 +571,9 @@ static size_t gst_imx_ion_allocator_imxdmabufalloc_get_size(G_GNUC_UNUSED ImxDma
  */
 GstAllocator* gst_imx_ion_allocator_new(void)
 {
-	return GST_ALLOCATOR_CAST(g_object_new(gst_imx_ion_allocator_get_type(), NULL));
+	GstAllocator *imx_ion_allocator = GST_ALLOCATOR_CAST(g_object_new(gst_imx_ion_allocator_get_type(), NULL));
+
+	GST_DEBUG_OBJECT(imx_ion_allocator, "created new ION i.MX DMA allocator %s", GST_OBJECT_NAME(imx_ion_allocator));
+
+	return imx_ion_allocator;
 }
