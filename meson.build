@@ -66,6 +66,9 @@ conf_data.set_quoted('GST_PACKAGE_ORIGIN', get_option('package-origin'))
 conf_data.set_quoted('PACKAGE', 'gstreamer-imx')
 conf_data.set_quoted('PACKAGE_BUGREPORT', 'https://github.com/Freescale/gstreamer-imx')
 conf_data.set_quoted('VERSION', meson.project_version())
+if ion_support
+	conf_data.set('WITH_GST_ION_ALLOCATOR', 1)
+endif
 
 
 subdir('gst-libs/gst/imx')
