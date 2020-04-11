@@ -395,6 +395,11 @@ GstImxVpuDecBufferPool* gst_imx_vpu_dec_buffer_pool_new(ImxVpuApiDecStreamInfo *
 	imx_vpu_dec_buffer_pool->priv->decoder_context = decoder_context;
 	imx_vpu_dec_buffer_pool->priv->stream_info = *stream_info;
 
+	// Clear the floating flag, since it is not useful
+	// with buffer pools, and could lead to subtle
+	// bugs related to refcounting.
+	gst_object_ref_sink(GST_OBJECT(imx_vpu_dec_buffer_pool));
+
 	return imx_vpu_dec_buffer_pool;
 }
 
