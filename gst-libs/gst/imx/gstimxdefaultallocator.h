@@ -46,4 +46,4 @@ GstAllocator* gst_imx_default_allocator_new(void);
 G_END_DECLS
 
 
-#endif
+#endif /* GST_IMX_DEFAULT_ALLOCATOR_H */

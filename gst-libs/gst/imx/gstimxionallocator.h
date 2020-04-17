@@ -46,4 +46,4 @@ GstAllocator* gst_imx_ion_allocator_new(void);
 G_END_DECLS
 
 
-#endif
+#endif /* GST_IMX_ION_ALLOCATOR_H */

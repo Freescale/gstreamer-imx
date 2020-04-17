@@ -36,8 +36,6 @@ GST_DEBUG_CATEGORY_STATIC(imx_default_allocator_debug);
 
 #define GST_IMX_DEFAULT_MEMORY_TYPE "ImxDefaultDmaMemory"
 
-static GQuark gst_imx_default_memory_imxbuffer_quark;
-
 
 typedef struct _GstImxDefaultDmaMemory GstImxDefaultDmaMemory;
 
@@ -63,10 +61,10 @@ struct _GstImxDefaultAllocatorClass
 
 
 static void gst_imx_default_allocator_phys_mem_allocator_iface_init(gpointer iface, gpointer iface_data);
-guintptr gst_imx_default_allocator_get_phys_addr(GstPhysMemoryAllocator *allocator, GstMemory *memory);
+static guintptr gst_imx_default_allocator_get_phys_addr(GstPhysMemoryAllocator *allocator, GstMemory *memory);
 
 static void gst_imx_default_allocator_dma_buffer_allocator_iface_init(gpointer iface, gpointer iface_data);
-ImxDmaBuffer* gst_imx_default_allocator_get_dma_buffer(GstImxDmaBufferAllocator *allocator, GstMemory *memory);
+static ImxDmaBuffer* gst_imx_default_allocator_get_dma_buffer(GstImxDmaBufferAllocator *allocator, GstMemory *memory);
 
 
 G_DEFINE_TYPE_WITH_CODE(
@@ -95,8 +93,6 @@ static void gst_imx_default_allocator_class_init(GstImxDefaultAllocatorClass *kl
 	GstAllocatorClass *allocator_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_default_allocator_debug, "imxdefaultallocator", 0, "physical memory allocator using the default libimxdmabuffer DMA buffer allocator");
-
-	gst_imx_default_memory_imxbuffer_quark = g_quark_from_static_string("gst-imx-default-memory-imxbuffer");
 
 	object_class = G_OBJECT_CLASS(klass);
 	allocator_class = GST_ALLOCATOR_CLASS(klass);
@@ -141,7 +137,7 @@ static void gst_imx_default_allocator_phys_mem_allocator_iface_init(gpointer ifa
 }
 
 
-guintptr gst_imx_default_allocator_get_phys_addr(G_GNUC_UNUSED GstPhysMemoryAllocator *allocator, GstMemory *memory)
+static guintptr gst_imx_default_allocator_get_phys_addr(G_GNUC_UNUSED GstPhysMemoryAllocator *allocator, GstMemory *memory)
 {
 	GstImxDefaultDmaMemory *dma_memory = (GstImxDefaultDmaMemory *)memory;
 	return imx_dma_buffer_get_physical_address(dma_memory->dmabuffer) + memory->offset;
@@ -155,7 +151,7 @@ static void gst_imx_default_allocator_dma_buffer_allocator_iface_init(gpointer i
 }
 
 
-ImxDmaBuffer* gst_imx_default_allocator_get_dma_buffer(G_GNUC_UNUSED GstImxDmaBufferAllocator *allocator, GstMemory *memory)
+static ImxDmaBuffer* gst_imx_default_allocator_get_dma_buffer(G_GNUC_UNUSED GstImxDmaBufferAllocator *allocator, GstMemory *memory)
 {
 	GstImxDefaultDmaMemory *dma_memory = (GstImxDefaultDmaMemory *)memory;
 	return dma_memory->dmabuffer;
@@ -186,12 +182,10 @@ static GstMemory* gst_imx_default_allocator_alloc(GstAllocator *allocator, gsize
 }
 
 
-static void gst_imx_default_allocator_free(GstAllocator *allocator, GstMemory *memory)
+static void gst_imx_default_allocator_free(G_GNUC_UNUSED GstAllocator *allocator, GstMemory *memory)
 {
 	GstImxDefaultDmaMemory *imx_dma_memory = (GstImxDefaultDmaMemory *)memory;
-	GstImxDefaultAllocator *imx_default_allocator = GST_IMX_DEFAULT_ALLOCATOR(allocator);
 
-	g_assert(imx_default_allocator != NULL);
 	g_assert(imx_dma_memory != NULL);
 	g_assert(imx_dma_memory->dmabuffer != NULL);
 
@@ -313,7 +307,7 @@ static GstMemory * gst_imx_default_allocator_share(GstMemory *memory, gssize off
 	new_imx_dma_memory = g_slice_alloc0(sizeof(GstImxDefaultDmaMemory));
 	if (G_UNLIKELY(new_imx_dma_memory == NULL))
 	{
-		GST_ERROR_OBJECT(imx_default_allocator, "could not allocate slice for GstImxDefaultDmaMemory copy");
+		GST_ERROR_OBJECT(imx_default_allocator, "could not allocate slice for GstImxDefaultDmaMemory share");
 		goto cleanup;
 	}
 

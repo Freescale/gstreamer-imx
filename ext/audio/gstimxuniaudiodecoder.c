@@ -210,7 +210,7 @@ static void gst_imx_audio_uniaudio_dec_class_init(GstImxAudioUniaudioDecClass *k
 		element_class,
 		"NXP i.MX uniaudio decoder",
 		"Codec/Decoder/Audio",
-		"audio decoding using the NXP i.MX uniaudio codecs",
+		"Audio decoding using the NXP i.MX uniaudio codecs",
 		"Carlos Rafael Giani <dv@pseudoterminal.org>"
 	);
 }

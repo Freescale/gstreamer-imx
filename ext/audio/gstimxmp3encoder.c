@@ -358,7 +358,7 @@ static gboolean gst_imx_audio_mp3_enc_set_format(GstAudioEncoder *audioencoder, 
 		}
 		else
 		{
-			GST_ERROR_OBJECT(audioencoder, "unexpected type for 'channel' field in caps structure %" GST_PTR_FORMAT, structure);
+			GST_ERROR_OBJECT(audioencoder, "unexpected type for 'channel' field in caps structure %" GST_PTR_FORMAT, (gpointer)structure);
 			err = TRUE;
 		}
 

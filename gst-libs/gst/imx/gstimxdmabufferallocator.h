@@ -69,4 +69,4 @@ GstAllocator* gst_imx_allocator_new(void);
 G_END_DECLS
 
 
-#endif
+#endif /* GST_IMX_DMA_BUFFER_ALLOCATOR_H */
