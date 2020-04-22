@@ -1,3 +1,46 @@
+==== version 0.13.1 (2020-04-22) ====
+
+* Last planned release in the 0.x series. Development now focuses on 2.x.
+
+* waf: Update to version 2.0.12 and switch to Python 3
+
+* misc:
+  * gst_buffer_pool_config_set_allocator() and get_allocator() are
+    transfer-none. Changes to the code address that, fixing various refcount
+    related problems.
+  * Update GstPhysMemoryAllocator support for GStreamer 1.14+
+
+* v4l2video:
+  * v4l2src: Set interlace flags in GstBuffer
+  * v4l2sink: Define V4L2_COLORSPACE_DEFAULT if it doesn't exist
+  * v4l2: Add phys mem meta only if the driver/card is known to support this
+    This makes USB video cameras work with imxv4l2videosrc, because they do
+    not provide any physical address.
+  * v4l2_buffer_pool: First reset the buffer storage in the pool, then queue
+    the buffer. Otherwise it might happen that we dequeue the same buffer in
+    a different thread already *before* we have it reset in the buffer storage,
+    and then run into an assertion because it contains NULL.
+
+* vpu:
+  * decoder: Fix for an endless loop at gst_imx_vpu_decoder_finish() when in
+    no_wait mode
+  * decoder: Clear the GST_VIDEO_BUFFER_FLAG_TFF flag in case of
+    IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_FIRST
+  * decoder: Honour num-additional-framebuffers setting
+  * decoder: Fix leak when input video formats change due to a missing
+    gst_imx_vpu_decoder_close() call
+
+* ipu: Reintroduce interlace methods
+
+* audio:
+  * Save pointer to codec_data GstBuffer to fix memory leak
+  * Only allocate reordered_channel_positions if needed. If we don't need to
+    reorder the audio channels, we the unnecessary allocation otherwise.
+
+* g2dpango:
+  * Add missing header and cleanup a few warnings
+  * Unref video_frame memory after phys_memory check
+
 ==== version 0.13.0 (2017-11-01) ====
 
 * New imxv4l2videosink element
