@@ -863,6 +863,7 @@ static GstFlowReturn gst_imx_video_compositor_aggregate_frames(GstImxBPVideoAggr
 
 				if (!klass->draw_frame(
 					compositor,
+					compositor_pad,
 					&(videoaggregator_pad->info),
 					&(compositor_pad->source_subset),
 					&(compositor_pad->canvas),

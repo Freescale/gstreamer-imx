@@ -24,6 +24,9 @@ struct _GstImxBlitterCompositor
 {
 	GstImxVideoCompositor parent;
 	GstImxBlitter *blitter;
+
+	/* Pad to cached buffer pool hashtable */
+	GHashTable *dma_bufferpools;
 };
 
 

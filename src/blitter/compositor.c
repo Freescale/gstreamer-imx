@@ -1,5 +1,5 @@
 #include "compositor.h"
-
+#include "../common/phys_mem_meta.h"
 
 
 
@@ -14,11 +14,13 @@ static void gst_imx_blitter_compositor_dispose(GObject *object);
 
 static GstStateChangeReturn gst_imx_blitter_compositor_change_state(GstElement *element, GstStateChange transition);
 
+static void gst_imx_blitter_compositor_release_pad(GstElement *element, GstPad *pad);
+
 GstAllocator* gst_imx_blitter_compositor_get_phys_mem_allocator(GstImxVideoCompositor *compositor);
 gboolean gst_imx_blitter_compositor_set_output_frame(GstImxVideoCompositor *compositor, GstBuffer *output_frame);
 gboolean gst_imx_blitter_compositor_set_output_video_info(GstImxVideoCompositor *compositor, GstVideoInfo const *info);
 gboolean gst_imx_blitter_compositor_fill_region(GstImxVideoCompositor *compositor, GstImxRegion const *region, guint32 color);
-gboolean gst_imx_blitter_compositor_draw_frame(GstImxVideoCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer **input_frame, guint8 alpha);
+gboolean gst_imx_blitter_compositor_draw_frame(GstImxVideoCompositor *compositor, GstImxVideoCompositorPad *pad, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer **input_frame, guint8 alpha);
 
 
 
@@ -40,6 +42,7 @@ static void gst_imx_blitter_compositor_class_init(GstImxBlitterCompositorClass *
 	object_class->dispose = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_dispose);
 
 	element_class->change_state = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_change_state);
+	element_class->release_pad = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_release_pad);
 
 	parent_class->get_phys_mem_allocator = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_get_phys_mem_allocator);
 	parent_class->set_output_frame       = GST_DEBUG_FUNCPTR(gst_imx_blitter_compositor_set_output_frame);
@@ -56,6 +59,7 @@ static void gst_imx_blitter_compositor_class_init(GstImxBlitterCompositorClass *
 static void gst_imx_blitter_compositor_init(GstImxBlitterCompositor *blitter_compositor)
 {
 	blitter_compositor->blitter = NULL;
+	blitter_compositor->dma_bufferpools = g_hash_table_new_full (g_direct_hash, g_direct_equal, (GDestroyNotify) gst_object_unref, (GDestroyNotify) gst_object_unref);
 }
 
 
@@ -67,6 +71,12 @@ static void gst_imx_blitter_compositor_dispose(GObject *object)
 	{
 		gst_object_unref(blitter_compositor->blitter);
 		blitter_compositor->blitter = NULL;
+	}
+
+	if (blitter_compositor->dma_bufferpools != NULL)
+	{
+		g_hash_table_unref(blitter_compositor->dma_bufferpools);
+		blitter_compositor->dma_bufferpools = NULL;
 	}
 
 	G_OBJECT_CLASS(gst_imx_blitter_compositor_parent_class)->dispose(object);
@@ -131,6 +141,15 @@ static GstStateChangeReturn gst_imx_blitter_compositor_change_state(GstElement *
 	return ret;
 }
 
+static void gst_imx_blitter_compositor_release_pad(GstElement *element, GstPad *pad)
+{
+	GstImxBlitterCompositor *blitter_compositor = GST_IMX_BLITTER_COMPOSITOR(element);
+
+	if (blitter_compositor->dma_bufferpools)
+		g_hash_table_remove(blitter_compositor->dma_bufferpools, pad);
+
+	GST_ELEMENT_CLASS(gst_imx_blitter_compositor_parent_class)->release_pad(element, pad);
+}
 
 GstAllocator* gst_imx_blitter_compositor_get_phys_mem_allocator(GstImxVideoCompositor *compositor)
 {
@@ -168,13 +187,71 @@ gboolean gst_imx_blitter_compositor_fill_region(GstImxVideoCompositor *composito
 }
 
 
-gboolean gst_imx_blitter_compositor_draw_frame(GstImxVideoCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer **input_frame, guint8 alpha)
+gboolean gst_imx_blitter_compositor_draw_frame(GstImxVideoCompositor *compositor, GstImxVideoCompositorPad *pad, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer **input_frame, guint8 alpha)
 {
 	gboolean ret = TRUE;
 	GstImxBlitterCompositor *blitter_compositor = GST_IMX_BLITTER_COMPOSITOR(compositor);
 	g_assert(blitter_compositor->blitter != NULL);
 
+	GstImxPhysMemMeta *phys_mem_meta;
+	phys_mem_meta = GST_IMX_PHYS_MEM_META_GET(*input_frame);
+
 	ret = ret && gst_imx_blitter_set_input_video_info(blitter_compositor->blitter, input_info);
+
+	if ((phys_mem_meta == NULL) || (phys_mem_meta->phys_addr == 0))
+	{
+		GstBufferPool *dma_bufferpool;
+		GstCaps *current_caps = gst_video_info_to_caps(input_info);
+
+		GST_TRACE_OBJECT(blitter_compositor, "need an internal bufferpool");
+
+		dma_bufferpool = g_hash_table_lookup(blitter_compositor->dma_bufferpools, pad);
+		if (dma_bufferpool)
+		{
+			GstStructure *buffer_pool_config = gst_buffer_pool_get_config(dma_bufferpool);
+			GstCaps *previous_caps = NULL;
+
+			GST_TRACE_OBJECT(blitter_compositor, "found an internal bufferpool");
+
+			gst_buffer_pool_config_get_params(buffer_pool_config, &previous_caps, NULL, NULL, NULL);
+
+			if (!previous_caps || !gst_caps_is_equal(current_caps, previous_caps))
+			{
+				g_hash_table_remove(blitter_compositor->dma_bufferpools, pad);
+				dma_bufferpool = NULL;
+			}
+
+			gst_structure_free(buffer_pool_config);
+		}
+
+		if (dma_bufferpool == NULL)
+		{
+			GST_TRACE_OBJECT(blitter_compositor, "need to create internal bufferpool");
+			dma_bufferpool = gst_imx_blitter_create_bufferpool(
+				blitter_compositor->blitter,
+				current_caps,
+				input_info->size,
+				0, 0,
+				NULL,
+				NULL
+			);
+
+			if (dma_bufferpool == NULL)
+			{
+				GST_ERROR_OBJECT(blitter_compositor, "failed to create internal bufferpool");
+				return FALSE;
+			}
+
+			g_hash_table_insert(blitter_compositor->dma_bufferpools, gst_object_ref(pad), dma_bufferpool);
+		}
+
+		gst_caps_unref(current_caps);
+
+		ret = ret && gst_imx_blitter_set_input_dma_bufferpool(blitter_compositor->blitter, dma_bufferpool);
+	} else {
+		ret = ret && gst_imx_blitter_set_input_dma_bufferpool(blitter_compositor->blitter, NULL);
+	}
+
 	ret = ret && gst_imx_blitter_set_input_region(blitter_compositor->blitter, input_region);
 	ret = ret && gst_imx_blitter_set_input_frame_and_cache(blitter_compositor->blitter, input_frame);
 	ret = ret && gst_imx_blitter_set_output_canvas(blitter_compositor->blitter, output_canvas);

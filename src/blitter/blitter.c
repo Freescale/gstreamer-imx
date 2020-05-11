@@ -116,6 +116,15 @@ gboolean gst_imx_blitter_set_input_video_info(GstImxBlitter *blitter, GstVideoIn
 	return TRUE;
 }
 
+gboolean gst_imx_blitter_set_input_dma_bufferpool(GstImxBlitter *blitter, GstBufferPool *dma_bufferpool)
+{
+	if (blitter->dma_bufferpool)
+		gst_object_unref (blitter->dma_bufferpool);
+
+	blitter->dma_bufferpool = dma_bufferpool ? gst_object_ref (dma_bufferpool) : NULL;
+
+	return TRUE;
+}
 
 gboolean gst_imx_blitter_set_output_video_info(GstImxBlitter *blitter, GstVideoInfo const *output_video_info)
 {

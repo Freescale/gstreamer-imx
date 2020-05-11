@@ -188,6 +188,13 @@ struct _GstImxBlitterClass
 
 GType gst_imx_blitter_get_type(void);
 
+/* Sets the input DMA buffer pool.
+ *
+ * This buffer pool is going to be used for allocating temporary input frames
+ * if needed. The caller must ensure that the pool is activated and configured
+ * for the correct input video info.
+ */
+gboolean gst_imx_blitter_set_input_dma_bufferpool(GstImxBlitter *blitter, GstBufferPool *dma_bufferpool);
 
 /* Sets the input video info.
  *

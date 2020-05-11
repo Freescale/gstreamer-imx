@@ -97,7 +97,7 @@ struct _GstImxVideoCompositorClass
 	gboolean (*set_output_frame)(GstImxVideoCompositor *compositor, GstBuffer *output_frame);
 	gboolean (*set_output_video_info)(GstImxVideoCompositor *compositor, GstVideoInfo const *info);
 	gboolean (*fill_region)(GstImxVideoCompositor *compositor, GstImxRegion const *region, guint32 color);
-	gboolean (*draw_frame)(GstImxVideoCompositor *compositor, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer **input_frame, guint8 alpha);
+	gboolean (*draw_frame)(GstImxVideoCompositor *compositor, GstImxVideoCompositorPad *pad, GstVideoInfo const *input_info, GstImxRegion const *input_region, GstImxCanvas const *output_canvas, GstBuffer **input_frame, guint8 alpha);
 };
 
 
