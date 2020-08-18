@@ -22,7 +22,6 @@
 #include <glib.h>
 #include <gst/gst.h>
 #include <imxvpuapi2/imxvpuapi2.h>
-#include "gst/imx/gstimxdmabufferallocator.h"
 #include "gstimxvpudeccontext.h"
 
 
@@ -84,11 +83,8 @@ G_BEGIN_DECLS
 #define GST_BUFFER_POOL_OPTION_IMX_VPU_DEC_BUFFER_POOL "GstBufferPoolOptionImxVpuDecBufferPool"
 
 
-struct _GstImxVpuDecContext;
-
 typedef struct _GstImxVpuDecBufferPool GstImxVpuDecBufferPool;
 typedef struct _GstImxVpuDecBufferPoolClass GstImxVpuDecBufferPoolClass;
-typedef struct _GstImxVpuDecBufferPoolPrivate GstImxVpuDecBufferPoolPrivate;
 
 
 typedef enum
@@ -96,16 +92,6 @@ typedef enum
 	GST_IMX_VPU_DEC_BUFFER_POOL_ACQUIRE_FLAG_SELECTED = GST_BUFFER_POOL_ACQUIRE_FLAG_LAST
 }
 GstImxVpuDecBufferPoolAcquireFlags;
-
-
-struct _GstImxVpuDecBufferPool
-{
-	GstBufferPool parent;
-
-	/*< private >*/
-
-	GstImxVpuDecBufferPoolPrivate *priv;
-};
 
 
 GType gst_imx_vpu_dec_buffer_pool_get_type(void);

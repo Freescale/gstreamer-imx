@@ -20,6 +20,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideometa.h>
+#include "gst/imx/gstimxdmabufferallocator.h"
 #include "gstimxvpudecbufferpool.h"
 #include "gstimxvpudeccontext.h"
 
@@ -36,8 +37,12 @@ typedef enum
 GstImxVpuBufferFlags;
 
 
-struct _GstImxVpuDecBufferPoolPrivate
+struct _GstImxVpuDecBufferPool
 {
+	GstBufferPool parent;
+
+	/*< private >*/
+
 	GstImxVpuDecContext *decoder_context;
 	ImxVpuApiDecStreamInfo stream_info;
 	GstBuffer *selected_reserved_buffer;
@@ -50,7 +55,7 @@ struct _GstImxVpuDecBufferPoolPrivate
 
 struct _GstImxVpuDecBufferPoolClass
 {
-	GstBufferPoolClass parent;
+	GstBufferPoolClass parent_class;
 };
 
 
@@ -67,12 +72,7 @@ static void gst_imx_vpu_dec_buffer_pool_free_buffer(GstBufferPool *pool, GstBuff
 
 
 
-G_DEFINE_TYPE_WITH_CODE(
-	GstImxVpuDecBufferPool,
-	gst_imx_vpu_dec_buffer_pool,
-	GST_TYPE_BUFFER_POOL,
-	G_ADD_PRIVATE(GstImxVpuDecBufferPool)
-)
+G_DEFINE_TYPE(GstImxVpuDecBufferPool, gst_imx_vpu_dec_buffer_pool, GST_TYPE_BUFFER_POOL)
 
 
 
@@ -104,12 +104,16 @@ static void gst_imx_vpu_dec_buffer_pool_init(GstImxVpuDecBufferPool *imx_vpu_dec
 {
 	GST_DEBUG_OBJECT(imx_vpu_dec_buffer_pool, "initializing buffer pool");
 
-	imx_vpu_dec_buffer_pool->priv = gst_imx_vpu_dec_buffer_pool_get_instance_private(imx_vpu_dec_buffer_pool);
-	memset(imx_vpu_dec_buffer_pool->priv, 0, sizeof(GstImxVpuDecBufferPoolPrivate));
+	imx_vpu_dec_buffer_pool->decoder_context = NULL;
 
-	g_mutex_init(&(imx_vpu_dec_buffer_pool->priv->selected_buffer_mutex));
+	memset(&(imx_vpu_dec_buffer_pool->stream_info), 0, sizeof(imx_vpu_dec_buffer_pool->stream_info));
 
-	gst_video_info_init(&(imx_vpu_dec_buffer_pool->priv->video_info));
+	imx_vpu_dec_buffer_pool->selected_reserved_buffer = NULL;
+	imx_vpu_dec_buffer_pool->reserved_buffers = NULL;
+	g_mutex_init(&(imx_vpu_dec_buffer_pool->selected_buffer_mutex));
+
+	gst_video_info_init(&(imx_vpu_dec_buffer_pool->video_info));
+	imx_vpu_dec_buffer_pool->add_videometa = FALSE;
 }
 
 
@@ -119,10 +123,10 @@ static void gst_imx_vpu_dec_buffer_pool_finalize(GObject *object)
 
 	GST_DEBUG_OBJECT(imx_vpu_dec_buffer_pool, "shutting down buffer pool");
 
-	if (imx_vpu_dec_buffer_pool->priv->decoder_context != NULL)
-		gst_object_unref(GST_OBJECT(imx_vpu_dec_buffer_pool->priv->decoder_context));
+	if (imx_vpu_dec_buffer_pool->decoder_context != NULL)
+		gst_object_unref(GST_OBJECT(imx_vpu_dec_buffer_pool->decoder_context));
 
-	g_mutex_clear(&(imx_vpu_dec_buffer_pool->priv->selected_buffer_mutex));
+	g_mutex_clear(&(imx_vpu_dec_buffer_pool->selected_buffer_mutex));
 
 	G_OBJECT_CLASS(gst_imx_vpu_dec_buffer_pool_parent_class)->finalize(object);
 }
@@ -171,28 +175,28 @@ static gboolean gst_imx_vpu_dec_buffer_pool_set_config(GstBufferPool *pool, GstS
 		return FALSE;
 	}
 
-	imx_vpu_dec_buffer_pool->priv->video_info = info;
+	imx_vpu_dec_buffer_pool->video_info = info;
 
-	stream_info = &(imx_vpu_dec_buffer_pool->priv->stream_info);
+	stream_info = &(imx_vpu_dec_buffer_pool->stream_info);
 	fb_metrics = &(stream_info->decoded_frame_framebuffer_metrics);
 
 	/* Set the video info width/height to the actual frame
 	 * width/height to exclude padding rows and columns. */
-	imx_vpu_dec_buffer_pool->priv->video_info.width = fb_metrics->actual_frame_width;
-	imx_vpu_dec_buffer_pool->priv->video_info.height = fb_metrics->actual_frame_height;
+	imx_vpu_dec_buffer_pool->video_info.width = fb_metrics->actual_frame_width;
+	imx_vpu_dec_buffer_pool->video_info.height = fb_metrics->actual_frame_height;
 	/* Set up the stride sizes according to the framebuffer metrics.
 	 * The framebuffer_sizes struct can contain different stride values,
 	 * depending on the needs of the VPU. */
-	imx_vpu_dec_buffer_pool->priv->video_info.stride[0] = fb_metrics->y_stride;
-	imx_vpu_dec_buffer_pool->priv->video_info.stride[1] = fb_metrics->uv_stride;
-	imx_vpu_dec_buffer_pool->priv->video_info.stride[2] = fb_metrics->uv_stride;
+	imx_vpu_dec_buffer_pool->video_info.stride[0] = fb_metrics->y_stride;
+	imx_vpu_dec_buffer_pool->video_info.stride[1] = fb_metrics->uv_stride;
+	imx_vpu_dec_buffer_pool->video_info.stride[2] = fb_metrics->uv_stride;
 	/* Set up the stride sizes according to the framebuffer offsets. */
-	imx_vpu_dec_buffer_pool->priv->video_info.offset[0] = 0;
-	imx_vpu_dec_buffer_pool->priv->video_info.offset[1] = fb_metrics->y_size;
-	imx_vpu_dec_buffer_pool->priv->video_info.offset[2] = fb_metrics->y_size + fb_metrics->uv_size;
-	imx_vpu_dec_buffer_pool->priv->video_info.size = MAX(stream_info->min_output_framebuffer_size, size);
+	imx_vpu_dec_buffer_pool->video_info.offset[0] = 0;
+	imx_vpu_dec_buffer_pool->video_info.offset[1] = fb_metrics->y_size;
+	imx_vpu_dec_buffer_pool->video_info.offset[2] = fb_metrics->y_size + fb_metrics->uv_size;
+	imx_vpu_dec_buffer_pool->video_info.size = MAX(stream_info->min_output_framebuffer_size, size);
 
-	imx_vpu_dec_buffer_pool->priv->add_videometa = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+	imx_vpu_dec_buffer_pool->add_videometa = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
 	GST_DEBUG_OBJECT(
 		imx_vpu_dec_buffer_pool,
@@ -201,14 +205,14 @@ static gboolean gst_imx_vpu_dec_buffer_pool_set_config(GstBufferPool *pool, GstS
 		"  Y/Cb/Cr offsets: %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT
 		"  frame size: %" G_GSIZE_FORMAT " bytes"
 		"  with videometa: %d",
-		imx_vpu_dec_buffer_pool->priv->video_info.stride[0],
-		imx_vpu_dec_buffer_pool->priv->video_info.stride[1],
-		imx_vpu_dec_buffer_pool->priv->video_info.stride[2],
-		imx_vpu_dec_buffer_pool->priv->video_info.offset[0],
-		imx_vpu_dec_buffer_pool->priv->video_info.offset[1],
-		imx_vpu_dec_buffer_pool->priv->video_info.offset[2],
-		imx_vpu_dec_buffer_pool->priv->video_info.size,
-		imx_vpu_dec_buffer_pool->priv->add_videometa
+		imx_vpu_dec_buffer_pool->video_info.stride[0],
+		imx_vpu_dec_buffer_pool->video_info.stride[1],
+		imx_vpu_dec_buffer_pool->video_info.stride[2],
+		imx_vpu_dec_buffer_pool->video_info.offset[0],
+		imx_vpu_dec_buffer_pool->video_info.offset[1],
+		imx_vpu_dec_buffer_pool->video_info.offset[2],
+		imx_vpu_dec_buffer_pool->video_info.size,
+		imx_vpu_dec_buffer_pool->add_videometa
 	);
 
 	ret = GST_BUFFER_POOL_CLASS(gst_imx_vpu_dec_buffer_pool_parent_class)->set_config(pool, config);
@@ -233,7 +237,7 @@ static gboolean gst_imx_vpu_dec_buffer_pool_set_config(GstBufferPool *pool, GstS
 
 static gboolean gst_imx_vpu_dec_buffer_pool_start(GstBufferPool *pool)
 {
-	GST_DEBUG_OBJECT(pool, "starting buffer pool");
+	GST_DEBUG_OBJECT(pool, "starting imxvpudec buffer pool");
 	return GST_BUFFER_POOL_CLASS(gst_imx_vpu_dec_buffer_pool_parent_class)->start(pool);
 }
 
@@ -243,16 +247,16 @@ static gboolean gst_imx_vpu_dec_buffer_pool_stop(GstBufferPool *pool)
 	GSList *reserved_buffer_list_item;
 	GstImxVpuDecBufferPool *imx_vpu_dec_buffer_pool = GST_IMX_VPU_DEC_BUFFER_POOL(pool);
 
-	GST_DEBUG_OBJECT(imx_vpu_dec_buffer_pool, "stopping buffer pool");
+	GST_DEBUG_OBJECT(imx_vpu_dec_buffer_pool, "stopping imxvpudec buffer pool");
 
-	for (reserved_buffer_list_item = imx_vpu_dec_buffer_pool->priv->reserved_buffers; reserved_buffer_list_item != NULL; reserved_buffer_list_item = reserved_buffer_list_item->next)
+	for (reserved_buffer_list_item = imx_vpu_dec_buffer_pool->reserved_buffers; reserved_buffer_list_item != NULL; reserved_buffer_list_item = reserved_buffer_list_item->next)
 	{
 		GstBuffer *buffer = GST_BUFFER_CAST(reserved_buffer_list_item->data);
 		GST_DEBUG_OBJECT(imx_vpu_dec_buffer_pool, "freeing reserved gstbuffer %p", (gpointer)buffer);
 		gst_buffer_unref(buffer);
 	}
 
-	g_slist_free(imx_vpu_dec_buffer_pool->priv->reserved_buffers);
+	g_slist_free(imx_vpu_dec_buffer_pool->reserved_buffers);
 
 	return GST_BUFFER_POOL_CLASS(gst_imx_vpu_dec_buffer_pool_parent_class)->stop(pool);
 }
@@ -267,9 +271,9 @@ static GstFlowReturn gst_imx_vpu_dec_buffer_pool_acquire_buffer(GstBufferPool *p
 	 * buffer while thread B does a regular acquire call). */
 	if ((params != NULL) && (params->flags & GST_IMX_VPU_DEC_BUFFER_POOL_ACQUIRE_FLAG_SELECTED))
 	{
-		g_mutex_lock(&(imx_vpu_dec_buffer_pool->priv->selected_buffer_mutex));
-		*buffer = imx_vpu_dec_buffer_pool->priv->selected_reserved_buffer;
-		g_mutex_unlock(&(imx_vpu_dec_buffer_pool->priv->selected_buffer_mutex));
+		g_mutex_lock(&(imx_vpu_dec_buffer_pool->selected_buffer_mutex));
+		*buffer = imx_vpu_dec_buffer_pool->selected_reserved_buffer;
+		g_mutex_unlock(&(imx_vpu_dec_buffer_pool->selected_buffer_mutex));
 
 		/* Set this flag to make sure the buffer is returned to the VPU in the
 		 * release() function. */
@@ -297,7 +301,7 @@ static GstFlowReturn gst_imx_vpu_dec_buffer_pool_alloc_buffer(GstBufferPool *poo
 {
 	GstFlowReturn flow_ret;
 	GstImxVpuDecBufferPool *imx_vpu_dec_buffer_pool = GST_IMX_VPU_DEC_BUFFER_POOL(pool);
-	ImxVpuApiDecStreamInfo *stream_info = &(imx_vpu_dec_buffer_pool->priv->stream_info);
+	ImxVpuApiDecStreamInfo *stream_info = &(imx_vpu_dec_buffer_pool->stream_info);
 
 	if (G_UNLIKELY((flow_ret = GST_BUFFER_POOL_CLASS(gst_imx_vpu_dec_buffer_pool_parent_class)->alloc_buffer(pool, buffer, params)) != GST_FLOW_OK))
 	{
@@ -309,9 +313,9 @@ static GstFlowReturn gst_imx_vpu_dec_buffer_pool_alloc_buffer(GstBufferPool *poo
 
 	g_assert(*buffer != NULL);
 
-	if (imx_vpu_dec_buffer_pool->priv->add_videometa)
+	if (imx_vpu_dec_buffer_pool->add_videometa)
 	{
-		GstVideoInfo *video_info = &(imx_vpu_dec_buffer_pool->priv->video_info);
+		GstVideoInfo *video_info = &(imx_vpu_dec_buffer_pool->video_info);
 
 		gst_buffer_add_video_meta_full(
 			*buffer,
@@ -345,12 +349,12 @@ static void gst_imx_vpu_dec_buffer_pool_release_buffer(GstBufferPool *pool, GstB
 	{
 		ImxDmaBuffer *framebuffer = gst_imx_get_dma_buffer_from_buffer(buffer);
 
-		g_assert(imx_vpu_dec_buffer_pool->priv->decoder_context != NULL);
+		g_assert(imx_vpu_dec_buffer_pool->decoder_context != NULL);
 
 		if (G_LIKELY(GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_IMX_VPU_FRAMEBUFFER_NEEDS_TO_BE_RETURNED)))
 		{
 			GST_LOG_OBJECT(imx_vpu_dec_buffer_pool, "returning framebuffer %p to decoder from reserved gstbuffer %p", (gpointer)framebuffer, (gpointer)buffer);
-			gst_imx_vpu_dec_context_return_framebuffer_to_decoder(imx_vpu_dec_buffer_pool->priv->decoder_context, framebuffer);
+			gst_imx_vpu_dec_context_return_framebuffer_to_decoder(imx_vpu_dec_buffer_pool->decoder_context, framebuffer);
 		}
 
 		GST_BUFFER_FLAG_UNSET(buffer, GST_BUFFER_FLAG_IMX_VPU_FRAMEBUFFER_NEEDS_TO_BE_RETURNED);
@@ -392,8 +396,8 @@ GstImxVpuDecBufferPool* gst_imx_vpu_dec_buffer_pool_new(ImxVpuApiDecStreamInfo *
 	gst_object_ref(GST_OBJECT(decoder_context));
 
 	imx_vpu_dec_buffer_pool = g_object_new(gst_imx_vpu_dec_buffer_pool_get_type(), NULL);
-	imx_vpu_dec_buffer_pool->priv->decoder_context = decoder_context;
-	imx_vpu_dec_buffer_pool->priv->stream_info = *stream_info;
+	imx_vpu_dec_buffer_pool->decoder_context = decoder_context;
+	imx_vpu_dec_buffer_pool->stream_info = *stream_info;
 
 	// Clear the floating flag, since it is not useful
 	// with buffer pools, and could lead to subtle
@@ -425,7 +429,7 @@ GstBuffer* gst_imx_vpu_dec_buffer_pool_reserve_buffer(GstImxVpuDecBufferPool *im
 		return NULL;
 	}
 
-	imx_vpu_dec_buffer_pool->priv->reserved_buffers = g_slist_prepend(imx_vpu_dec_buffer_pool->priv->reserved_buffers, buffer);
+	imx_vpu_dec_buffer_pool->reserved_buffers = g_slist_prepend(imx_vpu_dec_buffer_pool->reserved_buffers, buffer);
 
 	/* Make sure the reserved buffer is marked as pooled and locked, otherwise
 	 * it won't be passed to the release() function once its refcount reaches 0. */
@@ -448,9 +452,9 @@ void gst_imx_vpu_dec_buffer_pool_select_reserved_buffer(GstImxVpuDecBufferPool *
 {
 	g_assert((buffer == NULL) || GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_IMX_VPU_RESERVED_FRAMEBUFFER));
 
-	g_mutex_lock(&(imx_vpu_dec_buffer_pool->priv->selected_buffer_mutex));
-	imx_vpu_dec_buffer_pool->priv->selected_reserved_buffer = buffer;
-	g_mutex_unlock(&(imx_vpu_dec_buffer_pool->priv->selected_buffer_mutex));
+	g_mutex_lock(&(imx_vpu_dec_buffer_pool->selected_buffer_mutex));
+	imx_vpu_dec_buffer_pool->selected_reserved_buffer = buffer;
+	g_mutex_unlock(&(imx_vpu_dec_buffer_pool->selected_buffer_mutex));
 
 	GST_LOG_OBJECT(imx_vpu_dec_buffer_pool, "selected reserved gstbuffer %p", (gpointer)buffer);
 }
