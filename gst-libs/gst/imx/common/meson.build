@@ -15,7 +15,7 @@ gstimxcommon = library(
 	dependencies : [gstreamer_dep, gstreamer_base_dep, gstreamer_allocators_dep, libm_dep, libimxdmabuffer_dep]
 )
 
-install_headers(public_headers, subdir : 'gstreamer-1.0/gst/imx')
+install_headers(public_headers, subdir : 'gstreamer-1.0/gst/imx/common')
 
 pkg.generate(
 	gstimxcommon,

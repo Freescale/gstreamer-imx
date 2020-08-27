@@ -21,7 +21,7 @@
 #include <gst/video/gstvideometa.h>
 #include <imxdmabuffer/imxdmabuffer.h>
 #include <imxdmabuffer/imxdmabuffer_config.h>
-#include "gst/imx/gstimxdmabufferallocator.h"
+#include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "gstimxvpucommon.h"
 #include "gstimxvpuenc.h"
 

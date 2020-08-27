@@ -23,7 +23,7 @@
 #include <imxdmabuffer/imxdmabuffer.h>
 #include <imxdmabuffer/imxdmabuffer_config.h>
 #include <imxvpuapi2/imxvpuapi2.h>
-#include "gst/imx/gstimxdmabufferallocator.h"
+#include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "gstimxvpudec.h"
 #include "gstimxvpudeccontext.h"
 #include "gstimxvpudecbufferpool.h"

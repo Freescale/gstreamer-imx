@@ -20,7 +20,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideometa.h>
-#include "gst/imx/gstimxdmabufferallocator.h"
+#include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "gstimxvpudecbufferpool.h"
 #include "gstimxvpudeccontext.h"
 
