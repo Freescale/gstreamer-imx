@@ -51,6 +51,15 @@ gboolean gst_imx_is_imx_dma_buffer_memory(GstMemory *memory)
 }
 
 
+gboolean gst_imx_has_imx_dma_buffer_memory(GstBuffer *buffer)
+{
+	if (G_UNLIKELY((buffer == NULL) || (gst_buffer_n_memory(buffer) == 0)))
+		return FALSE;
+
+	return gst_imx_is_imx_dma_buffer_memory(gst_buffer_peek_memory(buffer, 0));
+}
+
+
 /**
  * gst_imx_get_dma_buffer_from_memory:
  * @memory: a #GstMemory

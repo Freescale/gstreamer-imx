@@ -59,6 +59,7 @@ struct _GstImxDmaBufferAllocatorInterface
 GType gst_imx_dma_buffer_allocator_get_type(void);
 
 gboolean gst_imx_is_imx_dma_buffer_memory(GstMemory *memory);
+gboolean gst_imx_has_imx_dma_buffer_memory(GstBuffer *buffer);
 
 ImxDmaBuffer* gst_imx_get_dma_buffer_from_memory(GstMemory *memory);
 ImxDmaBuffer* gst_imx_get_dma_buffer_from_buffer(GstBuffer *buffer);
