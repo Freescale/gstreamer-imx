@@ -33,6 +33,6 @@ library(
 	install : true,
 	install_dir: plugins_install_dir,
 	include_directories: [configinc, libsinc],
-	dependencies : [gstreamer_dep, gstreamer_base_dep, gstreamer_video_dep, gstreamer_allocators_dep, libm_dep, libimxdmabuffer_dep, libimxvpuapi2_dep],
+	dependencies : [gstimxcommon_dep, gstreamer_video_dep, libimxvpuapi2_dep],
 	link_with : [gstimxcommon]
 )
