@@ -33,8 +33,6 @@ gstreamer_allocators_dep = dependency('gstreamer-allocators-1.0', version : '>=1
 gstreamer_audio_dep      = dependency('gstreamer-audio-1.0',      version : '>=1.14.0', required : false)
 gstreamer_video_dep      = dependency('gstreamer-video-1.0',      version : '>=1.14.0', required : false)
 
-#gstphotography_dep       = cc.find_library('gstphotography-1.0',  required : false)
-
 if gstreamer_audio_dep.found()
 	message('found gstaudio library - building audio plugins')
 else
@@ -47,10 +45,6 @@ else
 	message('could not find gstvideo library - not building video plugins')
 endif
 
-# TODO: enable gstphotography once the imx v4l2src plugin is reintroduced
-#if gstphotography_dep.found()
-#	message('found gstphotography library - adding photography controls to v4l2src plugin')
-#endif
 
 
 plugins_install_dir = join_paths(get_option('libdir'), 'gstreamer-1.0')
