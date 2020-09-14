@@ -768,8 +768,6 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 
 		/* Now create our DMA buffer pool. */
 		imx_vpu_dec->dma_buffer_pool = gst_imx_vpu_dec_buffer_pool_new(&(imx_vpu_dec->current_stream_info), imx_vpu_dec->decoder_context);
-		/* Clear floating flag. */
-		gst_object_ref_sink(GST_OBJECT(imx_vpu_dec->dma_buffer_pool));
 		buffer_pool = GST_BUFFER_POOL(imx_vpu_dec->dma_buffer_pool);
 
 		/* And configure our newly created pool. */
