@@ -1152,15 +1152,19 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 				g_assert(imx_vpu_dec->output_state != NULL);
 
 
-				/* Need to make sure the output state has the right interlac
+				/* Need to make sure the output state has the right interlace
 				 * mode, which might not be set correctly in the input state. */
 
 				GST_VIDEO_INFO_INTERLACE_MODE(&(imx_vpu_dec->output_state->info)) = is_interlaced ? GST_VIDEO_INTERLACE_MODE_MIXED : GST_VIDEO_INTERLACE_MODE_PROGRESSIVE;
 
-				imx_vpu_dec->output_state->info.colorimetry.range = new_stream_info->video_full_range_flag ? GST_VIDEO_COLOR_RANGE_0_255 : GST_VIDEO_COLOR_RANGE_16_235;
+				/* We (currently) do not support multiview. */
 
+				GST_VIDEO_INFO_MULTIVIEW_MODE(&(imx_vpu_dec->output_state->info)) = GST_VIDEO_MULTIVIEW_MODE_MONO;
+				GST_VIDEO_INFO_MULTIVIEW_FLAGS(&(imx_vpu_dec->output_state->info)) = GST_VIDEO_MULTIVIEW_FLAGS_NONE;
 
 				/* Fill colorimetry information into the output state. */
+
+				imx_vpu_dec->output_state->info.colorimetry.range = new_stream_info->video_full_range_flag ? GST_VIDEO_COLOR_RANGE_0_255 : GST_VIDEO_COLOR_RANGE_16_235;
 
 				if (new_stream_info->flags & IMX_VPU_API_DEC_STREAM_INFO_FLAG_COLOR_DESCRIPTION_AVAILABLE)
 				{
