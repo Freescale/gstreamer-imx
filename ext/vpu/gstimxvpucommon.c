@@ -28,11 +28,6 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_api_debug);
 GST_DEBUG_CATEGORY_EXTERN(gst_imx_vpu_common_debug);
 
 
-#if GST_CHECK_VERSION(1, 16, 0)
-#define SUPPORTS_SEMI_PLANAR_10BIT_FRAMES
-#endif
-
-
 static GstImxVpuCodecDetails const decoder_details_table[NUM_IMX_VPU_API_COMPRESSION_FORMATS] =
 {
 	{ "jpeg",   "Jpeg",   "JPEG",                                              GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_JPEG,           FALSE },
@@ -436,7 +431,7 @@ gboolean gst_imx_vpu_color_format_to_gstvidfmt(GstVideoFormat *gst_video_format,
 		case IMX_VPU_API_COLOR_FORMAT_FULLY_PLANAR_YUV420_8BIT: *gst_video_format = GST_VIDEO_FORMAT_I420; break;
 		case IMX_VPU_API_COLOR_FORMAT_FULLY_PLANAR_YUV420_10BIT: *gst_video_format = GST_VIDEO_FORMAT_I420_10LE; break;
 		case IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_YUV420_8BIT: *gst_video_format = GST_VIDEO_FORMAT_NV12; break;
-#ifdef SUPPORTS_SEMI_PLANAR_10BIT_FRAMES
+#ifdef GST_IMX_VPU_SUPPORTS_SEMI_PLANAR_10BIT_FRAMES
 		case IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_YUV420_10BIT: *gst_video_format = GST_VIDEO_FORMAT_NV12_10LE40; break;
 #endif
 		case IMX_VPU_API_COLOR_FORMAT_FULLY_PLANAR_YUV411_8BIT: *gst_video_format = GST_VIDEO_FORMAT_Y41B; break;
@@ -466,7 +461,7 @@ gboolean gst_imx_vpu_color_format_from_gstvidfmt(ImxVpuApiColorFormat *imxvpuapi
 		case GST_VIDEO_FORMAT_I420: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_FULLY_PLANAR_YUV420_8BIT; break;
 		case GST_VIDEO_FORMAT_I420_10LE: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_FULLY_PLANAR_YUV420_10BIT; break;
 		case GST_VIDEO_FORMAT_NV12: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_YUV420_8BIT; break;
-#ifdef SUPPORTS_SEMI_PLANAR_10BIT_FRAMES
+#ifdef GST_IMX_VPU_SUPPORTS_SEMI_PLANAR_10BIT_FRAMES
 		case GST_VIDEO_FORMAT_NV12_10LE40: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_YUV420_10BIT; break;
 #endif
 		case GST_VIDEO_FORMAT_Y41B: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_FULLY_PLANAR_YUV411_8BIT; break;

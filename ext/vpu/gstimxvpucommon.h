@@ -31,6 +31,11 @@ G_BEGIN_DECLS
 
 
 
+#if GST_CHECK_VERSION(1, 16, 0)
+#define GST_IMX_VPU_SUPPORTS_SEMI_PLANAR_10BIT_FRAMES
+#endif
+
+
 /* Functionality for autogenerating GStreamer element entries in the
  * GStreamer registry out of the list of supported codecs.
  *

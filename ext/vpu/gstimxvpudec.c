@@ -1023,7 +1023,7 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 						break;
 
 					case IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_YUV420_10BIT:
-#ifdef SUPPORTS_SEMI_PLANAR_10BIT_FRAMES
+#ifdef GST_IMX_VPU_SUPPORTS_SEMI_PLANAR_10BIT_FRAMES
 						video_format = GST_VIDEO_FORMAT_NV12_10LE40;
 						break;
 #else
