@@ -137,6 +137,9 @@ static void gst_imx_ion_allocator_dispose(GObject *object);
 static void gst_imx_ion_allocator_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_ion_allocator_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
+static gboolean gst_imx_ion_allocator_check_and_open_ion_fd(GstImxIonAllocator *imx_ion_allocator);
+static GstMemory* gst_imx_ion_allocator_alloc_internal(GstImxIonAllocator *imx_ion_allocator, int dmabuf_fd, gsize size);
+
 static GstMemory* gst_imx_ion_allocator_gstalloc_alloc(GstAllocator *allocator, gsize size, GstAllocationParams *params);
 
 
@@ -350,6 +353,69 @@ static void gst_imx_ion_allocator_get_property(GObject *object, guint prop_id, G
 }
 
 
+static gboolean gst_imx_ion_allocator_check_and_open_ion_fd(GstImxIonAllocator *imx_ion_allocator)
+{
+	/* must be called with object lock held */
+
+	if (imx_ion_allocator->ion_fd > 0)
+		return TRUE;
+
+	imx_ion_allocator->ion_fd = open("/dev/ion", O_RDONLY);
+	if (imx_ion_allocator->ion_fd < 0)
+	{
+		GST_ERROR_OBJECT(imx_ion_allocator, "could not open ION allocator device node: %s (%d)", strerror(errno), errno);
+		return FALSE;
+	}
+
+	GST_DEBUG_OBJECT(imx_ion_allocator, "opened ION device node, FD: %d", imx_ion_allocator->ion_fd);
+
+	/* We opened the FD, or at least are now using it. Mark
+	 * the allocator as active to prevent other FDs from
+	 * being set via GObject properties in set_property(). */
+	imx_ion_allocator->active = TRUE;
+
+	return TRUE;
+}
+
+
+static GstMemory* gst_imx_ion_allocator_alloc_internal(GstImxIonAllocator *imx_ion_allocator, int dmabuf_fd, gsize size)
+{
+	int error = 0;
+	imx_physical_address_t physical_address;
+	ImxDmaBufferIonBuffer *imx_ion_buffer;
+	GstMemory *memory = NULL;
+
+	/* must be called with object lock held */
+
+	physical_address = imx_dma_buffer_ion_get_physical_address_from_dmabuf_fd(imx_ion_allocator->ion_fd, dmabuf_fd, &error);
+	if (physical_address == 0)
+	{
+		GST_ERROR_OBJECT(imx_ion_allocator, "could not open get physical address from dmabuf FD: %s (%d)", strerror(error), error);
+		goto finish;
+	}
+	GST_DEBUG_OBJECT(imx_ion_allocator, "got physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " from DMA-BUF buffer", physical_address);
+
+	memory = gst_dmabuf_allocator_alloc(GST_ALLOCATOR_CAST(imx_ion_allocator), dmabuf_fd, size);
+	if (!memory)
+	{
+		GST_ERROR_OBJECT(imx_ion_allocator, "could not allocate GstMemory with GstDmaBufAllocator");
+		goto finish;
+	}
+
+	imx_ion_buffer = g_malloc0(sizeof(ImxDmaBufferIonBuffer));
+	imx_ion_buffer->parent.allocator = (ImxDmaBufferAllocator *)&(imx_ion_allocator->imxdmabuffer_allocator);
+	imx_ion_buffer->gstmemory = memory;
+	imx_ion_buffer->physical_address = physical_address;
+	imx_ion_buffer->dmabuf_fd = dmabuf_fd;
+	imx_ion_buffer->size = size;
+	imx_ion_buffer->mapping_refcount = 0;
+	gst_mini_object_set_qdata(GST_MINI_OBJECT_CAST(memory), gst_imx_ion_memory_imxionbuffer_quark, (gpointer)imx_ion_buffer, g_free);
+
+finish:
+	return memory;
+}
+
+
 
 
 /**** GstPhysMemoryAllocatorInterface internal function definitions ****/
@@ -411,32 +477,13 @@ static GstMemory* gst_imx_ion_allocator_gstalloc_alloc(GstAllocator *allocator, 
 	int dmabuf_fd = -1;
 	int error = 0;
 	GstMemory *memory = NULL;
-	imx_physical_address_t physical_address;
-	ImxDmaBufferIonBuffer *imx_ion_buffer;
 	GstImxIonAllocator *imx_ion_allocator = GST_IMX_ION_ALLOCATOR(allocator);
 	gsize total_size = size + params->prefix + params->padding;
 	size_t alignment;
 
-	assert(imx_ion_allocator != NULL);
-
 	GST_OBJECT_LOCK(imx_ion_allocator);
 
-	if (imx_ion_allocator->ion_fd < 0)
-	{
-		imx_ion_allocator->ion_fd = open("/dev/ion", O_RDONLY);
-		if (imx_ion_allocator->ion_fd < 0)
-		{
-			GST_ERROR_OBJECT(imx_ion_allocator, "could not open ION allocator device node: %s (%d)", strerror(errno), errno);
-			goto finish;
-		}
-
-		GST_DEBUG_OBJECT(imx_ion_allocator, "opened ION device node, FD: %d", imx_ion_allocator->ion_fd);
-	}
-
-	/* We opened the FD, or at least are now using it. Mark
-	 * the allocator as active to prevent other FDs from
-	 * being set via GObject properties in set_property(). */
-	imx_ion_allocator->active = TRUE;
+	gst_imx_ion_allocator_check_and_open_ion_fd(imx_ion_allocator);
 
 	/* TODO: is this the correct way to calculate alignment?
 	alignment = (params->align > 1) ? (params->align - 1) : 0; */
@@ -451,32 +498,7 @@ static GstMemory* gst_imx_ion_allocator_gstalloc_alloc(GstAllocator *allocator, 
 	}
 	GST_DEBUG_OBJECT(imx_ion_allocator, "allocated new DMA-BUF buffer with FD %d", dmabuf_fd);
 
-	/* Now that we've got the buffer, retrieve its physical address. */
-	physical_address = imx_dma_buffer_ion_get_physical_address_from_dmabuf_fd(imx_ion_allocator->ion_fd, dmabuf_fd, &error);
-	if (physical_address == 0)
-	{
-		close(dmabuf_fd);
-		GST_ERROR_OBJECT(imx_ion_allocator, "could not open get physical address from dmabuf FD: %s (%d)", strerror(error), error);
-		goto finish;
-	}
-	GST_DEBUG_OBJECT(imx_ion_allocator, "got physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " from DMA-BUF buffer", physical_address);
-
-	memory = gst_dmabuf_allocator_alloc(allocator, dmabuf_fd, total_size);
-	if (!memory)
-	{
-		close(dmabuf_fd);
-		GST_ERROR_OBJECT(imx_ion_allocator, "could not allocate GstMemory with GstDmaBufAllocator");
-		goto finish;
-	}
-
-	imx_ion_buffer = g_malloc0(sizeof(ImxDmaBufferIonBuffer));
-	imx_ion_buffer->parent.allocator = (ImxDmaBufferAllocator *)&(imx_ion_allocator->imxdmabuffer_allocator);
-	imx_ion_buffer->gstmemory = memory;
-	imx_ion_buffer->physical_address = physical_address;
-	imx_ion_buffer->dmabuf_fd = dmabuf_fd;
-	imx_ion_buffer->size = total_size;
-	imx_ion_buffer->mapping_refcount = 0;
-	gst_mini_object_set_qdata(GST_MINI_OBJECT_CAST(memory), gst_imx_ion_memory_imxionbuffer_quark, (gpointer)imx_ion_buffer, g_free);
+	memory = gst_imx_ion_allocator_alloc_internal(imx_ion_allocator, dmabuf_fd, total_size);
 
 finish:
 	GST_OBJECT_UNLOCK(imx_ion_allocator);
@@ -562,13 +584,6 @@ static size_t gst_imx_ion_allocator_imxdmabufalloc_get_size(G_GNUC_UNUSED ImxDma
 
 /**** Public functions ****/
 
-/**
- * gst_imx_ion_allocator_new:
- *
- * Creates a new #GstAllocator using the libimxdmabuffer ION allocator.
- *
- * Returns: (transfer full) (nullable): Newly created allocator, or NULL in case of failure.
- */
 GstAllocator* gst_imx_ion_allocator_new(void)
 {
 	GstAllocator *imx_ion_allocator = GST_ALLOCATOR_CAST(g_object_new(gst_imx_ion_allocator_get_type(), NULL));
@@ -579,4 +594,21 @@ GstAllocator* gst_imx_ion_allocator_new(void)
 	gst_object_ref_sink(GST_OBJECT(imx_ion_allocator));
 
 	return imx_ion_allocator;
+}
+
+
+GstMemory* gst_imx_ion_allocator_wrap_dmabuf(GstAllocator *allocator, int dmabuf_fd, gsize dmabuf_size)
+{
+	GstMemory *memory = NULL;
+	GstImxIonAllocator *imx_ion_allocator = GST_IMX_ION_ALLOCATOR(allocator);
+
+	assert(dmabuf_fd > 0);
+	assert(dmabuf_size > 0);
+
+	GST_OBJECT_LOCK(imx_ion_allocator);
+	gst_imx_ion_allocator_check_and_open_ion_fd(imx_ion_allocator);
+	memory = gst_imx_ion_allocator_alloc_internal(imx_ion_allocator, dmabuf_fd, dmabuf_size);
+	GST_OBJECT_UNLOCK(imx_ion_allocator);
+
+	return memory;
 }

@@ -40,7 +40,34 @@ typedef struct _GstImxIonAllocatorClass GstImxIonAllocatorClass;
 
 GType gst_imx_ion_allocator_get_type(void);
 
+/**
+ * gst_imx_ion_allocator_new:
+ *
+ * Creates a new #GstAllocator using the libimxdmabuffer ION allocator.
+ *
+ * Returns: (transfer full) (nullable): Newly created allocator, or NULL in case of failure.
+ */
 GstAllocator* gst_imx_ion_allocator_new(void);
+
+/**
+ * gst_imx_ion_allocator_wrap_dmabuf:
+ * @allocator: ION allocator to use.
+ * @dmabuf_fd: DMA-BUF FD to wrap. Must be valid.
+ * @dmabuf_size: Size of the DMA-BUF buffer, in bytes. Must be greater than zero.
+ *
+ * Wraps the specified DMA-BUF FD in an ImxDmaBuffer.
+ * The returned GstMemory will have @allocator set as its allocator.
+ * @allocator must be an GstImxIonAllocator instance.
+ *
+ * Note that the GstMemory will take ownership over the DMA-BUF FD,
+ * meaning that the FD will be closed when the memory is disposed of.
+ * To make sure this does not deallocate the DMA-BUF, use the POSIX
+ * dup() call to create a duplicate FD.
+ *
+ * Returns: GstMemory containing an ImxDmaBuffer which in turn wraps the @dmabuf_fd
+ * duplicate created internally by this function.
+ */
+GstMemory* gst_imx_ion_allocator_wrap_dmabuf(GstAllocator *allocator, int dmabuf_fd, gsize dmabuf_size);
 
 
 G_END_DECLS
