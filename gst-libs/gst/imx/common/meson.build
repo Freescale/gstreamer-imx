@@ -1,5 +1,5 @@
-source = ['gstimxdmabufferallocator.c', 'gstimxdefaultallocator.c']
-public_headers = ['gstimxdmabufferallocator.h', 'gstimxdefaultallocator.h']
+source = ['gstimxdmabufferallocator.c', 'gstimxdefaultallocator.c', 'gstimxdmabufferuploader.c']
+public_headers = ['gstimxdmabufferallocator.h', 'gstimxdefaultallocator.h', 'gstimxdmabufferuploader.h']
 
 if ion_support
 	source += ['gstimxionallocator.c']
