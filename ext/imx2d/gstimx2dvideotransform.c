@@ -1576,6 +1576,9 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
 	self->uploader = gst_imx_dma_buffer_uploader_new(self->imx_dma_buffer_allocator);
 
+	/* We call start _after_ the allocator & uploader were
+	 * set up in case these might be needed. Currently,
+	 * this is not the case, but it may be in the future. */
 	if ((klass->start != NULL) && !(klass->start(self)))
 	{
 		GST_ERROR_OBJECT(self, "start() failed");
