@@ -46,7 +46,6 @@ else
 endif
 
 
-
 plugins_install_dir = join_paths(get_option('libdir'), 'gstreamer-1.0')
 
 
@@ -69,6 +68,7 @@ subdir('gst-libs/imx2d')
 subdir('gst-libs/gst/imx/common')
 subdir('ext/vpu')
 subdir('ext/audio')
+subdir('ext/imx2d')
 
 
 configure_file(output : 'config.h', configuration : conf_data)
