@@ -65,6 +65,7 @@ if ion_support
 endif
 
 
+subdir('gst-libs/imx2d')
 subdir('gst-libs/gst/imx/common')
 subdir('ext/vpu')
 subdir('ext/audio')
