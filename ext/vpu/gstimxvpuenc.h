@@ -24,6 +24,7 @@
 #include <gst/video/gstvideoencoder.h>
 #include <imxvpuapi2/imxvpuapi2.h>
 #include "gstimxvpucommon.h"
+#include "gst/imx/common/gstimxdmabufferuploader.h"
 
 
 G_BEGIN_DECLS
@@ -73,13 +74,15 @@ struct _GstImxVpuEnc
 	 * gst_imx_vpu_enc_set_format() by calling
 	 * gst_imx_vpu_enc_create_dma_buffer_pool(). */
 	GstBufferPool *dma_buffer_pool;
-	/* Hash table that contains a GstMiniObject for each queued
-	 * frame. The key is the system frame number, the value is the
-	 * miniobject. Two types of miniobjects are stored here: GstBuffer
-	 * and GstImxPhysMemWrapper. The former are GstBuffers backed
-	 * by libximdmabuffer memory. The latter is a wrapper around
-	 * physical memory that has not been allocated by libimxdmabuffer. */
-	GHashTable *temp_mini_objects;
+
+	/* Used for uploading incoming buffers into ImxDmaBuffer-backed
+	 * GstMemory that we can use with the VPU encoder. */
+	GstImxDmaBufferUploader *uploader;
+	/* The uploader produces new gstbuffers with the uploaded variants
+	 * of input buffers. These are stored here, and get removed once the
+	 * corresponding input frames got fully processed by the encoder.
+	 * This table helps keeping track of these temp buffers at all times. */
+	GHashTable *uploaded_buffers_table;
 
 	/* The GstBufferList that was created to act as the backing store
 	 * for the VPU's framebuffer pool. */

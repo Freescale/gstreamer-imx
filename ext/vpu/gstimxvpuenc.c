@@ -68,98 +68,10 @@ enum
 
 
 
-/* Internal miniobject for wrapping physical memory blocks whose
- * allocator isn't derived from GstImxDmaBufferAllocator. */
-
-typedef struct _GstImxPhysMemWrapper GstImxPhysMemWrapper;
-
-struct _GstImxPhysMemWrapper
-{
-	GstMiniObject mini_object;
-	GstBuffer *phys_mem_gstbuffer;
-	ImxWrappedDmaBuffer wrapped_dma_buffer;
-};
-
-
-static inline GstImxPhysMemWrapper* gst_imx_phys_mem_wrapper_ref(GstImxPhysMemWrapper *imx_phys_mem_wrapper)
-{
-	return (GstImxPhysMemWrapper *)gst_mini_object_ref(GST_MINI_OBJECT_CAST(imx_phys_mem_wrapper));
-}
-
-
-static inline void gst_imx_phys_mem_wrapper_unref(GstImxPhysMemWrapper *imx_phys_mem_wrapper)
-{
-	gst_mini_object_unref(GST_MINI_OBJECT_CAST(imx_phys_mem_wrapper));
-}
-
-
-GType gst_imx_phys_mem_wrapper_api_get_type(void)
-{
-	static volatile GType type;
-	static gchar const *tags[] = { "resource", "imx", "wrapper", "physmem", NULL };
-
-	if (g_once_init_enter(&type))
-	{
-		GType _type = gst_meta_api_type_register("GstImxPhysMemWrapperAPI", tags);
-		g_once_init_leave(&type, _type);
-	}
-
-	return type;
-}
-
-
-static void gst_imx_phys_mem_wrapper_free(GstImxPhysMemWrapper *imx_phys_mem_wrapper)
-{
-	if (G_UNLIKELY(imx_phys_mem_wrapper->phys_mem_gstbuffer == NULL))
-		return;
-
-	gst_buffer_unref(imx_phys_mem_wrapper->phys_mem_gstbuffer);
-
-	g_slice_free1(sizeof(GstImxPhysMemWrapper), imx_phys_mem_wrapper);
-}
-
-
-static void gst_imx_phys_mem_wrapper_init(GstImxPhysMemWrapper *imx_phys_mem_wrapper, GstBuffer *phys_mem_gstbuffer)
-{
-	GstMemory *phys_memory;
-
-	gst_mini_object_init(
-		GST_MINI_OBJECT_CAST(imx_phys_mem_wrapper),
-		0,
-		gst_imx_phys_mem_wrapper_api_get_type(),
-		NULL,
-		NULL,
-		(GstMiniObjectFreeFunction)gst_imx_phys_mem_wrapper_free
-	);
-
-	phys_memory = gst_buffer_peek_memory(imx_phys_mem_wrapper->phys_mem_gstbuffer, 0);
-
-	imx_phys_mem_wrapper->phys_mem_gstbuffer = gst_buffer_ref(phys_mem_gstbuffer);
-	imx_dma_buffer_init_wrapped_buffer(&(imx_phys_mem_wrapper->wrapped_dma_buffer));
-	imx_phys_mem_wrapper->wrapped_dma_buffer.fd = -1;
-	imx_phys_mem_wrapper->wrapped_dma_buffer.physical_address = gst_phys_memory_get_phys_addr(phys_memory);
-	imx_phys_mem_wrapper->wrapped_dma_buffer.size = phys_memory->size;
-}
-
-
-static GstImxPhysMemWrapper* gst_imx_phys_mem_wrapper_new(GstBuffer *phys_mem_gstbuffer)
-{
-	GstImxPhysMemWrapper *obj;
-
-	g_assert(phys_mem_gstbuffer != NULL);
-	g_assert(gst_buffer_n_memory(phys_mem_gstbuffer) > 0);
-
-	obj = g_slice_alloc(sizeof(GstImxPhysMemWrapper));
-	gst_imx_phys_mem_wrapper_init(obj, phys_mem_gstbuffer);
-
-	return obj;
-}
-
-
-
-
 G_DEFINE_ABSTRACT_TYPE(GstImxVpuEnc, gst_imx_vpu_enc, GST_TYPE_VIDEO_ENCODER)
 
+
+static void gst_imx_vpu_enc_dispose(GObject *object);
 
 static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_vpu_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
@@ -174,18 +86,21 @@ static gboolean gst_imx_vpu_enc_flush(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_enc_create_dma_buffer_pool(GstImxVpuEnc *imx_vpu_enc);
 static void gst_imx_vpu_enc_free_fb_pool_dmabuffers(GstImxVpuEnc *imx_vpu_enc);
 static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_enc);
-static gboolean gst_imx_vpu_enc_verify_phys_buffer(GstImxVpuEnc *imx_vpu_enc, GstBuffer *buffer);
 
 
 static void gst_imx_vpu_enc_class_init(GstImxVpuEncClass *klass)
 {
+	GObjectClass *object_class;
 	GstVideoEncoderClass *video_encoder_class;
 
 	gst_imx_vpu_api_setup_logging();
 
 	GST_DEBUG_CATEGORY_INIT(imx_vpu_enc_debug, "imxvpuenc", 0, "NXP i.MX VPU video encoder");
 
+	object_class = G_OBJECT_CLASS(klass);
 	video_encoder_class = GST_VIDEO_ENCODER_CLASS(klass);
+
+	object_class->dispose                   = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_dispose);
 
 	video_encoder_class->start              = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_start);
 	video_encoder_class->stop               = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_stop);
@@ -208,10 +123,26 @@ static void gst_imx_vpu_enc_init(GstImxVpuEnc *imx_vpu_enc)
 	imx_vpu_enc->default_dma_buf_allocator = NULL;
 
 	imx_vpu_enc->dma_buffer_pool = NULL;
-	imx_vpu_enc->temp_mini_objects = g_hash_table_new_full(g_int64_hash, g_int64_equal, NULL, (GDestroyNotify)gst_mini_object_unref);
+	imx_vpu_enc->uploader = NULL;
+	imx_vpu_enc->uploaded_buffers_table = g_hash_table_new_full(g_int64_hash, g_int64_equal, NULL, (GDestroyNotify)gst_buffer_unref);
 	imx_vpu_enc->fb_pool_buffers = NULL;
 
 	imx_vpu_enc->fatal_error_cannot_encode = FALSE;
+}
+
+
+static void gst_imx_vpu_enc_dispose(GObject *object)
+{
+	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC(object);
+
+	if (imx_vpu_enc->uploaded_buffers_table != NULL)
+	{
+		g_hash_table_remove_all(imx_vpu_enc->uploaded_buffers_table);
+		g_hash_table_unref(imx_vpu_enc->uploaded_buffers_table);
+		imx_vpu_enc->uploaded_buffers_table = NULL;
+	}
+
+	G_OBJECT_CLASS(gst_imx_vpu_enc_parent_class)->dispose(object);
 }
 
 
@@ -313,6 +244,8 @@ static gboolean gst_imx_vpu_enc_start(GstVideoEncoder *encoder)
 
 	imx_vpu_enc->default_dma_buf_allocator = gst_imx_allocator_new();
 
+	imx_vpu_enc->uploader = gst_imx_dma_buffer_uploader_new(imx_vpu_enc->default_dma_buf_allocator);
+
 	imx_vpu_enc->stream_buffer = gst_allocator_alloc(
 		imx_vpu_enc->default_dma_buf_allocator,
 		stream_buffer_size,
@@ -342,8 +275,13 @@ static gboolean gst_imx_vpu_enc_stop(GstVideoEncoder *encoder)
 	ImxVpuApiCompressionFormat compression_format = GST_IMX_VPU_GET_ELEMENT_COMPRESSION_FORMAT(encoder);
 	GstImxVpuCodecDetails const * codec_details = gst_imx_vpu_get_codec_details(compression_format);
 
-	GST_DEBUG_OBJECT(imx_vpu_enc, "removing %u temp mini object(s) from hash table", (guint)(g_hash_table_size(imx_vpu_enc->temp_mini_objects)));
-	g_hash_table_remove_all(imx_vpu_enc->temp_mini_objects);
+	g_hash_table_remove_all(imx_vpu_enc->uploaded_buffers_table);
+
+	if (imx_vpu_enc->uploader != NULL)
+	{
+		gst_object_unref(GST_OBJECT(imx_vpu_enc->uploader));
+		imx_vpu_enc->uploader = NULL;
+	}
 
 	if (imx_vpu_enc->encoder != NULL)
 	{
@@ -355,7 +293,7 @@ static gboolean gst_imx_vpu_enc_stop(GstVideoEncoder *encoder)
 
 	if (imx_vpu_enc->dma_buffer_pool != NULL)
 	{
-		gst_object_unref(imx_vpu_enc->dma_buffer_pool);
+		gst_object_unref(GST_OBJECT(imx_vpu_enc->dma_buffer_pool));
 		imx_vpu_enc->dma_buffer_pool = NULL;
 	}
 
@@ -403,7 +341,7 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 		imx_vpu_enc->encoder = NULL;
 	}
 
-	g_hash_table_remove_all(imx_vpu_enc->temp_mini_objects);
+	g_hash_table_remove_all(imx_vpu_enc->uploaded_buffers_table);
 
 	gst_imx_vpu_enc_free_fb_pool_dmabuffers(imx_vpu_enc);
 
@@ -568,89 +506,17 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 		ImxDmaBuffer *fb_dma_buffer = NULL;
 		ImxVpuApiRawFrame raw_frame;
 		ImxVpuApiEncReturnCodes enc_ret;
-		GstBuffer *input_buffer = cur_frame->input_buffer;
+		GstBuffer *uploaded_input_buffer;
+
+		flow_ret = gst_imx_dma_buffer_uploader_perform(imx_vpu_enc->uploader, cur_frame->input_buffer, &uploaded_input_buffer);
+		if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+			goto finish;
+
+		fb_dma_buffer = gst_imx_get_dma_buffer_from_buffer(uploaded_input_buffer);
 
 		{
-			GstMemory *memory;
-
-			if (gst_buffer_n_memory(input_buffer) == 0)
-			{
-				GST_ERROR_OBJECT(imx_vpu_enc, "input buffer has no memory blocks");
-				flow_ret = GST_FLOW_ERROR;
-				goto finish;
-			}
-
-			memory = gst_buffer_peek_memory(input_buffer, 0);
-
-			if (gst_imx_is_imx_dma_buffer_memory(memory))
-			{
-				fb_dma_buffer = gst_imx_get_dma_buffer_from_buffer(input_buffer);
-			}
-			else
-			{
-				gint64 sys_frame_num = cur_frame->system_frame_number;
-
-				if (gst_is_phys_memory(memory))
-				{
-					GST_LOG_OBJECT(imx_vpu_enc, "input buffer is physically contiguous but was not created by a GstImxDmaBufferAllocator; checking if its memory can be used directly");
-
-					if (gst_imx_vpu_enc_verify_phys_buffer(imx_vpu_enc, input_buffer))
-					{
-						GstImxPhysMemWrapper* wrapper;
-
-						wrapper = gst_imx_phys_mem_wrapper_new(input_buffer);
-						g_hash_table_insert(imx_vpu_enc->temp_mini_objects, &sys_frame_num, wrapper);
-						fb_dma_buffer = (ImxDmaBuffer *)(&(wrapper->wrapped_dma_buffer));
-					}
-				}
-
-				if (fb_dma_buffer == NULL)
-				{
-					gboolean ret;
-					GstBuffer *temp_input_buffer = NULL;
-
-					GstVideoFrame orig_in_video_frame, temp_in_video_frame;
-
-					GST_LOG_OBJECT(imx_vpu_enc, "input buffer is not physically contiguous; creating temporary copy");
-
-					if ((flow_ret = gst_buffer_pool_acquire_buffer(imx_vpu_enc->dma_buffer_pool, &temp_input_buffer, NULL)) != GST_FLOW_OK)
-					{
-						GST_ERROR_OBJECT(imx_vpu_enc, "could not acquire temporary input buffer: %s", gst_flow_get_name(flow_ret));
-						flow_ret = GST_FLOW_ERROR;
-						goto finish;
-					}
-
-					if (!gst_video_frame_map(&orig_in_video_frame, &(imx_vpu_enc->in_video_info), input_buffer, GST_MAP_READ))
-					{
-						GST_ERROR_OBJECT(imx_vpu_enc, "could not map input frame");
-						flow_ret = GST_FLOW_ERROR;
-						goto finish;
-					}
-
-					if (!gst_video_frame_map(&temp_in_video_frame, &(imx_vpu_enc->in_video_info), temp_input_buffer, GST_MAP_WRITE))
-					{
-						gst_video_frame_unmap(&orig_in_video_frame);
-						GST_ERROR_OBJECT(imx_vpu_enc, "could not map temporary input frame");
-						flow_ret = GST_FLOW_ERROR;
-						goto finish;
-					}
-
-					ret = gst_video_frame_copy(&temp_in_video_frame, &orig_in_video_frame);
-
-					gst_video_frame_unmap(&temp_in_video_frame);
-					gst_video_frame_unmap(&orig_in_video_frame);
-
-					if (!ret)
-					{
-						GST_ERROR_OBJECT(imx_vpu_enc, "could not make temporary copy of input frame");
-						flow_ret = GST_FLOW_ERROR;
-						goto finish;
-					}
-
-					g_hash_table_insert(imx_vpu_enc->temp_mini_objects, &sys_frame_num, temp_input_buffer);
-					fb_dma_buffer = gst_imx_get_dma_buffer_from_buffer(temp_input_buffer);
-				}
-			}
+			gint64 sys_frame_num = cur_frame->system_frame_number;
+			g_hash_table_insert(imx_vpu_enc->uploaded_buffers_table, &sys_frame_num, uploaded_input_buffer);
 		}
 
 		g_assert(fb_dma_buffer != NULL);
@@ -896,7 +762,7 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 
 				{
 					gint64 sys_frame_num = system_frame_number;
-					g_hash_table_remove(imx_vpu_enc->temp_mini_objects, &sys_frame_num);
+					g_hash_table_remove(imx_vpu_enc->uploaded_buffers_table, &sys_frame_num);
 				}
 
 				break;
@@ -925,67 +791,6 @@ finish:
 		imx_vpu_enc->fatal_error_cannot_encode = TRUE;
 
 	return flow_ret;
-}
-
-
-static gboolean gst_imx_vpu_enc_verify_phys_buffer(GstImxVpuEnc *imx_vpu_enc, GstBuffer *buffer)
-{
-	/* First, check that the buffer's physical address is aligned properly. */
-	if (imx_vpu_enc->current_stream_info.framebuffer_alignment > 1)
-	{
-		GstMemory *memory = gst_buffer_peek_memory(buffer, 0);
-		imx_physical_address_t physical_address = gst_phys_memory_get_phys_addr(memory);
-		size_t phys_address_alignment = imx_vpu_enc->current_stream_info.framebuffer_alignment;
-
-		if ((imx_vpu_enc->current_stream_info.framebuffer_alignment & (phys_address_alignment - 1)) != 0)
-		{
-			GST_LOG_OBJECT(imx_vpu_enc, "buffer has physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " which is not aligned to %zu byte; copying frame with CPU", physical_address, phys_address_alignment);
-			return FALSE;
-		}
-	}
-
-	/* Next, check the offsets and strides of the planes in the frame. */
-	{
-		GstVideoMeta *video_meta = gst_buffer_get_video_meta(buffer);
-		gboolean has_video_meta = (video_meta != NULL);
-		GstVideoInfo *video_info = &(imx_vpu_enc->in_video_info);
-		guint num_planes;
-		guint expected_plane_strides[3];
-		gsize expected_plane_offsets[3];
-		guint i;
-
-		num_planes = has_video_meta ? video_meta->n_planes : GST_VIDEO_INFO_N_PLANES(video_info);
-
-		expected_plane_strides[0] = imx_vpu_enc->current_stream_info.frame_encoding_framebuffer_metrics.y_stride;
-		expected_plane_strides[1] = imx_vpu_enc->current_stream_info.frame_encoding_framebuffer_metrics.uv_stride;
-		expected_plane_strides[2] = imx_vpu_enc->current_stream_info.frame_encoding_framebuffer_metrics.uv_stride;
-
-		for (i = 0; i < num_planes; ++i)
-		{
-			guint actual_plane_stride = has_video_meta ? video_meta->stride[0] : GST_VIDEO_INFO_PLANE_STRIDE(video_info, 0);
-			if (actual_plane_stride != expected_plane_strides[i])
-			{
-				GST_LOG_OBJECT(imx_vpu_enc, "buffer plane #%u has stride %u, expected stride %u; copying frame with CPU", i, actual_plane_stride, expected_plane_strides[i]);
-				return FALSE;
-			}
-		}
-
-		expected_plane_offsets[0] = imx_vpu_enc->current_stream_info.frame_encoding_framebuffer_metrics.y_offset;
-		expected_plane_offsets[1] = imx_vpu_enc->current_stream_info.frame_encoding_framebuffer_metrics.u_offset;
-		expected_plane_offsets[2] = imx_vpu_enc->current_stream_info.frame_encoding_framebuffer_metrics.v_offset;
-
-		for (i = 0; i < num_planes; ++i)
-		{
-			gsize actual_plane_offset = has_video_meta ? video_meta->offset[0] : GST_VIDEO_INFO_PLANE_OFFSET(video_info, 0);
-			if (actual_plane_offset != expected_plane_offsets[i])
-			{
-				GST_LOG_OBJECT(imx_vpu_enc, "buffer plane #%u starts at offset %" G_GSIZE_FORMAT ", expected start at offset %" G_GSIZE_FORMAT "; copying frame with CPU", i, actual_plane_offset, expected_plane_offsets[i]);
-				return FALSE;
-			}
-		}
-	}
-
-	return TRUE;
 }
 
 
