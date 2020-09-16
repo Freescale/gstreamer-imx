@@ -119,6 +119,87 @@ Imx2dPixelFormatInfo const * imx_2d_get_pixel_format_info(Imx2dPixelFormat forma
 
 
 
+inline static int sgn(int const val)
+{
+	return (0 < val) - (val < 0);
+}
+
+
+Imx2dRegionInclusion imx_2d_region_check_inclusion(Imx2dRegion const *first_region, Imx2dRegion const *second_region)
+{
+	assert(first_region != NULL);
+	assert(second_region != NULL);
+
+	/* The -1 subtraction is necessary since the (x2,y2)
+	 * coordinates are right outside of the region */
+
+	int sx1 = first_region->x1;
+	int sx2 = first_region->x2 - 1;
+	int sy1 = first_region->y1;
+	int sy2 = first_region->y2 - 1;
+	int dx1 = second_region->x1;
+	int dx2 = second_region->x2 - 1;
+	int dy1 = second_region->y1;
+	int dy2 = second_region->y2 - 1;
+
+	int xt1 = sgn(dx2 - sx1);
+	int xt2 = sgn(dx1 - sx2);
+	int yt1 = sgn(dy2 - sy1);
+	int yt2 = sgn(dy1 - sy2);
+
+	if ((xt1 != xt2) && (yt1 != yt2))
+	{
+		/* In case there is an overlap, check if second_region (dx/dy)
+		 * contains first_region (sx/sy) partially or fully */
+		return ((sx1 >= dx1) && (sy1 >= dy1) && (sx2 <= dx2) && (sy2 <= dy2))
+		     ? IMX_2D_REGION_INCLUSION_FULL
+		     : IMX_2D_REGION_INCLUSION_PARTIAL;
+	}
+	else
+		return IMX_2D_REGION_INCLUSION_NONE;
+}
+
+
+int imx_2d_region_check_if_equal(Imx2dRegion const *first_region, Imx2dRegion const *second_region)
+{
+	assert(first_region != NULL);
+	assert(second_region != NULL);
+
+	return (first_region->x1 == second_region->x1) &&
+	       (first_region->y1 == second_region->y1) &&
+	       (first_region->x2 == second_region->x2) &&
+	       (first_region->y2 == second_region->y2);
+}
+
+
+void imx_2d_region_intersect(Imx2dRegion *intersection, Imx2dRegion const *first_region, Imx2dRegion const *second_region)
+{
+	assert(intersection != NULL);
+	assert(first_region != NULL);
+	assert(second_region != NULL);
+
+	intersection->x1 = MAX(first_region->x1, second_region->x1);
+	intersection->y1 = MAX(first_region->y1, second_region->y1);
+	intersection->x2 = MIN(first_region->x2, second_region->x2);
+	intersection->y2 = MIN(first_region->y2, second_region->y2);
+}
+
+
+void imx_2d_region_merge(Imx2dRegion *merged_region, Imx2dRegion const *first_region, Imx2dRegion const *second_region)
+{
+	assert(merged_region != NULL);
+	assert(first_region != NULL);
+	assert(second_region != NULL);
+
+	merged_region->x1 = MIN(first_region->x1, second_region->x1);
+	merged_region->y1 = MIN(first_region->y1, second_region->y1);
+	merged_region->x2 = MAX(first_region->x2, second_region->x2);
+	merged_region->y2 = MAX(first_region->y2, second_region->y2);
+}
+
+
+
+
 void imx_2d_surface_desc_calculate_strides_and_offsets(Imx2dSurfaceDesc *desc, Imx2dHardwareCapabilities const *capabilities)
 {
 	Imx2dPixelFormatInfo const *fmt_info;
@@ -256,10 +337,10 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 }
 
 
-int imx_2d_blitter_fill_rect(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRect const *dest_rect, uint32_t fill_color)
+int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color)
 {
-	assert((blitter != NULL) && (blitter->blitter_class != NULL) && (blitter->blitter_class->fill_rect != NULL));
-	return blitter->blitter_class->fill_rect(blitter, dest, dest_rect, fill_color);
+	assert((blitter != NULL) && (blitter->blitter_class != NULL) && (blitter->blitter_class->fill_region != NULL));
+	return blitter->blitter_class->fill_region(blitter, dest, dest_region, fill_color);
 }
 
 

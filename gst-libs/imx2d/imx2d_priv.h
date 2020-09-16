@@ -24,6 +24,16 @@ extern "C" {
 #endif
 
 
+#ifndef MIN
+#define MIN(a,b) (((a) <= (b)) ? (a) : (b))
+#endif
+
+
+#ifndef MAX
+#define MAX(a,b) (((a) >= (b)) ? (a) : (b))
+#endif
+
+
 #define IMX_2D_UNUSED_PARAM(x) ((void)(x))
 
 
@@ -69,7 +79,7 @@ struct _Imx2dBlitterClass
 	int (*finish)(Imx2dBlitter *blitter);
 
 	int (*do_blit)(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params);
-	int (*fill_rect)(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRect const *dest_rect, uint32_t fill_color);
+	int (*fill_region)(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color);
 
 	Imx2dHardwareCapabilities const * (*get_hardware_capabilities)(Imx2dBlitter *blitter);
 };

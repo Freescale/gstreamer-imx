@@ -1332,7 +1332,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	ImxDmaBuffer *in_dma_buffer;
 	ImxDmaBuffer *out_dma_buffer;
 	gboolean input_crop;
-	Imx2dRect crop_rectangle;
+	Imx2dRegion crop_rectangle;
 	Imx2dRotation output_rotation;
 	Imx2dFlipMode output_flip_mode;
 	GstVideoMeta *videometa;
@@ -1473,8 +1473,8 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	imx_2d_surface_set_dma_buffer(self->input_surface, in_dma_buffer);
 	imx_2d_surface_set_dma_buffer(self->output_surface, out_dma_buffer);
 
-	blit_params.source_rect = NULL;
-	blit_params.dest_rect = NULL;
+	blit_params.source_region = NULL;
+	blit_params.dest_region = NULL;
 	blit_params.flip_mode = output_flip_mode;
 	blit_params.rotation = output_rotation;
 	blit_params.alpha = 255;
@@ -1490,7 +1490,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 			crop_rectangle.x2 = crop_meta->x + crop_meta->width;
 			crop_rectangle.y2 = crop_meta->y + crop_meta->height;
 
-			blit_params.source_rect = &crop_rectangle;
+			blit_params.source_region = &crop_rectangle;
 
 			GST_LOG_OBJECT(
 				self,

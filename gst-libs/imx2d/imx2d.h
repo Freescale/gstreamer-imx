@@ -227,35 +227,7 @@ Imx2dRotation;
 char const * imx_2d_rotation_to_string(Imx2dRotation rotation);
 
 
-typedef struct _Imx2dRect Imx2dRect;
 typedef struct _Imx2dPixelFormatInfo Imx2dPixelFormatInfo;
-
-
-/**
- * Imx2dRect:
- * @x1: Left end of the rectangle, in pixels.
- * @y1: Top end of the rectangle, in pixels.
- * @x2: One past the right end of the rectangle, in pixels.
- * @y2: One past the bottom end of the rectangle, in pixels.
- *
- * Describes a rectangular region. Used for blitting
- * from/to subregions.
- *
- * x2,y2 are exactly one pixel to the right and one pixel
- * below the bottom right corner of the rectangle, and
- * x1,y1 are the top left corner of the rectangle.
- *
- * From that follows:
- * rectangle width = x2 - x1
- * rectangle height = y2 - y1
- *
- * x1 must always be <= x2.
- * y1 must always be <= y2.
- */
-struct _Imx2dRect
-{
-	int x1, y1, x2, y2;
-};
 
 
 /**
@@ -331,6 +303,141 @@ struct _Imx2dHardwareCapabilities
 	int min_height, max_height, height_step_size;
 };
 
+
+
+
+/* Rectangular region handling */
+
+
+typedef struct _Imx2dRegion Imx2dRegion;
+
+
+/**
+ * Imx2dRegion:
+ * @x1: Left end of the region, in pixels.
+ * @y1: Top end of the region, in pixels.
+ * @x2: One past the right end of the region, in pixels.
+ * @y2: One past the bottom end of the region, in pixels.
+ *
+ * Describes a rectangular region. Used for blitting
+ * from/to subregions.
+ *
+ * x2,y2 are exactly one pixel to the right and one pixel
+ * below the bottom right corner of the region, and
+ * x1,y1 are the top left corner of the region.
+ *
+ * From that follows:
+ * region width = x2 - x1
+ * region height = y2 - y1
+ *
+ * x1 must always be <= x2.
+ * y1 must always be <= y2.
+ */
+struct _Imx2dRegion
+{
+	int x1, y1, x2, y2;
+};
+
+
+/**
+ * Imx2dRegionInclusion:
+ *
+ * To what degree one region includes another.
+ */
+typedef enum
+{
+	IMX_2D_REGION_INCLUSION_NONE = 0,
+	IMX_2D_REGION_INCLUSION_PARTIAL,
+	IMX_2D_REGION_INCLUSION_FULL
+}
+Imx2dRegionInclusion;
+
+
+/**
+ * IMX_2D_REGION_FORMAT: (skip):
+ *
+ * format type used for printing out @Imx2dRegion
+ * coordinates with printf-style functions.
+ */
+#define IMX_2D_REGION_FORMAT "d,%d-%d,%d"
+
+/**
+ * IMX_2D_REGION_ARGS: (skip):
+ * @REGION: an @Imx2dRegion
+ *
+ * Format @REGION for the @GST_TIME_FORMAT format string.
+ *
+ * Note: @REGION will be evaluated more than once.
+ */
+#define IMX_2D_REGION_ARGS(REGION) (REGION)->x1,(REGION)->y1,(REGION)->x2,(REGION)->y2
+
+
+/**
+ * imx_2d_region_check_inclusion:
+ * @first_region: First region to use in the check.
+ * @second_region: Second region to use in the check.
+ *
+ * Checks if and to what degree @second_region includes @first_region.
+ *
+ * @first_region can be included fully, partially, or not at all
+ * in @second_region .
+ *
+ * Both pointers must be non-NULL.
+ *
+ * Returns: Result of the check.
+ */
+Imx2dRegionInclusion imx_2d_region_check_inclusion(Imx2dRegion const *first_region, Imx2dRegion const *second_region);
+
+/**
+ * imx_2d_region_check_if_equal:
+ * @first_region: First region to use in the comparison.
+ * @second_region: Second region to use in the comparison.
+ *
+ * Checks if two regions are equal.
+ *
+ * Both pointers must be non-NULL.
+ *
+ * Returns: Nonzero if the regions are equal.
+ */
+int imx_2d_region_check_if_equal(Imx2dRegion const *first_region, Imx2dRegion const *second_region);
+
+/**
+ * imx_2d_region_intersect:
+ * @intersection: Region that will be filled with the result
+ *     of the intersection.
+ * @first_region: First region to use in the intersection.
+ * @second_region: Second region to use in the intersection.
+ *
+ * Calculates the intersection of two regions. The result is a
+ * region that encompasses the subset of the two regions that is
+ * contained in both.
+ *
+ * If one region fully contains the other, then the resulting
+ * region equals the fully contained region. If the regions
+ * do not intersect at all, the result is undefined. For this reason,
+ * if it is not certain that these two regions always overlap,
+ * it is recommended to use @imx_2d_region_check_inclusion first to see
+ * if there is an intersection. (Also, if the result from that function
+ * is @IMX_2D_REGION_INCLUSION_FULL, then calculating an intersection is
+ * unnecessary.)
+ *
+ * All pointers must be non-NULL.
+ */
+void imx_2d_region_intersect(Imx2dRegion *intersection, Imx2dRegion const *first_region, Imx2dRegion const *second_region);
+
+/**
+ * imx_2d_region_merge:
+ * @merged_region Region that will be filled with the result
+ *     of the merge.
+ * @first_region: First region to use in the merge.
+ * @second_region: Second region to use in the merge.
+ *
+ * Calculates the merge of two regions. The result is
+ * a region that encompasses both regions.
+ *
+ * All pointers must be non-NULL.
+ */
+void imx_2d_region_merge(Imx2dRegion *merged_region, Imx2dRegion const *first_region, Imx2dRegion const *second_region);
 
 
 
@@ -533,9 +640,9 @@ typedef struct _Imx2dBlitterClass Imx2dBlitterClass;
 
 /**
  * Imx2dBlitParams:
- * @source_rect: Rectangle describing the source region to blit from.
+ * @source_region: Region describing the source region to blit from.
  *     NULL means use the entire source surface.
- * @dest_rect: Rectangle describing the destination region to blit to.
+ * @dest_region: Region describing the destination region to blit to.
  *     NULL means use the entire destination surface.
  * @flip_mode: Flip mode to use in the blitter operation.
  * @rotation: Rotation to use in the blitter operation.
@@ -544,8 +651,8 @@ typedef struct _Imx2dBlitterClass Imx2dBlitterClass;
  */
 struct _Imx2dBlitParams
 {
-	Imx2dRect const *source_rect;
-	Imx2dRect const *dest_rect;
+	Imx2dRegion const *source_region;
+	Imx2dRegion const *dest_region;
 
 	Imx2dFlipMode flip_mode;
 	Imx2dRotation rotation;
@@ -556,7 +663,7 @@ struct _Imx2dBlitParams
 
 /**
  * imx_2d_blitter_destroy:
- * @param blitter Blitter to destroy.
+ * @blitter Blitter to destroy.
  *
  * Destroys the given blitter. The blitter pointer is invalid
  * after this call and must not be used anymore.
@@ -570,7 +677,7 @@ void imx_2d_blitter_destroy(Imx2dBlitter *blitter);
  * Starts a sequence of blitter operations.
  *
  * This must be called before any @imx_2d_blitter_do_blit,
- * @imx_2d_blitter_fill_rect or @imx_2d_blitter_finish calls.
+ * @imx_2d_blitter_fill_region or @imx_2d_blitter_finish calls.
  *
  * If this is again after a sequence was already started,
  * this function does nothing and returns nonzero.
@@ -581,7 +688,7 @@ void imx_2d_blitter_destroy(Imx2dBlitter *blitter);
  * - @imx_2d_blitter_start
  * - @imx_2d_blitter_finish
  * - @imx_2d_blitter_do_blit
- * - @imx_2d_blitter_fill_rect
+ * - @imx_2d_blitter_fill_region
  *
  * This limitation is present in some underlying APIs such as G2D.
  *
@@ -622,12 +729,12 @@ int imx_2d_blitter_finish(Imx2dBlitter *blitter);
  * The blitter transfers pixels from a source region in the
  * @source surface to a destination region in the @dest surface.
  * The regions are determined by the source and destination
- * rectangles in @params. If the source rectangle pointer there
+ * regions in @params. If the source region pointer there
  * is set to NULL, then the entire @source surface is the source
  * region. Same goes for the @dest surface and the destination
- * rectangle in @params. If @params itself is set to NULL, this
+ * region in @params. If @params itself is set to NULL, this
  * function behaves as if an @Imx2dBlitParams structure were
- * passed, with the source and destination rectangles set to NULL.
+ * passed, with the source and destination regions set to NULL.
  *
  * Scaling is determined by the source and destination regions.
  * The pixels from the source region are transferred into the
@@ -636,7 +743,7 @@ int imx_2d_blitter_finish(Imx2dBlitter *blitter);
  * they fit in the destination region.
  *
  * If @params is set to NULL, default parameters are used.
- * These are: NULL source and destination rectangles,
+ * These are: NULL source and destination regions,
  * @IMX_2D_FLIP_MODE_NONE as flip mode, IMX_2D_ROTATION_NONE
  * as rotation, and 255 as the alpha value. In other words,
  * the default parameters produce a simple blit operation
@@ -650,16 +757,16 @@ int imx_2d_blitter_finish(Imx2dBlitter *blitter);
 int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params);
 
 /**
- * imx_2d_blitter_fill_rect:
+ * imx_2d_blitter_fill_region:
  * @blitter: Blitter to use.
  * @dest: Surface that shall be filled.
- * @dest_rect: Rectangular region in the @dest surface to fill.
+ * @dest_region: Region in the @dest surface to fill.
  * @fill_color: Color to use for filling.
  *
  * This fills the @dest_region in @dest with pixels whose
  * color is set to @fill_color. Should @dest_region extend
  * past the boundaries of @dest, it will be clipped. If
- * @dest_rect is fully outside of @dest, this function does
+ * @dest_region is fully outside of @dest, this function does
  * nothing and just returns nonzero.
  *
  * The @fill_color is specified as a 32-bit unsigned integer.
@@ -671,7 +778,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
  *
  * Returns: Nonzero if the call succeeds, zero on failure.
  */
-int imx_2d_blitter_fill_rect(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRect const *dest_rect, uint32_t fill_color);
+int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color);
 
 Imx2dHardwareCapabilities const * imx_2d_blitter_get_hardware_capabilities(Imx2dBlitter *blitter);
 

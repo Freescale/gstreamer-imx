@@ -111,9 +111,9 @@ static BOOL get_g2d_format(Imx2dPixelFormat imx_2d_format, enum g2d_format *fmt)
 }
 
 
-static void copy_rect_to_g2d_surface(struct g2d_surface *surface, Imx2dRect const *rect)
+static void copy_region_to_g2d_surface(struct g2d_surface *surface, Imx2dRegion const *region)
 {
-	if (rect == NULL)
+	if (region == NULL)
 	{
 		surface->left   = 0;
 		surface->top    = 0;
@@ -122,10 +122,10 @@ static void copy_rect_to_g2d_surface(struct g2d_surface *surface, Imx2dRect cons
 	}
 	else
 	{
-		surface->left   = rect->x1;
-		surface->top    = rect->y1;
-		surface->right  = rect->x2;
-		surface->bottom = rect->y2;
+		surface->left   = region->x1;
+		surface->top    = region->y1;
+		surface->right  = region->x2;
+		surface->bottom = region->y2;
 	}
 }
 
@@ -213,7 +213,7 @@ static int imx_2d_backend_g2d_blitter_start(Imx2dBlitter *blitter);
 static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter);
 
 static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params);
-static int imx_2d_backend_g2d_blitter_fill_color(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRect const *dest_rect, uint32_t fill_color);
+static int imx_2d_backend_g2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color);
 
 static Imx2dHardwareCapabilities const * imx_2d_backend_g2d_blitter_get_hardware_capabilities(Imx2dBlitter *blitter);
 
@@ -226,7 +226,7 @@ static Imx2dBlitterClass imx_2d_backend_g2d_blitter_class =
 	imx_2d_backend_g2d_blitter_finish,
 
 	imx_2d_backend_g2d_blitter_do_blit,
-	imx_2d_backend_g2d_blitter_fill_color,
+	imx_2d_backend_g2d_blitter_fill_region,
 
 	imx_2d_backend_g2d_blitter_get_hardware_capabilities
 };
@@ -278,9 +278,9 @@ static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 }
 
 
-// TODO: Source and destination rectangles need to be
+// TODO: Source and destination regions need to be
 // manually clipped. G2D does not do this automatically.
-// Rectangles that are (partially) outside of the surface
+// Regions that are (partially) outside of the surface
 // boundaries cause blitting to fail.
 
 
@@ -293,8 +293,8 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurfac
 
 	static Imx2dBlitParams const default_params =
 	{
-		.source_rect = NULL,
-		.dest_rect = NULL,
+		.source_region = NULL,
+		.dest_region = NULL,
 		.flip_mode = IMX_2D_FLIP_MODE_NONE,
 		.rotation = IMX_2D_ROTATION_NONE,
 		.alpha = 255
@@ -319,8 +319,8 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurfac
 	if (!fill_g2d_surface_info(&g2d_source_surf, source) || !fill_g2d_surface_info(&g2d_dest_surf, dest))
 		return FALSE;
 
-	copy_rect_to_g2d_surface(&g2d_source_surf, params_in_use->source_rect);
-	copy_rect_to_g2d_surface(&g2d_dest_surf, params_in_use->dest_rect);
+	copy_region_to_g2d_surface(&g2d_source_surf, params_in_use->source_region);
+	copy_region_to_g2d_surface(&g2d_dest_surf, params_in_use->dest_region);
 
 	g2d_source_surf.clrcolor = g2d_dest_surf.clrcolor = 0xFF000000;
 
@@ -387,7 +387,7 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurfac
 }
 
 
-static int imx_2d_backend_g2d_blitter_fill_color(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRect const *dest_rect, uint32_t fill_color)
+static int imx_2d_backend_g2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color)
 {
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
 	struct g2d_surface g2d_dest_surf;
@@ -395,14 +395,14 @@ static int imx_2d_backend_g2d_blitter_fill_color(Imx2dBlitter *blitter, Imx2dSur
 
 	assert(blitter != NULL);
 	assert(dest != NULL);
-	assert(dest_rect != NULL);
+	assert(dest_region != NULL);
 
 	assert(g2d_blitter->g2d_handle != NULL);
 
 	if (!fill_g2d_surface_info(&g2d_dest_surf, dest))
 		return FALSE;
 
-	copy_rect_to_g2d_surface(&g2d_dest_surf, dest_rect);
+	copy_region_to_g2d_surface(&g2d_dest_surf, dest_region);
 	g2d_dest_surf.clrcolor = fill_color | 0xFF000000;
 
 	g2d_ret = g2d_clear(g2d_blitter->g2d_handle, &g2d_dest_surf);
