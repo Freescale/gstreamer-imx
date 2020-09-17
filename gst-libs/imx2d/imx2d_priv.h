@@ -61,6 +61,7 @@ typedef struct _Imx2dSurfaceClass Imx2dSurfaceClass;
 struct _Imx2dSurface
 {
 	Imx2dSurfaceDesc desc;
+	Imx2dRegion region;
 	ImxDmaBuffer *dma_buffer;
 };
 

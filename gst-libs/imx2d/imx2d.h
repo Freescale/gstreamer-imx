@@ -611,6 +611,18 @@ void imx_2d_surface_set_dma_buffer(Imx2dSurface *surface, ImxDmaBuffer *dma_buff
  */
 ImxDmaBuffer* imx_2d_surface_get_dma_buffer(Imx2dSurface *surface);
 
+/**
+ * imx_2d_surface_get_region:
+ *
+ * Retrieves the @Imx2dRegion that encompasses the entire surface.
+ * This is useful for region based calculations for example.
+ *
+ * The region is set to 0,0 .. surface_width,surface_height.
+ *
+ * Returns: Const pointer to the surface's region.
+ */
+Imx2dRegion const * imx_2d_surface_get_region(Imx2dSurface *surface);
+
 
 
 

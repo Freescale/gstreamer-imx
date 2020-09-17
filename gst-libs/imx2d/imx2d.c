@@ -263,10 +263,10 @@ Imx2dSurface* imx_2d_surface_create(ImxDmaBuffer *dma_buffer, Imx2dSurfaceDesc c
 	assert(surface != NULL);
 
 	surface->dma_buffer = dma_buffer;
+	memset(&(surface->region), 0, sizeof(surface->region));
+
 	if (desc != NULL)
-		memcpy(&(surface->desc), desc, sizeof(surface->desc));
-	else
-		memset(&(surface->desc), 0, sizeof(surface->desc));
+		imx_2d_surface_set_desc(surface, desc);
 
 	return surface;
 }
@@ -283,6 +283,8 @@ void imx_2d_surface_set_desc(Imx2dSurface *surface, Imx2dSurfaceDesc const *desc
 	assert(surface != NULL);
 	assert(desc != NULL);
 	memcpy(&(surface->desc), desc, sizeof(Imx2dSurfaceDesc));
+	surface->region.x2 = desc->width;
+	surface->region.y2 = desc->height;
 }
 
 
@@ -304,6 +306,13 @@ ImxDmaBuffer* imx_2d_surface_get_dma_buffer(Imx2dSurface *surface)
 {
 	assert(surface != NULL);
 	return surface->dma_buffer;
+}
+
+
+Imx2dRegion const * imx_2d_surface_get_region(Imx2dSurface *surface)
+{
+	assert(surface != NULL);
+	return &(surface->region);
 }
 
 
