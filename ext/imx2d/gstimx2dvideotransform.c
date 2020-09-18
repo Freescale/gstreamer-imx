@@ -92,6 +92,8 @@ static void gst_imx_2d_video_transform_class_init(GstImx2dVideoTransformClass *k
 	GstElementClass *element_class;
 	GstBaseTransformClass *base_transform_class;
 
+	gst_imx_2d_setup_logging();
+
 	GST_DEBUG_CATEGORY_INIT(imx_2d_video_transform_debug, "imx2dvideotransform", 0, "NXP i.MX 2D video transform");
 
 	meta_tag_video_quark = g_quark_from_static_string(GST_META_TAG_VIDEO_STR);

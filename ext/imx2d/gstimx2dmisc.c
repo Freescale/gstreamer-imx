@@ -2,8 +2,74 @@
 #include "imx2d/imx2d.h"
 
 
-void gst_imx_2d_register_log_function(void)
+GST_DEBUG_CATEGORY_STATIC(imx2d_debug);
+#define GST_CAT_DEFAULT imx2d_debug
+
+
+static void imx_2d_logging_func(Imx2dLogLevel level, char const *file, int const line, char const *function_name, const char *format, ...);
+
+
+/* GLib mutexes are implicitely initialized if they are global */
+static GMutex logging_mutex;
+static gboolean logging_set_up = FALSE;
+
+
+void gst_imx_2d_setup_logging(void)
 {
+	g_mutex_lock(&logging_mutex);
+	if (!logging_set_up)
+	{
+		Imx2dLogLevel level;
+
+		GST_DEBUG_CATEGORY_INIT(imx2d_debug, "imx2d", 0, "imx2d 2D graphics code based on NXP i.MX 2D hardware APIs");
+		GstDebugLevel gst_level = gst_debug_category_get_threshold(imx2d_debug);
+
+		switch (gst_level)
+		{
+			case GST_LEVEL_ERROR:   level = IMX_2D_LOG_LEVEL_ERROR;   break;
+			case GST_LEVEL_WARNING: level = IMX_2D_LOG_LEVEL_WARNING; break;
+			case GST_LEVEL_INFO:    level = IMX_2D_LOG_LEVEL_INFO;    break;
+			case GST_LEVEL_DEBUG:   level = IMX_2D_LOG_LEVEL_DEBUG;   break;
+			case GST_LEVEL_LOG:
+			case GST_LEVEL_TRACE:   level = IMX_2D_LOG_LEVEL_TRACE;   break;
+			default: level = IMX_2D_LOG_LEVEL_TRACE;
+		}
+
+		imx_2d_set_logging_threshold(level);
+		imx_2d_set_logging_function(imx_2d_logging_func);
+
+		logging_set_up = TRUE;
+	}
+	g_mutex_unlock(&logging_mutex);
+}
+
+
+static void imx_2d_logging_func(Imx2dLogLevel level, char const *file, int const line, char const *function_name, const char *format, ...)
+{
+#ifndef GST_DISABLE_GST_DEBUG
+	GstDebugLevel gst_level;
+	va_list args;
+
+	switch (level)
+	{
+		case IMX_2D_LOG_LEVEL_ERROR:   gst_level = GST_LEVEL_ERROR;   break;
+		case IMX_2D_LOG_LEVEL_WARNING: gst_level = GST_LEVEL_WARNING; break;
+		case IMX_2D_LOG_LEVEL_INFO:    gst_level = GST_LEVEL_INFO;    break;
+		case IMX_2D_LOG_LEVEL_DEBUG:   gst_level = GST_LEVEL_DEBUG;   break;
+		case IMX_2D_LOG_LEVEL_TRACE:   gst_level = GST_LEVEL_TRACE;   break;
+		default: gst_level = GST_LEVEL_LOG;
+	}
+
+	va_start(args, format);
+	gst_debug_log_valist(imx2d_debug, gst_level, file, function_name, line, NULL, format, args);
+	va_end(args);
+#else
+	(void)level;
+	(void)file;
+	(void)line;
+	(void)function_name;
+	(void)format;
+#endif
 }
 
 

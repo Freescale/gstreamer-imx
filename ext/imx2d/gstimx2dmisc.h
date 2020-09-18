@@ -27,7 +27,7 @@
 G_BEGIN_DECLS
 
 
-void gst_imx_2d_register_log_function(void);
+void gst_imx_2d_setup_logging(void);
 
 Imx2dPixelFormat gst_imx_2d_convert_from_gst_video_format(GstVideoFormat gst_video_format);
 GstVideoFormat gst_imx_2d_convert_to_gst_video_format(Imx2dPixelFormat imx2d_format);
