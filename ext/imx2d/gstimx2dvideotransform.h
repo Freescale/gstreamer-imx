@@ -68,7 +68,6 @@ struct _GstImx2dVideoTransform
 
 	gboolean input_crop;
 	Imx2dRotation output_rotation;
-	Imx2dFlipMode output_flip_mode;
 };
 
 

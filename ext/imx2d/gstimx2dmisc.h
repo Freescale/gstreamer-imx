@@ -34,8 +34,6 @@ GstVideoFormat gst_imx_2d_convert_to_gst_video_format(Imx2dPixelFormat imx2d_for
 
 GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities const *capabilities, GstPadDirection direction);
 
-GType gst_imx_2d_flip_mode_get_type(void);
-
 GType gst_imx_2d_rotation_get_type(void);
 
 

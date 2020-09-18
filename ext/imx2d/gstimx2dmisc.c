@@ -212,30 +212,6 @@ GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities c
 }
 
 
-GType gst_imx_2d_flip_mode_get_type(void)
-{
-	static GType gst_imx_flip_mode_type = 0;
-
-	if (!gst_imx_flip_mode_type)
-	{
-		static GEnumValue imx_flip_mode_values[] =
-		{
-			{ IMX_2D_FLIP_MODE_NONE, "No flipping", "none" },
-			{ IMX_2D_FLIP_MODE_HORIZONTAL, "Horizontal flipping", "horizontal" },
-			{ IMX_2D_FLIP_MODE_VERTICAL, "Vertical flipping", "vertical" },
-			{ 0, NULL, NULL }
-		};
-
-		gst_imx_flip_mode_type = g_enum_register_static(
-			"Imx2dFlipMode",
-			imx_flip_mode_values
-		);
-	}
-
-	return gst_imx_flip_mode_type;
-}
-
-
 GType gst_imx_2d_rotation_get_type(void)
 {
 	static GType gst_imx_2d_rotation_type = 0;
@@ -248,6 +224,8 @@ GType gst_imx_2d_rotation_get_type(void)
 			{ IMX_2D_ROTATION_90, "90-degree rotation", "rotation-90" },
 			{ IMX_2D_ROTATION_180, "180-degree rotation", "rotation-180" },
 			{ IMX_2D_ROTATION_270, "270-degree rotation", "rotation-270" },
+			{ IMX_2D_ROTATION_FLIP_HORIZONTAL, "Horizontal flipping", "horizontal" },
+			{ IMX_2D_ROTATION_FLIP_VERTICAL, "Vertical flipping", "vertical" },
 			{ 0, NULL, NULL }
 		};
 

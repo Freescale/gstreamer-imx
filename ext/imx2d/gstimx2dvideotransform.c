@@ -32,14 +32,12 @@ enum
 {
 	PROP_0,
 	PROP_INPUT_CROP,
-	PROP_OUTPUT_ROTATION,
-	PROP_OUTPUT_FLIP_MODE
+	PROP_OUTPUT_ROTATION
 };
 
 
 #define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_OUTPUT_ROTATION IMX_2D_ROTATION_NONE
-#define DEFAULT_OUTPUT_FLIP_MODE IMX_2D_FLIP_MODE_NONE
 
 
 /* Cached quark to avoid contention on the global quark table lock */
@@ -150,18 +148,6 @@ static void gst_imx_2d_video_transform_class_init(GstImx2dVideoTransformClass *k
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
-	g_object_class_install_property(
-		object_class,
-		PROP_OUTPUT_FLIP_MODE,
-		g_param_spec_enum(
-			"output-flip-mode",
-			"Output flip mode",
-			"Output flip mode",
-			gst_imx_2d_flip_mode_get_type(),
-			DEFAULT_OUTPUT_FLIP_MODE,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
 }
 
 
@@ -184,7 +170,6 @@ void gst_imx_2d_video_transform_init(GstImx2dVideoTransform *self)
 
 	self->input_crop = DEFAULT_INPUT_CROP;
 	self->output_rotation = DEFAULT_OUTPUT_ROTATION;
-	self->output_flip_mode = DEFAULT_OUTPUT_FLIP_MODE;
 
 	/* Set passthrough initially to FALSE. Passthrough will
 	 * be enabled/disabled on a per-frame basis in
@@ -217,14 +202,6 @@ static void gst_imx_2d_video_transform_set_property(GObject *object, guint prop_
 			break;
 		}
 
-		case PROP_OUTPUT_FLIP_MODE:
-		{
-			GST_OBJECT_LOCK(self);
-			self->output_flip_mode = g_value_get_enum(value);
-			GST_OBJECT_UNLOCK(self);
-			break;
-		}
-
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -250,14 +227,6 @@ static void gst_imx_2d_video_transform_get_property(GObject *object, guint prop_
 		{
 			GST_OBJECT_LOCK(self);
 			g_value_set_enum(value, self->output_rotation);
-			GST_OBJECT_UNLOCK(self);
-			break;
-		}
-
-		case PROP_OUTPUT_FLIP_MODE:
-		{
-			GST_OBJECT_LOCK(self);
-			g_value_set_enum(value, self->output_flip_mode);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -1246,7 +1215,6 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	GstVideoCropMeta *video_crop_meta = NULL;
 	gboolean passthrough;
 	Imx2dRotation output_rotation;
-	Imx2dFlipMode output_flip_mode;
 	gboolean input_crop;
 	gboolean has_crop_meta = FALSE;
 
@@ -1260,21 +1228,18 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	 * - Input crop is disabled, or it is enabled & the input buffer's video
 	 *   crop meta defines a rectangle that contains the entire frame
 	 * - Output rotation is disabled (= set to IMX_2D_ROTATION_NONE)
-	 * - Flip mode is disabled (= set to IMX_2D_FLIP_MODE_NONE)
 	 */
 
 	g_assert(self->uploader != NULL);
 
 	GST_OBJECT_LOCK(self);
 	output_rotation = self->output_rotation;
-	output_flip_mode = self->output_flip_mode;
 	input_crop = self->input_crop;
 	GST_OBJECT_UNLOCK(self);
 
 	{
 		gboolean has_input_buffer = (input_buffer != NULL);
 		gboolean no_output_rotation = (output_rotation == IMX_2D_ROTATION_NONE);
-		gboolean no_output_flip_mode = (output_flip_mode == IMX_2D_FLIP_MODE_NONE);
 
 		if (input_crop)
 		{
@@ -1284,17 +1249,16 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 
 		GST_LOG_OBJECT(
 			self,
-			"has input: %d  input&output video info equal: %d  no output rotation: %d  no flip mode: %d  input crop: %d  has crop meta: %d",
+			"has input: %d  input&output video info equal: %d  no output rotation: %d  input crop: %d  has crop meta: %d",
 			has_input_buffer,
 			self->inout_info_equal,
-			no_output_rotation, no_output_flip_mode,
+			no_output_rotation,
 			input_crop, has_crop_meta
 		);
 
 		passthrough = (input_buffer != NULL)
 		           && self->inout_info_equal
-		           && (output_rotation == IMX_2D_ROTATION_NONE)
-		           && (output_flip_mode == IMX_2D_FLIP_MODE_NONE);
+		           && (output_rotation == IMX_2D_ROTATION_NONE);
 
 		if (passthrough && input_crop && has_crop_meta)
 		{
@@ -1336,7 +1300,6 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	gboolean input_crop;
 	Imx2dRegion crop_rectangle;
 	Imx2dRotation output_rotation;
-	Imx2dFlipMode output_flip_mode;
 	GstVideoMeta *videometa;
 	guint plane_index;
 	GstBuffer *uploading_result;
@@ -1388,7 +1351,6 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	GST_OBJECT_LOCK(self);
 	input_crop = self->input_crop;
 	output_rotation = self->output_rotation;
-	output_flip_mode = self->output_flip_mode;
 	GST_OBJECT_UNLOCK(self);
 
 	GST_LOG_OBJECT(self, "filling input surface description with input buffer plane stride and -info");
@@ -1477,7 +1439,6 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 
 	blit_params.source_region = NULL;
 	blit_params.dest_region = NULL;
-	blit_params.flip_mode = output_flip_mode;
 	blit_params.rotation = output_rotation;
 	blit_params.alpha = 255;
 

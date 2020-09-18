@@ -42,18 +42,6 @@ char const * imx_2d_pixel_format_to_string(Imx2dPixelFormat format)
 }
 
 
-char const * imx_2d_flip_mode_to_string(Imx2dFlipMode flip_mode)
-{
-	switch (flip_mode)
-	{
-		case IMX_2D_FLIP_MODE_NONE: return "none";
-		case IMX_2D_FLIP_MODE_HORIZONTAL: return "horizontal";
-		case IMX_2D_FLIP_MODE_VERTICAL: return "vertical";
-		default: return "<unknown>";
-	}
-}
-
-
 char const * imx_2d_rotation_string(Imx2dRotation rotation)
 {
 	switch (rotation)
@@ -62,6 +50,8 @@ char const * imx_2d_rotation_string(Imx2dRotation rotation)
 		case IMX_2D_ROTATION_90: return "90-degree rotation";
 		case IMX_2D_ROTATION_180: return "180-degree rotation";
 		case IMX_2D_ROTATION_270: return "270-degree rotation";
+		case IMX_2D_ROTATION_FLIP_HORIZONTAL: return "horizontal flip";
+		case IMX_2D_ROTATION_FLIP_VERTICAL: return "vertical flip";
 		default: return "<unknown>";
 	}
 }

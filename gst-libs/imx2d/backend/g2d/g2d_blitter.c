@@ -295,7 +295,6 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurfac
 	{
 		.source_region = NULL,
 		.dest_region = NULL,
-		.flip_mode = IMX_2D_FLIP_MODE_NONE,
 		.rotation = IMX_2D_ROTATION_NONE,
 		.alpha = 255
 	};
@@ -354,19 +353,15 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurfac
 		g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
 	}
 
-	switch (params_in_use->flip_mode)
-	{
-		case IMX_2D_FLIP_MODE_HORIZONTAL: g2d_source_surf.rot = G2D_FLIP_H; break;
-		case IMX_2D_FLIP_MODE_VERTICAL:   g2d_source_surf.rot = G2D_FLIP_V; break;
-		default: g2d_source_surf.rot = G2D_ROTATION_0;
-	}
-
+	g2d_source_surf.rot = g2d_dest_surf.rot = G2D_ROTATION_0;
 	switch (params_in_use->rotation)
 	{
 		case IMX_2D_ROTATION_90:  g2d_dest_surf.rot = G2D_ROTATION_90; break;
 		case IMX_2D_ROTATION_180: g2d_dest_surf.rot = G2D_ROTATION_180; break;
 		case IMX_2D_ROTATION_270: g2d_dest_surf.rot = G2D_ROTATION_270; break;
-		default: g2d_dest_surf.rot = G2D_ROTATION_0;
+		case IMX_2D_ROTATION_FLIP_HORIZONTAL: g2d_source_surf.rot = G2D_FLIP_H; break;
+		case IMX_2D_ROTATION_FLIP_VERTICAL: g2d_source_surf.rot = G2D_FLIP_V; break;
+		default: break;
 	}
 
 	DUMP_G2D_SURFACE_TO_LOG("blit source", &g2d_source_surf);

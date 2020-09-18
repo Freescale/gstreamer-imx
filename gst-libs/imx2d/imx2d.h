@@ -168,40 +168,13 @@ char const * imx_2d_pixel_format_to_string(Imx2dPixelFormat format);
 
 
 /**
- * Imx2dFlipMode:
- * @IMX_2D_FLIP_MODE_NONE: No flipping.
- * @IMX_2D_FLIP_MODE_HORIZONTAL: Frame is flipped horizontally.
- * @IMX_2D_FLIP_MODE_VERTICAL: Frame is flipped vertically.
- *
- * The flip mode to use when blitting.
- */
-typedef enum
-{
-	IMX_2D_FLIP_MODE_NONE = 0,
-	IMX_2D_FLIP_MODE_HORIZONTAL,
-	IMX_2D_FLIP_MODE_VERTICAL
-}
-Imx2dFlipMode;
-
-/**
- * imx_2d_flip_mode_to_string:
- * @flip_mode: Flip mode to return a string for.
- *
- * Returns a human-readable string representation of the given flip mode.
- *
- * This string is not suitable as an ID and is meant purely for logging and for information on user interfaces.
- *
- * Returns: Human-readable string representation
- */
-char const * imx_2d_flip_mode_to_string(Imx2dFlipMode flip_mode);
-
-
-/**
  * Imx2dRotation:
- * @IMX_2D_FLIP_MODE_NONE: No rotation.
+ * @IMX_2D_ROTATION_NONE: No rotation.
  * @IMX_2D_ROTATION_90: 90-degree rotation.
  * @IMX_2D_ROTATION_180: 180-degree rotation.
  * @IMX_2D_ROTATION_270: 270-degree rotation.
+ * @IMX_2D_ROTATION_FLIP_HORIZONTAL: Frame is flipped horizontally.
+ * @IMX_2D_ROTATION_FLIP_VERTICAL: Frame is flipped vertically.
  *
  * The clockwise rotation to use when blitting.
  */
@@ -210,7 +183,9 @@ typedef enum
 	IMX_2D_ROTATION_NONE = 0,
 	IMX_2D_ROTATION_90,
 	IMX_2D_ROTATION_180,
-	IMX_2D_ROTATION_270
+	IMX_2D_ROTATION_270,
+	IMX_2D_ROTATION_FLIP_HORIZONTAL,
+	IMX_2D_ROTATION_FLIP_VERTICAL
 }
 Imx2dRotation;
 
@@ -691,7 +666,6 @@ struct _Imx2dBlitMargin
  *     NULL means use the entire source surface.
  * @dest_region: Region describing the destination region to blit to.
  *     NULL means use the entire destination surface.
- * @flip_mode: Flip mode to use in the blitter operation.
  * @rotation: Rotation to use in the blitter operation.
  * @margin: Margin to use around @dest_region. If this is set to NULL,
  *     no margin will be used in the blitter operation. The margin
@@ -704,7 +678,6 @@ struct _Imx2dBlitParams
 	Imx2dRegion const *source_region;
 	Imx2dRegion const *dest_region;
 
-	Imx2dFlipMode flip_mode;
 	Imx2dRotation rotation;
 
 	Imx2dBlitMargin const *margin;
@@ -796,10 +769,9 @@ int imx_2d_blitter_finish(Imx2dBlitter *blitter);
  *
  * If @params is set to NULL, default parameters are used.
  * These are: NULL source and destination regions,
- * @IMX_2D_FLIP_MODE_NONE as flip mode, IMX_2D_ROTATION_NONE
- * as rotation, and 255 as the alpha value. In other words,
- * the default parameters produce a simple blit operation
- * with scaling as-needed (as explained above).
+ * @IMX_2D_ROTATION_NONE as rotation, and 255 as the alpha value.
+ * In other words, the default parameters produce a simple blit
+ * operation with scaling as-needed (as explained above).
  *
  * See @imx_2d_blitter_start for an important note about calling
  * this from a particular thread.
