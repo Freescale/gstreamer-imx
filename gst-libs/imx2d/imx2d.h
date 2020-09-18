@@ -629,6 +629,7 @@ Imx2dRegion const * imx_2d_surface_get_region(Imx2dSurface *surface);
 /* Blitter */
 
 
+typedef struct _Imx2dBlitMargin Imx2dBlitMargin;
 typedef struct _Imx2dBlitParams Imx2dBlitParams;
 
 
@@ -651,6 +652,40 @@ typedef struct _Imx2dBlitterClass Imx2dBlitterClass;
 
 
 /**
+ * Imx2dBlitMargin:
+ * @left_margin: Size of the margin to the left of the dest region.
+ * @top_margin: Size of the margin above the dest region.
+ * @right_margin: Size of the margin to the right of the dest region.
+ * @bottom_margin: Size of the margin below the dest region.
+ * @color: ARGB color the margin pixels shall be set to.
+ *     Layout is 0xAARRGGBB.
+ *
+ * Describes a margin region around the rectangular destination
+ * region of the blitter operation. Pixels in that margin get filled
+ * with the specified color.
+ *
+ * One example for where margins are useful is when the caller
+ * wants to implement letterboxing. To add the letterbox black
+ * bars at the top and bottom, the top & bottom margin sizes
+ * can be set to a nonzero value.
+ *
+ * The alpha byte in @color is multiplied together with the alpha
+ * value in @Imx2dBlitParams, and the result normalized to the
+ * 0..255 range.
+ *
+ * All margin sizes must be >= 0.
+ */
+struct _Imx2dBlitMargin
+{
+	int left_margin;
+	int top_margin;
+	int right_margin;
+	int bottom_margin;
+	uint32_t color;
+};
+
+
+/**
  * Imx2dBlitParams:
  * @source_region: Region describing the source region to blit from.
  *     NULL means use the entire source surface.
@@ -658,6 +693,9 @@ typedef struct _Imx2dBlitterClass Imx2dBlitterClass;
  *     NULL means use the entire destination surface.
  * @flip_mode: Flip mode to use in the blitter operation.
  * @rotation: Rotation to use in the blitter operation.
+ * @margin: Margin to use around @dest_region. If this is set to NULL,
+ *     no margin will be used in the blitter operation. The margin
+ *     is only used if @dest_region is not NULL.
  * @alpha: Global alpha value. Valid range goes from 0 (fully transparent)
  *     to 255 (fully opaque).
  */
@@ -668,6 +706,8 @@ struct _Imx2dBlitParams
 
 	Imx2dFlipMode flip_mode;
 	Imx2dRotation rotation;
+
+	Imx2dBlitMargin const *margin;
 
 	int alpha;
 };
