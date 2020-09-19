@@ -334,7 +334,7 @@ Imx2dRegionInclusion;
  * format type used for printing out @Imx2dRegion
  * coordinates with printf-style functions.
  */
-#define IMX_2D_REGION_FORMAT "d,%d-%d,%d"
+#define IMX_2D_REGION_FORMAT "d,%d ... %d,%d"
 
 /**
  * IMX_2D_REGION_ARGS: (skip):
@@ -804,6 +804,15 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
  */
 int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color);
 
+/**
+ * imx_2d_blitter_get_hardware_capabilities:
+ * @blitter: Blitter to get hardware capabilities from.
+ *
+ * Provides hardware capabilities that describe what the 2D
+ * hardware associated with @blitter is capable of.
+ *
+ * Returns: Const pointer to @Imx2dHardwareCapabilities structure.
+ */
 Imx2dHardwareCapabilities const * imx_2d_blitter_get_hardware_capabilities(Imx2dBlitter *blitter);
 
 
