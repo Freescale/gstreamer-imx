@@ -79,7 +79,21 @@ struct _Imx2dBlitterClass
 	int (*start)(Imx2dBlitter *blitter);
 	int (*finish)(Imx2dBlitter *blitter);
 
-	int (*do_blit)(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params);
+	/* source_region and dest_region can be NULL, in which case
+	 * the entire source/dest surface region is used.
+	 * If expanded_dest_region is NULL, then the expanded region
+	 * equals the dest region (either dest_region or dest->region,
+	 * as explained above).
+	 * The alpha value in margin_fill_color is premultiplied. */
+	int (*do_blit)(
+		Imx2dBlitter *blitter,
+		Imx2dSurface *source, Imx2dRegion const *source_region,
+		Imx2dSurface *dest, Imx2dRegion const *dest_region,
+		Imx2dRotation rotation,
+		Imx2dRegion const *expanded_dest_region,
+		int dest_surface_alpha,
+		uint32_t margin_fill_color
+	);
 	int (*fill_region)(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color);
 
 	Imx2dHardwareCapabilities const * (*get_hardware_capabilities)(Imx2dBlitter *blitter);

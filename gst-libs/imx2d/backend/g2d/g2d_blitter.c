@@ -203,7 +203,11 @@ typedef struct _Imx2dG2DBlitter Imx2dG2DBlitter;
 struct _Imx2dG2DBlitter
 {
 	Imx2dBlitter parent;
+
 	void *g2d_handle;
+
+	struct g2d_surface fill_g2d_surface;
+	struct g2d_buf *fill_g2d_surface_buffer;
 };
 
 
@@ -212,7 +216,15 @@ static void imx_2d_backend_g2d_blitter_destroy(Imx2dBlitter *blitter);
 static int imx_2d_backend_g2d_blitter_start(Imx2dBlitter *blitter);
 static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter);
 
-static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params);
+static int imx_2d_backend_g2d_blitter_do_blit(
+	Imx2dBlitter *blitter,
+	Imx2dSurface *source, Imx2dRegion const *source_region,
+	Imx2dSurface *dest, Imx2dRegion const *dest_region,
+	Imx2dRotation rotation,
+	Imx2dRegion const *expanded_dest_region,
+	int dest_surface_alpha,
+	uint32_t margin_fill_color
+);
 static int imx_2d_backend_g2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color);
 
 static Imx2dHardwareCapabilities const * imx_2d_backend_g2d_blitter_get_hardware_capabilities(Imx2dBlitter *blitter);
@@ -236,6 +248,13 @@ static Imx2dBlitterClass imx_2d_backend_g2d_blitter_class =
 
 static void imx_2d_backend_g2d_blitter_destroy(Imx2dBlitter *blitter)
 {
+	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
+
+	assert(blitter != NULL);
+
+	if (g2d_blitter->fill_g2d_surface_buffer != NULL)
+		g2d_free(g2d_blitter->fill_g2d_surface_buffer);
+
 	free(blitter);
 }
 
@@ -278,28 +297,20 @@ static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 }
 
 
-// TODO: Source and destination regions need to be
-// manually clipped. G2D does not do this automatically.
-// Regions that are (partially) outside of the surface
-// boundaries cause blitting to fail.
-
-
-static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params)
+static int imx_2d_backend_g2d_blitter_do_blit(
+	Imx2dBlitter *blitter,
+	Imx2dSurface *source, Imx2dRegion const *source_region,
+	Imx2dSurface *dest, Imx2dRegion const *dest_region,
+	Imx2dRotation rotation,
+	Imx2dRegion const *expanded_dest_region,
+	int dest_surface_alpha,
+	uint32_t margin_fill_color
+)
 {
 	BOOL do_alpha;
 	int g2d_ret;
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
 	struct g2d_surface g2d_source_surf, g2d_dest_surf;
-
-	static Imx2dBlitParams const default_params =
-	{
-		.source_region = NULL,
-		.dest_region = NULL,
-		.rotation = IMX_2D_ROTATION_NONE,
-		.alpha = 255
-	};
-
-	Imx2dBlitParams const *params_in_use = (params != NULL) ? params : &default_params;
 
 	assert(blitter != NULL);
 	assert(source != NULL);
@@ -308,37 +319,27 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurfac
 	assert(g2d_blitter->g2d_handle != NULL);
 
 
-	if (params_in_use->alpha > 255)
-	{
-		IMX_2D_LOG(ERROR, "attempting to blit with alpha value %u; maximum allowed value is 255", params_in_use->alpha);
-		return FALSE;
-	}
-
-
 	if (!fill_g2d_surface_info(&g2d_source_surf, source) || !fill_g2d_surface_info(&g2d_dest_surf, dest))
 		return FALSE;
 
-	copy_region_to_g2d_surface(&g2d_source_surf, params_in_use->source_region);
-	copy_region_to_g2d_surface(&g2d_dest_surf, params_in_use->dest_region);
+	copy_region_to_g2d_surface(&g2d_source_surf, source_region);
+	copy_region_to_g2d_surface(&g2d_dest_surf, dest_region);
 
 	g2d_source_surf.clrcolor = g2d_dest_surf.clrcolor = 0xFF000000;
 
-	do_alpha = (params_in_use->alpha != 255) || g2d_format_has_alpha(g2d_source_surf.format);
+	do_alpha = (dest_surface_alpha != 255) || g2d_format_has_alpha(g2d_source_surf.format);
 
-	// TODO: check if the g2d_enable()/g2d_disable() calls affect
-	// just the immediate g2d_blit() call or _all_ g2d_blit() calls
-	// until g2d_finish() is called
 	if (do_alpha)
 	{
 		g2d_source_surf.blendfunc = G2D_SRC_ALPHA;
 		g2d_dest_surf.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
 		g2d_enable(g2d_blitter->g2d_handle, G2D_BLEND);
 
-		if (params_in_use->alpha != 255)
+		if (dest_surface_alpha != 255)
 		{
 			g2d_enable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
-			g2d_source_surf.global_alpha = params_in_use->alpha;
-			g2d_dest_surf.global_alpha = 255 - params_in_use->alpha;
+			g2d_source_surf.global_alpha = dest_surface_alpha;
+			g2d_dest_surf.global_alpha = 255 - dest_surface_alpha;
 		}
 		else
 			g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
@@ -354,7 +355,7 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurfac
 	}
 
 	g2d_source_surf.rot = g2d_dest_surf.rot = G2D_ROTATION_0;
-	switch (params_in_use->rotation)
+	switch (rotation)
 	{
 		case IMX_2D_ROTATION_90:  g2d_dest_surf.rot = G2D_ROTATION_90; break;
 		case IMX_2D_ROTATION_180: g2d_dest_surf.rot = G2D_ROTATION_180; break;
@@ -366,6 +367,106 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurfac
 
 	DUMP_G2D_SURFACE_TO_LOG("blit source", &g2d_source_surf);
 	DUMP_G2D_SURFACE_TO_LOG("blit dest", &g2d_dest_surf);
+
+	/* If there is an expanded_dest_region, it means that
+	 * there is a margin that must be drawn. */
+	if (expanded_dest_region != NULL)
+	{
+		int i;
+		struct g2d_surface margin_g2d_surf;
+		int margin_alpha = (margin_fill_color >> 24) & 0xFF;
+
+		memcpy(&margin_g2d_surf, &g2d_dest_surf, sizeof(struct g2d_surface));
+
+		/* G2D clear color is 0x00BBGGRR, margin_fill_color
+		 * is 0x00RRGGBB, so we need to convert.  Also, the
+		 * clear operation exhibited problems when the MSB
+		 * wasn't 0xFF, so set it. */
+		margin_g2d_surf.clrcolor = ((margin_fill_color & 0x0000FF) << 16)
+		                         | ((margin_fill_color & 0x00FF00))
+		                         | ((margin_fill_color & 0xFF0000) >> 16)
+		                         | 0xFF000000;
+
+		IMX_2D_LOG(TRACE, "margin fill color: %#6x alpha: %d", margin_fill_color & 0x00FFFFFF, margin_alpha);
+
+		for (i = 0; i < 4; ++i)
+		{
+			BOOL skip_margin_region = FALSE;
+
+			/* There are four rectangular margin regions: left, top, right, bottom.
+			 * Figure out their coordinates here and write them directly into the
+			 * margin_g2d_surf structure so we can call g2d_clear() right away.
+			 * skip_margin_region is used in case the computed coordinates yield
+			 * a region that has no pixels because one of its sidelengths is zero. */
+			switch (i)
+			{
+				case 0:
+					margin_g2d_surf.left = expanded_dest_region->x1;
+					margin_g2d_surf.top = dest_region->y1;
+					margin_g2d_surf.right = dest_region->x1;
+					margin_g2d_surf.bottom = dest_region->y2;
+					skip_margin_region = (margin_g2d_surf.left == margin_g2d_surf.right);
+					break;
+
+				case 1:
+					margin_g2d_surf.left = expanded_dest_region->x1;
+					margin_g2d_surf.top = expanded_dest_region->y1;
+					margin_g2d_surf.right = expanded_dest_region->x2;
+					margin_g2d_surf.bottom = dest_region->y1;
+					skip_margin_region = (margin_g2d_surf.top == margin_g2d_surf.bottom);
+					break;
+
+				case 2:
+					margin_g2d_surf.left = dest_region->x2;
+					margin_g2d_surf.top = dest_region->y1;
+					margin_g2d_surf.right = expanded_dest_region->x2;
+					margin_g2d_surf.bottom = dest_region->y2;
+					skip_margin_region = (margin_g2d_surf.left == margin_g2d_surf.right);
+					break;
+
+				case 3:
+					margin_g2d_surf.left = expanded_dest_region->x1;
+					margin_g2d_surf.top = dest_region->y2;
+					margin_g2d_surf.right = expanded_dest_region->x2;
+					margin_g2d_surf.bottom = expanded_dest_region->y2;
+					skip_margin_region = (margin_g2d_surf.top == margin_g2d_surf.bottom);
+					break;
+
+				default:
+					assert(FALSE);
+			}
+
+			IMX_2D_LOG(TRACE, "margin #%d G2D surface: %d/%d/%d/%d", i, margin_g2d_surf.left, margin_g2d_surf.top, margin_g2d_surf.right, margin_g2d_surf.bottom);
+
+			if (skip_margin_region)
+				continue;
+
+			/* g2d_clear() ignores alpha blending, so if margin_alpha is not 255,
+			 * use a trick. Take the fill_surface, which is a very small surface,
+			 * fill it with the fill color, and blit it with blending. */
+			if (margin_alpha == 255)
+			{
+				if (g2d_clear(g2d_blitter->g2d_handle, &margin_g2d_surf) != 0)
+				{
+					IMX_2D_LOG(ERROR, "could not fill margin");
+					return FALSE;
+				}
+			}
+			else
+			{
+				g2d_blitter->fill_g2d_surface.blendfunc = G2D_SRC_ALPHA;
+				g2d_blitter->fill_g2d_surface.global_alpha = margin_alpha;
+				margin_g2d_surf.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
+				margin_g2d_surf.global_alpha = margin_alpha;
+
+				if (g2d_blit(g2d_blitter->g2d_handle, &(g2d_blitter->fill_g2d_surface), &margin_g2d_surf) != 0)
+				{
+					IMX_2D_LOG(ERROR, "could not blit fill surface - drawing margin failed");
+					return FALSE;
+				}
+			}
+		}
+	}
 
 	g2d_ret = g2d_blit(g2d_blitter->g2d_handle, &g2d_source_surf, &g2d_dest_surf);
 
@@ -386,7 +487,6 @@ static int imx_2d_backend_g2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSu
 {
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
 	struct g2d_surface g2d_dest_surf;
-	int g2d_ret;
 
 	assert(blitter != NULL);
 	assert(dest != NULL);
@@ -398,13 +498,17 @@ static int imx_2d_backend_g2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSu
 		return FALSE;
 
 	copy_region_to_g2d_surface(&g2d_dest_surf, dest_region);
-	g2d_dest_surf.clrcolor = fill_color | 0xFF000000;
 
-	g2d_ret = g2d_clear(g2d_blitter->g2d_handle, &g2d_dest_surf);
+	/* G2D clear color is 0x00BBGGRR, margin_fill_color
+	 * is 0x00RRGGBB, so we need to convert.  Also, the
+	 * clear operation exhibited problems when the MSB
+	 * wasn't 0xFF, so set it. */
+	g2d_dest_surf.clrcolor = ((fill_color & 0x0000FF) << 16)
+	                       | ((fill_color & 0x00FF00))
+	                       | ((fill_color & 0xFF0000) >> 16)
+	                       | 0xFF000000;
 
-	g2d_finish(g2d_blitter->g2d_handle);
-
-	if (g2d_ret != 0)
+	if (g2d_clear(g2d_blitter->g2d_handle, &g2d_dest_surf) != 0)
 	{
 		IMX_2D_LOG(ERROR, "could not clear area");
 		return FALSE;
@@ -425,6 +529,19 @@ static Imx2dHardwareCapabilities const * imx_2d_backend_g2d_blitter_get_hardware
 
 Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void)
 {
+	/* Set up the internal fill surface that will be used when drawing margins
+	 * that aren't 100% opaque (see imx_2d_backend_g2d_blitter_do_blit() above).
+	 * The internal fill surface does not have to be large. In fact, it is desirable
+	 * to make it as small as possible to ensure the g2d_clear() calls in the
+	 * blit() function uses as little bandwidth as possible. For this reason, the
+	 * fill surface is allocated to use a size of 4x1 pixels, the smallest one
+	 * allowed by the G2D API. */
+	static enum g2d_format const fill_surface_format = G2D_RGBX8888;
+	static int const fill_surface_bpp = 4;
+	static int const fill_surface_width = 4;
+	static int const fill_surface_height = 1;
+	static int const fill_surface_stride = fill_surface_width;
+
 	Imx2dG2DBlitter *g2d_blitter = malloc(sizeof(Imx2dG2DBlitter));
 	assert(g2d_blitter != NULL);
 
@@ -432,7 +549,29 @@ Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void)
 
 	g2d_blitter->parent.blitter_class = &imx_2d_backend_g2d_blitter_class;
 
+	g2d_blitter->fill_g2d_surface.format = fill_surface_format;
+	g2d_blitter->fill_g2d_surface.width = fill_surface_width;
+	g2d_blitter->fill_g2d_surface.height = fill_surface_height;
+	g2d_blitter->fill_g2d_surface.right = fill_surface_width;
+	g2d_blitter->fill_g2d_surface.bottom = fill_surface_height;
+	g2d_blitter->fill_g2d_surface.stride = fill_surface_stride;
+
+	g2d_blitter->fill_g2d_surface_buffer = g2d_alloc(fill_surface_stride * fill_surface_height * fill_surface_bpp, 0);
+	if (g2d_blitter->fill_g2d_surface_buffer == NULL)
+	{
+		IMX_2D_LOG(ERROR, "could not allocate fill surface buffer");
+		goto error;
+	}
+
+	g2d_blitter->fill_g2d_surface.planes[0] = g2d_blitter->fill_g2d_surface_buffer->buf_paddr;
+
+finish:
 	return (Imx2dBlitter *)g2d_blitter;
+
+error:
+	imx_2d_backend_g2d_blitter_destroy((Imx2dBlitter *)g2d_blitter);
+	g2d_blitter = NULL;
+	goto finish;
 }
 
 

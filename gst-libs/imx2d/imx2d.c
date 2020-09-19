@@ -331,8 +331,328 @@ int imx_2d_blitter_finish(Imx2dBlitter *blitter)
 
 int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params)
 {
+	static Imx2dBlitParams const default_params =
+	{
+		.source_region = NULL,
+		.dest_region = NULL,
+		.rotation = IMX_2D_ROTATION_NONE,
+		.alpha = 255
+	};
+
+	Imx2dBlitParams const *params_in_use = (params != NULL) ? params : &default_params;
+
 	assert((blitter != NULL) && (blitter->blitter_class != NULL) && (blitter->blitter_class->do_blit != NULL));
-	return blitter->blitter_class->do_blit(blitter, source, dest, params);
+
+	if (params_in_use->alpha == 0)
+	{
+		/* If alpha is set to 0, then the blitting would effectively
+		 * do nothing due to the pixels being 100% translucent. */
+		IMX_2D_LOG(TRACE, "not blitting because params alpha value is 0");
+		return TRUE;
+	}
+	else if (params_in_use->alpha < 0)
+	{
+		IMX_2D_LOG(ERROR, "attempting to blit with alpha value %u; minimum allowed value is 0", params_in_use->alpha);
+		return FALSE;
+	}
+	else if (params_in_use->alpha > 255)
+	{
+		IMX_2D_LOG(ERROR, "attempting to blit with alpha value %u; maximum allowed value is 255", params_in_use->alpha);
+		return FALSE;
+	}
+
+	if (params_in_use->dest_region != NULL)
+	{
+		/* dest_region is set, so we need to check if and to what
+		 * degree dest_region is inside the dest surface. */
+
+		Imx2dRegionInclusion dest_region_inclusion = IMX_2D_REGION_INCLUSION_FULL;
+		Imx2dRegion const *expanded_dest_region_to_use = NULL;
+		Imx2dRegion full_expanded_dest_region;
+		Imx2dRegion clipped_expanded_dest_region;
+		uint32_t margin_fill_color = 0x00000000;
+
+		/* Get the margin and look at its alpha value. If it is 0,
+		 * then the margin cannot be visible, so we disable it.
+		 * Otherwise, modulate the alpha value with the alpha value
+		 * from the params. If the result from that is 0, again,
+		 * disable the margin. */
+		Imx2dBlitMargin const *margin = params_in_use->margin;
+		if (margin != NULL)
+		{
+			int margin_alpha = (margin->color >> 24) & 0xFF;
+			if (margin_alpha != 0)
+			{
+				margin_alpha = margin_alpha * params_in_use->alpha / 255;
+				if (margin_alpha != 0)
+					margin_fill_color = (margin->color & 0x00FFFFFF) | (((uint32_t)margin_alpha) << 24);
+				else
+					margin = NULL;
+			}
+			else
+				margin = NULL;
+		}
+
+		if (margin != NULL)
+		{
+			Imx2dRegionInclusion expanded_dest_region_inclusion;
+
+			assert(margin->left_margin >= 0);
+			assert(margin->top_margin >= 0);
+			assert(margin->right_margin >= 0);
+			assert(margin->bottom_margin >= 0);
+
+			full_expanded_dest_region.x1 = params_in_use->dest_region->x1 - margin->left_margin;
+			full_expanded_dest_region.y1 = params_in_use->dest_region->y1 - margin->top_margin;
+			full_expanded_dest_region.x2 = params_in_use->dest_region->x2 + margin->right_margin;
+			full_expanded_dest_region.y2 = params_in_use->dest_region->y2 + margin->bottom_margin;
+
+			expanded_dest_region_inclusion = imx_2d_region_check_inclusion(
+				&full_expanded_dest_region,
+				&(dest->region)
+			);
+
+			IMX_2D_LOG(TRACE, "expanded dest region: %" IMX_2D_REGION_FORMAT, IMX_2D_REGION_ARGS(&full_expanded_dest_region));
+
+			switch (expanded_dest_region_inclusion)
+			{
+				case IMX_2D_REGION_INCLUSION_NONE:
+				{
+					/* if the expanded dest region is fully outside of the
+					 * dest surface, then we can exit right away, since then,
+					 * neither the margin nor the actual dest region can
+					 * possibly be visible, so there is nothing to blit. */
+					IMX_2D_LOG(TRACE, "expanded dest region is fully outside of the dest surface bounds; skipping blitter operation");
+					return TRUE;
+				}
+
+				case IMX_2D_REGION_INCLUSION_FULL:
+				{
+					/* If the expanded dest region is fully inside the dest
+					 * surface, this implies that the original dest region is too.
+					 * Therefore, set dest_region_inclusion to "full" to let
+					 * the rest of the code know that no more checks are needed. */
+					IMX_2D_LOG(TRACE, "expanded dest region is fully inside of the dest surface bounds");
+					dest_region_inclusion = IMX_2D_REGION_INCLUSION_FULL;
+					expanded_dest_region_to_use = &full_expanded_dest_region;
+					break;
+				}
+
+				case IMX_2D_REGION_INCLUSION_PARTIAL:
+					/* Partial inclusion -> check the inclusion of the original
+					 * dest region, and also clip the expanded dest region against
+					 * the dest surface. */
+
+					IMX_2D_LOG(TRACE, "expanded dest region is partially inside of the dest surface bounds");
+
+					dest_region_inclusion = imx_2d_region_check_inclusion(
+						params_in_use->dest_region,
+						&(dest->region)
+					);
+
+					imx_2d_region_intersect(
+						&clipped_expanded_dest_region,
+						&full_expanded_dest_region,
+						&(dest->region)
+					);
+					expanded_dest_region_to_use = &clipped_expanded_dest_region;
+
+					break;
+
+				default:
+					assert(FALSE);
+			}
+		}
+		else
+		{
+			dest_region_inclusion = imx_2d_region_check_inclusion(
+				params_in_use->dest_region,
+				&(dest->region)
+			);
+		}
+
+		/* If we reach this point, then either dest_region is
+		 * at least partially visible, or there is a margin &
+		 * it is partially visible, or both. In other words,
+		 * it is not possible that we have a margin which is
+		 * fully invisible if we made it to this point. */
+
+		switch (dest_region_inclusion)
+		{
+			case IMX_2D_REGION_INCLUSION_NONE:
+				if (margin != NULL)
+				{
+					IMX_2D_LOG(TRACE, "dest region is fully outside of the dest surface bounds, but margin is visible; skipping blitter operation, filling margin");
+					return blitter->blitter_class->fill_region(
+						blitter,
+						dest,
+						expanded_dest_region_to_use,
+						margin_fill_color
+					);
+				}
+				else
+				{
+					IMX_2D_LOG(TRACE, "dest region is fully outside of the dest surface bounds; skipping blitter operation");
+					return TRUE;
+				}
+				break;
+
+			case IMX_2D_REGION_INCLUSION_FULL:
+				/* We can blit with zero adjustments, since the dest
+				 * region is fully inside the dest surface. */
+				IMX_2D_LOG(TRACE, "dest region is fully inside of the dest surface bounds");
+				return blitter->blitter_class->do_blit(
+					blitter,
+					source, params_in_use->source_region,
+					dest, params_in_use->dest_region,
+					params_in_use->rotation,
+					expanded_dest_region_to_use,
+					params_in_use->alpha,
+					margin_fill_color
+				);
+
+			case IMX_2D_REGION_INCLUSION_PARTIAL:
+			{
+				/* We must adjust both the dest and the source region,
+				 * since the dest region is only partially inside the
+				 * dest surface. We also have to adjust the source region,
+				 * because we can only blit a subset of the source region. */
+
+				Imx2dRegion const *source_region = (params_in_use->source_region != NULL) ? params_in_use->source_region : &(source->region);
+				Imx2dRegion const *dest_region = params_in_use->dest_region;
+				Imx2dRegion clipped_source_region;
+				Imx2dRegion clipped_dest_region;
+
+				int source_region_width = source_region->x2 - source_region->x1;
+				int source_region_height = source_region->y2 - source_region->y1;
+				int dest_region_width = dest_region->x2 - dest_region->x1;
+				int dest_region_height = dest_region->y2 - dest_region->y1;
+
+				imx_2d_region_intersect(
+					&clipped_dest_region,
+					dest_region,
+					&(dest->region)
+				);
+
+				memcpy(&clipped_source_region, source_region, sizeof(Imx2dRegion));
+
+				switch (params_in_use->rotation)
+				{
+					case IMX_2D_ROTATION_NONE:
+						if (dest_region->x1 < 0)
+							clipped_source_region.x1 += source_region_width * (-dest_region->x1) / dest_region_width;
+						if (dest_region->y1 < 0)
+							clipped_source_region.y1 += source_region_height * (-dest_region->y1) / dest_region_height;
+						if (dest_region->x2 > dest->region.x2)
+							clipped_source_region.x2 -= source_region_width * (dest_region->x2 - dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > dest->region.y2)
+							clipped_source_region.y2 -= source_region_height * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						break;
+
+					case IMX_2D_ROTATION_90:
+						if (dest_region->x1 < 0)
+							clipped_source_region.y2 -= source_region_height * (-dest_region->x1) / dest_region_width;
+						if (dest_region->y1 < 0)
+							clipped_source_region.x1 += source_region_width * (-dest_region->y1) / dest_region_height;
+						if (dest_region->x2 > dest->region.x2)
+							clipped_source_region.y1 += source_region_height * (dest_region->x2 - dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > dest->region.y2)
+							clipped_source_region.x2 -= source_region_width * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						break;
+
+					case IMX_2D_ROTATION_180:
+						if (dest_region->x1 < 0)
+							clipped_source_region.x2 -= source_region_width * (-dest_region->x1) / dest_region_width;
+						if (dest_region->y1 < 0)
+							clipped_source_region.y2 -= source_region_height * (-dest_region->y1) / dest_region_height;
+						if (dest_region->x2 > dest->region.x2)
+							clipped_source_region.x1 += source_region_width * (dest_region->x2 - dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > dest->region.y2)
+							clipped_source_region.y1 += source_region_height * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						break;
+
+					case IMX_2D_ROTATION_270:
+						if (dest_region->x1 < 0)
+							clipped_source_region.y1 += source_region_height * (-dest_region->x1) / dest_region_width;
+						if (dest_region->y1 < 0)
+							clipped_source_region.x2 -= source_region_width * (-dest_region->y1) / dest_region_height;
+						if (dest_region->x2 > dest->region.x2)
+							clipped_source_region.y2 -= source_region_height * (dest_region->x2 - dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > dest->region.y2)
+							clipped_source_region.x1 += source_region_width * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						break;
+
+					case IMX_2D_ROTATION_FLIP_HORIZONTAL:
+						if (dest_region->x1 < 0)
+							clipped_source_region.x2 -= source_region_width * (-dest_region->x1) / dest_region_width;
+						if (dest_region->y1 < 0)
+							clipped_source_region.y1 += source_region_height * (-dest_region->y1) / dest_region_height;
+						if (dest_region->x2 > dest->region.x2)
+							clipped_source_region.x1 += source_region_width * (dest_region->x2 - dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > dest->region.y2)
+							clipped_source_region.y2 -= source_region_height * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						break;
+
+					case IMX_2D_ROTATION_FLIP_VERTICAL:
+						if (dest_region->x1 < 0)
+							clipped_source_region.x1 += source_region_width * (-dest_region->x1) / dest_region_width;
+						if (dest_region->y1 < 0)
+							clipped_source_region.y2 -= source_region_height * (-dest_region->y1) / dest_region_height;
+						if (dest_region->x2 > dest->region.x2)
+							clipped_source_region.x2 -= source_region_width * (dest_region->x2 - dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > dest->region.y2)
+							clipped_source_region.y1 += source_region_height * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						break;
+
+					default:
+						assert(FALSE);
+				}
+
+				IMX_2D_LOG(TRACE, "dest region is partially inside of the dest surface bounds");
+				IMX_2D_LOG(
+					TRACE,
+					"clipped source region: %" IMX_2D_REGION_FORMAT " clipped dest region: %" IMX_2D_REGION_FORMAT,
+					IMX_2D_REGION_ARGS(&clipped_source_region),
+					IMX_2D_REGION_ARGS(&clipped_dest_region)
+				);
+
+				return blitter->blitter_class->do_blit(
+					blitter,
+					source, &clipped_source_region,
+					dest, &clipped_dest_region,
+					params_in_use->rotation,
+					expanded_dest_region_to_use,
+					params_in_use->alpha,
+					margin_fill_color
+				);
+			}
+
+			default:
+				assert(FALSE);
+		}
+
+		/* Should not be reached. Just here to shut up superfluous compiler warnings. */
+		return FALSE;
+	}
+	else
+	{
+		/* dest_region is not set. This implies that we can directly
+		 * go ahead and do the blitter operation, since then, the
+		 * entire dest surface is the dest region, so a full inclusion
+		 * of the dest region is implied. No need to calculate
+		 * inclusions, intersections etc. */
+
+		return blitter->blitter_class->do_blit(
+			blitter,
+			source, params_in_use->source_region,
+			dest, params_in_use->dest_region,
+			params_in_use->rotation,
+			NULL,
+			params_in_use->alpha,
+			/* Setting the margin fill color to 0 since the margin is anyway not present in this case */
+			0x00000000
+		);
+	}
 }
 
 
