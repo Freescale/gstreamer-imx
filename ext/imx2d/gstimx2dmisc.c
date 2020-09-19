@@ -212,6 +212,124 @@ GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities c
 }
 
 
+void gst_imx_2d_canvas_calculate_letterbox_margin(
+	Imx2dBlitMargin *margin,
+	Imx2dRegion *inner_region,
+	Imx2dRegion const *outer_region,
+	gboolean video_transposed,
+	guint video_width, guint video_height,
+	guint video_par_n, guint video_par_d
+)
+{
+	guint display_ratio_n, display_ratio_d;
+	guint window_par_n, window_par_d;
+	guint ratio_factor;
+	guint outer_w, outer_h, inner_w, inner_h;
+	guint combined_w_margin, combined_h_margin;
+
+	g_assert(margin != NULL);
+	g_assert(outer_region != NULL);
+
+	window_par_n = 1;
+	window_par_d = 1;
+
+	if (G_UNLIKELY((video_width == 0) || (video_height == 0)))
+	{
+		/* Can't compute a margin if either width
+		 * or height are 0. */
+		goto set_zero_margin;
+	}
+
+	if (G_UNLIKELY(!gst_video_calculate_display_ratio(
+		&display_ratio_n, &display_ratio_d,
+		video_width, video_height,
+		video_par_n, video_par_d,
+		window_par_n, window_par_d
+	)))
+		goto set_zero_margin;
+
+	if (video_transposed)
+	{
+		guint d = display_ratio_d;
+		display_ratio_d = display_ratio_n;
+		display_ratio_n = d;
+	}
+
+	/* Fit the inner region in the outer one, keeping display ratio.
+	 * This means that either its width or its height will be set to the
+	 * outer region's width/height, and the other length will be shorter,
+	 * scaled accordingly to retain the display ratio
+	 *
+	 * Setting dn = display_ratio_n , dd = display_ratio_d ,
+	 * outer_w = outer_region_width , outer_h = outer_region_height ,
+	 * we can identify cases:
+	 *
+	 * (1) Inner region fits in outer one with its width maximized
+	 *     In this case, this holds: outer_w/outer_h < dn/dd
+	 * (1) Inner region fits in outer one with its height maximized
+	 *     In this case, this holds: outer_w/outer_h > dn/dd
+	 *
+	 * To simplify comparison, the inequality outer_w/outer_h > dn/dd
+	 * is transformed to: outer_w*dd/outer_h > dn
+	 * outer_w*dd/outer_h is the ratio_factor
+	 */
+
+	outer_w = outer_region->x2 - outer_region->x1;
+	outer_h = outer_region->y2 - outer_region->y1;
+
+	ratio_factor = (guint)gst_util_uint64_scale_int(outer_w, display_ratio_d, outer_h);
+
+	if (ratio_factor >= display_ratio_n)
+	{
+		inner_w = (guint)gst_util_uint64_scale_int(outer_h, display_ratio_n, display_ratio_d);
+		inner_h = outer_h;
+	}
+	else
+	{
+		inner_w = outer_w;
+		inner_h = (guint)gst_util_uint64_scale_int(outer_w, display_ratio_d, display_ratio_n);
+	}
+
+	/* Safeguard to ensure width/height aren't out of bounds
+	 * (should not happen, but better safe than sorry) */
+	inner_w = MIN(inner_w, outer_w);
+	inner_h = MIN(inner_h, outer_h);
+
+	combined_w_margin = outer_w - inner_w;
+	combined_h_margin = outer_h - inner_h;
+
+	GST_LOG(
+		"video w/h: %u/%u  video PAR: %d/%d  window PAR: %d/%d  display ratio: %d/%d  outer w/h: %u/%u  inner w/h: %u/%u  ratio factor: %u  combined margin w/h: %u/%d",
+		video_width, video_height,
+		video_par_n, video_par_d,
+		window_par_n, window_par_d,
+		display_ratio_n, display_ratio_d,
+		outer_w, outer_h,
+		inner_w, inner_h,
+		ratio_factor,
+		combined_w_margin, combined_h_margin
+	);
+
+	margin->left_margin = combined_w_margin / 2;
+	margin->right_margin = combined_w_margin - margin->left_margin;
+	margin->top_margin = combined_h_margin / 2;
+	margin->bottom_margin = combined_h_margin - margin->top_margin;
+
+	inner_region->x1 = outer_region->x1 + margin->left_margin;
+	inner_region->y1 = outer_region->y1 + margin->top_margin;
+	inner_region->x2 = outer_region->x2 - margin->right_margin;
+	inner_region->y2 = outer_region->y2 - margin->bottom_margin;
+
+	return;
+
+set_zero_margin:
+	margin->left_margin = 0;
+	margin->top_margin = 0;
+	margin->right_margin = 0;
+	margin->bottom_margin = 0;
+}
+
+
 GType gst_imx_2d_rotation_get_type(void)
 {
 	static GType gst_imx_2d_rotation_type = 0;

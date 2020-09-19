@@ -34,6 +34,15 @@ GstVideoFormat gst_imx_2d_convert_to_gst_video_format(Imx2dPixelFormat imx2d_for
 
 GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities const *capabilities, GstPadDirection direction);
 
+void gst_imx_2d_canvas_calculate_letterbox_margin(
+	Imx2dBlitMargin *margin,
+	Imx2dRegion *inner_region,
+	Imx2dRegion const *outer_region,
+	gboolean video_transposed,
+	guint video_width, guint video_height,
+	guint video_par_n, guint video_par_d
+);
+
 GType gst_imx_2d_rotation_get_type(void);
 
 
