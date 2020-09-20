@@ -1,6 +1,6 @@
 imx2d = static_library(
 	'imx2d',
-	['imx2d.c'],
+	['imx2d.c', 'linux_framebuffer.c'],
 	install : false,
 	include_directories : libsinc,
 	dependencies : [libimxdmabuffer_dep]

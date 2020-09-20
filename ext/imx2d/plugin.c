@@ -19,6 +19,7 @@
 #include <config.h>
 #include <gst/gst.h>
 #include "gstimxg2dvideotransform.h"
+#include "gstimxg2dvideosink.h"
 
 
 static gboolean plugin_init(GstPlugin *plugin)
@@ -26,6 +27,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 	gboolean ret = TRUE;
 #ifdef WITH_IMX2D_G2D_BACKEND
 	ret = ret && gst_element_register(plugin, "imxg2dvideotransform", GST_RANK_NONE, gst_imx_g2d_video_transform_get_type());
+	ret = ret && gst_element_register(plugin, "imxg2dvideosink", GST_RANK_NONE, gst_imx_g2d_video_sink_get_type());
 #endif
 	return ret;
 }

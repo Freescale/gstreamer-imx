@@ -6,6 +6,7 @@ source = [
 	'gstimx2dcompositor.c',
 	'gstimx2dmisc.c',
 	'gstimx2dvideotransform.c',
+	'gstimx2dvideosink.c',
 	'plugin.c'
 ]
 
@@ -14,7 +15,7 @@ backend_source = []
 backend_deps = []
 
 if imx2d_backend_g2d_dep.found()
-	backend_source += ['gstimxg2dvideotransform.c']
+	backend_source += ['gstimxg2dvideotransform.c', 'gstimxg2dvideosink.c']
 	backend_deps += [imx2d_backend_g2d_dep]
 endif
 
