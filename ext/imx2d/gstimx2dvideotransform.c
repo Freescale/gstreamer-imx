@@ -18,7 +18,6 @@
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
-#include "gst/imx/common/gstimxdefaultallocator.h"
 #include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "gstimx2dvideotransform.h"
 #include "gstimx2dmisc.h"
@@ -92,7 +91,7 @@ static void gst_imx_2d_video_transform_class_init(GstImx2dVideoTransformClass *k
 
 	gst_imx_2d_setup_logging();
 
-	GST_DEBUG_CATEGORY_INIT(imx_2d_video_transform_debug, "imx2dvideotransform", 0, "NXP i.MX 2D video transform");
+	GST_DEBUG_CATEGORY_INIT(imx_2d_video_transform_debug, "imx2dvideotransform", 0, "NXP i.MX 2D video transform base class");
 
 	meta_tag_video_quark = g_quark_from_static_string(GST_META_TAG_VIDEO_STR);
 
@@ -1415,6 +1414,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 
 	{
 		GstVideoInfo *out_info = &(self->output_video_info);
+		Imx2dSurfaceDesc const *output_surface_desc = imx_2d_surface_get_desc(self->output_surface);
 
 		for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(out_info); ++plane_index)
 		{
@@ -1425,8 +1425,8 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 				self,
 				"output plane #%u info:  stride: %d  offset: %d",
 				plane_index,
-				self->input_surface_desc.plane_stride[plane_index],
-				self->input_surface_desc.plane_offset[plane_index]
+				output_surface_desc->plane_stride[plane_index],
+				output_surface_desc->plane_offset[plane_index]
 			);
 		}
 	}
@@ -1437,6 +1437,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	imx_2d_surface_set_dma_buffer(self->input_surface, in_dma_buffer);
 	imx_2d_surface_set_dma_buffer(self->output_surface, out_dma_buffer);
 
+	memset(&blit_params, 0, sizeof(blit_params));
 	blit_params.source_region = NULL;
 	blit_params.dest_region = NULL;
 	blit_params.rotation = output_rotation;
