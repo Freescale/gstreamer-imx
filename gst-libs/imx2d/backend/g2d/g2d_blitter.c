@@ -389,6 +389,20 @@ static int imx_2d_backend_g2d_blitter_do_blit(
 
 		IMX_2D_LOG(TRACE, "margin fill color: %#6x alpha: %d", margin_fill_color & 0x00FFFFFF, margin_alpha);
 
+		if (margin_alpha != 255)
+		{
+			/* g2d_clear() ignores alpha blending, so if margin_alpha is not 255,
+			 * use a trick. Take the fill_surface, which is a very small surface,
+			 * fill it with the fill color, and blit it with blending. */
+
+			g2d_blitter->fill_g2d_surface.clrcolor = margin_g2d_surf.clrcolor;
+			if (g2d_clear(g2d_blitter->g2d_handle, &(g2d_blitter->fill_g2d_surface)) != 0)
+			{
+				IMX_2D_LOG(ERROR, "could not fill margin");
+				return FALSE;
+			}
+		}
+
 		for (i = 0; i < 4; ++i)
 		{
 			BOOL skip_margin_region = FALSE;
@@ -441,9 +455,6 @@ static int imx_2d_backend_g2d_blitter_do_blit(
 			if (skip_margin_region)
 				continue;
 
-			/* g2d_clear() ignores alpha blending, so if margin_alpha is not 255,
-			 * use a trick. Take the fill_surface, which is a very small surface,
-			 * fill it with the fill color, and blit it with blending. */
 			if (margin_alpha == 255)
 			{
 				if (g2d_clear(g2d_blitter->g2d_handle, &margin_g2d_surf) != 0)
