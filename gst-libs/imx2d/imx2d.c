@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 #include "imx2d.h"
 #include "imx2d_priv.h"
 
@@ -383,14 +384,37 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 			int margin_alpha = (margin->color >> 24) & 0xFF;
 			if (margin_alpha != 0)
 			{
-				margin_alpha = margin_alpha * params_in_use->alpha / 255;
-				if (margin_alpha != 0)
-					margin_fill_color = (margin->color & 0x00FFFFFF) | (((uint32_t)margin_alpha) << 24);
+				int combined_alpha = margin_alpha * params_in_use->alpha / 255;
+				IMX_2D_LOG(
+					TRACE,
+					"global alpha: %d  margin alpha: %d  combined alpha: %d",
+					params_in_use->alpha,
+					margin_alpha,
+					combined_alpha
+				);
+				if (combined_alpha != 0)
+				{
+					uint32_t orig_margin_color_without_alpha = margin->color & 0x00FFFFFF;
+					margin_fill_color = orig_margin_color_without_alpha | (((uint32_t)combined_alpha) << 24);
+					IMX_2D_LOG(
+						TRACE,
+						"merging margin fill color %#06" PRIx32 " and combined alpha %d to new margin fill color %#08" PRIx32,
+						orig_margin_color_without_alpha,
+						combined_alpha,
+						margin_fill_color
+					);
+				}
 				else
+				{
+					IMX_2D_LOG(TRACE, "combined alpha is 0; disabling margin");
 					margin = NULL;
+				}
 			}
 			else
+			{
+				IMX_2D_LOG(TRACE, "margin alpha is 0; disabling margin");
 				margin = NULL;
+			}
 		}
 
 		if (margin != NULL)
@@ -412,7 +436,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 				&(dest->region)
 			);
 
-			IMX_2D_LOG(TRACE, "expanded dest region: %" IMX_2D_REGION_FORMAT, IMX_2D_REGION_ARGS(&full_expanded_dest_region));
+			IMX_2D_LOG(TRACE, "margin defined; expanded dest region: %" IMX_2D_REGION_FORMAT, IMX_2D_REGION_ARGS(&full_expanded_dest_region));
 
 			switch (expanded_dest_region_inclusion)
 			{
@@ -465,6 +489,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 		}
 		else
 		{
+			IMX_2D_LOG(TRACE, "no margin defined");
 			dest_region_inclusion = imx_2d_region_check_inclusion(
 				params_in_use->dest_region,
 				&(dest->region)
