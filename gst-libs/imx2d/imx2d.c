@@ -684,7 +684,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color)
 {
 	assert((blitter != NULL) && (blitter->blitter_class != NULL) && (blitter->blitter_class->fill_region != NULL));
-	return blitter->blitter_class->fill_region(blitter, dest, dest_region, fill_color);
+	return blitter->blitter_class->fill_region(blitter, dest, (dest_region != NULL) ? dest_region : &(dest->region), fill_color);
 }
 
 

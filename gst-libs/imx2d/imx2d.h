@@ -791,7 +791,8 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
  * color is set to @fill_color. Should @dest_region extend
  * past the boundaries of @dest, it will be clipped. If
  * @dest_region is fully outside of @dest, this function does
- * nothing and just returns nonzero.
+ * nothing and just returns nonzero. If @dest_region is NULL,
+ * the entire surface is filled.
  *
  * The @fill_color is specified as a 32-bit unsigned integer.
  * the layout being 0x00RRGGBB, that is, the LSB is the byte
