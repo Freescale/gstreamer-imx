@@ -1124,6 +1124,12 @@ static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *t
 	GstBufferPool *new_buffer_pool = NULL;
 	guint buffer_size;
 
+	/* Chain up to the base class.
+	 * We first do that, then modify the query. That way, we can be
+	 * sure that our modifications remain, and aren't overwritten. */
+	if (!GST_BASE_TRANSFORM_CLASS(gst_imx_2d_video_transform_parent_class)->decide_allocation(transform, query))
+		return FALSE;
+
 	GST_TRACE_OBJECT(self, "attempting to decide what buffer pool and allocator to use");
 
 	gst_query_parse_allocation(query, &negotiated_caps, NULL);
@@ -1170,12 +1176,12 @@ static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *t
 	 * it as the first entry in the allocation param list. */
 	if (gst_query_get_n_allocation_params(query) == 0)
 	{
-		GST_DEBUG_OBJECT(self, "there are no allocation pools in the allocation query; adding our buffer pool to it");
+		GST_DEBUG_OBJECT(self, "there are no allocation params in the allocation query; adding our params to it");
 		gst_query_add_allocation_param(query, selected_allocator, &allocation_params);
 	}
 	else
 	{
-		GST_DEBUG_OBJECT(self, "there are allocation pools in the allocation query; setting our buffer pool as the first one in the query");
+		GST_DEBUG_OBJECT(self, "there are allocation params in the allocation query; setting our params as the first ones in the query");
 		gst_query_set_nth_allocation_param(query, 0, selected_allocator, &allocation_params);
 	}
 
@@ -1196,6 +1202,7 @@ static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *t
 	 * sure it gets added to newly created buffers. */
 	pool_config = gst_buffer_pool_get_config(new_buffer_pool);
 	gst_buffer_pool_config_set_params(pool_config, negotiated_caps, buffer_size, 0, 0);
+	gst_buffer_pool_config_set_allocator(pool_config, selected_allocator, &allocation_params);
 	gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 	gst_buffer_pool_set_config(new_buffer_pool, pool_config);
 
@@ -1203,8 +1210,7 @@ static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *t
 	gst_object_unref(GST_OBJECT(selected_allocator));
 	gst_object_unref(GST_OBJECT(new_buffer_pool));
 
-	/* Chain up to the base class. */
-	return GST_BASE_TRANSFORM_CLASS(gst_imx_2d_video_transform_parent_class)->decide_allocation(transform, query);
+	return TRUE;
 }
 
 
