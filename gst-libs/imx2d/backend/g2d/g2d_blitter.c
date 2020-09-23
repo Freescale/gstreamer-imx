@@ -329,31 +329,6 @@ static int imx_2d_backend_g2d_blitter_do_blit(
 
 	do_alpha = (dest_surface_alpha != 255) || g2d_format_has_alpha(g2d_source_surf.format);
 
-	if (do_alpha)
-	{
-		g2d_source_surf.blendfunc = G2D_SRC_ALPHA;
-		g2d_dest_surf.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
-		g2d_enable(g2d_blitter->g2d_handle, G2D_BLEND);
-
-		if (dest_surface_alpha != 255)
-		{
-			g2d_enable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
-			g2d_source_surf.global_alpha = dest_surface_alpha;
-			g2d_dest_surf.global_alpha = 255 - dest_surface_alpha;
-		}
-		else
-			g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
-	}
-	else
-	{
-		g2d_source_surf.blendfunc = G2D_ONE;
-		g2d_dest_surf.blendfunc = G2D_ZERO;
-		g2d_source_surf.global_alpha = 0;
-		g2d_dest_surf.global_alpha = 0;
-		g2d_disable(g2d_blitter->g2d_handle, G2D_BLEND);
-		g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
-	}
-
 	g2d_source_surf.rot = g2d_dest_surf.rot = G2D_ROTATION_0;
 	switch (rotation)
 	{
@@ -387,7 +362,7 @@ static int imx_2d_backend_g2d_blitter_do_blit(
 		                         | ((margin_fill_color & 0xFF0000) >> 16)
 		                         | 0xFF000000;
 
-		IMX_2D_LOG(TRACE, "margin fill color: %#6x alpha: %d", margin_fill_color & 0x00FFFFFF, margin_alpha);
+		IMX_2D_LOG(TRACE, "margin fill color: %#08x alpha: %d", margin_fill_color & 0x00FFFFFF, margin_alpha);
 
 		if (margin_alpha != 255)
 		{
@@ -401,6 +376,14 @@ static int imx_2d_backend_g2d_blitter_do_blit(
 				IMX_2D_LOG(ERROR, "could not fill margin");
 				return FALSE;
 			}
+
+			g2d_blitter->fill_g2d_surface.blendfunc = G2D_SRC_ALPHA;
+			g2d_blitter->fill_g2d_surface.global_alpha = margin_alpha;
+			margin_g2d_surf.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
+			margin_g2d_surf.global_alpha = margin_alpha;
+
+			g2d_enable(g2d_blitter->g2d_handle, G2D_BLEND);
+			g2d_enable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
 		}
 
 		for (i = 0; i < 4; ++i)
@@ -457,6 +440,7 @@ static int imx_2d_backend_g2d_blitter_do_blit(
 
 			if (margin_alpha == 255)
 			{
+				IMX_2D_LOG(TRACE, "filling margin with g2d_clear()");
 				if (g2d_clear(g2d_blitter->g2d_handle, &margin_g2d_surf) != 0)
 				{
 					IMX_2D_LOG(ERROR, "could not fill margin");
@@ -465,10 +449,7 @@ static int imx_2d_backend_g2d_blitter_do_blit(
 			}
 			else
 			{
-				g2d_blitter->fill_g2d_surface.blendfunc = G2D_SRC_ALPHA;
-				g2d_blitter->fill_g2d_surface.global_alpha = margin_alpha;
-				margin_g2d_surf.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
-				margin_g2d_surf.global_alpha = margin_alpha;
+				IMX_2D_LOG(TRACE, "filling margin with g2d_blit() and the fill surface; alpha = %d", margin_alpha);
 
 				if (g2d_blit(g2d_blitter->g2d_handle, &(g2d_blitter->fill_g2d_surface), &margin_g2d_surf) != 0)
 				{
@@ -477,6 +458,37 @@ static int imx_2d_backend_g2d_blitter_do_blit(
 				}
 			}
 		}
+
+		if (margin_alpha != 255)
+		{
+			g2d_disable(g2d_blitter->g2d_handle, G2D_BLEND);
+			g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
+		}
+	}
+
+	if (do_alpha)
+	{
+		g2d_source_surf.blendfunc = G2D_SRC_ALPHA;
+		g2d_dest_surf.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
+		g2d_enable(g2d_blitter->g2d_handle, G2D_BLEND);
+
+		if (dest_surface_alpha != 255)
+		{
+			g2d_enable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
+			g2d_source_surf.global_alpha = dest_surface_alpha;
+			g2d_dest_surf.global_alpha = 255 - dest_surface_alpha;
+		}
+		else
+			g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
+	}
+	else
+	{
+		g2d_source_surf.blendfunc = G2D_ONE;
+		g2d_dest_surf.blendfunc = G2D_ZERO;
+		g2d_source_surf.global_alpha = 0;
+		g2d_dest_surf.global_alpha = 0;
+		g2d_disable(g2d_blitter->g2d_handle, G2D_BLEND);
+		g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
 	}
 
 	g2d_ret = g2d_blit(g2d_blitter->g2d_handle, &g2d_source_surf, &g2d_dest_surf);
