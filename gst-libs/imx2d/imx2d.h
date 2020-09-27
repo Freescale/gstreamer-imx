@@ -226,6 +226,7 @@ struct _Imx2dPixelFormatInfo
 	int num_planes;
 	int num_first_plane_bpp;
 	int x_subsampling, y_subsampling;
+	int is_semi_planar;
 };
 
 
