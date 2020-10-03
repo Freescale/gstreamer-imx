@@ -225,8 +225,6 @@ void imx_2d_surface_desc_calculate_strides_and_offsets(Imx2dSurfaceDesc *desc, I
 
 int imx_2d_surface_desc_calculate_framesize(Imx2dSurfaceDesc const *desc)
 {
-	int y_subsampling;
-	int last_plane_nr;
 	Imx2dPixelFormatInfo const * fmt_info;
 
 	assert(desc != NULL);
@@ -237,14 +235,53 @@ int imx_2d_surface_desc_calculate_framesize(Imx2dSurfaceDesc const *desc)
 
 	assert(fmt_info->num_planes >= 1);
 
-	last_plane_nr = fmt_info->num_planes - 1;
-	y_subsampling = (last_plane_nr == 0) ? 1 : fmt_info->y_subsampling;
+	if (fmt_info->num_planes > 1)
+	{
+		int subsampled_height;
+		int num_chroma_planes;
+		int chroma_plane_size;
 
-	/* Use the offset of the last plane when computing the frame size.
-	 * This is because there may be padding bytes in between planes.
-	 * By using the last plane's offset, we implicitely factor in these
-	 * padding bytes into our calculations. */
-	return desc->plane_offset[last_plane_nr] + desc->plane_stride[last_plane_nr] * desc->height / y_subsampling;
+		/* In YUV formats, luma always comes first, followed by chroma
+		 * planes. The second plane is therefore always a chroma plane.
+		 * All chroma planes have the same size, so it does not really
+		 * matter which one we pick for size calculations. We just pick
+		 * the second one because it is convenient to do so. */
+		static int const chroma_plane_index = 1;
+
+		/* Compute the height of a chroma plane. That's the frame size
+		 * divided by the subsampling in direction of the Y coordinate
+		 * (not to be confused with Y as in luma from YUV).
+		 * We do not need to use x_subsampling, since in horizontal
+		 * direction, we use stride values, which are in bytes. */
+		subsampled_height = desc->height / fmt_info->y_subsampling;
+
+		/* The first plane is always the luma (Y) plane.
+		 * Subsequent planes are either one combined chroma UV plane
+		 * (if formats like NV12 are used), or two separate chroma
+		 * planes, one for U, one for V data. Therefore, the number
+		 * of chroma planes equals the number of planes minus the
+		 * single luma plane. */
+		num_chroma_planes = fmt_info->num_planes - 1;
+		chroma_plane_size = desc->plane_stride[chroma_plane_index] * subsampled_height;
+		/* If the format is semi planar, it means that there is one
+		 * single interleaved UV chroma plane. Since it contains both
+		 * U and V values, we need to double the size to accound for
+		 * its combined nature. */
+		if (fmt_info->is_semi_planar)
+			chroma_plane_size *= 2;
+
+		/* Use the offset of the last plane when computing the frame size.
+		 * This is because there may be padding bytes in between planes.
+		 * By using the last plane's offset, we implicitely factor in these
+		 * padding bytes into our calculations. */
+		return (desc->plane_offset[fmt_info->num_planes - 1] + chroma_plane_size * num_chroma_planes);
+	}
+	else
+	{
+		/* Single-planar formats are simpler. No need to factor in
+		 * any offsets between planes. */
+		return desc->plane_stride[0] * desc->height;
+	}
 }
 
 
