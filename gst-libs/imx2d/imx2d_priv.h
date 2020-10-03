@@ -56,6 +56,8 @@ extern Imx2dLoggingFunc imx_2d_cur_logging_fn;
 
 
 typedef struct _Imx2dSurfaceClass Imx2dSurfaceClass;
+typedef struct _Imx2dInternalBlitParams Imx2dInternalBlitParams;
+typedef struct _Imx2dInternalFillRegionParams Imx2dInternalFillRegionParams;
 
 
 struct _Imx2dSurface
@@ -72,6 +74,33 @@ struct _Imx2dBlitter
 };
 
 
+/* source_region and dest_region can be NULL, in which case
+ * the entire source/dest surface region is used.
+ * If expanded_dest_region is NULL, then the expanded region
+ * equals the dest region (either dest_region or dest->region,
+ * as explained above).
+ * The alpha value in margin_fill_color is premultiplied. */
+struct _Imx2dInternalBlitParams
+{
+	Imx2dSurface *source;
+	Imx2dRegion const *source_region;
+	Imx2dSurface *dest;
+	Imx2dRegion const *dest_region;
+	Imx2dRotation rotation;
+	Imx2dRegion const *expanded_dest_region;
+	int dest_surface_alpha;
+	uint32_t margin_fill_color;
+};
+
+
+struct _Imx2dInternalFillRegionParams
+{
+	Imx2dSurface *dest;
+	Imx2dRegion const *dest_region;
+	uint32_t fill_color;
+};
+
+
 struct _Imx2dBlitterClass
 {
 	void (*destroy)(Imx2dBlitter *blitter);
@@ -79,22 +108,8 @@ struct _Imx2dBlitterClass
 	int (*start)(Imx2dBlitter *blitter);
 	int (*finish)(Imx2dBlitter *blitter);
 
-	/* source_region and dest_region can be NULL, in which case
-	 * the entire source/dest surface region is used.
-	 * If expanded_dest_region is NULL, then the expanded region
-	 * equals the dest region (either dest_region or dest->region,
-	 * as explained above).
-	 * The alpha value in margin_fill_color is premultiplied. */
-	int (*do_blit)(
-		Imx2dBlitter *blitter,
-		Imx2dSurface *source, Imx2dRegion const *source_region,
-		Imx2dSurface *dest, Imx2dRegion const *dest_region,
-		Imx2dRotation rotation,
-		Imx2dRegion const *expanded_dest_region,
-		int dest_surface_alpha,
-		uint32_t margin_fill_color
-	);
-	int (*fill_region)(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color);
+	int (*do_blit)(Imx2dBlitter *blitter, Imx2dInternalBlitParams *internal_blit_params);
+	int (*fill_region)(Imx2dBlitter *blitter, Imx2dInternalFillRegionParams *internal_fill_region_params);
 
 	Imx2dHardwareCapabilities const * (*get_hardware_capabilities)(Imx2dBlitter *blitter);
 };

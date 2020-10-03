@@ -507,13 +507,16 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 			case IMX_2D_REGION_INCLUSION_NONE:
 				if (margin != NULL)
 				{
-					IMX_2D_LOG(TRACE, "dest region is fully outside of the dest surface bounds, but margin is visible; skipping blitter operation, filling margin");
-					return blitter->blitter_class->fill_region(
-						blitter,
+					Imx2dInternalFillRegionParams params =
+					{
 						dest,
 						expanded_dest_region_to_use,
 						margin_fill_color
-					);
+					};
+
+					IMX_2D_LOG(TRACE, "dest region is fully outside of the dest surface bounds, but margin is visible; skipping blitter operation, filling margin");
+
+					return blitter->blitter_class->fill_region(blitter, &params);
 				}
 				else
 				{
@@ -523,18 +526,22 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 				break;
 
 			case IMX_2D_REGION_INCLUSION_FULL:
-				/* We can blit with zero adjustments, since the dest
-				 * region is fully inside the dest surface. */
-				IMX_2D_LOG(TRACE, "dest region is fully inside of the dest surface bounds");
-				return blitter->blitter_class->do_blit(
-					blitter,
+			{
+				Imx2dInternalBlitParams params =
+				{
 					source, params_in_use->source_region,
 					dest, params_in_use->dest_region,
 					params_in_use->rotation,
 					expanded_dest_region_to_use,
 					params_in_use->alpha,
 					margin_fill_color
-				);
+				};
+
+				/* We can blit with zero adjustments, since the dest
+				 * region is fully inside the dest surface. */
+				IMX_2D_LOG(TRACE, "dest region is fully inside of the dest surface bounds");
+				return blitter->blitter_class->do_blit(blitter, &params);
+			}
 
 			case IMX_2D_REGION_INCLUSION_PARTIAL:
 			{
@@ -641,15 +648,18 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 					IMX_2D_REGION_ARGS(&clipped_dest_region)
 				);
 
-				return blitter->blitter_class->do_blit(
-					blitter,
-					source, &clipped_source_region,
-					dest, &clipped_dest_region,
-					params_in_use->rotation,
-					expanded_dest_region_to_use,
-					params_in_use->alpha,
-					margin_fill_color
-				);
+				{
+					Imx2dInternalBlitParams params =
+					{
+						source, &clipped_source_region,
+						dest, &clipped_dest_region,
+						params_in_use->rotation,
+						expanded_dest_region_to_use,
+						params_in_use->alpha,
+						margin_fill_color
+					};
+					return blitter->blitter_class->do_blit(blitter, &params);
+				}
 			}
 
 			default:
@@ -667,8 +677,8 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 		 * of the dest region is implied. No need to calculate
 		 * inclusions, intersections etc. */
 
-		return blitter->blitter_class->do_blit(
-			blitter,
+		Imx2dInternalBlitParams params =
+		{
 			source, params_in_use->source_region,
 			dest, params_in_use->dest_region,
 			params_in_use->rotation,
@@ -676,7 +686,9 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 			params_in_use->alpha,
 			/* Setting the margin fill color to 0 since the margin is anyway not present in this case */
 			0x00000000
-		);
+		};
+
+		return blitter->blitter_class->do_blit(blitter, &params);
 	}
 }
 
@@ -684,7 +696,17 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color)
 {
 	assert((blitter != NULL) && (blitter->blitter_class != NULL) && (blitter->blitter_class->fill_region != NULL));
-	return blitter->blitter_class->fill_region(blitter, dest, (dest_region != NULL) ? dest_region : &(dest->region), fill_color);
+
+	{
+		Imx2dInternalFillRegionParams params =
+		{
+			dest,
+			(dest_region != NULL) ? dest_region : &(dest->region),
+			fill_color
+		};
+
+		return blitter->blitter_class->fill_region(blitter, &params);
+	}
 }
 
 
