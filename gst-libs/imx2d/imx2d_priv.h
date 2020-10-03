@@ -71,6 +71,7 @@ struct _Imx2dSurface
 struct _Imx2dBlitter
 {
 	Imx2dBlitterClass *blitter_class;
+	Imx2dSurface *dest;
 };
 
 
@@ -84,7 +85,6 @@ struct _Imx2dInternalBlitParams
 {
 	Imx2dSurface *source;
 	Imx2dRegion const *source_region;
-	Imx2dSurface *dest;
 	Imx2dRegion const *dest_region;
 	Imx2dRotation rotation;
 	Imx2dRegion const *expanded_dest_region;
@@ -95,7 +95,6 @@ struct _Imx2dInternalBlitParams
 
 struct _Imx2dInternalFillRegionParams
 {
-	Imx2dSurface *dest;
 	Imx2dRegion const *dest_region;
 	uint32_t fill_color;
 };

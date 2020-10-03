@@ -453,13 +453,13 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 
 	GST_LOG_OBJECT(self, "beginning blitting procedure to transform the frame");
 
-	if (!imx_2d_blitter_start(self->blitter))
+	if (!imx_2d_blitter_start(self->blitter, self->framebuffer_surface))
 	{
 		GST_ERROR_OBJECT(self, "starting blitter failed");
 		goto error;
 	}
 
-	if (!imx_2d_blitter_do_blit(self->blitter, self->input_surface, self->framebuffer_surface, &blit_params))
+	if (!imx_2d_blitter_do_blit(self->blitter, self->input_surface, &blit_params))
 	{
 		GST_ERROR_OBJECT(self, "blitting failed");
 		goto error;

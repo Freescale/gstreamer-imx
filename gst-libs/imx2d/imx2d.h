@@ -699,14 +699,20 @@ void imx_2d_blitter_destroy(Imx2dBlitter *blitter);
 /**
  * imx_2d_blitter_start:
  * @blitter: Blitter to use.
+ * @dest: Surface to blit pixels to.
  *
  * Starts a sequence of blitter operations.
  *
  * This must be called before any @imx_2d_blitter_do_blit,
  * @imx_2d_blitter_fill_region or @imx_2d_blitter_finish calls.
  *
- * If this is again after a sequence was already started,
+ * If this is called again after a sequence was already started,
  * this function does nothing and returns nonzero.
+ *
+ * All subsequent blit / fill_region calls will write pixels into
+ * @dest. The @dest surface must exist until @imx_2d_blitter_finish
+ * is called, because the actual blit / fill_region operations
+ * may run asynchronously until the sequence is finished.
  *
  * IMPORTANT: All functions that are part of a sequence must
  * be called from the same thread. These functions are:
@@ -720,7 +726,7 @@ void imx_2d_blitter_destroy(Imx2dBlitter *blitter);
  *
  * Returns: Nonzero if the call succeeds, zero on failure.
  */
-int imx_2d_blitter_start(Imx2dBlitter *blitter);
+int imx_2d_blitter_start(Imx2dBlitter *blitter, Imx2dSurface *dest);
 
 /**
  * imx_2d_blitter_finish:
@@ -745,22 +751,27 @@ int imx_2d_blitter_finish(Imx2dBlitter *blitter);
  * imx_2d_blitter_do_blit:
  * @blitter: Blitter to use.
  * @source: Surface to blit pixels from.
- * @dest: Surface to blit pixels to.
  * @params: Optional blitter parameters. NULL sets default ones.
  *
  * This is the main function of a blitter. It blits (copies)
- * pixels from @source to @dest. When doing that, it also
- * performs flipping, rotation, blending, and scaling.
+ * pixels from @source to the destination surface (passed to
+ * @imx_2d_blitter_start). When doing that, it also performs
+ * flipping, rotation, blending, and scaling.
  *
- * The blitter transfers pixels from a source region in the
- * @source surface to a destination region in the @dest surface.
+ * The blitter transfers pixels from a source region in the @source
+ * surface to a destination region in the destination surface.
  * The regions are determined by the source and destination
  * regions in @params. If the source region pointer there
  * is set to NULL, then the entire @source surface is the source
- * region. Same goes for the @dest surface and the destination
+ * region. Same goes for the destination surface and the destination
  * region in @params. If @params itself is set to NULL, this
  * function behaves as if an @Imx2dBlitParams structure were
- * passed, with the source and destination regions set to NULL.
+ * passed with the source and destination regions set to NULL.
+ *
+ * The source surface must exist until the sequence that was begun
+ * with @imx_2d_blitter_start is ended with @imx_2d_blitter_finish.
+ * This is because blitters can queue up commands internally and
+ * execute them asynchronously.
  *
  * Scaling is determined by the source and destination regions.
  * The pixels from the source region are transferred into the
@@ -779,21 +790,20 @@ int imx_2d_blitter_finish(Imx2dBlitter *blitter);
  *
  * Returns: Nonzero if the call succeeds, zero on failure.
  */
-int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params);
+int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dBlitParams const *params);
 
 /**
  * imx_2d_blitter_fill_region:
  * @blitter: Blitter to use.
- * @dest: Surface that shall be filled.
- * @dest_region: Region in the @dest surface to fill.
+ * @dest_region: Region in the destination surface to fill.
  * @fill_color: Color to use for filling.
  *
- * This fills the @dest_region in @dest with pixels whose
- * color is set to @fill_color. Should @dest_region extend
- * past the boundaries of @dest, it will be clipped. If
- * @dest_region is fully outside of @dest, this function does
- * nothing and just returns nonzero. If @dest_region is NULL,
- * the entire surface is filled.
+ * This fills the @dest_region in the destination surface with
+ * pixels whose color is set to @fill_color. Should @dest_region
+ * extend past the boundaries of the destination surface, it will
+ * be clipped. If @dest_region is fully outside of the surface,
+ * this function does nothing and just returns nonzero. If
+ * @dest_region is NULL, the entire surface is filled.
  *
  * The @fill_color is specified as a 32-bit unsigned integer.
  * the layout being 0x00RRGGBB, that is, the LSB is the byte
@@ -804,7 +814,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
  *
  * Returns: Nonzero if the call succeeds, zero on failure.
  */
-int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color);
+int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dRegion const *dest_region, uint32_t fill_color);
 
 /**
  * imx_2d_blitter_get_hardware_capabilities:

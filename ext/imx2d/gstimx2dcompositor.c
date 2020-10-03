@@ -1338,7 +1338,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 	}
 
 	/* Start the imx2d blit sequence. */
-	if (!imx_2d_blitter_start(self->blitter))
+	if (!imx_2d_blitter_start(self->blitter, self->output_surface))
 	{
 		GST_ERROR_OBJECT(self, "starting blitter failed");
 		goto error;
@@ -1466,7 +1466,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 	{
 		GST_LOG_OBJECT(self, "need to clear background with color %#06" G_GINT32_MODIFIER "x", self->background_color & 0xFFFFFF);
 
-		if (!imx_2d_blitter_fill_region(self->blitter, self->output_surface, NULL, self->background_color))
+		if (!imx_2d_blitter_fill_region(self->blitter, NULL, self->background_color))
 		{
 			GST_ERROR_OBJECT(self, "could not clear background");
 			goto error_while_locked;
@@ -1624,7 +1624,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 			}
 		}
 
-		blit_ret = imx_2d_blitter_do_blit(self->blitter, compositor_pad->input_surface, self->output_surface, &blit_params);
+		blit_ret = imx_2d_blitter_do_blit(self->blitter, compositor_pad->input_surface, &blit_params);
 
 		gst_buffer_unref(input_buffer);
 

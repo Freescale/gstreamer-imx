@@ -353,9 +353,11 @@ void imx_2d_blitter_destroy(Imx2dBlitter *blitter)
 }
 
 
-int imx_2d_blitter_start(Imx2dBlitter *blitter)
+int imx_2d_blitter_start(Imx2dBlitter *blitter, Imx2dSurface *dest)
 {
 	assert((blitter != NULL) && (blitter->blitter_class != NULL) && (blitter->blitter_class->start != NULL));
+	assert(dest != NULL);
+	blitter->dest = dest;
 	return blitter->blitter_class->start(blitter);
 }
 
@@ -367,7 +369,7 @@ int imx_2d_blitter_finish(Imx2dBlitter *blitter)
 }
 
 
-int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSurface *dest, Imx2dBlitParams const *params)
+int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dBlitParams const *params)
 {
 	static Imx2dBlitParams const default_params =
 	{
@@ -470,7 +472,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 
 			expanded_dest_region_inclusion = imx_2d_region_check_inclusion(
 				&full_expanded_dest_region,
-				&(dest->region)
+				&(blitter->dest->region)
 			);
 
 			IMX_2D_LOG(TRACE, "margin defined; expanded dest region: %" IMX_2D_REGION_FORMAT, IMX_2D_REGION_ARGS(&full_expanded_dest_region));
@@ -508,13 +510,13 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 
 					dest_region_inclusion = imx_2d_region_check_inclusion(
 						params_in_use->dest_region,
-						&(dest->region)
+						&(blitter->dest->region)
 					);
 
 					imx_2d_region_intersect(
 						&clipped_expanded_dest_region,
 						&full_expanded_dest_region,
-						&(dest->region)
+						&(blitter->dest->region)
 					);
 					expanded_dest_region_to_use = &clipped_expanded_dest_region;
 
@@ -529,7 +531,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 			IMX_2D_LOG(TRACE, "no margin defined");
 			dest_region_inclusion = imx_2d_region_check_inclusion(
 				params_in_use->dest_region,
-				&(dest->region)
+				&(blitter->dest->region)
 			);
 		}
 
@@ -546,7 +548,6 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 				{
 					Imx2dInternalFillRegionParams params =
 					{
-						dest,
 						expanded_dest_region_to_use,
 						margin_fill_color
 					};
@@ -567,7 +568,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 				Imx2dInternalBlitParams params =
 				{
 					source, params_in_use->source_region,
-					dest, params_in_use->dest_region,
+					params_in_use->dest_region,
 					params_in_use->rotation,
 					expanded_dest_region_to_use,
 					params_in_use->alpha,
@@ -600,7 +601,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 				imx_2d_region_intersect(
 					&clipped_dest_region,
 					dest_region,
-					&(dest->region)
+					&(blitter->dest->region)
 				);
 
 				memcpy(&clipped_source_region, source_region, sizeof(Imx2dRegion));
@@ -612,10 +613,10 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 							clipped_source_region.x1 += source_region_width * (-dest_region->x1) / dest_region_width;
 						if (dest_region->y1 < 0)
 							clipped_source_region.y1 += source_region_height * (-dest_region->y1) / dest_region_height;
-						if (dest_region->x2 > dest->region.x2)
-							clipped_source_region.x2 -= source_region_width * (dest_region->x2 - dest->region.x2) / dest_region_width;
-						if (dest_region->y2 > dest->region.y2)
-							clipped_source_region.y2 -= source_region_height * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						if (dest_region->x2 > blitter->dest->region.x2)
+							clipped_source_region.x2 -= source_region_width * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > blitter->dest->region.y2)
+							clipped_source_region.y2 -= source_region_height * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
 						break;
 
 					case IMX_2D_ROTATION_90:
@@ -623,10 +624,10 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 							clipped_source_region.y2 -= source_region_height * (-dest_region->x1) / dest_region_width;
 						if (dest_region->y1 < 0)
 							clipped_source_region.x1 += source_region_width * (-dest_region->y1) / dest_region_height;
-						if (dest_region->x2 > dest->region.x2)
-							clipped_source_region.y1 += source_region_height * (dest_region->x2 - dest->region.x2) / dest_region_width;
-						if (dest_region->y2 > dest->region.y2)
-							clipped_source_region.x2 -= source_region_width * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						if (dest_region->x2 > blitter->dest->region.x2)
+							clipped_source_region.y1 += source_region_height * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > blitter->dest->region.y2)
+							clipped_source_region.x2 -= source_region_width * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
 						break;
 
 					case IMX_2D_ROTATION_180:
@@ -634,10 +635,10 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 							clipped_source_region.x2 -= source_region_width * (-dest_region->x1) / dest_region_width;
 						if (dest_region->y1 < 0)
 							clipped_source_region.y2 -= source_region_height * (-dest_region->y1) / dest_region_height;
-						if (dest_region->x2 > dest->region.x2)
-							clipped_source_region.x1 += source_region_width * (dest_region->x2 - dest->region.x2) / dest_region_width;
-						if (dest_region->y2 > dest->region.y2)
-							clipped_source_region.y1 += source_region_height * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						if (dest_region->x2 > blitter->dest->region.x2)
+							clipped_source_region.x1 += source_region_width * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > blitter->dest->region.y2)
+							clipped_source_region.y1 += source_region_height * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
 						break;
 
 					case IMX_2D_ROTATION_270:
@@ -645,10 +646,10 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 							clipped_source_region.y1 += source_region_height * (-dest_region->x1) / dest_region_width;
 						if (dest_region->y1 < 0)
 							clipped_source_region.x2 -= source_region_width * (-dest_region->y1) / dest_region_height;
-						if (dest_region->x2 > dest->region.x2)
-							clipped_source_region.y2 -= source_region_height * (dest_region->x2 - dest->region.x2) / dest_region_width;
-						if (dest_region->y2 > dest->region.y2)
-							clipped_source_region.x1 += source_region_width * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						if (dest_region->x2 > blitter->dest->region.x2)
+							clipped_source_region.y2 -= source_region_height * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > blitter->dest->region.y2)
+							clipped_source_region.x1 += source_region_width * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
 						break;
 
 					case IMX_2D_ROTATION_FLIP_HORIZONTAL:
@@ -656,10 +657,10 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 							clipped_source_region.x2 -= source_region_width * (-dest_region->x1) / dest_region_width;
 						if (dest_region->y1 < 0)
 							clipped_source_region.y1 += source_region_height * (-dest_region->y1) / dest_region_height;
-						if (dest_region->x2 > dest->region.x2)
-							clipped_source_region.x1 += source_region_width * (dest_region->x2 - dest->region.x2) / dest_region_width;
-						if (dest_region->y2 > dest->region.y2)
-							clipped_source_region.y2 -= source_region_height * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						if (dest_region->x2 > blitter->dest->region.x2)
+							clipped_source_region.x1 += source_region_width * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > blitter->dest->region.y2)
+							clipped_source_region.y2 -= source_region_height * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
 						break;
 
 					case IMX_2D_ROTATION_FLIP_VERTICAL:
@@ -667,10 +668,10 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 							clipped_source_region.x1 += source_region_width * (-dest_region->x1) / dest_region_width;
 						if (dest_region->y1 < 0)
 							clipped_source_region.y2 -= source_region_height * (-dest_region->y1) / dest_region_height;
-						if (dest_region->x2 > dest->region.x2)
-							clipped_source_region.x2 -= source_region_width * (dest_region->x2 - dest->region.x2) / dest_region_width;
-						if (dest_region->y2 > dest->region.y2)
-							clipped_source_region.y1 += source_region_height * (dest_region->y2 - dest->region.y2) / dest_region_height;
+						if (dest_region->x2 > blitter->dest->region.x2)
+							clipped_source_region.x2 -= source_region_width * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > blitter->dest->region.y2)
+							clipped_source_region.y1 += source_region_height * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
 						break;
 
 					default:
@@ -689,7 +690,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 					Imx2dInternalBlitParams params =
 					{
 						source, &clipped_source_region,
-						dest, &clipped_dest_region,
+						&clipped_dest_region,
 						params_in_use->rotation,
 						expanded_dest_region_to_use,
 						params_in_use->alpha,
@@ -717,7 +718,7 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 		Imx2dInternalBlitParams params =
 		{
 			source, params_in_use->source_region,
-			dest, params_in_use->dest_region,
+			&(blitter->dest->region),
 			params_in_use->rotation,
 			NULL,
 			params_in_use->alpha,
@@ -730,15 +731,14 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dSur
 }
 
 
-int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dSurface *dest, Imx2dRegion const *dest_region, uint32_t fill_color)
+int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dRegion const *dest_region, uint32_t fill_color)
 {
 	assert((blitter != NULL) && (blitter->blitter_class != NULL) && (blitter->blitter_class->fill_region != NULL));
 
 	{
 		Imx2dInternalFillRegionParams params =
 		{
-			dest,
-			(dest_region != NULL) ? dest_region : &(dest->region),
+			(dest_region != NULL) ? dest_region : &(blitter->dest->region),
 			fill_color
 		};
 

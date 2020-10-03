@@ -297,14 +297,14 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	struct g2d_surface g2d_source_surf, g2d_dest_surf;
 
 	assert(blitter != NULL);
+	assert(blitter->dest != NULL);
 	assert(internal_blit_params != NULL);
 	assert(internal_blit_params->source != NULL);
-	assert(internal_blit_params->dest != NULL);
 
 	assert(g2d_blitter->g2d_handle != NULL);
 
 
-	if (!fill_g2d_surface_info(&g2d_source_surf, internal_blit_params->source) || !fill_g2d_surface_info(&g2d_dest_surf, internal_blit_params->dest))
+	if (!fill_g2d_surface_info(&g2d_source_surf, internal_blit_params->source) || !fill_g2d_surface_info(&g2d_dest_surf, blitter->dest))
 		return FALSE;
 
 	copy_region_to_g2d_surface(&g2d_source_surf, internal_blit_params->source_region);
@@ -497,13 +497,13 @@ static int imx_2d_backend_g2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dIn
 	struct g2d_surface g2d_dest_surf;
 
 	assert(blitter != NULL);
+	assert(blitter->dest != NULL);
 	assert(internal_fill_region_params != NULL);
-	assert(internal_fill_region_params->dest != NULL);
 	assert(internal_fill_region_params->dest_region != NULL);
 
 	assert(g2d_blitter->g2d_handle != NULL);
 
-	if (!fill_g2d_surface_info(&g2d_dest_surf, internal_fill_region_params->dest))
+	if (!fill_g2d_surface_info(&g2d_dest_surf, blitter->dest))
 		return FALSE;
 
 	copy_region_to_g2d_surface(&g2d_dest_surf, internal_fill_region_params->dest_region);
