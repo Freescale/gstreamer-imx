@@ -4,6 +4,11 @@
 #include <imx2d/imx2d.h>
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
 /**
  * imx_2d_backend_g2d_blitter_create:
  *
@@ -25,6 +30,11 @@ Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void);
  *     This structure is static, and does not have to be freed in any way.
  */
 Imx2dHardwareCapabilities const * imx_2d_backend_g2d_get_hardware_capabilities(void);
+
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif /* IMX2D_BACKEND_G2D_BLITTER_H */
