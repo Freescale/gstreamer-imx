@@ -1299,7 +1299,7 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform *transform, GstBuffer *input_buffer, GstBuffer *output_buffer)
 {
 	Imx2dBlitParams blit_params;
-	GstFlowReturn flow_ret;
+	GstFlowReturn flow_ret = GST_FLOW_OK;
 	ImxDmaBuffer *in_dma_buffer;
 	ImxDmaBuffer *out_dma_buffer;
 	gboolean input_crop;
@@ -1498,7 +1498,7 @@ finish:
 	return flow_ret;
 
 error:
-	if (flow_ret != GST_FLOW_OK)
+	if (flow_ret == GST_FLOW_OK)
 		flow_ret = GST_FLOW_ERROR;
 	goto finish;
 }
