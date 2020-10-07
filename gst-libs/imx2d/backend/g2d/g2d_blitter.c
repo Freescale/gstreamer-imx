@@ -207,7 +207,9 @@ struct _Imx2dG2DBlitter
 	void *g2d_handle;
 
 	struct g2d_surface fill_g2d_surface;
-	struct g2d_buf *fill_g2d_surface_buffer;
+	ImxDmaBuffer *fill_g2d_surface_dmabuffer;
+
+	ImxDmaBufferAllocator *internal_dmabuffer_allocator;
 };
 
 
@@ -244,8 +246,17 @@ static void imx_2d_backend_g2d_blitter_destroy(Imx2dBlitter *blitter)
 
 	assert(blitter != NULL);
 
-	if (g2d_blitter->fill_g2d_surface_buffer != NULL)
-		g2d_free(g2d_blitter->fill_g2d_surface_buffer);
+	if (g2d_blitter->fill_g2d_surface_dmabuffer != NULL)
+	{
+		IMX_2D_LOG(DEBUG, "destroying G2D fill surface DMA buffer %p", (void *)(g2d_blitter->fill_g2d_surface_dmabuffer));
+		imx_dma_buffer_deallocate(g2d_blitter->fill_g2d_surface_dmabuffer);
+	}
+
+	if (g2d_blitter->internal_dmabuffer_allocator != NULL)
+	{
+		IMX_2D_LOG(DEBUG, "destroying i.MX DMA buffer allocator %p", (void *)(g2d_blitter->internal_dmabuffer_allocator));
+		imx_dma_buffer_allocator_destroy(g2d_blitter->internal_dmabuffer_allocator);
+	}
 
 	free(blitter);
 }
@@ -538,6 +549,8 @@ static Imx2dHardwareCapabilities const * imx_2d_backend_g2d_blitter_get_hardware
 
 Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void)
 {
+	int err;
+
 	/* Set up the internal fill surface that will be used when drawing margins
 	 * that aren't 100% opaque (see imx_2d_backend_g2d_blitter_do_blit() above).
 	 * The internal fill surface does not have to be large. In fact, it is desirable
@@ -550,6 +563,7 @@ Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void)
 	static int const fill_surface_width = 4;
 	static int const fill_surface_height = 1;
 	static int const fill_surface_stride = fill_surface_width;
+	static size_t fill_surface_dmabuffer_size = fill_surface_stride * fill_surface_height * fill_surface_bpp;
 
 	Imx2dG2DBlitter *g2d_blitter = malloc(sizeof(Imx2dG2DBlitter));
 	assert(g2d_blitter != NULL);
@@ -565,14 +579,23 @@ Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void)
 	g2d_blitter->fill_g2d_surface.bottom = fill_surface_height;
 	g2d_blitter->fill_g2d_surface.stride = fill_surface_stride;
 
-	g2d_blitter->fill_g2d_surface_buffer = g2d_alloc(fill_surface_stride * fill_surface_height * fill_surface_bpp, 0);
-	if (g2d_blitter->fill_g2d_surface_buffer == NULL)
+	g2d_blitter->internal_dmabuffer_allocator = imx_dma_buffer_allocator_new(&err);
+	if (g2d_blitter->internal_dmabuffer_allocator == NULL)
 	{
-		IMX_2D_LOG(ERROR, "could not allocate fill surface buffer");
+		IMX_2D_LOG(ERROR, "could not create internal G2D DMA buffer allocator: %s (%d)", strerror(err), err);
 		goto error;
 	}
+	IMX_2D_LOG(DEBUG, "created new i.MX DMA buffer allocator %p", (void *)(g2d_blitter->internal_dmabuffer_allocator));
 
-	g2d_blitter->fill_g2d_surface.planes[0] = g2d_blitter->fill_g2d_surface_buffer->buf_paddr;
+	g2d_blitter->fill_g2d_surface_dmabuffer = imx_dma_buffer_allocate(g2d_blitter->internal_dmabuffer_allocator, fill_surface_dmabuffer_size, 1, &err);
+	if (g2d_blitter->fill_g2d_surface_dmabuffer == NULL)
+	{
+		IMX_2D_LOG(ERROR, "could not allocate fill surface DMA buffer");
+		goto error;
+	}
+	IMX_2D_LOG(DEBUG, "created new G2D fill surface DMA buffer %p; buffer size: %zu byte(s)", (void *)(g2d_blitter->fill_g2d_surface_dmabuffer), fill_surface_dmabuffer_size);
+
+	g2d_blitter->fill_g2d_surface.planes[0] = imx_dma_buffer_get_physical_address(g2d_blitter->fill_g2d_surface_dmabuffer);
 
 finish:
 	return (Imx2dBlitter *)g2d_blitter;
