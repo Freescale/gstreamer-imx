@@ -24,6 +24,7 @@
 #include <gst/video/video.h>
 #include "gst/imx/common/gstimxdmabufferuploader.h"
 #include "imx2d/imx2d.h"
+#include "gstimx2dmisc.h"
 
 
 G_BEGIN_DECLS

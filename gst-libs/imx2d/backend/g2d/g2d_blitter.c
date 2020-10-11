@@ -3,6 +3,7 @@
 #include <string.h>
 #include <limits.h>
 #include <g2d.h>
+#include <g2dExt.h>
 #include "imx2d/imx2d_priv.h"
 #include "g2d_blitter.h"
 
@@ -37,7 +38,10 @@ static Imx2dPixelFormat const supported_source_pixel_formats[] =
 	IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV61,
 
 	IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_YV12,
-	IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_I420
+	IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_I420,
+
+	IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128,
+	IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128
 };
 
 
@@ -104,6 +108,9 @@ static BOOL get_g2d_format(Imx2dPixelFormat imx_2d_format, enum g2d_format *fmt)
 		case IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_YV12: *fmt = G2D_YV12; break;
 		case IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_I420: *fmt = G2D_I420; break;
 
+		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128: *fmt = G2D_NV12; break;
+		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128: *fmt = G2D_NV21; break;
+
 		default: ret = FALSE;
 	}
 
@@ -126,6 +133,18 @@ static void copy_region_to_g2d_surface(struct g2d_surface *surface, Imx2dRegion 
 		surface->top    = region->y1;
 		surface->right  = region->x2;
 		surface->bottom = region->y2;
+	}
+}
+
+
+static char const * g2d_tile_layout_to_string(enum g2d_tiling tiling)
+{
+	switch (tiling)
+	{
+		case G2D_LINEAR: return "linear (none)";
+		case G2D_AMPHION_TILED: return "Amphion 8x128";
+		case G2D_AMPHION_INTERLACED: return "Amphion 8x128 interlaced";
+		default: return "<unknown>";
 	}
 }
 
@@ -180,17 +199,40 @@ static BOOL fill_g2d_surface_info(struct g2d_surface *g2d_surface, Imx2dSurface 
 }
 
 
+static BOOL fill_g2d_surfaceEx_info(struct g2d_surfaceEx *g2d_surfaceEx, Imx2dSurface *imx_2d_surface)
+{
+	Imx2dSurfaceDesc const *desc = imx_2d_surface_get_desc(imx_2d_surface);
+
+	if (!fill_g2d_surface_info(&(g2d_surfaceEx->base), imx_2d_surface))
+		return FALSE;
+
+	switch (desc->format)
+	{
+		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128:
+		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128:
+			g2d_surfaceEx->tiling = G2D_AMPHION_TILED;
+			break;
+
+		default:
+			g2d_surfaceEx->tiling = G2D_LINEAR;
+			break;
+	}
+
+	return TRUE;
+}
+
+
 #define DUMP_G2D_SURFACE_TO_LOG(DESC, SURFACE) \
 	do { \
 		IMX_2D_LOG(TRACE, \
 			"%s:  planes %" IMX_PHYSICAL_ADDRESS_FORMAT " %" IMX_PHYSICAL_ADDRESS_FORMAT " %" IMX_PHYSICAL_ADDRESS_FORMAT "  left/top/right/bottom %d/%d/%d/%d  stride %d  width/height %d/%d  global_alpha %d  clrcolor %08x", \
 			(DESC), \
-			(SURFACE)->planes[0], (SURFACE)->planes[1], (SURFACE)->planes[2], \
-			(SURFACE)->left, (SURFACE)->top, (SURFACE)->right, (SURFACE)->bottom, \
-			(SURFACE)->stride, \
-			(SURFACE)->width, (SURFACE)->height, \
-			(SURFACE)->global_alpha, \
-			(SURFACE)->clrcolor \
+			(SURFACE)->base.planes[0], (SURFACE)->base.planes[1], (SURFACE)->base.planes[2], \
+			(SURFACE)->base.left, (SURFACE)->base.top, (SURFACE)->base.right, (SURFACE)->base.bottom, \
+			(SURFACE)->base.stride, \
+			(SURFACE)->base.width, (SURFACE)->base.height, \
+			(SURFACE)->base.global_alpha, \
+			(SURFACE)->base.clrcolor \
 		); \
 	} while (0)
 
@@ -305,7 +347,7 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	BOOL do_alpha;
 	int g2d_ret;
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
-	struct g2d_surface g2d_source_surf, g2d_dest_surf;
+	struct g2d_surfaceEx g2d_source_surf, g2d_dest_surf;
 
 	assert(blitter != NULL);
 	assert(blitter->dest != NULL);
@@ -315,29 +357,31 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	assert(g2d_blitter->g2d_handle != NULL);
 
 
-	if (!fill_g2d_surface_info(&g2d_source_surf, internal_blit_params->source) || !fill_g2d_surface_info(&g2d_dest_surf, blitter->dest))
+	if (!fill_g2d_surfaceEx_info(&g2d_source_surf, internal_blit_params->source) || !fill_g2d_surfaceEx_info(&g2d_dest_surf, blitter->dest))
 		return FALSE;
 
-	copy_region_to_g2d_surface(&g2d_source_surf, internal_blit_params->source_region);
-	copy_region_to_g2d_surface(&g2d_dest_surf, internal_blit_params->dest_region);
+	copy_region_to_g2d_surface(&(g2d_source_surf.base), internal_blit_params->source_region);
+	copy_region_to_g2d_surface(&(g2d_dest_surf.base), internal_blit_params->dest_region);
 
-	g2d_source_surf.clrcolor = g2d_dest_surf.clrcolor = 0xFF000000;
+	g2d_source_surf.base.clrcolor = g2d_dest_surf.base.clrcolor = 0xFF000000;
 
-	do_alpha = (internal_blit_params->dest_surface_alpha != 255) || g2d_format_has_alpha(g2d_source_surf.format);
+	do_alpha = (internal_blit_params->dest_surface_alpha != 255) || g2d_format_has_alpha(g2d_source_surf.base.format);
 
-	g2d_source_surf.rot = g2d_dest_surf.rot = G2D_ROTATION_0;
+	g2d_source_surf.base.rot = g2d_dest_surf.base.rot = G2D_ROTATION_0;
 	switch (internal_blit_params->rotation)
 	{
-		case IMX_2D_ROTATION_90:  g2d_dest_surf.rot = G2D_ROTATION_90; break;
-		case IMX_2D_ROTATION_180: g2d_dest_surf.rot = G2D_ROTATION_180; break;
-		case IMX_2D_ROTATION_270: g2d_dest_surf.rot = G2D_ROTATION_270; break;
-		case IMX_2D_ROTATION_FLIP_HORIZONTAL: g2d_source_surf.rot = G2D_FLIP_H; break;
-		case IMX_2D_ROTATION_FLIP_VERTICAL: g2d_source_surf.rot = G2D_FLIP_V; break;
+		case IMX_2D_ROTATION_90:  g2d_dest_surf.base.rot = G2D_ROTATION_90; break;
+		case IMX_2D_ROTATION_180: g2d_dest_surf.base.rot = G2D_ROTATION_180; break;
+		case IMX_2D_ROTATION_270: g2d_dest_surf.base.rot = G2D_ROTATION_270; break;
+		case IMX_2D_ROTATION_FLIP_HORIZONTAL: g2d_source_surf.base.rot = G2D_FLIP_H; break;
+		case IMX_2D_ROTATION_FLIP_VERTICAL: g2d_source_surf.base.rot = G2D_FLIP_V; break;
 		default: break;
 	}
 
 	DUMP_G2D_SURFACE_TO_LOG("blit source", &g2d_source_surf);
 	DUMP_G2D_SURFACE_TO_LOG("blit dest", &g2d_dest_surf);
+
+	IMX_2D_LOG(TRACE, "source tile layout: %s", g2d_tile_layout_to_string(g2d_source_surf.tiling));
 
 	/* If there is an expanded_dest_region, it means that
 	 * there is a margin that must be drawn. */
@@ -464,30 +508,30 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 
 	if (do_alpha)
 	{
-		g2d_source_surf.blendfunc = G2D_SRC_ALPHA;
-		g2d_dest_surf.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
+		g2d_source_surf.base.blendfunc = G2D_SRC_ALPHA;
+		g2d_dest_surf.base.blendfunc = G2D_ONE_MINUS_SRC_ALPHA;
 		g2d_enable(g2d_blitter->g2d_handle, G2D_BLEND);
 
 		if (internal_blit_params->dest_surface_alpha != 255)
 		{
 			g2d_enable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
-			g2d_source_surf.global_alpha = internal_blit_params->dest_surface_alpha;
-			g2d_dest_surf.global_alpha = 255 - internal_blit_params->dest_surface_alpha;
+			g2d_source_surf.base.global_alpha = internal_blit_params->dest_surface_alpha;
+			g2d_dest_surf.base.global_alpha = 255 - internal_blit_params->dest_surface_alpha;
 		}
 		else
 			g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
 	}
 	else
 	{
-		g2d_source_surf.blendfunc = G2D_ONE;
-		g2d_dest_surf.blendfunc = G2D_ZERO;
-		g2d_source_surf.global_alpha = 0;
-		g2d_dest_surf.global_alpha = 0;
+		g2d_source_surf.base.blendfunc = G2D_ONE;
+		g2d_dest_surf.base.blendfunc = G2D_ZERO;
+		g2d_source_surf.base.global_alpha = 0;
+		g2d_dest_surf.base.global_alpha = 0;
 		g2d_disable(g2d_blitter->g2d_handle, G2D_BLEND);
 		g2d_disable(g2d_blitter->g2d_handle, G2D_GLOBAL_ALPHA);
 	}
 
-	g2d_ret = g2d_blit(g2d_blitter->g2d_handle, &g2d_source_surf, &g2d_dest_surf);
+	g2d_ret = g2d_blitEx(g2d_blitter->g2d_handle, &g2d_source_surf, &g2d_dest_surf);
 
 	if (do_alpha)
 		g2d_disable(g2d_blitter->g2d_handle, G2D_BLEND);

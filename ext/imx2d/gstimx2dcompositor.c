@@ -181,6 +181,8 @@ static void gst_imx_2d_compositor_pad_finalize(GObject *object);
 static void gst_imx_2d_compositor_pad_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_2d_compositor_pad_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
+static GstPadProbeReturn gst_imx_2d_compositor_caps_event_probe(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);
+
 static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dCompositorPad *self, GstVideoInfo *output_video_info);
 
 
@@ -386,6 +388,8 @@ static void gst_imx_2d_compositor_pad_init(GstImx2dCompositorPad *self)
 
 	memset(&(self->letterbox_margin), 0, sizeof(Imx2dRegion));
 	memcpy(&(self->combined_margin), &(self->extra_margin), sizeof(Imx2dRegion));
+
+	gst_pad_add_probe(GST_PAD(self), GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, gst_imx_2d_compositor_caps_event_probe, NULL, NULL);
 }
 
 
@@ -591,6 +595,68 @@ static void gst_imx_2d_compositor_pad_get_property(GObject *object, guint prop_i
 }
 
 
+static GstPadProbeReturn gst_imx_2d_compositor_caps_event_probe(GstPad *pad, GstPadProbeInfo *info, G_GNUC_UNUSED gpointer user_data)
+{
+	/* In this probe, we intercept CAPS events to replace the format string
+	 * if necessary. Currently, the Amphion tiled format is not supported in
+	 * gstvideo, so we must replace the tiled NV12/NV21 formats with the
+	 * regular NV12/NV21 ones, otherwise the gst_video_info_from_caps() call
+	 * inside GstVideoAggregator would fail. */
+
+	GstImx2dCompositorPad *compositor_pad = GST_IMX_2D_COMPOSITOR_PAD(pad);
+	GstVideoInfo video_info;
+	GstEvent *event;
+	GstImx2dTileLayout input_video_tile_layout = GST_IMX_2D_TILE_LAYOUT_NONE;
+
+	if (G_UNLIKELY((GST_PAD_PROBE_INFO_TYPE(info) & GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM) == 0))
+		return GST_PAD_PROBE_OK;
+
+	event = GST_PAD_PROBE_INFO_EVENT(info);
+	g_assert(event != NULL);
+
+	switch (GST_EVENT_TYPE(event))
+	{
+		case GST_EVENT_CAPS:
+		{
+			GstCaps *caps;
+			GstEvent *new_event;
+
+			gst_event_parse_caps(event, &caps);
+
+			if (!gst_imx_video_info_from_caps(&video_info, caps, &input_video_tile_layout))
+			{
+				GST_ERROR_OBJECT(pad, "cannot convert caps to video info; caps: %" GST_PTR_FORMAT, (gpointer)caps);
+				return GST_PAD_PROBE_OK;
+			}
+
+			new_event = gst_event_new_caps(caps);
+			gst_event_unref(event);
+			GST_PAD_PROBE_INFO_DATA(info) = new_event;
+
+			GST_LOG_OBJECT(pad, "marking pad region coords as in need of an update");
+			GST_LOG_OBJECT(pad, "imx2d compositor pad caps: %" GST_PTR_FORMAT, (gpointer)caps);
+
+			GST_OBJECT_LOCK(compositor_pad);
+
+			compositor_pad->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&video_info);
+			compositor_pad->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&video_info);
+			compositor_pad->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&video_info), &input_video_tile_layout);
+
+			compositor_pad->region_coords_need_update = TRUE;
+
+			GST_OBJECT_UNLOCK(compositor_pad);
+
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return GST_PAD_PROBE_OK;
+}
+
+
 static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dCompositorPad *self, GstVideoInfo *output_video_info)
 {
 	GstVideoInfo *input_video_info;
@@ -749,7 +815,6 @@ static gboolean gst_imx_2d_compositor_decide_allocation(GstAggregator *aggregato
 /* Misc aggregator functionality. */
 static gboolean gst_imx_2d_compositor_start(GstAggregator *aggregator);
 static gboolean gst_imx_2d_compositor_stop(GstAggregator *aggregator);
-static gboolean gst_imx_2d_compositor_sink_event(GstAggregator *aggregator, GstAggregatorPad *pad, GstEvent *event);
 static gboolean gst_imx_2d_compositor_sink_query(GstAggregator *aggregator, GstAggregatorPad *pad, GstQuery *query);
 
 /* Caps handling. */
@@ -787,7 +852,6 @@ static void gst_imx_2d_compositor_class_init(GstImx2dCompositorClass *klass)
 	aggregator_class->decide_allocation   = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_decide_allocation);
 	aggregator_class->start               = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_start);
 	aggregator_class->stop                = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_stop);
-	aggregator_class->sink_event          = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_sink_event);
 	aggregator_class->sink_query          = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_sink_query);
 	aggregator_class->negotiated_src_caps = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_negotiated_src_caps);
 
@@ -1118,46 +1182,6 @@ static gboolean gst_imx_2d_compositor_stop(GstAggregator *aggregator)
 }
 
 
-static gboolean gst_imx_2d_compositor_sink_event(GstAggregator *aggregator, GstAggregatorPad *pad, GstEvent *event)
-{
-	gboolean retval;
-	GstVideoAggregatorPad *videoaggregator_pad = GST_VIDEO_AGGREGATOR_PAD(pad);
-	GstImx2dCompositorPad *compositor_pad = GST_IMX_2D_COMPOSITOR_PAD(pad);
-
-	retval = GST_AGGREGATOR_CLASS(gst_imx_2d_compositor_parent_class)->sink_event(aggregator, pad, event);
-	if (!retval)
-		return FALSE;
-
-	switch (GST_EVENT_TYPE(event))
-	{
-		case GST_EVENT_CAPS:
-		{
-			/* Intercept caps events to make sure we update
-			 * the pad's region coordinates, since the new
-			 * caps may require changes, for example if the
-			 * width is now different. */
-
-			GST_OBJECT_LOCK(compositor_pad);
-
-			compositor_pad->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&(videoaggregator_pad->info));
-			compositor_pad->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&(videoaggregator_pad->info));
-			compositor_pad->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&(videoaggregator_pad->info)));
-
-			compositor_pad->region_coords_need_update = TRUE;
-
-			GST_OBJECT_UNLOCK(compositor_pad);
-
-			break;
-		}
-
-		default:
-			break;
-	}
-
-	return retval;
-}
-
-
 static gboolean gst_imx_2d_compositor_sink_query(GstAggregator *aggregator, GstAggregatorPad *pad, GstQuery *query)
 {
 	switch (GST_QUERY_TYPE(query))
@@ -1246,7 +1270,7 @@ static gboolean gst_imx_2d_compositor_negotiated_src_caps(GstAggregator *aggrega
 	memset(&output_surface_desc, 0, sizeof(output_surface_desc));
 	output_surface_desc.width = GST_VIDEO_INFO_WIDTH(&output_video_info);
 	output_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&output_video_info);
-	output_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&output_video_info));
+	output_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&output_video_info), NULL);
 
 	/* As said above, we allocate the output buffers ourselves, so we can
 	 * define what the plane stride and offset values should be. Do that

@@ -14,6 +14,10 @@ static GMutex logging_mutex;
 static gboolean logging_set_up = FALSE;
 
 
+static gchar const *nv12_amphion_8x128_str = "NV12_AMPHION_8x128";
+static gchar const *nv21_amphion_8x128_str = "NV21_AMPHION_8x128";
+
+
 void gst_imx_2d_setup_logging(void)
 {
 	g_mutex_lock(&logging_mutex);
@@ -73,8 +77,121 @@ static void imx_2d_logging_func(Imx2dLogLevel level, char const *file, int const
 }
 
 
-Imx2dPixelFormat gst_imx_2d_convert_from_gst_video_format(GstVideoFormat gst_video_format)
+GstCaps* gst_imx_remove_tile_layout_from_caps(GstCaps *caps, GstImx2dTileLayout *tile_layout)
 {
+	GstStructure *s;
+	gchar const *format_str;
+
+	if (G_UNLIKELY(gst_caps_is_empty(caps)))
+		return caps;
+
+	if (G_UNLIKELY(gst_caps_is_any(caps)))
+		return caps;
+
+	if (G_UNLIKELY(!gst_caps_is_fixed(caps)))
+		return caps;
+
+	caps = gst_caps_make_writable(caps);
+
+	s = gst_caps_get_structure(caps, 0);
+	g_assert(s != NULL);
+
+	format_str = gst_structure_get_string(s, "format");
+	if (G_UNLIKELY(format_str == NULL))
+	{
+		GST_ERROR("caps have no format string field; caps: %" GST_PTR_FORMAT, (gpointer)caps);
+		goto error;
+	}
+
+	if (g_strcmp0(format_str, nv12_amphion_8x128_str) == 0)
+	{
+		gst_structure_set(s, "format", G_TYPE_STRING, "NV12", NULL);
+
+		if (tile_layout != NULL)
+			*tile_layout = GST_IMX_2D_TILE_LAYOUT_AMPHION_8x128;
+	}
+	else if (g_strcmp0(format_str, nv21_amphion_8x128_str) == 0)
+	{
+		gst_structure_set(s, "format", G_TYPE_STRING, "NV21", NULL);
+
+		if (tile_layout != NULL)
+			*tile_layout = GST_IMX_2D_TILE_LAYOUT_AMPHION_8x128;
+	}
+	else
+	{
+		if (tile_layout != NULL)
+			*tile_layout = GST_IMX_2D_TILE_LAYOUT_NONE;
+	}
+
+finish:
+	return caps;
+
+error:
+	gst_caps_unref(caps);
+	goto finish;
+}
+
+
+gboolean gst_imx_video_info_from_caps(GstVideoInfo *info, GstCaps const *caps, GstImx2dTileLayout *tile_layout)
+{
+	gboolean ret = TRUE;
+	GstCaps *edited_caps = gst_caps_copy(caps);
+
+	if (G_UNLIKELY(gst_caps_is_empty(edited_caps)))
+	{
+		GST_ERROR("caps is empty; cannot convert to video info");
+		goto error;
+	}
+
+	if (G_UNLIKELY(gst_caps_is_any(edited_caps)))
+	{
+		GST_ERROR("caps is ANY; cannot convert to video info");
+		goto error;
+	}
+
+	if (G_UNLIKELY(!gst_caps_is_fixed(edited_caps)))
+	{
+		GST_ERROR("cannot convert unfixated caps to video info; caps: %" GST_PTR_FORMAT, (gpointer)edited_caps);
+		goto error;
+	}
+
+	edited_caps = gst_imx_remove_tile_layout_from_caps(edited_caps, tile_layout);
+
+	ret = gst_video_info_from_caps(info, edited_caps);
+
+finish:
+	gst_caps_unref(edited_caps);
+	return ret;
+
+error:
+	ret = FALSE;
+	goto finish;
+}
+
+
+Imx2dPixelFormat gst_imx_2d_convert_from_gst_video_format(GstVideoFormat gst_video_format, GstImx2dTileLayout const *tile_layout)
+{
+	if (tile_layout != NULL)
+	{
+		switch (*tile_layout)
+		{
+			case GST_IMX_2D_TILE_LAYOUT_AMPHION_8x128:
+			{
+				switch (gst_video_format)
+				{
+					case GST_VIDEO_FORMAT_NV12: return IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128;
+					case GST_VIDEO_FORMAT_NV21: return IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128;
+					default: break;
+				}
+
+				break;
+			}
+
+			default:
+				break;
+		}
+	}
+
 	switch (gst_video_format)
 	{
 		case GST_VIDEO_FORMAT_RGB16: return IMX_2D_PIXEL_FORMAT_RGB565;
@@ -146,6 +263,9 @@ GstVideoFormat gst_imx_2d_convert_to_gst_video_format(Imx2dPixelFormat imx2d_for
 		case IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_Y42B: return GST_VIDEO_FORMAT_Y42B;
 		case IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_Y444: return GST_VIDEO_FORMAT_Y444;
 
+		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128: return GST_VIDEO_FORMAT_NV12;
+		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128: return GST_VIDEO_FORMAT_NV21;
+
 		default: return GST_VIDEO_FORMAT_UNKNOWN;
 	}
 }
@@ -183,14 +303,33 @@ GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities c
 
 	for (i = 0; i < num_supported_formats; ++i)
 	{
-		GstVideoFormat gst_format = gst_imx_2d_convert_to_gst_video_format(supported_formats[i]);
-
-		if (G_UNLIKELY(gst_format == GST_VIDEO_FORMAT_UNKNOWN))
-			continue;
+		gchar const *format_str = NULL;
 
 		g_value_init(&format_string_gvalue, G_TYPE_STRING);
-		g_value_set_string(&format_string_gvalue, gst_video_format_to_string(gst_format));
-		gst_value_list_append_and_take_value(&format_list_gvalue, &format_string_gvalue);
+
+		switch (supported_formats[i])
+		{
+			case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128:
+				format_str = nv12_amphion_8x128_str;
+				break;
+
+			case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128:
+				format_str = nv21_amphion_8x128_str;
+				break;
+
+			default:
+			{
+				GstVideoFormat gst_format = gst_imx_2d_convert_to_gst_video_format(supported_formats[i]);
+				if (G_LIKELY(gst_format != GST_VIDEO_FORMAT_UNKNOWN))
+					format_str = gst_video_format_to_string(gst_format);
+			}
+		}
+
+		if (G_LIKELY(format_str != NULL))
+		{
+			g_value_set_string(&format_string_gvalue, format_str);
+			gst_value_list_append_and_take_value(&format_list_gvalue, &format_string_gvalue);
+		}
 	}
 
 	g_value_init(&width_range_gvalue, GST_TYPE_INT_RANGE);

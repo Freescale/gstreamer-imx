@@ -27,9 +27,20 @@
 G_BEGIN_DECLS
 
 
+typedef enum
+{
+	GST_IMX_2D_TILE_LAYOUT_NONE,
+	GST_IMX_2D_TILE_LAYOUT_AMPHION_8x128
+}
+GstImx2dTileLayout;
+
+
 void gst_imx_2d_setup_logging(void);
 
-Imx2dPixelFormat gst_imx_2d_convert_from_gst_video_format(GstVideoFormat gst_video_format);
+GstCaps* gst_imx_remove_tile_layout_from_caps(GstCaps *caps, GstImx2dTileLayout *tile_layout);
+gboolean gst_imx_video_info_from_caps(GstVideoInfo *info, GstCaps const *caps, GstImx2dTileLayout *tile_layout);
+
+Imx2dPixelFormat gst_imx_2d_convert_from_gst_video_format(GstVideoFormat gst_video_format, GstImx2dTileLayout const *tile_layout);
 GstVideoFormat gst_imx_2d_convert_to_gst_video_format(Imx2dPixelFormat imx2d_format);
 
 GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities const *capabilities, GstPadDirection direction);

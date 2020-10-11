@@ -101,6 +101,9 @@ Imx2dPixelFormatInfo const * imx_2d_get_pixel_format_info(Imx2dPixelFormat forma
 		PIXEL_FORMAT_DESC("YUV 4:2:2 fully planar Y42B", FULLY_PLANAR_Y42B, 3, 8, 2, 1, FALSE)
 		PIXEL_FORMAT_DESC("YUV 4:4:4 fully planar Y444", FULLY_PLANAR_Y444, 3, 8, 1, 1, FALSE)
 
+		PIXEL_FORMAT_DESC("YUV 4:2:0 semi planar NV12 tiled Amphion 8x128", TILED_NV12_AMPHION_8x128, 2, 8, 2, 2, TRUE)
+		PIXEL_FORMAT_DESC("YUV 4:2:0 semi planar NV21 tiled Amphion 8x128", TILED_NV21_AMPHION_8x128, 2, 8, 2, 2, TRUE)
+
 		default: return NULL;
 	}
 

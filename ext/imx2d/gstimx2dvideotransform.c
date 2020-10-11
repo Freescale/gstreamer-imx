@@ -1043,6 +1043,7 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 {
 	guint i;
 	GstVideoInfo input_video_info;
+	GstImx2dTileLayout input_video_tile_layout;
 	GstVideoInfo output_video_info;
 	Imx2dSurfaceDesc output_surface_desc;
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
@@ -1053,7 +1054,7 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 
 	GST_DEBUG_OBJECT(self, "setting caps: input caps: %" GST_PTR_FORMAT "  output caps: %" GST_PTR_FORMAT, (gpointer)input_caps, (gpointer)output_caps);
 
-	if (!gst_video_info_from_caps(&input_video_info, input_caps))
+	if (!gst_imx_video_info_from_caps(&input_video_info, input_caps, &input_video_tile_layout))
 	{
 		GST_ERROR_OBJECT(self, "cannot convert input caps to video info; input caps: %" GST_PTR_FORMAT, (gpointer)input_caps);
 		self->inout_info_set = FALSE;
@@ -1086,7 +1087,7 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	 * This is unlikely to happen, but it is not impossible.) */
 	self->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&input_video_info);
 	self->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&input_video_info);
-	self->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&input_video_info));
+	self->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&input_video_info), &input_video_tile_layout);
 
 	/* Fill the output surface description. None of its values can change
 	 * in between buffers, since we allocate the output buffers ourselves.
@@ -1097,7 +1098,7 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	memset(&output_surface_desc, 0, sizeof(output_surface_desc));
 	output_surface_desc.width = GST_VIDEO_INFO_WIDTH(&output_video_info);
 	output_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&output_video_info);
-	output_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&output_video_info));
+	output_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&output_video_info), NULL);
 
 	/* As said above, we allocate the output buffers ourselves, so we can
 	 * define what the plane stride and offset values should be. Do that
@@ -1532,17 +1533,18 @@ static gboolean gst_imx_2d_video_transform_transform_size(GstBaseTransform *tran
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
 	GstVideoInfo video_info;
 	Imx2dSurfaceDesc surface_desc;
+	GstImx2dTileLayout tile_layout;
 
 	if (G_UNLIKELY(self->blitter == NULL))
 		return FALSE;
 
-	if (G_UNLIKELY(!gst_video_info_from_caps(&video_info, othercaps)))
+	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&video_info, othercaps, &tile_layout)))
 		return FALSE;
 
 	memset(&surface_desc, 0, sizeof(surface_desc));
 	surface_desc.width = GST_VIDEO_INFO_WIDTH(&video_info);
 	surface_desc.height = GST_VIDEO_INFO_HEIGHT(&video_info);
-	surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&video_info));
+	surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&video_info), &tile_layout);
 
 	imx_2d_surface_desc_calculate_strides_and_offsets(&surface_desc, imx_2d_blitter_get_hardware_capabilities(self->blitter));
 

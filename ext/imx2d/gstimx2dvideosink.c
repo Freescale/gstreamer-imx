@@ -259,6 +259,7 @@ static GstStateChangeReturn gst_imx_2d_video_sink_change_state(GstElement *eleme
 static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 {
 	GstVideoInfo input_video_info;
+	GstImx2dTileLayout tile_layout;
 	GstImx2dVideoSink *self = GST_IMX_2D_VIDEO_SINK(sink);
 
 	g_assert(self->blitter != NULL);
@@ -267,7 +268,7 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 	GST_DEBUG_OBJECT(self, "setting caps %" GST_PTR_FORMAT, (gpointer)caps);
 
-	if (G_UNLIKELY(!gst_video_info_from_caps(&input_video_info, caps)))
+	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&input_video_info, caps, &tile_layout)))
 	{
 		GST_ERROR_OBJECT(self, "could not set caps %" GST_PTR_FORMAT, (gpointer)caps);
 		goto error;
@@ -280,7 +281,7 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 	 * This is unlikely to happen, but it is not impossible.) */
 	self->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&input_video_info);
 	self->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&input_video_info);
-	self->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&input_video_info));
+	self->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&input_video_info), &tile_layout);
 
 	return TRUE;
 
