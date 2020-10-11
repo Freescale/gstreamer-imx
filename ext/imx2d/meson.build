@@ -2,13 +2,36 @@ if not gstreamer_video_dep.found()
 	subdir_done()
 endif
 
+imx2d_compositor_option = get_option('imx2d-compositor')
+imx2d_compositor_enabled = false
+if imx2d_compositor_option.disabled()
+	message('imx2d compositor elements disabled explicitely by command line option')
+else
+	is_gst_1_16 = gstreamer_video_dep.version().version_compare('>=1.16.0')
+	if is_gst_1_16
+		message('imx2d compositor elements enabled')
+		imx2d_compositor_enabled = true
+	else
+		if imx2d_compositor_option.enabled()
+			error('imx2d compositor elements enabled, but GStreamer version is too old (must be at least 1.16.0 for GstVideoAggregator in gst-plugins-base)')
+		else
+			message('imx2d compositor elements enabled, but GStreamer version is too old (must be at least 1.16.0 for GstVideoAggregator in gst-plugins-base); disabling compositor elements')
+			imx2d_compositor_enabled = false
+		endif
+	endif
+endif
+
 source = [
-	'gstimx2dcompositor.c',
 	'gstimx2dmisc.c',
 	'gstimx2dvideotransform.c',
 	'gstimx2dvideosink.c',
 	'plugin.c'
 ]
+
+if imx2d_compositor_enabled
+	source += ['gstimx2dcompositor.c']
+	conf_data.set('WITH_GST_IMX2D_COMPOSITOR', 1)
+endif
 
 
 backend_source = []
@@ -16,10 +39,12 @@ backend_deps = []
 
 if imx2d_backend_g2d_dep.found()
 	backend_source += [
-		'gstimxg2dcompositor.c',
 		'gstimxg2dvideotransform.c',
 		'gstimxg2dvideosink.c'
 	]
+	if imx2d_compositor_enabled
+		source += ['gstimxg2dcompositor.c']
+	endif
 	backend_deps += [imx2d_backend_g2d_dep]
 endif
 

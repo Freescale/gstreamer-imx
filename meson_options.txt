@@ -5,5 +5,7 @@ option('mp3encoder', type : 'feature', value : 'auto')
 
 option('g2d', type : 'feature', value : 'auto')
 
+option('imx2d-compositor', type : 'feature', value : 'auto')
+
 option('package-name', type : 'string', value : 'Unknown package name', yield : true, description : 'package name to use in plugins')
 option('package-origin', type : 'string', value : 'Unknown package origin', yield : true, description : 'package origin URL to use in plugins')

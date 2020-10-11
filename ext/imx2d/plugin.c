@@ -18,7 +18,11 @@
 
 #include <config.h>
 #include <gst/gst.h>
+
+#ifdef WITH_GST_IMX2D_COMPOSITOR
 #include "gstimxg2dcompositor.h"
+#endif
+
 #include "gstimxg2dvideotransform.h"
 #include "gstimxg2dvideosink.h"
 
@@ -27,7 +31,9 @@ static gboolean plugin_init(GstPlugin *plugin)
 {
 	gboolean ret = TRUE;
 #ifdef WITH_IMX2D_G2D_BACKEND
+#ifdef WITH_GST_IMX2D_COMPOSITOR
 	ret = ret && gst_element_register(plugin, "imxg2dcompositor", GST_RANK_NONE, gst_imx_g2d_compositor_get_type());
+#endif
 	ret = ret && gst_element_register(plugin, "imxg2dvideotransform", GST_RANK_NONE, gst_imx_g2d_video_transform_get_type());
 	ret = ret && gst_element_register(plugin, "imxg2dvideosink", GST_RANK_NONE, gst_imx_g2d_video_sink_get_type());
 #endif
