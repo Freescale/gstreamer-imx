@@ -23,8 +23,11 @@
 #include "gstimxg2dcompositor.h"
 #endif
 
-#include "gstimxg2dvideotransform.h"
+#ifdef WITH_GST_IMX2D_VIDEOSINK
 #include "gstimxg2dvideosink.h"
+#endif
+
+#include "gstimxg2dvideotransform.h"
 
 
 static gboolean plugin_init(GstPlugin *plugin)
@@ -34,8 +37,10 @@ static gboolean plugin_init(GstPlugin *plugin)
 #ifdef WITH_GST_IMX2D_COMPOSITOR
 	ret = ret && gst_element_register(plugin, "imxg2dcompositor", GST_RANK_NONE, gst_imx_g2d_compositor_get_type());
 #endif
-	ret = ret && gst_element_register(plugin, "imxg2dvideotransform", GST_RANK_NONE, gst_imx_g2d_video_transform_get_type());
+#ifdef WITH_GST_IMX2D_VIDEOSINK
 	ret = ret && gst_element_register(plugin, "imxg2dvideosink", GST_RANK_NONE, gst_imx_g2d_video_sink_get_type());
+#endif
+	ret = ret && gst_element_register(plugin, "imxg2dvideotransform", GST_RANK_NONE, gst_imx_g2d_video_transform_get_type());
 #endif
 	return ret;
 }

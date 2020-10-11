@@ -21,10 +21,16 @@ else
 	endif
 endif
 
+imx2d_videosink_enabled = get_option('imx2d-videosink')
+if imx2d_videosink_enabled
+	message('imx2d videosink elements enabled')
+else
+	message('imx2d videosink elements disabled')
+endif
+
 source = [
 	'gstimx2dmisc.c',
 	'gstimx2dvideotransform.c',
-	'gstimx2dvideosink.c',
 	'plugin.c'
 ]
 
@@ -33,17 +39,24 @@ if imx2d_compositor_enabled
 	conf_data.set('WITH_GST_IMX2D_COMPOSITOR', 1)
 endif
 
+if imx2d_videosink_enabled
+	source += ['gstimx2dvideosink.c']
+	conf_data.set('WITH_GST_IMX2D_VIDEOSINK', 1)
+endif
+
 
 backend_source = []
 backend_deps = []
 
 if imx2d_backend_g2d_dep.found()
 	backend_source += [
-		'gstimxg2dvideotransform.c',
-		'gstimxg2dvideosink.c'
+		'gstimxg2dvideotransform.c'
 	]
 	if imx2d_compositor_enabled
 		source += ['gstimxg2dcompositor.c']
+	endif
+	if imx2d_videosink_enabled
+		source += ['gstimxg2dvideosink.c']
 	endif
 	backend_deps += [imx2d_backend_g2d_dep]
 endif

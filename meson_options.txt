@@ -5,6 +5,7 @@ option('mp3encoder', type : 'feature', value : 'auto')
 
 option('g2d', type : 'feature', value : 'auto')
 
+option('imx2d-videosink', type : 'boolean', value : true)
 option('imx2d-compositor', type : 'feature', value : 'auto')
 
 option('package-name', type : 'string', value : 'Unknown package name', yield : true, description : 'package name to use in plugins')
