@@ -407,15 +407,33 @@ static GstCaps* gst_imx_2d_video_transform_transform_caps(GstBaseTransform *tran
 
 static GstCaps* gst_imx_2d_video_transform_fixate_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *othercaps)
 {
+	GstCaps *result;
+
 	GST_DEBUG_OBJECT(transform, "trying to fixate othercaps %" GST_PTR_FORMAT " based on caps %" GST_PTR_FORMAT, (gpointer)othercaps, (gpointer)caps);
 
-	othercaps = gst_caps_truncate(othercaps);
-	othercaps = gst_caps_make_writable(othercaps);
+	result = gst_caps_truncate(othercaps);
+	result = gst_caps_make_writable(result);
+	GST_DEBUG_OBJECT(transform, "truncated caps to: %" GST_PTR_FORMAT, (gpointer)result);
 
-	othercaps = gst_imx_2d_video_transform_fixate_size_caps(transform, direction, caps, othercaps);
-	gst_imx_2d_video_transform_fixate_format_caps(transform, caps, othercaps);
+	result = gst_imx_2d_video_transform_fixate_size_caps(transform, direction, caps, result);
+	GST_DEBUG_OBJECT(transform, "fixated size to: %" GST_PTR_FORMAT, (gpointer)result);
 
-	return othercaps;
+	gst_imx_2d_video_transform_fixate_format_caps(transform, caps, result);
+	GST_DEBUG_OBJECT(transform, "fixated format to: %" GST_PTR_FORMAT, (gpointer)result);
+
+	result = gst_caps_fixate(result);
+	GST_DEBUG_OBJECT(transform, "fixated remaining fields to: %" GST_PTR_FORMAT, (gpointer)result);
+
+	if (direction == GST_PAD_SINK)
+	{
+		if (gst_caps_is_subset(caps, result))
+		{
+			GST_DEBUG_OBJECT(transform, "sink caps %" GST_PTR_FORMAT " are a subset of the fixated caps; using original sink caps as result instead", (gpointer)caps);
+			gst_caps_replace(&result, caps);
+		}
+	}
+
+	return result;
 }
 
 
