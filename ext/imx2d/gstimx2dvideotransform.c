@@ -1142,11 +1142,11 @@ static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *t
 	GstBufferPool *new_buffer_pool = NULL;
 	guint buffer_size;
 
-	/* Chain up to the base class.
-	 * We first do that, then modify the query. That way, we can be
-	 * sure that our modifications remain, and aren't overwritten. */
-	if (!GST_BASE_TRANSFORM_CLASS(gst_imx_2d_video_transform_parent_class)->decide_allocation(transform, query))
-		return FALSE;
+	/* We are not chaining up to the base class since the default
+	 * basetransform decide_allocation method is very cautious
+	 * and throws away too much from the allocation query, including
+	 * memory-tagged metas like the videometa, while not providing
+	 * any work we aren't performing here anyway. */
 
 	GST_TRACE_OBJECT(self, "attempting to decide what buffer pool and allocator to use");
 
