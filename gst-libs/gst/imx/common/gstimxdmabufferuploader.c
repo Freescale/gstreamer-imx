@@ -71,7 +71,7 @@ struct _GstImxDmaBufferUploadMethodType
 
 	GstImxDmaBufferUploadMethodContext* (*create)(GstImxDmaBufferUploader *uploader);
 	void (*destroy)(GstImxDmaBufferUploadMethodContext *upload_method_context);
-	GstFlowReturn (*perform)(GstImxDmaBufferUploadMethodContext *upload_method_context, GstBuffer *input_buffer, GstBuffer **output_buffer);
+	GstFlowReturn (*perform)(GstImxDmaBufferUploadMethodContext *upload_method_context, GstMemory *input_memory, GstMemory **output_memory);
 };
 
 
@@ -83,74 +83,9 @@ struct _GstImxDmaBufferUploadMethodContext
 
 
 
-struct DirectImxDmaBufferUploadMethodContext
-{
-	GstImxDmaBufferUploadMethodContext parent;
-};
-
-
-static GstImxDmaBufferUploadMethodContext* direct_imx_dma_buffer_upload_method_create(GstImxDmaBufferUploader *uploader)
-{
-	struct DirectImxDmaBufferUploadMethodContext *upload_method_context = g_new0(struct DirectImxDmaBufferUploadMethodContext, 1);
-
-	upload_method_context->parent.uploader = uploader;
-
-	return (GstImxDmaBufferUploadMethodContext*)upload_method_context;
-}
-
-
-static void direct_imx_dma_buffer_upload_method_destroy(GstImxDmaBufferUploadMethodContext *upload_method_context)
-{
-	g_free(upload_method_context);
-}
-
-
-static GstFlowReturn direct_imx_dma_buffer_upload_method_perform(GstImxDmaBufferUploadMethodContext *upload_method_context, GstBuffer *input_buffer, GstBuffer **output_buffer)
-{
-	struct DirectImxDmaBufferUploadMethodContext *self;
-
-	self = (struct DirectImxDmaBufferUploadMethodContext *)upload_method_context;
-
-	if (!gst_imx_is_imx_dma_buffer_memory(gst_buffer_peek_memory(input_buffer, 0)))
-		return GST_FLOW_COULD_NOT_UPLOAD;
-
-	GST_LOG_OBJECT(self->parent.uploader, "this is the DirectImxDmaBuffer upload method; not actually uploading anything - just ref'ing the input buffer: %" GST_PTR_FORMAT, (gpointer)input_buffer);
-
-	/* We ref the input buffer, since we don't actually create a copy
-	 * and upload the input buffer data to said copy. But callers expect
-	 * that gst_imx_dma_buffer_uploader_perform() does not cause the input
-	 * buffer to be deallocated. So, to avoid having to do a copy, and
-	 * to maintain these expectations, we ref the buffer. */
-	gst_buffer_ref(input_buffer);
-	*output_buffer = input_buffer;
-
-	return GST_FLOW_OK;
-}
-
-
-static const GstImxDmaBufferUploadMethodType direct_imx_dma_buffer_upload_method_type = {
-	"DirectImxDmaBuffer",
-
-	direct_imx_dma_buffer_upload_method_create,
-	direct_imx_dma_buffer_upload_method_destroy,
-	direct_imx_dma_buffer_upload_method_perform
-};
-
-
-
-
 struct RawBufferUploadMethodContext
 {
 	GstImxDmaBufferUploadMethodContext parent;
-
-	/* Buffer pool to use for creating ImxDmaBuffer backed
-	 * GstBuffers that we upload incoming data into. */
-	GstBufferPool *buffer_pool;
-
-	/* This one keeps track of the buffer size. If it changes,
-	 * we have to create a new buffer pool, since a buffer pool
-	 * expects a constant buffer size. */
-	guint last_buffer_size;
 };
 
 
@@ -159,8 +94,6 @@ static GstImxDmaBufferUploadMethodContext* raw_buffer_upload_method_create(GstIm
 	struct RawBufferUploadMethodContext *upload_method_context = g_new0(struct RawBufferUploadMethodContext, 1);
 
 	upload_method_context->parent.uploader = uploader;
-	upload_method_context->buffer_pool = NULL;
-	upload_method_context->last_buffer_size = 0;
 
 	return (GstImxDmaBufferUploadMethodContext*)upload_method_context;
 }
@@ -168,81 +101,36 @@ static GstImxDmaBufferUploadMethodContext* raw_buffer_upload_method_create(GstIm
 
 static void raw_buffer_upload_method_destroy(GstImxDmaBufferUploadMethodContext *upload_method_context)
 {
-	struct RawBufferUploadMethodContext *self = (struct RawBufferUploadMethodContext *)upload_method_context;
-
-	if (self != NULL)
-	{
-		if (self->buffer_pool != NULL)
-			gst_object_unref(GST_OBJECT(self->buffer_pool));
-
-		g_free(self);
-	}
+	g_free(upload_method_context);
 }
 
 
-static GstFlowReturn raw_buffer_upload_method_perform(GstImxDmaBufferUploadMethodContext *upload_method_context, GstBuffer *input_buffer, GstBuffer **output_buffer)
+static GstFlowReturn raw_buffer_upload_method_perform(GstImxDmaBufferUploadMethodContext *upload_method_context, GstMemory *input_memory, GstMemory **output_memory)
 {
 	struct RawBufferUploadMethodContext *self = (struct RawBufferUploadMethodContext *)upload_method_context;
 	GstFlowReturn flow_ret = GST_FLOW_OK;
-	GstMapInfo map_info;
+	GstMapInfo in_map_info, out_map_info;
 
-	gst_buffer_map(input_buffer, &map_info, GST_MAP_READ);
+	gst_memory_map(input_memory, &in_map_info, GST_MAP_READ);
 
-	/* Buffer pools are created on-demand, if either it does not exist yet,
-	 * or if the size of the incoming buffer is now different to the last one. */
-	if (G_UNLIKELY((self->buffer_pool == NULL) || (self->last_buffer_size != map_info.size)))
+	*output_memory = gst_allocator_alloc(self->parent.uploader->imx_dma_buffer_allocator, in_map_info.size, NULL);
+	if (G_UNLIKELY((*output_memory) == NULL))
 	{
-		GstStructure *pool_config;
-
-		GST_DEBUG_OBJECT(
-			self,
-			"buffer pool does not yet exist, or we got a buffer to upload whose size is now different (last buffer size: %u new size: %" G_GSIZE_FORMAT "); (re)creating buffer pool",
-			self->last_buffer_size, map_info.size
-		);
-
-		/* Unref any existing buffer pool first to prevent a memleak. */
-		if (self->buffer_pool != NULL)
-			gst_object_unref(GST_OBJECT(self->buffer_pool));
-
-		self->buffer_pool = gst_buffer_pool_new();
-
-		GST_DEBUG_OBJECT(
-			self,
-			"buffer pool config: size: %" G_GSIZE_FORMAT " output caps: %" GST_PTR_FORMAT,
-			map_info.size,
-			(gpointer)(self->parent.uploader->output_caps)
-		);
-
-		pool_config = gst_buffer_pool_get_config(self->buffer_pool);
-		gst_buffer_pool_config_set_params(pool_config, self->parent.uploader->output_caps, map_info.size, 0, 0);
-		gst_buffer_pool_config_set_allocator(pool_config, self->parent.uploader->imx_dma_buffer_allocator, NULL);
-		gst_buffer_pool_set_config (self->buffer_pool, pool_config);
-
-		gst_buffer_pool_set_active(self->buffer_pool, TRUE);
-
-		self->last_buffer_size = map_info.size;
-	}
-
-	flow_ret = gst_buffer_pool_acquire_buffer(self->buffer_pool, output_buffer, NULL);
-	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
-	{
-		GST_ERROR_OBJECT(self->parent.uploader, "could not acquire buffer");
+		GST_ERROR_OBJECT(self->parent.uploader, "could not allocate imxdmabuffer memory");
 		goto error;
 	}
 
-	/* This is the actual upload here. The metadata (timestamps etc.)
-	 * is copied to the output buffer 1:1. The actual contents are
-	 * copied separately to make sure nothing about the output buffer
-	 * GstMemory is changed in any way (since the whole point about this
-	 * operation is to use ImxDmaBuffer based GstMemory as output). */
-	gst_buffer_copy_into(*output_buffer, input_buffer, GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS | GST_BUFFER_COPY_META, 0, -1);
-	gst_buffer_fill(*output_buffer, 0, map_info.data, map_info.size);
+	gst_memory_map(*output_memory, &out_map_info, GST_MAP_WRITE);
 
-	GST_LOG_OBJECT(self, "copied data from: %" GST_PTR_FORMAT, (gpointer)input_buffer);
-	GST_LOG_OBJECT(self, "              to: %" GST_PTR_FORMAT, (gpointer)(*output_buffer));
+	memcpy(out_map_info.data, in_map_info.data, in_map_info.size);
+
+	GST_LOG_OBJECT(self, "copied %" G_GSIZE_FORMAT " byte(s) from memory %p to memory %p", in_map_info.size, (gpointer)input_memory, (gpointer)(*output_memory));
 
 finish:
-	gst_buffer_unmap(input_buffer, &map_info);
+	if ((*output_memory) != NULL)
+		gst_memory_unmap(*output_memory, &out_map_info);
+
+	gst_memory_unmap(input_memory, &in_map_info);
 	return flow_ret;
 
 error:
@@ -309,15 +197,11 @@ static void dmabuf_upload_method_destroy(GstImxDmaBufferUploadMethodContext *upl
 }
 
 
-static GstFlowReturn dmabuf_upload_method_perform(GstImxDmaBufferUploadMethodContext *upload_method_context, GstBuffer *input_buffer, GstBuffer **output_buffer)
+static GstFlowReturn dmabuf_upload_method_perform(GstImxDmaBufferUploadMethodContext *upload_method_context, GstMemory *input_memory, GstMemory **output_memory)
 {
 	int dmabuf_fd, dup_dmabuf_fd;
 	gsize size;
-	GstMemory *input_memory;
-	GstMemory *output_memory;
 	struct DmabufUploadMethodContext *self = (struct DmabufUploadMethodContext *)upload_method_context;
-
-	input_memory = gst_buffer_peek_memory(input_buffer, 0);
 
 	if (!gst_is_dmabuf_memory(input_memory))
 		return GST_FLOW_COULD_NOT_UPLOAD;
@@ -350,14 +234,10 @@ static GstFlowReturn dmabuf_upload_method_perform(GstImxDmaBufferUploadMethodCon
 		input_memory->offset
 	);
 
-	output_memory = gst_imx_ion_allocator_wrap_dmabuf(self->parent.uploader->imx_dma_buffer_allocator, dup_dmabuf_fd, size);
-	output_memory->maxsize = input_memory->maxsize;
-	output_memory->align = input_memory->align;
-	output_memory->offset = input_memory->offset;
-
-	// TODO: use buffer pool
-	*output_buffer = gst_buffer_new();
-	gst_buffer_append_memory(*output_buffer, output_memory);
+	*output_memory = gst_imx_ion_allocator_wrap_dmabuf(self->parent.uploader->imx_dma_buffer_allocator, dup_dmabuf_fd, size);
+	(*output_memory)->maxsize = input_memory->maxsize;
+	(*output_memory)->align = input_memory->align;
+	(*output_memory)->offset = input_memory->offset;
 
 	return GST_FLOW_OK;
 }
@@ -378,7 +258,6 @@ static const GstImxDmaBufferUploadMethodType dmabuf_upload_method_type = {
 
 
 static GstImxDmaBufferUploadMethodType const *upload_method_types[] = {
-	&direct_imx_dma_buffer_upload_method_type,
 #ifdef WITH_GST_ION_ALLOCATOR
 	&dmabuf_upload_method_type,
 #endif
@@ -476,8 +355,8 @@ error:
 
 GstFlowReturn gst_imx_dma_buffer_uploader_perform(GstImxDmaBufferUploader *uploader, GstBuffer *input_buffer, GstBuffer **output_buffer)
 {
-	gint i;
-	GstFlowReturn flow_ret;
+	gint memory_idx, method_idx;
+	GstFlowReturn flow_ret = GST_FLOW_OK;
 
 	g_assert(input_buffer != NULL);
 	g_assert(output_buffer != NULL);
@@ -490,26 +369,78 @@ GstFlowReturn gst_imx_dma_buffer_uploader_perform(GstImxDmaBufferUploader *uploa
 		return GST_FLOW_OK;
 	}
 
-	for (i = 0; i < num_upload_method_types; ++i)
+	/* Check if we can simply ref and passthrough the input buffer.
+	 * This is the case if it consists entirely of imxdmabuffers. */
 	{
-		GstImxDmaBufferUploadMethodType const *upload_method_type = upload_method_types[i];
+		gboolean is_all_imxdmabuffer_memory = TRUE;
 
-		g_assert(upload_method_type != NULL);
+		for (memory_idx = 0; memory_idx < (gint)gst_buffer_n_memory(input_buffer); ++memory_idx)
+		{
+			GstMemory *memory = gst_buffer_peek_memory(input_buffer, memory_idx);
 
-		flow_ret = upload_method_type->perform(uploader->upload_method_contexts[i], input_buffer, output_buffer);
+			if (!gst_imx_is_imx_dma_buffer_memory(memory))
+			{
+				is_all_imxdmabuffer_memory = FALSE;
+				break;
+			}
+		}
+
+		if (is_all_imxdmabuffer_memory)
+		{
+			GST_LOG_OBJECT(uploader, "input buffer consists only of imxdmabuffer memory blocks; passing through buffer");
+			*output_buffer = gst_buffer_ref(input_buffer);
+			return GST_FLOW_OK;
+		}
+	}
+
+	// TODO: Use a buffer pool and reuse memory blocks as much as possible
+
+	*output_buffer = gst_buffer_new();
+
+	for (memory_idx = 0; memory_idx < (gint)gst_buffer_n_memory(input_buffer); ++memory_idx)
+	{
+		GST_LOG_OBJECT(uploader, "performing upload for memory #%d of input buffer", memory_idx);
+
+		for (method_idx = 0; method_idx < num_upload_method_types; ++method_idx)
+		{
+			GstMemory *input_memory = NULL;
+			GstMemory *output_memory = NULL;
+
+			GstImxDmaBufferUploadMethodType const *upload_method_type = upload_method_types[method_idx];
+			g_assert(upload_method_type != NULL);
+
+			input_memory = gst_buffer_peek_memory(input_buffer, memory_idx);
+
+			flow_ret = upload_method_type->perform(uploader->upload_method_contexts[method_idx], input_memory, &output_memory);
+			if (flow_ret == GST_FLOW_OK)
+			{
+				gst_buffer_append_memory(*output_buffer, output_memory);
+				break;
+			}
+			else if (flow_ret != GST_FLOW_COULD_NOT_UPLOAD)
+				break;
+		}
+
 		if (flow_ret == GST_FLOW_COULD_NOT_UPLOAD)
-			continue;
-		else
-			break;
+		{
+			GST_ERROR_OBJECT(uploader, "could not upload memory #%d from input buffer since none of the upload methods support that memory; buffer: %" GST_PTR_FORMAT, memory_idx, (gpointer)input_buffer);
+			goto error;
+		}
+		else if (flow_ret != GST_FLOW_OK)
+			goto error;
 	}
 
-	if (flow_ret == GST_FLOW_COULD_NOT_UPLOAD)
-	{
-		GST_ERROR_OBJECT(uploader, "could not upload buffer since none of the upload methods support its memory; buffer: %" GST_PTR_FORMAT, (gpointer)input_buffer);
-		flow_ret = GST_FLOW_ERROR;
-	}
+	gst_buffer_copy_into(*output_buffer, input_buffer, GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS | GST_BUFFER_COPY_META, 0, -1);
+	GST_BUFFER_FLAG_UNSET(*output_buffer, GST_BUFFER_FLAG_TAG_MEMORY);
 
+finish:
 	return flow_ret;
+
+error:
+	gst_buffer_replace(output_buffer, NULL);
+	if ((flow_ret == GST_FLOW_OK) || (flow_ret == GST_FLOW_COULD_NOT_UPLOAD))
+		flow_ret = GST_FLOW_ERROR;
+	goto finish;
 }
 
 
