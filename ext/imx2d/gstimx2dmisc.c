@@ -1,4 +1,5 @@
 #include "gstimx2dmisc.h"
+#include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "imx2d/imx2d.h"
 
 
@@ -128,6 +129,7 @@ finish:
 
 error:
 	gst_caps_unref(caps);
+	caps = NULL;
 	goto finish;
 }
 
@@ -466,6 +468,173 @@ set_zero_margin:
 	margin->top_margin = 0;
 	margin->right_margin = 0;
 	margin->bottom_margin = 0;
+}
+
+
+gboolean gst_imx_2d_check_input_buffer_structure(GstBuffer *input_buffer, guint num_planes)
+{
+	guint num_memory_blocks;
+
+	/* Check the structure of the input buffer. */
+	num_memory_blocks = gst_buffer_n_memory(input_buffer);
+
+	if (num_memory_blocks == 1)
+	{
+		GST_LOG("input buffer has one single memory block for all planes");
+	}
+	else if (num_memory_blocks != num_planes)
+	{
+		GST_ERROR("input buffer has an unsupported number of memory blocks (%u blocks); either one single block or one block per plane are supported", num_memory_blocks);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+
+void gst_imx_2d_assign_input_buffer_to_surface(
+	GstBuffer *original_input_buffer, GstBuffer *uploaded_input_buffer,
+	Imx2dSurface *surface,
+	Imx2dSurfaceDesc *surface_desc,
+	GstVideoInfo const *input_video_info
+)
+{
+	guint num_memory_blocks;
+	guint plane_index;
+	GstVideoMeta *videometa;
+	ImxDmaBuffer *in_dma_buffer;
+
+	/* Check the structure of the input buffer. */
+	num_memory_blocks = gst_buffer_n_memory(original_input_buffer);
+
+	if (num_memory_blocks > 1)
+	{
+		videometa = gst_buffer_get_video_meta(original_input_buffer);
+		if (videometa != NULL)
+		{
+			for (plane_index = 0; plane_index < videometa->n_planes; ++plane_index)
+			{
+				GstMemory *in_memory = gst_buffer_peek_memory(uploaded_input_buffer, plane_index);
+				g_assert(gst_imx_is_imx_dma_buffer_memory(in_memory));
+				in_dma_buffer = gst_imx_get_dma_buffer_from_memory(in_memory);
+
+				GST_LOG("setting ImxDmaBuffer %p as input DMA buffer for plane #%u", (gpointer)(in_dma_buffer), plane_index);
+
+				surface_desc->plane_strides[plane_index] = videometa->stride[plane_index];
+
+				GST_LOG(
+					"input plane #%u info from videometa:  stride: %d  offset: %" G_GSIZE_FORMAT,
+					plane_index,
+					videometa->stride[plane_index],
+					videometa->offset[plane_index]
+				);
+
+				/* Setting the offset to 0 even though the videometa has
+				 * plane offset values. This is because we have a multi-gstmemory
+				 * gstbuffer here, and each gstmemory contains one plane, so
+				 * the plane offset values are not needed here. */
+				imx_2d_surface_set_dma_buffer(surface, in_dma_buffer, plane_index, 0);
+			}
+		}
+		else
+		{
+			for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(input_video_info); ++plane_index)
+			{
+				GstMemory *in_memory = gst_buffer_peek_memory(uploaded_input_buffer, plane_index);
+				g_assert(gst_imx_is_imx_dma_buffer_memory(in_memory));
+				in_dma_buffer = gst_imx_get_dma_buffer_from_memory(in_memory);
+
+				GST_LOG("setting ImxDmaBuffer %p as input DMA buffer for plane #%u", (gpointer)(in_dma_buffer), plane_index);
+
+				surface_desc->plane_strides[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(input_video_info, plane_index);
+
+				GST_LOG(
+					"input plane #%u info from videometa:  stride: %d  offset: %" G_GSIZE_FORMAT,
+					plane_index,
+					GST_VIDEO_INFO_PLANE_STRIDE(input_video_info, plane_index),
+					GST_VIDEO_INFO_PLANE_OFFSET(input_video_info, plane_index)
+				);
+
+				/* Setting the offset to 0 even though the video info has
+				 * plane offset values. This is because we have a multi-gstmemory
+				 * gstbuffer here, and each gstmemory contains one plane, so
+				 * the plane offset values are not needed here. */
+				imx_2d_surface_set_dma_buffer(surface, in_dma_buffer, plane_index, 0);
+			}
+		}
+	}
+	else
+	{
+		g_assert(gst_imx_has_imx_dma_buffer_memory(uploaded_input_buffer));
+		in_dma_buffer = gst_imx_get_dma_buffer_from_buffer(uploaded_input_buffer);
+		g_assert(in_dma_buffer != NULL);
+
+		GST_LOG("setting ImxDmaBuffer %p as input DMA buffer for all planes", (gpointer)in_dma_buffer);
+
+		videometa = gst_buffer_get_video_meta(original_input_buffer);
+		if (videometa != NULL)
+		{
+			for (plane_index = 0; plane_index < videometa->n_planes; ++plane_index)
+			{
+				surface_desc->plane_strides[plane_index] = videometa->stride[plane_index];
+
+				GST_LOG(
+					"input plane #%u info from videometa:  stride: %d  offset: %" G_GSIZE_FORMAT,
+					plane_index,
+					videometa->stride[plane_index],
+					videometa->offset[plane_index]
+				);
+
+				imx_2d_surface_set_dma_buffer(surface, in_dma_buffer, plane_index, videometa->offset[plane_index]);
+			}
+		}
+		else
+		{
+			for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(input_video_info); ++plane_index)
+			{
+				surface_desc->plane_strides[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(input_video_info, plane_index);
+
+				GST_LOG(
+					"input plane #%u info from videoinfo:  stride: %d  offset: %" G_GSIZE_FORMAT,
+					plane_index,
+					GST_VIDEO_INFO_PLANE_STRIDE(input_video_info, plane_index),
+					GST_VIDEO_INFO_PLANE_OFFSET(input_video_info, plane_index)
+				);
+
+				imx_2d_surface_set_dma_buffer(surface, in_dma_buffer, plane_index, GST_VIDEO_INFO_PLANE_OFFSET(input_video_info, plane_index));
+			}
+		}
+	}
+}
+
+
+void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer *output_buffer, GstVideoInfo const *output_video_info)
+{
+	ImxDmaBuffer *out_dma_buffer;
+	GstVideoMeta *videometa;
+	guint plane_index;
+
+	g_assert(gst_imx_has_imx_dma_buffer_memory(output_buffer));
+	out_dma_buffer = gst_imx_get_dma_buffer_from_buffer(output_buffer);
+	g_assert(out_dma_buffer != NULL);
+
+	videometa = gst_buffer_get_video_meta(output_buffer);
+	g_assert(videometa != NULL);
+
+	for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(output_video_info); ++plane_index)
+	{
+		videometa->stride[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(output_video_info, plane_index);
+		videometa->offset[plane_index] = GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, plane_index);
+
+		GST_LOG(
+			"output plane #%u info:  stride: %d  offset: %" G_GSIZE_FORMAT,
+			plane_index,
+			GST_VIDEO_INFO_PLANE_STRIDE(output_video_info, plane_index),
+			GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, plane_index)
+		);
+
+		imx_2d_surface_set_dma_buffer(surface, out_dma_buffer, 0, videometa->offset[plane_index]);
+	}
 }
 
 

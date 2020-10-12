@@ -378,7 +378,7 @@ static void gst_imx_2d_compositor_pad_init(GstImx2dCompositorPad *self)
 	self->input_crop = DEFAULT_PAD_INPUT_CROP;
 	self->alpha = DEFAULT_PAD_ALPHA;
 
-	self->input_surface = imx_2d_surface_create(NULL, NULL);
+	self->input_surface = imx_2d_surface_create(NULL);
 	memset(&(self->input_surface_desc), 0, sizeof(self->input_surface_desc));
 
 	self->region_coords_need_update = TRUE;
@@ -1135,7 +1135,7 @@ static gboolean gst_imx_2d_compositor_start(GstAggregator *aggregator)
 	 * DMA buffer or description to it yet. This will
 	 * happen later in the aggregate_frames() and
 	 * negotiated_src_caps() vfuncs, respectively. */
-	self->output_surface = imx_2d_surface_create(NULL, NULL);
+	self->output_surface = imx_2d_surface_create(NULL);
 	if (self->output_surface == NULL)
 	{
 		GST_ERROR_OBJECT(self, "creating output surface failed");
@@ -1272,29 +1272,16 @@ static gboolean gst_imx_2d_compositor_negotiated_src_caps(GstAggregator *aggrega
 	output_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&output_video_info);
 	output_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&output_video_info), NULL);
 
-	/* As said above, we allocate the output buffers ourselves, so we can
-	 * define what the plane stride and offset values should be. Do that
-	 * by using this utility function to calculate the strides and offsets. */
-	imx_2d_surface_desc_calculate_strides_and_offsets(&output_surface_desc, imx_2d_blitter_get_hardware_capabilities(self->blitter));
+	for (i = 0; i < GST_VIDEO_INFO_N_PLANES(&output_video_info); ++i)
+		output_surface_desc.plane_strides[i] = GST_VIDEO_INFO_PLANE_STRIDE(&output_video_info, i);
 
 	imx_2d_surface_set_desc(self->output_surface, &output_surface_desc);
 
-	/* Copy the calculated strides and offsets into the output_video_info
-	 * structure so that its values and those in output_surface_desc match. */
-	for (i = 0; i < GST_VIDEO_INFO_N_PLANES(&output_video_info); ++i)
-	{
-		GST_VIDEO_INFO_PLANE_STRIDE(&output_video_info, i) = output_surface_desc.plane_stride[i];
-		GST_VIDEO_INFO_PLANE_OFFSET(&output_video_info, i) = output_surface_desc.plane_offset[i];
-	}
-
-	/* Also set the output_video_info size to the one that results from the
-	 * values in output_surface_desc. This is particularly important for
-	 * gst_imx_2d_compositor_decide_allocation(), since that function will
-	 * be called once this negotiated_src_caps() function is done, and
-	 * it will use the output_video_info values we set here. */
-	GST_VIDEO_INFO_SIZE(&output_video_info) = imx_2d_surface_desc_calculate_framesize(&output_surface_desc);
-
 	self->output_video_info = output_video_info;
+
+	/* Mark all pads to have their region coordinates recalculated
+	 * since the visibility of their frames might have changed after
+	 * we got new output caps. */
 
 	GST_OBJECT_LOCK(self);
 
@@ -1316,11 +1303,8 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 {
 	GstImx2dCompositor *self = GST_IMX_2D_COMPOSITOR(videoaggregator);
 	GstFlowReturn flow_ret = GST_FLOW_OK;
-	ImxDmaBuffer *out_dma_buffer;
 	GList *walk;
 	Imx2dBlitParams blit_params;
-	GstVideoMeta *videometa;
-	guint plane_index;
 	gboolean background_needs_to_be_cleared = TRUE;
 	gboolean blitting_started = FALSE;
 
@@ -1328,38 +1312,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 
 	g_assert(self->blitter != NULL);
 
-	/* Sanity check on the output buffer, then retrieve
-	 * the ImxDmaBuffer from it so we can pass that buffer
-	 * to the output surface. */
-	g_assert(gst_imx_has_imx_dma_buffer_memory(output_buffer));
-	out_dma_buffer = gst_imx_get_dma_buffer_from_buffer(output_buffer);
-	g_assert(out_dma_buffer != NULL);
-
-	GST_LOG_OBJECT(self, "setting ImxDmaBuffer %p as output DMA buffer", (gpointer)(out_dma_buffer));
-	imx_2d_surface_set_dma_buffer(self->output_surface, out_dma_buffer);
-
-	/* The videometa of the output buffer needs to be filled
-	 * with the correct stride and plane offset values. */
-	videometa = gst_buffer_get_video_meta(output_buffer);
-	g_assert(videometa != NULL);
-	{
-		GstVideoInfo *out_info = &(self->output_video_info);
-		Imx2dSurfaceDesc const *output_surface_desc = imx_2d_surface_get_desc(self->output_surface);
-
-		for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(out_info); ++plane_index)
-		{
-			videometa->stride[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(out_info, plane_index);
-			videometa->offset[plane_index] = GST_VIDEO_INFO_PLANE_OFFSET(out_info, plane_index);
-
-			GST_LOG_OBJECT(
-				self,
-				"output plane #%u info:  stride: %d  offset: %d",
-				plane_index,
-				output_surface_desc->plane_stride[plane_index],
-				output_surface_desc->plane_offset[plane_index]
-			);
-		}
-	}
+	gst_imx_2d_assign_output_buffer_to_surface(self->output_surface, output_buffer, &(self->output_video_info));
 
 	/* Start the imx2d blit sequence. */
 	if (!imx_2d_blitter_start(self->blitter, self->output_surface))
@@ -1508,14 +1461,13 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 		GstVideoAggregatorPad *videoaggregator_pad = walk->data;
 		GstImx2dCompositorPad *compositor_pad = GST_IMX_2D_COMPOSITOR_PAD_CAST(videoaggregator_pad);
 		GstBuffer *input_buffer;
-		ImxDmaBuffer *in_dma_buffer;
 		gboolean input_crop;
 		Imx2dRegion inner_region;
 		Imx2dBlitMargin combined_margin;
 		Imx2dRegion crop_rectangle;
 		Imx2dRotation output_rotation;
 		gint alpha;
-		GstBuffer *uploading_result;
+		GstBuffer *uploaded_input_buffer;
 		int blit_ret;
 
 		/* Retrieve the input from the sinkpad, and upload it.
@@ -1529,21 +1481,6 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 
 		if (G_UNLIKELY(input_buffer == NULL))
 			continue;
-
-		flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploading_result);
-		if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
-			goto error_while_locked;
-
-		input_buffer = uploading_result;
-
-		g_assert(gst_imx_has_imx_dma_buffer_memory(input_buffer));
-		in_dma_buffer = gst_imx_get_dma_buffer_from_buffer(input_buffer);
-		g_assert(in_dma_buffer != NULL);
-
-		/* At this point, input_buffer is either the original input
-		 * buffer (if the uploader just ref'd the buffer), or a new
-		 * buffer with an ImxDmaBuffer as memory, and the contents
-		 * of the original input_buffer inside. */
 
 		{
 			/* Lock the pad so we can get copies of its property
@@ -1564,51 +1501,28 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 			GST_OBJECT_UNLOCK(compositor_pad);
 		}
 
-		/* As explained in the input_surface_desc description (see
-		 * the struct _GstImx2dCompositorPad defintion at the top),
-		 * plane stride / offset values _can_ change in between
-		 * buffers. The only way we can detect that is by using the
-		 * values from the buffer's videometa. If the buffer has no
-		 * videometa, we just use the stride/offset values from the
-		 * pad's info structure. */
-		videometa = gst_buffer_get_video_meta(input_buffer);
-		if (videometa != NULL)
-		{
-			for (plane_index = 0; plane_index < videometa->n_planes; ++plane_index)
-			{
-				compositor_pad->input_surface_desc.plane_stride[plane_index] = videometa->stride[plane_index];
-				compositor_pad->input_surface_desc.plane_offset[plane_index] = videometa->offset[plane_index];
+		/* Upload the input buffer. The uploader creates a deep
+		 * copy if necessary, but tries to avoid that if possible
+		 * by passing through the buffer (if it consists purely
+		 * of imxdmabuffer backeed gstmemory blocks) or by
+		 * duplicating DMA-BUF FDs with dup(). */
+		flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
+		if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+			goto error_while_locked;
 
-				GST_LOG_OBJECT(
-					self,
-					"input plane #%u info from videometa:  stride: %d  offset: %d",
-					plane_index,
-					compositor_pad->input_surface_desc.plane_stride[plane_index],
-					compositor_pad->input_surface_desc.plane_offset[plane_index]
-				);
-			}
-		}
-		else
-		{
-			GstVideoInfo *in_info = &(videoaggregator_pad->info);
+		/* Set up the pad's input surface. */
 
-			for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(in_info); ++plane_index)
-			{
-				compositor_pad->input_surface_desc.plane_stride[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(in_info, plane_index);
-				compositor_pad->input_surface_desc.plane_offset[plane_index] = GST_VIDEO_INFO_PLANE_OFFSET(in_info, plane_index);
-
-				GST_LOG_OBJECT(
-					self,
-					"input plane #%u info from videoinfo:  stride: %d  offset: %d",
-					plane_index,
-					compositor_pad->input_surface_desc.plane_stride[plane_index],
-					compositor_pad->input_surface_desc.plane_offset[plane_index]
-				);
-			}
-		}
+		gst_imx_2d_assign_input_buffer_to_surface(
+			input_buffer, uploaded_input_buffer,
+			compositor_pad->input_surface,
+			&(compositor_pad->input_surface_desc),
+			&(videoaggregator_pad->info)
+		);
 
 		imx_2d_surface_set_desc(compositor_pad->input_surface, &(compositor_pad->input_surface_desc));
-		imx_2d_surface_set_dma_buffer(compositor_pad->input_surface, in_dma_buffer);
+
+
+		/* Fill the blit parameters. */
 
 		GST_LOG_OBJECT(
 			self,
@@ -1648,9 +1562,15 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 			}
 		}
 
+
+		/* Now perform the actual blit. */
+
 		blit_ret = imx_2d_blitter_do_blit(self->blitter, compositor_pad->input_surface, &blit_params);
 
-		gst_buffer_unref(input_buffer);
+
+		/* Discard the uploaded version of the input buffer. */
+		gst_buffer_unref(uploaded_input_buffer);
+
 
 		if (!blit_ret)
 		{
@@ -1660,6 +1580,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 	}
 
 	GST_OBJECT_UNLOCK(self);
+
 
 finish:
 	if (blitting_started && !imx_2d_blitter_finish(self->blitter))

@@ -141,7 +141,7 @@ Imx2dLinuxFramebuffer* imx_2d_linux_framebuffer_create(char const *device_name, 
 		goto error;
 	}
 
-	desc.plane_stride[0] = linux_framebuffer->fb_fix.line_length;
+	desc.plane_strides[0] = linux_framebuffer->fb_fix.line_length;
 
 	imx_dma_buffer_init_wrapped_buffer(&(linux_framebuffer->dma_buffer));
 	linux_framebuffer->dma_buffer.fd = -1;
@@ -156,17 +156,19 @@ Imx2dLinuxFramebuffer* imx_2d_linux_framebuffer_create(char const *device_name, 
 		DEBUG,
 		"framebuffer surface desc: width: %d height: %d stride: %d format: %s",
 		desc.width, desc.height,
-		desc.plane_stride[0],
+		desc.plane_strides[0],
 		imx_2d_pixel_format_to_string(desc.format)
 	);
 	IMX_2D_LOG(DEBUG, "framebuffer physical address: %" IMX_PHYSICAL_ADDRESS_FORMAT, linux_framebuffer->dma_buffer.physical_address);
 
-	linux_framebuffer->surface = imx_2d_surface_create((ImxDmaBuffer *)&(linux_framebuffer->dma_buffer), &desc);
+	linux_framebuffer->surface = imx_2d_surface_create(&desc);
 	if (linux_framebuffer->surface == NULL)
 	{
 		IMX_2D_LOG(ERROR, "could not create framebuffer surface");
 		goto error;
 	}
+
+	imx_2d_surface_set_dma_buffer(linux_framebuffer->surface, (ImxDmaBuffer *)&(linux_framebuffer->dma_buffer), 0, 0);
 
 
 finish:

@@ -164,13 +164,6 @@ static BOOL fill_g2d_surface_info(struct g2d_surface *g2d_surface, Imx2dSurface 
 	}
 	assert(fmt_info->num_planes <= 3);
 
-	physical_address = imx_dma_buffer_get_physical_address(imx_2d_surface_get_dma_buffer(imx_2d_surface));
-	if (physical_address == 0)
-	{
-		IMX_2D_LOG(ERROR, "could not get physical address from DMA buffer");
-		return FALSE;
-	}
-
 	if (!get_g2d_format(desc->format, &(g2d_surface->format)))
 	{
 		IMX_2D_LOG(ERROR, "pixel format not supported by G2D");
@@ -179,9 +172,20 @@ static BOOL fill_g2d_surface_info(struct g2d_surface *g2d_surface, Imx2dSurface 
 
 	g2d_surface->width = desc->width;
 	g2d_surface->height = desc->height;
-	g2d_surface->stride = desc->plane_stride[0] * 8 / fmt_info->num_first_plane_bpp;
+	g2d_surface->stride = desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
+
 	for (i = 0; i < fmt_info->num_planes; ++i)
-		g2d_surface->planes[i] = physical_address + desc->plane_offset[i];
+	{
+		physical_address = imx_dma_buffer_get_physical_address(imx_2d_surface_get_dma_buffer(imx_2d_surface, i));
+		if (physical_address == 0)
+		{
+			IMX_2D_LOG(ERROR, "could not get physical address from DMA buffer");
+			return FALSE;
+		}
+
+		g2d_surface->planes[i] = physical_address + imx_2d_surface_get_dma_buffer_offset(imx_2d_surface, i);
+	}
+
 	for (i = fmt_info->num_planes; i < 3; ++i)
 		g2d_surface->planes[i] = 0;
 

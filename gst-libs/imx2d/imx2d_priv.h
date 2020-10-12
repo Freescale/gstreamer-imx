@@ -64,7 +64,8 @@ struct _Imx2dSurface
 {
 	Imx2dSurfaceDesc desc;
 	Imx2dRegion region;
-	ImxDmaBuffer *dma_buffer;
+	ImxDmaBuffer *dma_buffers[3];
+	int dma_buffer_offsets[3];
 };
 
 

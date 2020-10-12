@@ -54,6 +54,16 @@ void gst_imx_2d_canvas_calculate_letterbox_margin(
 	guint video_par_n, guint video_par_d
 );
 
+gboolean gst_imx_2d_check_input_buffer_structure(GstBuffer *input_buffer, guint num_planes);
+
+void gst_imx_2d_assign_input_buffer_to_surface(
+	GstBuffer *original_input_buffer, GstBuffer *uploaded_input_buffer,
+	Imx2dSurface *surface,
+	Imx2dSurfaceDesc *surface_desc,
+	GstVideoInfo const *input_video_info
+);
+void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer *output_buffer, GstVideoInfo const *output_video_info);
+
 GType gst_imx_2d_rotation_get_type(void);
 
 

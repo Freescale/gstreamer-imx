@@ -457,12 +457,15 @@ typedef struct _Imx2dSurface Imx2dSurface;
  * Imx2dSurfaceDesc:
  * @width: Width of the surface, in pixels.
  * @height: Height of the surface, in pixels.
- * @plane_stride: Plane stride values, in bytes.
- * @plane_offset: Plane offset values, in bytes.
+ * @plane_strides: Plane stride values, in bytes.
  * @format: Pixel format of the surface.
  *
  * Describes a surface by specifying metrics like width, height,
- * plane offsets etc.
+ * plane strides etc.
+ *
+ * Plane offsets are not present, since they implicitely exist
+ * as the DMA buffers + buffer offset in surfaces (see
+ * @imx_2d_surface_set_dma_buffer for details).
  *
  * RGB(A) and grayscale formats always have only one plane.
  * YUV formats typically have two of three planes. The number
@@ -472,59 +475,30 @@ typedef struct _Imx2dSurface Imx2dSurface;
 struct _Imx2dSurfaceDesc
 {
 	int width, height;
-	int plane_stride[3], plane_offset[3];
+	int plane_strides[3];
 	Imx2dPixelFormat format;
 };
-
-/**
- * imx_2d_surface_desc_calculate_strides_and_offsets:
- * @desc: Surface description to fill with calculated values.
- * @capabilities: Hardware capabilities to use for the calculations.
- *
- * This calculates the plane stride and offset values in the
- * description. Any existing values are overwritten.
- *
- * This function is useful for computing these values if only
- * width, height, and format are specified. These three values
- * must be valid in @desc.
- */
-void imx_2d_surface_desc_calculate_strides_and_offsets(Imx2dSurfaceDesc *desc, Imx2dHardwareCapabilities const *capabilities);
-
-/**
- * imx_2d_surface_desc_calculate_framesize:
- * @desc: Surface description to use in the calculation.
- *
- * Calculates the size of a frame based on the given surface
- * description. This is useful for determining the size of
- * DMA buffers to allocate when setting up frame buffers.
- *
- * All values in @desc must be valid.
- *
- * Returns: Recommended frame size in bytes.
- */
-int imx_2d_surface_desc_calculate_framesize(Imx2dSurfaceDesc const *desc);
 
 
 /**
  * imx_2d_surface_create:
- * @dma_buffer: DMA buffer to associate with the newly created surface.
  * @desc: Description for the newly created surface.
  *
  * Creates a new surface that is associated with this blitter.
  *
- * @dma_buffer can be set to NULL creates a surface with no assigned
- * DMA buffer. With such a surface, @imx_2d_surface_set_dma_buffer
- * must be called at least once prior to using this surface with a
- * blitter. Same goes for @desc - if it is set to NULL, then
- * @imx_2d_surface_set_desc must be called at least once before using
- * this surface for blitting.
+ * @desc can be set to NULL. This creates a surface with no assigned
+ * description. With such a surface, @imx_2d_surface_set_desc must be
+ * called at least once before using this surface for blitting.
+ *
+ * In addition, @imx_2d_surface_set_dma_buffer must be called at
+ * least once for every plane to properly set up the surface.
  *
  * Use @imx_2d_surface_destroy to destroy the surface when
  * it is no longer needed.
  *
  * Returns: Pointer to the new surface.
  */
-Imx2dSurface* imx_2d_surface_create(ImxDmaBuffer *dma_buffer, Imx2dSurfaceDesc const *desc);
+Imx2dSurface* imx_2d_surface_create(Imx2dSurfaceDesc const *desc);
 
 /**
  * imx_2d_surface_destroy:
@@ -567,29 +541,47 @@ Imx2dSurfaceDesc const * imx_2d_surface_get_desc(Imx2dSurface *surface);
 
 /**
  * imx_2d_surface_set_dma_buffer:
- * @surface: Surface that shall have its DMA buffer set.
- * @dma_buffer: DMA buffer to use with this surface.
+ * @surface: Surface that shall have one of its DMA buffers set.
+ * @dma_buffer: DMA buffer to use with this surface for the given plane.
+ * @plane_nr: Number of the plane to use the DMA buffer for.
+ * @offset: Offset within the DMA buffer to start reading data at.
  *
- * Sets the surface's DMA buffer.
+ * Sets the surface's DMA buffer for the given plane.
  *
  * The surface does not take ownership over the DMA buffer.
  * The DMA buffer must continue to exist at least until
- * the surface is destroyed or a different DMA buffer is set.
+ * the surface is destroyed or a different DMA buffer is set
+ * for the same plane.
  */
-void imx_2d_surface_set_dma_buffer(Imx2dSurface *surface, ImxDmaBuffer *dma_buffer);
+void imx_2d_surface_set_dma_buffer(Imx2dSurface *surface, ImxDmaBuffer *dma_buffer, int plane_nr, int offset);
 
 /**
  * imx_2d_surface_get_dma_buffer:
  * @surface: Surface to get a DMA buffer from.
+ * @plane_nr: Number of the plane to get the DMA buffer of.
  *
- * Retrieves the DMA buffer of this surface.
+ * Retrieves the DMA buffer of this surface for the given plane.
  *
  * The return value is NULL until @imx_2d_surface_set_dma_buffer
- * is called.
+ * is called for this plane.
  *
  * Returns: Pointer to the DMA buffer.
  */
-ImxDmaBuffer* imx_2d_surface_get_dma_buffer(Imx2dSurface *surface);
+ImxDmaBuffer* imx_2d_surface_get_dma_buffer(Imx2dSurface *surface, int plane_nr);
+
+/**
+ * imx_2d_surface_get_dma_buffer_offset:
+ * @surface: Surface to get the DMA buffer offset of.
+ * @plane_nr: Number of the plane to get the DMA buffer offset of.
+ *
+ * Retrieves the DMA buffer offset of this surface for the given plane.
+ *
+ * The return value is 0 until @imx_2d_surface_set_dma_buffer
+ * is called for this plane.
+ *
+ * Returns: Pointer to the DMA buffer.
+ */
+int imx_2d_surface_get_dma_buffer_offset(Imx2dSurface *surface, int plane_nr);
 
 /**
  * imx_2d_surface_get_region:

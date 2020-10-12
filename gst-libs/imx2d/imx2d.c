@@ -194,106 +194,11 @@ void imx_2d_region_merge(Imx2dRegion *merged_region, Imx2dRegion const *first_re
 
 
 
-void imx_2d_surface_desc_calculate_strides_and_offsets(Imx2dSurfaceDesc *desc, Imx2dHardwareCapabilities const *capabilities)
-{
-	Imx2dPixelFormatInfo const *fmt_info;
-	int offset;
-	int plane_nr;
-
-	assert(desc != NULL);
-	assert(desc->width > 0);
-	assert(desc->height > 0);
-	assert(desc->format != IMX_2D_PIXEL_FORMAT_UNKNOWN);
-	assert(capabilities != NULL);
-
-	fmt_info = imx_2d_get_pixel_format_info(desc->format);
-
-	offset = 0;
-	for (plane_nr = 0; plane_nr < fmt_info->num_planes; ++plane_nr)
-	{
-		int stride;
-
-		int x_subsampling = (plane_nr == 0) ? 1 : fmt_info->x_subsampling;
-		int y_subsampling = (plane_nr == 0) ? 1 : fmt_info->y_subsampling;
-
-		stride = desc->width * fmt_info->num_first_plane_bpp / 8 / x_subsampling;
-
-		desc->plane_stride[plane_nr] = stride;
-		desc->plane_offset[plane_nr] = offset;
-
-		offset += stride * desc->height / y_subsampling;
-	}
-}
-
-
-int imx_2d_surface_desc_calculate_framesize(Imx2dSurfaceDesc const *desc)
-{
-	Imx2dPixelFormatInfo const * fmt_info;
-
-	assert(desc != NULL);
-
-	fmt_info = imx_2d_get_pixel_format_info(desc->format);
-	if (fmt_info == NULL)
-		return 0;
-
-	assert(fmt_info->num_planes >= 1);
-
-	if (fmt_info->num_planes > 1)
-	{
-		int subsampled_height;
-		int num_chroma_planes;
-		int chroma_plane_size;
-
-		/* In YUV formats, luma always comes first, followed by chroma
-		 * planes. The second plane is therefore always a chroma plane.
-		 * All chroma planes have the same size, so it does not really
-		 * matter which one we pick for size calculations. We just pick
-		 * the second one because it is convenient to do so. */
-		static int const chroma_plane_index = 1;
-
-		/* Compute the height of a chroma plane. That's the frame size
-		 * divided by the subsampling in direction of the Y coordinate
-		 * (not to be confused with Y as in luma from YUV).
-		 * We do not need to use x_subsampling, since in horizontal
-		 * direction, we use stride values, which are in bytes. */
-		subsampled_height = desc->height / fmt_info->y_subsampling;
-
-		/* The first plane is always the luma (Y) plane.
-		 * Subsequent planes are either one combined chroma UV plane
-		 * (if formats like NV12 are used), or two separate chroma
-		 * planes, one for U, one for V data. Therefore, the number
-		 * of chroma planes equals the number of planes minus the
-		 * single luma plane. */
-		num_chroma_planes = fmt_info->num_planes - 1;
-		chroma_plane_size = desc->plane_stride[chroma_plane_index] * subsampled_height;
-		/* If the format is semi planar, it means that there is one
-		 * single interleaved UV chroma plane. Since it contains both
-		 * U and V values, we need to double the size to accound for
-		 * its combined nature. */
-		if (fmt_info->is_semi_planar)
-			chroma_plane_size *= 2;
-
-		/* Use the offset of the last plane when computing the frame size.
-		 * This is because there may be padding bytes in between planes.
-		 * By using the last plane's offset, we implicitely factor in these
-		 * padding bytes into our calculations. */
-		return (desc->plane_offset[fmt_info->num_planes - 1] + chroma_plane_size * num_chroma_planes);
-	}
-	else
-	{
-		/* Single-planar formats are simpler. No need to factor in
-		 * any offsets between planes. */
-		return desc->plane_stride[0] * desc->height;
-	}
-}
-
-
-Imx2dSurface* imx_2d_surface_create(ImxDmaBuffer *dma_buffer, Imx2dSurfaceDesc const *desc)
+Imx2dSurface* imx_2d_surface_create(Imx2dSurfaceDesc const *desc)
 {
 	Imx2dSurface *surface = malloc(sizeof(Imx2dSurface));
 	assert(surface != NULL);
 
-	surface->dma_buffer = dma_buffer;
 	memset(&(surface->region), 0, sizeof(surface->region));
 
 	if (desc != NULL)
@@ -325,18 +230,28 @@ Imx2dSurfaceDesc const * imx_2d_surface_get_desc(Imx2dSurface *surface)
 }
 
 
-void imx_2d_surface_set_dma_buffer(Imx2dSurface *surface, ImxDmaBuffer *dma_buffer)
+void imx_2d_surface_set_dma_buffer(Imx2dSurface *surface, ImxDmaBuffer *dma_buffer, int plane_nr, int offset)
 {
 	assert(surface != NULL);
 	assert(dma_buffer != NULL);
-	surface->dma_buffer = dma_buffer;
+	surface->dma_buffers[plane_nr] = dma_buffer;
+	surface->dma_buffer_offsets[plane_nr] = offset;
 }
 
 
-ImxDmaBuffer* imx_2d_surface_get_dma_buffer(Imx2dSurface *surface)
+ImxDmaBuffer* imx_2d_surface_get_dma_buffer(Imx2dSurface *surface, int plane_nr)
 {
 	assert(surface != NULL);
-	return surface->dma_buffer;
+	assert(plane_nr < 3);
+	return surface->dma_buffers[plane_nr];
+}
+
+
+int imx_2d_surface_get_dma_buffer_offset(Imx2dSurface *surface, int plane_nr)
+{
+	assert(surface != NULL);
+	assert(plane_nr < 3);
+	return surface->dma_buffer_offsets[plane_nr];
 }
 
 

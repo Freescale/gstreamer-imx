@@ -1100,27 +1100,10 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	output_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&output_video_info);
 	output_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&output_video_info), NULL);
 
-	/* As said above, we allocate the output buffers ourselves, so we can
-	 * define what the plane stride and offset values should be. Do that
-	 * by using this utility function to calculate the strides and offsets. */
-	imx_2d_surface_desc_calculate_strides_and_offsets(&output_surface_desc, imx_2d_blitter_get_hardware_capabilities(self->blitter));
+	for (i = 0; i < GST_VIDEO_INFO_N_PLANES(&output_video_info); ++i)
+		output_surface_desc.plane_strides[i] = GST_VIDEO_INFO_PLANE_STRIDE(&output_video_info, i);
 
 	imx_2d_surface_set_desc(self->output_surface, &output_surface_desc);
-
-	/* Copy the calculated strides and offsets into the output_video_info
-	 * structure so that its values and those in output_surface_desc match. */
-	for (i = 0; i < GST_VIDEO_INFO_N_PLANES(&output_video_info); ++i)
-	{
-		GST_VIDEO_INFO_PLANE_STRIDE(&output_video_info, i) = output_surface_desc.plane_stride[i];
-		GST_VIDEO_INFO_PLANE_OFFSET(&output_video_info, i) = output_surface_desc.plane_offset[i];
-	}
-
-	/* Also set the output_video_info size to the one that results from the
-	 * values in output_surface_desc. This is particularly important for
-	 * gst_imx_2d_video_transform_decide_allocation(), since that function
-	 * will be called once this set_caps() function is done, and it will
-	 * use the output_video_info values we set here. */
-	GST_VIDEO_INFO_SIZE(&output_video_info) = imx_2d_surface_desc_calculate_framesize(&output_surface_desc);
 
 	gst_caps_replace(&(self->input_caps), input_caps);
 
@@ -1319,15 +1302,13 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 {
 	Imx2dBlitParams blit_params;
 	GstFlowReturn flow_ret = GST_FLOW_OK;
-	ImxDmaBuffer *in_dma_buffer;
-	ImxDmaBuffer *out_dma_buffer;
 	gboolean input_crop;
 	Imx2dRegion crop_rectangle;
 	Imx2dRotation output_rotation;
-	GstVideoMeta *videometa;
-	guint plane_index;
-	GstBuffer *uploading_result;
+	GstBuffer *uploaded_input_buffer = NULL;
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
+
+	/* Initial checks. */
 
 	if (G_UNLIKELY(!self->inout_info_set))
 	{
@@ -1341,33 +1322,9 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 		return GST_FLOW_OK;
 	}
 
-	GST_LOG_OBJECT(self, "beginning frame transform by uploading input buffer");
+	if (!gst_imx_2d_check_input_buffer_structure(input_buffer, GST_VIDEO_INFO_N_PLANES(&(self->input_video_info))))
+		return GST_FLOW_ERROR;
 
-	/* Begin by uploading the buffer. This may actually be a secondary form
-	 * of "passthrough". If the input buffer already uses an ImxDmaBuffer, then
-	 * there is no point in doing a proper upload (which typically would imply
-	 * a CPU based frame copy). Instead, we can then just use the input buffer
-	 * as-is. The uploader can configure itself automatically based on the input
-	 * caps, and has a method for this case, where the input buffer is ref'd, but
-	 * otherwise just passed through. In other cases, such as when an upstream
-	 * element outputs buffers that have their memory in sysmem, the uploader
-	 * will have chosen a method that does copy the buffer contents. */
-	flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploading_result);
-	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
-		return flow_ret;
-
-	/* From this moment on, use the uploaded version as our "input buffer".
-	 * As explained above, depending on the caps, this may really be still
-	 * our original input buffer. */
-	input_buffer = uploading_result;
-
-	/* The rest of the code in this function expects buffers with ImxDmaBuffer inside. */
-	g_assert(gst_imx_has_imx_dma_buffer_memory(input_buffer));
-	g_assert(gst_imx_has_imx_dma_buffer_memory(output_buffer));
-	in_dma_buffer = gst_imx_get_dma_buffer_from_buffer(input_buffer);
-	out_dma_buffer = gst_imx_get_dma_buffer_from_buffer(output_buffer);
-	g_assert(in_dma_buffer != NULL);
-	g_assert(out_dma_buffer != NULL);
 
 	/* Create local copies of the property values so that we can use them
 	 * without risking race conditions if another thread is setting new
@@ -1377,90 +1334,34 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	output_rotation = self->output_rotation;
 	GST_OBJECT_UNLOCK(self);
 
-	GST_LOG_OBJECT(self, "filling input surface description with input buffer plane stride and -info");
 
-	/* Fill plane offset and stride values into input_surface_desc. As explained
-	 * in gst_imx_2d_video_transform_set_caps(), these values _can_ in theory
-	 * change between incoming buffers. Prefer getting them from a videometa,
-	 * because those can carry values with them that deviate from what could
-	 * be calculated out of the caps. For example, if width = 100 and bytes
-	 * per pixel = 3, then one could calculate a stride value of 100*3 = 300 byte.
-	 * But the underlying hardware may require alignment to 16-byte increments,
-	 * and the actual stride value is then 304 bytes - impossible to determine
-	 * with the caps alone. The videometa would then contain this stride value
-	 * of 304 bytes. Consequently, it is better to look at the videometa and
-	 * use its values instead of relying on computed ones. */
-	videometa = gst_buffer_get_video_meta(input_buffer);
-	if (videometa != NULL)
-	{
-		for (plane_index = 0; plane_index < videometa->n_planes; ++plane_index)
-		{
-			self->input_surface_desc.plane_stride[plane_index] = videometa->stride[plane_index];
-			self->input_surface_desc.plane_offset[plane_index] = videometa->offset[plane_index];
+	GST_LOG_OBJECT(self, "beginning frame transform by uploading input buffer");
 
-			GST_LOG_OBJECT(
-				self,
-				"input plane #%u info from videometa:  stride: %d  offset: %d",
-				plane_index,
-				self->input_surface_desc.plane_stride[plane_index],
-				self->input_surface_desc.plane_offset[plane_index]
-			);
-		}
-	}
-	else
-	{
-		GstVideoInfo *in_info = &(self->input_video_info);
+	/* Upload the input buffer. The uploader creates a deep
+	 * copy if necessary, but tries to avoid that if possible
+	 * by passing through the buffer (if it consists purely
+	 * of imxdmabuffer backeed gstmemory blocks) or by
+	 * duplicating DMA-BUF FDs with dup(). */
+	flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
+	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+		goto error;
 
-		for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(in_info); ++plane_index)
-		{
-			self->input_surface_desc.plane_stride[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(in_info, plane_index);
-			self->input_surface_desc.plane_offset[plane_index] = GST_VIDEO_INFO_PLANE_OFFSET(in_info, plane_index);
 
-			GST_LOG_OBJECT(
-				self,
-				"input plane #%u info from videoinfo:  stride: %d  offset: %d",
-				plane_index,
-				self->input_surface_desc.plane_stride[plane_index],
-				self->input_surface_desc.plane_offset[plane_index]
-			);
-		}
-	}
+	/* Set up the input and output surfaces. */
+
+	gst_imx_2d_assign_input_buffer_to_surface(
+		input_buffer, uploaded_input_buffer,
+		self->input_surface,
+		&(self->input_surface_desc),
+		&(self->input_video_info)
+	);
 
 	imx_2d_surface_set_desc(self->input_surface, &(self->input_surface_desc));
 
-	GST_LOG_OBJECT(self, "setting output buffer videometa's plane stride and -offset");
+	gst_imx_2d_assign_output_buffer_to_surface(self->output_surface, output_buffer, &(self->output_video_info));
 
-	/* Now fill the videometa of the output buffer. Since we allocate
-	 * these buffers, we know they always must contain a videometa.
-	 * That meta needs to be filled with valid values though. */
 
-	videometa = gst_buffer_get_video_meta(output_buffer);
-	g_assert(videometa != NULL);
-
-	{
-		GstVideoInfo *out_info = &(self->output_video_info);
-		Imx2dSurfaceDesc const *output_surface_desc = imx_2d_surface_get_desc(self->output_surface);
-
-		for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(out_info); ++plane_index)
-		{
-			videometa->stride[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(out_info, plane_index);
-			videometa->offset[plane_index] = GST_VIDEO_INFO_PLANE_OFFSET(out_info, plane_index);
-
-			GST_LOG_OBJECT(
-				self,
-				"output plane #%u info:  stride: %d  offset: %d",
-				plane_index,
-				output_surface_desc->plane_stride[plane_index],
-				output_surface_desc->plane_offset[plane_index]
-			);
-		}
-	}
-
-	GST_LOG_OBJECT(self, "setting ImxDmaBuffer %p as input DMA buffer", (gpointer)(in_dma_buffer));
-	GST_LOG_OBJECT(self, "setting ImxDmaBuffer %p as output DMA buffer", (gpointer)(out_dma_buffer));
-
-	imx_2d_surface_set_dma_buffer(self->input_surface, in_dma_buffer);
-	imx_2d_surface_set_dma_buffer(self->output_surface, out_dma_buffer);
+	/* Fill the blit parameters. */
 
 	memset(&blit_params, 0, sizeof(blit_params));
 	blit_params.source_region = NULL;
@@ -1490,6 +1391,9 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 		}
 	}
 
+
+	/* Now perform the actual blit. */
+
 	GST_LOG_OBJECT(self, "beginning blitting procedure to transform the frame");
 
 	if (!imx_2d_blitter_start(self->blitter, self->output_surface))
@@ -1510,10 +1414,14 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 		goto error;
 	}
 
+
 	GST_LOG_OBJECT(self, "blitting procedure finished successfully; frame transform complete");
 
+
 finish:
-	gst_buffer_unref(input_buffer);
+	/* Discard the uploaded version of the input buffer. */
+	if (uploaded_input_buffer != NULL)
+		gst_buffer_unref(uploaded_input_buffer);
 	return flow_ret;
 
 error:
@@ -1532,23 +1440,14 @@ static gboolean gst_imx_2d_video_transform_transform_size(GstBaseTransform *tran
 
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
 	GstVideoInfo video_info;
-	Imx2dSurfaceDesc surface_desc;
-	GstImx2dTileLayout tile_layout;
 
 	if (G_UNLIKELY(self->blitter == NULL))
 		return FALSE;
 
-	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&video_info, othercaps, &tile_layout)))
+	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&video_info, othercaps, NULL)))
 		return FALSE;
 
-	memset(&surface_desc, 0, sizeof(surface_desc));
-	surface_desc.width = GST_VIDEO_INFO_WIDTH(&video_info);
-	surface_desc.height = GST_VIDEO_INFO_HEIGHT(&video_info);
-	surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&video_info), &tile_layout);
-
-	imx_2d_surface_desc_calculate_strides_and_offsets(&surface_desc, imx_2d_blitter_get_hardware_capabilities(self->blitter));
-
-	*othersize = imx_2d_surface_desc_calculate_framesize(&surface_desc);
+	*othersize = GST_VIDEO_INFO_SIZE(&video_info);
 
 	return TRUE;
 }
@@ -1618,14 +1517,14 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 		goto error;
 	}
 
-	self->input_surface = imx_2d_surface_create(NULL, NULL);
+	self->input_surface = imx_2d_surface_create(NULL);
 	if (self->input_surface == NULL)
 	{
 		GST_ERROR_OBJECT(self, "creating input surface failed");
 		goto error;
 	}
 
-	self->output_surface = imx_2d_surface_create(NULL, NULL);
+	self->output_surface = imx_2d_surface_create(NULL);
 	if (self->output_surface == NULL)
 	{
 		GST_ERROR_OBJECT(self, "creating output surface failed");
