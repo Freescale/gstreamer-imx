@@ -295,43 +295,18 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	Imx2dBlitParams blit_params;
 	Imx2dBlitMargin blit_margin;
 	GstFlowReturn flow_ret;
-	ImxDmaBuffer *in_dma_buffer;
 	gboolean input_crop;
 	Imx2dRegion crop_rectangle;
 	Imx2dRegion dest_region;
 	Imx2dRotation output_rotation;
 	gboolean force_aspect_ratio;
-	GstVideoMeta *videometa;
-	guint plane_index;
-	GstBuffer *uploading_result;
+	GstBuffer *uploaded_input_buffer = NULL;
 	GstImx2dVideoSink *self = GST_IMX_2D_VIDEO_SINK_CAST(video_sink);
 	GstVideoInfo *input_video_info = &(self->input_video_info);
 	guint video_width, video_height;
 
 	g_assert(self->blitter != NULL);
 
-	/* Begin by uploading the buffer. This may actually be a form
-	 * of "passthrough". If the input buffer already uses an ImxDmaBuffer, then
-	 * there is no point in doing a proper upload (which typically would imply
-	 * a CPU based frame copy). Instead, we can then just use the input buffer
-	 * as-is. The uploader can configure itself automatically based on the input
-	 * caps, and has a method for this case, where the input buffer is ref'd, but
-	 * otherwise just passed through. In other cases, such as when an upstream
-	 * element outputs buffers that have their memory in sysmem, the uploader
-	 * will have chosen a method that does copy the buffer contents. */
-	flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploading_result);
-	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
-		return flow_ret;
-
-	/* From this moment on, use the uploaded version as our "input buffer".
-	 * As explained above, depending on the caps, this may really be still
-	 * our original input buffer. */
-	input_buffer = uploading_result;
-
-	/* The rest of the code in this function expects buffers with ImxDmaBuffer inside. */
-	g_assert(gst_imx_has_imx_dma_buffer_memory(input_buffer));
-	in_dma_buffer = gst_imx_get_dma_buffer_from_buffer(input_buffer);
-	g_assert(in_dma_buffer != NULL);
 
 	/* Create local copies of the property values so that we can use them
 	 * without risking race conditions if another thread is setting new
@@ -342,58 +317,30 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	force_aspect_ratio = self->force_aspect_ratio;
 	GST_OBJECT_UNLOCK(self);
 
-	GST_LOG_OBJECT(self, "filling input surface description with input buffer plane stride and -info");
 
-	/* Fill plane offset and stride values into input_surface_desc. As explained
-	 * in gst_imx_2d_video_transform_set_caps(), these values _can_ in theory
-	 * change between incoming buffers. Prefer getting them from a videometa,
-	 * because those can carry values with them that deviate from what could
-	 * be calculated out of the caps. For example, if width = 100 and bytes
-	 * per pixel = 3, then one could calculate a stride value of 100*3 = 300 byte.
-	 * But the underlying hardware may require alignment to 16-byte increments,
-	 * and the actual stride value is then 304 bytes - impossible to determine
-	 * with the caps alone. The videometa would then contain this stride value
-	 * of 304 bytes. Consequently, it is better to look at the videometa and
-	 * use its values instead of relying on computed ones. */
-	videometa = gst_buffer_get_video_meta(input_buffer);
-	if (videometa != NULL)
-	{
-		for (plane_index = 0; plane_index < videometa->n_planes; ++plane_index)
-		{
-			self->input_surface_desc.plane_stride[plane_index] = videometa->stride[plane_index];
-			self->input_surface_desc.plane_offset[plane_index] = videometa->offset[plane_index];
+	/* Upload the input buffer. The uploader creates a deep
+	 * copy if necessary, but tries to avoid that if possible
+	 * by passing through the buffer (if it consists purely
+	 * of imxdmabuffer backeed gstmemory blocks) or by
+	 * duplicating DMA-BUF FDs with dup(). */
+	flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
+	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+		return flow_ret;
 
-			GST_LOG_OBJECT(
-				self,
-				"input plane #%u info from videometa:  stride: %d  offset: %d",
-				plane_index,
-				self->input_surface_desc.plane_stride[plane_index],
-				self->input_surface_desc.plane_offset[plane_index]
-			);
-		}
-	}
-	else
-	{
-		for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(input_video_info); ++plane_index)
-		{
-			self->input_surface_desc.plane_stride[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(input_video_info, plane_index);
-			self->input_surface_desc.plane_offset[plane_index] = GST_VIDEO_INFO_PLANE_OFFSET(input_video_info, plane_index);
 
-			GST_LOG_OBJECT(
-				self,
-				"input plane #%u info from videoinfo:  stride: %d  offset: %d",
-				plane_index,
-				self->input_surface_desc.plane_stride[plane_index],
-				self->input_surface_desc.plane_offset[plane_index]
-			);
-		}
-	}
+	/* Set up the input surface. */
+
+	gst_imx_2d_assign_input_buffer_to_surface(
+		input_buffer, uploaded_input_buffer,
+		self->input_surface,
+		&(self->input_surface_desc),
+		&(self->input_video_info)
+	);
 
 	imx_2d_surface_set_desc(self->input_surface, &(self->input_surface_desc));
 
-	GST_LOG_OBJECT(self, "setting ImxDmaBuffer %p as input DMA buffer", (gpointer)(in_dma_buffer));
 
-	imx_2d_surface_set_dma_buffer(self->input_surface, in_dma_buffer);
+	/* Fill the blit parameters. */
 
 	memset(&blit_params, 0, sizeof(blit_params));
 	blit_params.source_region = NULL;
@@ -445,12 +392,13 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 			GST_VIDEO_INFO_PAR_D(input_video_info)
 		);
 
-		//GST_LOG_OBJECT(self, "computed margin %d/%d/%d/%d", blit_margin.left_margin, blit_margin.top_margin, blit_margin.right_margin, blit_margin.bottom_margin);
-
 		blit_margin.color = 0xFF000000;
 		blit_params.margin = &blit_margin;
 		blit_params.dest_region = &dest_region;
 	}
+
+
+	/* Now perform the actual blit. */
 
 	GST_LOG_OBJECT(self, "beginning blitting procedure to transform the frame");
 
@@ -472,7 +420,9 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 		goto error;
 	}
 
-	GST_LOG_OBJECT(self, "blitting procedure finished successfully; frame transform complete");
+
+	GST_LOG_OBJECT(self, "blitting procedure finished successfully; frame output complete");
+
 
 finish:
 	gst_buffer_unref(input_buffer);
@@ -507,7 +457,7 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 		goto error;
 	}
 
-	self->input_surface = imx_2d_surface_create(NULL, NULL);
+	self->input_surface = imx_2d_surface_create(NULL);
 	if (self->input_surface == NULL)
 	{
 		GST_ERROR_OBJECT(self, "creating input surface failed");
