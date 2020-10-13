@@ -1075,7 +1075,8 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	// for interlacing flags if deinterlacing is enabled.
 	self->inout_info_equal = (GST_VIDEO_INFO_WIDTH(&input_video_info) == GST_VIDEO_INFO_WIDTH(&output_video_info))
 	                      && (GST_VIDEO_INFO_HEIGHT(&input_video_info) == GST_VIDEO_INFO_HEIGHT(&output_video_info))
-	                      && (GST_VIDEO_INFO_FORMAT(&input_video_info) == GST_VIDEO_INFO_FORMAT(&output_video_info));
+	                      && (GST_VIDEO_INFO_FORMAT(&input_video_info) == GST_VIDEO_INFO_FORMAT(&output_video_info))
+	                      && (input_video_tile_layout == GST_IMX_2D_TILE_LAYOUT_NONE);
 
 	if (self->inout_info_equal)
 		GST_DEBUG_OBJECT(self, "input and output caps are equal");
