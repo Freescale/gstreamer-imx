@@ -1054,7 +1054,7 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 
 	GST_DEBUG_OBJECT(self, "setting caps: input caps: %" GST_PTR_FORMAT "  output caps: %" GST_PTR_FORMAT, (gpointer)input_caps, (gpointer)output_caps);
 
-	if (!gst_imx_video_info_from_caps(&input_video_info, input_caps, &input_video_tile_layout))
+	if (!gst_imx_video_info_from_caps(&input_video_info, input_caps, &input_video_tile_layout, NULL))
 	{
 		GST_ERROR_OBJECT(self, "cannot convert input caps to video info; input caps: %" GST_PTR_FORMAT, (gpointer)input_caps);
 		self->inout_info_set = FALSE;
@@ -1445,7 +1445,7 @@ static gboolean gst_imx_2d_video_transform_transform_size(GstBaseTransform *tran
 	if (G_UNLIKELY(self->blitter == NULL))
 		return FALSE;
 
-	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&video_info, othercaps, NULL)))
+	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&video_info, othercaps, NULL, NULL)))
 		return FALSE;
 
 	*othersize = GST_VIDEO_INFO_SIZE(&video_info);

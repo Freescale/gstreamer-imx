@@ -134,7 +134,7 @@ error:
 }
 
 
-gboolean gst_imx_video_info_from_caps(GstVideoInfo *info, GstCaps const *caps, GstImx2dTileLayout *tile_layout)
+gboolean gst_imx_video_info_from_caps(GstVideoInfo *info, GstCaps const *caps, GstImx2dTileLayout *tile_layout, GstCaps **modified_caps)
 {
 	gboolean ret = TRUE;
 	GstCaps *edited_caps = gst_caps_copy(caps);
@@ -162,7 +162,11 @@ gboolean gst_imx_video_info_from_caps(GstVideoInfo *info, GstCaps const *caps, G
 	ret = gst_video_info_from_caps(info, edited_caps);
 
 finish:
-	gst_caps_unref(edited_caps);
+	if (modified_caps != NULL)
+		*modified_caps = edited_caps;
+	else
+		gst_caps_unref(edited_caps);
+
 	return ret;
 
 error:

@@ -619,24 +619,27 @@ static GstPadProbeReturn gst_imx_2d_compositor_caps_event_probe(GstPad *pad, Gst
 		case GST_EVENT_CAPS:
 		{
 			GstCaps *caps;
+			GstCaps *modified_caps = NULL;
 			GstEvent *new_event;
 
 			gst_event_parse_caps(event, &caps);
 
-			if (!gst_imx_video_info_from_caps(&video_info, caps, &input_video_tile_layout))
+			if (!gst_imx_video_info_from_caps(&video_info, caps, &input_video_tile_layout, &modified_caps))
 			{
 				GST_ERROR_OBJECT(pad, "cannot convert caps to video info; caps: %" GST_PTR_FORMAT, (gpointer)caps);
 				return GST_PAD_PROBE_OK;
 			}
 
-			new_event = gst_event_new_caps(caps);
+			new_event = gst_event_new_caps(modified_caps);
 			gst_event_unref(event);
 			GST_PAD_PROBE_INFO_DATA(info) = new_event;
 
 			GST_LOG_OBJECT(pad, "marking pad region coords as in need of an update");
-			GST_LOG_OBJECT(pad, "imx2d compositor pad caps: %" GST_PTR_FORMAT, (gpointer)caps);
+			GST_LOG_OBJECT(pad, "new imx2d compositor pad caps: %" GST_PTR_FORMAT, (gpointer)modified_caps);
 
 			GST_OBJECT_LOCK(compositor_pad);
+
+			gst_caps_unref(modified_caps);
 
 			compositor_pad->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&video_info);
 			compositor_pad->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&video_info);

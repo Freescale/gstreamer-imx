@@ -268,7 +268,7 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 	GST_DEBUG_OBJECT(self, "setting caps %" GST_PTR_FORMAT, (gpointer)caps);
 
-	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&input_video_info, caps, &tile_layout)))
+	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&input_video_info, caps, &tile_layout, NULL)))
 	{
 		GST_ERROR_OBJECT(self, "could not set caps %" GST_PTR_FORMAT, (gpointer)caps);
 		goto error;

@@ -38,7 +38,7 @@ GstImx2dTileLayout;
 void gst_imx_2d_setup_logging(void);
 
 GstCaps* gst_imx_remove_tile_layout_from_caps(GstCaps *caps, GstImx2dTileLayout *tile_layout);
-gboolean gst_imx_video_info_from_caps(GstVideoInfo *info, GstCaps const *caps, GstImx2dTileLayout *tile_layout);
+gboolean gst_imx_video_info_from_caps(GstVideoInfo *info, GstCaps const *caps, GstImx2dTileLayout *tile_layout, GstCaps **modified_caps);
 
 Imx2dPixelFormat gst_imx_2d_convert_from_gst_video_format(GstVideoFormat gst_video_format, GstImx2dTileLayout const *tile_layout);
 GstVideoFormat gst_imx_2d_convert_to_gst_video_format(Imx2dPixelFormat imx2d_format);
