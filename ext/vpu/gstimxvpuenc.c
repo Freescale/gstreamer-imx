@@ -124,7 +124,7 @@ static void gst_imx_vpu_enc_init(GstImxVpuEnc *imx_vpu_enc)
 
 	imx_vpu_enc->dma_buffer_pool = NULL;
 	imx_vpu_enc->uploader = NULL;
-	imx_vpu_enc->uploaded_buffers_table = g_hash_table_new_full(g_int64_hash, g_int64_equal, NULL, (GDestroyNotify)gst_buffer_unref);
+	imx_vpu_enc->uploaded_buffers_table = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)gst_buffer_unref);
 	imx_vpu_enc->fb_pool_buffers = NULL;
 
 	imx_vpu_enc->fatal_error_cannot_encode = FALSE;
@@ -514,10 +514,7 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 
 		fb_dma_buffer = gst_imx_get_dma_buffer_from_buffer(uploaded_input_buffer);
 
-		{
-			gint64 sys_frame_num = cur_frame->system_frame_number;
-			g_hash_table_insert(imx_vpu_enc->uploaded_buffers_table, &sys_frame_num, uploaded_input_buffer);
-		}
+		g_hash_table_insert(imx_vpu_enc->uploaded_buffers_table, (gpointer)(gintptr)(cur_frame->system_frame_number), uploaded_input_buffer);
 
 		g_assert(fb_dma_buffer != NULL);
 
@@ -694,6 +691,8 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 				GstFlowReturn flow_ret;
 				ImxDmaBuffer *fb_dma_buffer;
 
+				GST_LOG_OBJECT(imx_vpu_enc, "need to acquire additional DMA buffer");
+
 				flow_ret = gst_buffer_pool_acquire_buffer(imx_vpu_enc->dma_buffer_pool, &buffer, NULL);
 				if (flow_ret != GST_FLOW_OK)
 				{
@@ -760,10 +759,7 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 
 				flow_ret = gst_video_encoder_finish_frame(encoder, out_frame);
 
-				{
-					gint64 sys_frame_num = system_frame_number;
-					g_hash_table_remove(imx_vpu_enc->uploaded_buffers_table, &sys_frame_num);
-				}
+				g_hash_table_remove(imx_vpu_enc->uploaded_buffers_table, (gpointer)(gintptr)system_frame_number);
 
 				break;
 			}
