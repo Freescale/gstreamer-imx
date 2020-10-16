@@ -425,7 +425,9 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 
 
 finish:
-	gst_buffer_unref(input_buffer);
+	/* Discard the uploaded version of the input buffer. */
+	if (uploaded_input_buffer != NULL)
+		gst_buffer_unref(uploaded_input_buffer);
 	return flow_ret;
 
 error:
