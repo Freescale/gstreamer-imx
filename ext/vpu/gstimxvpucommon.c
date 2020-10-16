@@ -443,6 +443,15 @@ gboolean gst_imx_vpu_color_format_to_gstvidfmt(GstVideoFormat *gst_video_format,
 		case IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_YUV444_8BIT: *gst_video_format = GST_VIDEO_FORMAT_NV24; break;
 		case IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_P010_10BIT: *gst_video_format = GST_VIDEO_FORMAT_P010_10LE; break;
 		case IMX_VPU_API_COLOR_FORMAT_YUV400_8BIT: *gst_video_format = GST_VIDEO_FORMAT_GRAY8; break;
+
+		case IMX_VPU_API_COLOR_FORMAT_PACKED_YUV422_UYVY_8BIT: *gst_video_format = GST_VIDEO_FORMAT_UYVY; break;
+		case IMX_VPU_API_COLOR_FORMAT_PACKED_YUV422_YUYV_8BIT: *gst_video_format = GST_VIDEO_FORMAT_YUY2; break;
+
+		case IMX_VPU_API_COLOR_FORMAT_RGB565: *gst_video_format = GST_VIDEO_FORMAT_RGB16; break;
+		case IMX_VPU_API_COLOR_FORMAT_BGR565: *gst_video_format = GST_VIDEO_FORMAT_BGR16; break;
+		case IMX_VPU_API_COLOR_FORMAT_RGBA8888: *gst_video_format = GST_VIDEO_FORMAT_RGBA; break;
+		case IMX_VPU_API_COLOR_FORMAT_BGRA8888: *gst_video_format = GST_VIDEO_FORMAT_BGRA; break;
+
 		default: ret = FALSE; break;
 	}
 
@@ -473,6 +482,15 @@ gboolean gst_imx_vpu_color_format_from_gstvidfmt(ImxVpuApiColorFormat *imxvpuapi
 		case GST_VIDEO_FORMAT_NV24: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_YUV444_8BIT; break;
 		case GST_VIDEO_FORMAT_P010_10LE: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_P010_10BIT; break;
 		case GST_VIDEO_FORMAT_GRAY8: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_YUV400_8BIT; break;
+
+		case GST_VIDEO_FORMAT_UYVY: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_PACKED_YUV422_UYVY_8BIT; break;
+		case GST_VIDEO_FORMAT_YUY2: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_PACKED_YUV422_YUYV_8BIT; break;
+
+		case GST_VIDEO_FORMAT_RGB16: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_RGB565; break;
+		case GST_VIDEO_FORMAT_BGR16: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_BGR565; break;
+		case GST_VIDEO_FORMAT_RGBA: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_RGBA8888; break;
+		case GST_VIDEO_FORMAT_BGRA: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_BGRA8888; break;
+
 		default: ret = FALSE; break;
 	}
 
