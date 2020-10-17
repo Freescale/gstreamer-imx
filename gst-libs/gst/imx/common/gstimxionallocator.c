@@ -142,6 +142,8 @@ static GstMemory* gst_imx_ion_allocator_alloc_internal(GstImxIonAllocator *imx_i
 
 static GstMemory* gst_imx_ion_allocator_gstalloc_alloc(GstAllocator *allocator, gsize size, GstAllocationParams *params);
 
+static GstMemory * gst_imx_ion_allocator_copy(GstMemory *memory, gssize offset, gssize size);
+
 
 /* Integration of the libimxdmabuffer ION allocator with GstDmaBufAllocator
  * is not straightforward. This is because the GstDmaBufAllocator closes the
@@ -243,6 +245,7 @@ static void gst_imx_ion_allocator_init(GstImxIonAllocator *imx_ion_allocator)
 {
 	GstAllocator *allocator = GST_ALLOCATOR(imx_ion_allocator);
 	allocator->mem_type = GST_IMX_ION_MEMORY_TYPE;
+	allocator->mem_copy = GST_DEBUG_FUNCPTR(gst_imx_ion_allocator_copy);
 
 	imx_ion_allocator->ion_fd_is_internal = FALSE;
 	imx_ion_allocator->ion_fd = -1;
@@ -503,6 +506,88 @@ static GstMemory* gst_imx_ion_allocator_gstalloc_alloc(GstAllocator *allocator, 
 finish:
 	GST_OBJECT_UNLOCK(imx_ion_allocator);
 	return memory;
+}
+
+
+static GstMemory * gst_imx_ion_allocator_copy(GstMemory *memory, gssize offset, gssize size)
+{
+	/* We explicitely do the copy here. GstAllocator has a fallback
+	 * mem_copy function that works in a very similar manner. But
+	 * we cannot rely on it, since this the GstFdAllocator's
+	 * GST_ALLOCATOR_FLAG_CUSTOM_ALLOC flag is set, and we inherit
+	 * from that class indirectly. This causes the fallback mem_copy
+	 * to not use our ION allocator, picking the sysmem allocator
+	 * instead. To make sure the copy is also ION-allocated (and thus
+	 * DMA-BUF backed), we perform the copy manually. */
+
+	int dmabuf_fd = -1;
+	int error = 0;
+	GstMemory *copy = NULL;
+	GstMapInfo src_map_info;
+	GstMapInfo dest_map_info;
+	GstImxIonAllocator *imx_ion_allocator = GST_IMX_ION_ALLOCATOR_CAST(memory->allocator);
+
+	if (G_UNLIKELY(!gst_memory_map(memory, &src_map_info, GST_MAP_READ)))
+	{
+		GST_ERROR_OBJECT(memory, "could not map source memory %p for copy", (gpointer)memory);
+		return NULL;
+	}
+
+	if (size == -1)
+		size = (gssize)(src_map_info.size) > offset ? (src_map_info.size - offset) : 0;
+
+	dmabuf_fd = imx_dma_buffer_ion_allocate_dmabuf(imx_ion_allocator->ion_fd, size, 1, imx_ion_allocator->ion_heap_id_mask, imx_ion_allocator->ion_heap_flags, &error);
+	if (G_UNLIKELY(dmabuf_fd < 0))
+	{
+		GST_ERROR_OBJECT(imx_ion_allocator, "could not open ION allocator device node: %s (%d)", strerror(error), error);
+		goto error;
+	}
+	GST_DEBUG_OBJECT(imx_ion_allocator, "allocated new DMA-BUF buffer with FD %d for gstmemory copy", dmabuf_fd);
+
+	copy = gst_imx_ion_allocator_alloc_internal(imx_ion_allocator, dmabuf_fd, size);
+	if (G_UNLIKELY(copy == NULL))
+		goto error;
+
+	if (G_UNLIKELY(!gst_memory_map(copy, &dest_map_info, GST_MAP_WRITE)))
+	{
+		GST_ERROR_OBJECT(memory, "could not map destination memory %p for copy", (gpointer)copy);
+	    goto error;
+	}
+
+	GST_LOG_OBJECT(
+		imx_ion_allocator,
+		"copying %" G_GSSIZE_FORMAT " byte(s) from gstmemory %p to gstmemory %p with offset %" G_GSSIZE_FORMAT,
+		size,
+		(gpointer)memory,
+		(gpointer)copy,
+		offset
+	);
+
+	memcpy(dest_map_info.data, src_map_info.data + offset, size);
+
+	gst_memory_unmap(memory, &dest_map_info);
+
+
+finish:
+	gst_memory_unmap(memory, &src_map_info);
+	return copy;
+
+error:
+	if (copy != NULL)
+	{
+		gst_memory_unref(copy);
+		/* The copy handles ownership over dmabuf_fd, so by
+		 * unref'ing it, the DMA-BUF FD got closed as well. */
+		dmabuf_fd = -1;
+	}
+
+	if (dmabuf_fd > 0)
+	{
+		close(dmabuf_fd);
+		dmabuf_fd = -1;
+	}
+
+	goto finish;
 }
 
 
