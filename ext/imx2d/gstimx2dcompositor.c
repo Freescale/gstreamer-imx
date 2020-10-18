@@ -161,8 +161,8 @@ enum
 
 #define DEFAULT_PAD_XPOS 0
 #define DEFAULT_PAD_YPOS 0
-#define DEFAULT_PAD_WIDTH 320
-#define DEFAULT_PAD_HEIGHT 240
+#define DEFAULT_PAD_WIDTH 0
+#define DEFAULT_PAD_HEIGHT 0
 #define DEFAULT_PAD_LEFT_MARGIN 0
 #define DEFAULT_PAD_TOP_MARGIN 0
 #define DEFAULT_PAD_RIGHT_MARGIN 0
@@ -412,14 +412,14 @@ static void gst_imx_2d_compositor_pad_set_property(GObject *object, guint prop_i
 	{
 		case PROP_PAD_XPOS:
 			GST_OBJECT_LOCK(self);
-			self->outer_region.x1 = g_value_get_int(value);
+			self->xpos = g_value_get_int(value);
 			self->region_coords_need_update = TRUE;
 			GST_OBJECT_UNLOCK(self);
 			break;
 
 		case PROP_PAD_YPOS:
 			GST_OBJECT_LOCK(self);
-			self->outer_region.y1 = g_value_get_int(value);
+			self->ypos = g_value_get_int(value);
 			self->region_coords_need_update = TRUE;
 			GST_OBJECT_UNLOCK(self);
 			break;
@@ -663,10 +663,19 @@ static GstPadProbeReturn gst_imx_2d_compositor_caps_event_probe(GstPad *pad, Gst
 static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dCompositorPad *self, GstVideoInfo *output_video_info)
 {
 	GstVideoInfo *input_video_info;
-	guint video_width, video_height;
+	gint video_width, video_height;
+	gint pad_width, pad_height;
 
 	if (!self->region_coords_need_update)
 		return;
+
+	input_video_info = &(GST_VIDEO_AGGREGATOR_PAD_CAST(self)->info);
+	video_width = GST_VIDEO_INFO_WIDTH(input_video_info);
+	video_height = GST_VIDEO_INFO_HEIGHT(input_video_info);
+
+	/* Pad width/height 0 means "use the width/height from the video". */
+	pad_width = (self->width != 0) ? self->width : video_width;
+	pad_height = (self->height != 0) ? self->height : video_height;
 
 	/* Relations between regions and margins:
 	 *
@@ -680,8 +689,8 @@ static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dComp
 
 	self->total_region.x1 = self->xpos;
 	self->total_region.y1 = self->ypos;
-	self->total_region.x2 = self->xpos + self->width;
-	self->total_region.y2 = self->ypos + self->height;
+	self->total_region.x2 = self->xpos + pad_width;
+	self->total_region.y2 = self->ypos + pad_height;
 
 	self->outer_region.x1 = self->total_region.x1 + self->extra_margin.left_margin;
 	self->outer_region.y1 = self->total_region.y1 + self->extra_margin.top_margin;
@@ -710,10 +719,6 @@ static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dComp
 	self->combined_margin.top_margin = self->extra_margin.top_margin;
 	self->combined_margin.right_margin = self->extra_margin.right_margin;
 	self->combined_margin.bottom_margin = self->extra_margin.bottom_margin;
-
-	input_video_info = &(GST_VIDEO_AGGREGATOR_PAD_CAST(self)->info);
-	video_width = GST_VIDEO_INFO_WIDTH(input_video_info);
-	video_height = GST_VIDEO_INFO_HEIGHT(input_video_info);
 
 	/* Calculate a letterbox_margin if necessary.
 	 *
@@ -765,8 +770,8 @@ static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dComp
 	                                     && (self->inner_region.y2 >= GST_VIDEO_INFO_HEIGHT(output_video_info));
 	self->total_region_fills_output_frame = (self->xpos <= 0)
 	                                     && (self->ypos <= 0)
-	                                     && (self->width >= GST_VIDEO_INFO_WIDTH(output_video_info))
-	                                     && (self->height >= GST_VIDEO_INFO_HEIGHT(output_video_info));
+	                                     && (pad_width >= GST_VIDEO_INFO_WIDTH(output_video_info))
+	                                     && (pad_height >= GST_VIDEO_INFO_HEIGHT(output_video_info));
 
 	GST_DEBUG_OBJECT(self, "calculated inner region: %" IMX_2D_REGION_FORMAT, IMX_2D_REGION_ARGS(&(self->inner_region)));
 
