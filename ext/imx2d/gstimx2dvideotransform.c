@@ -1501,7 +1501,18 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 	self->inout_info_set = FALSE;
 
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
+	if (self->imx_dma_buffer_allocator == NULL)
+	{
+		GST_ERROR_OBJECT(self, "creating DMA buffer allocator failed");
+		goto error;
+	}
+
 	self->uploader = gst_imx_dma_buffer_uploader_new(self->imx_dma_buffer_allocator);
+	if (self->uploader == NULL)
+	{
+		GST_ERROR_OBJECT(self, "creating DMA buffer uploader failed");
+		goto error;
+	}
 
 	/* We call start _after_ the allocator & uploader were
 	 * set up in case these might be needed. Currently,
