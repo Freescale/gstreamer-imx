@@ -565,7 +565,7 @@ static GstMemory * gst_imx_ion_allocator_copy(GstMemory *memory, gssize offset, 
 
 	memcpy(dest_map_info.data, src_map_info.data + offset, size);
 
-	gst_memory_unmap(memory, &dest_map_info);
+	gst_memory_unmap(copy, &dest_map_info);
 
 
 finish:
