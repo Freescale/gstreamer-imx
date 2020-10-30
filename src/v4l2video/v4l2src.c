@@ -257,14 +257,14 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 			v4l2src->fps_n, v4l2src->fps_d);
 	}
 
-	/* Determine the desired input pixelformat (UYVY or I420)
+	/* Determine the desired input pixelformat (UYVY, YUY2 or I420)
 	 * by looking at the allowed srccaps */
 	{
 		GstCaps *allowed_src_caps, *available_format_caps, *allowed_format_caps;
 
 		pixelformat = V4L2_PIX_FMT_YUV420;
 
-		available_format_caps = gst_caps_from_string("video/x-raw, format = { UYVY, I420 }");
+		available_format_caps = gst_caps_from_string("video/x-raw, format = { UYVY, YUY2, I420 }");
 		allowed_src_caps = gst_pad_get_allowed_caps(GST_BASE_SRC_PAD(v4l2src));
 
 		/* Apply intersection to get caps with a valid pixelformat */
@@ -289,6 +289,8 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 						pixelformat = V4L2_PIX_FMT_UYVY;
 					else if (g_strcmp0(format_str, "I420") == 0)
 						pixelformat = V4L2_PIX_FMT_YUV420;
+					else if (g_strcmp0(format_str, "YUY2") == 0)
+						pixelformat = V4L2_PIX_FMT_YUYV;
 					else
 					{
 						GST_ERROR_OBJECT(v4l2src, "pixel format \"%s\" is unsupported", format_str);
@@ -668,7 +670,7 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 
 	caps = gst_caps_from_string(
 		"video/x-raw"
-		", format = (string) { UYVY, I420 }"
+		", format = (string) { UYVY, YUY2, I420 }"
 		", width = (gint) [ 16, MAX ]"
 		", height = (gint) [ 16, MAX ]"
 		", interlace-mode = (string) { progressive, interleaved }"
