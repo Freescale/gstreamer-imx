@@ -583,6 +583,16 @@ static void gst_imx_g2d_blitter_set_output_rotation(GstImxG2DBlitter *g2d_blitte
 			g2d_blitter->input_surface.rot = G2D_FLIP_V;
 			g2d_blitter->output_surface.rot = G2D_ROTATION_0;
 			break;
+
+		case GST_IMX_CANVAS_INNER_ROTATION_UL_LR:
+			g2d_blitter->input_surface.rot = G2D_FLIP_H;
+			g2d_blitter->output_surface.rot = G2D_ROTATION_90;
+			break;
+
+		case GST_IMX_CANVAS_INNER_ROTATION_UR_LL:
+			g2d_blitter->input_surface.rot = G2D_FLIP_V;
+			g2d_blitter->output_surface.rot = G2D_ROTATION_90;
+			break;
 	}
 }
 

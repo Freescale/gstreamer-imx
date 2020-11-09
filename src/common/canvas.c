@@ -17,6 +17,8 @@ GType gst_imx_canvas_inner_rotation_get_type(void)
 			{ GST_IMX_CANVAS_INNER_ROTATION_270_DEGREES, "Rotate clockwise 270 degrees", "rotate-270" },
 			{ GST_IMX_CANVAS_INNER_ROTATION_HFLIP, "Flip horizontally", "horizontal-flip" },
 			{ GST_IMX_CANVAS_INNER_ROTATION_VFLIP, "Flip vertically", "vertical-flip" },
+			{ GST_IMX_CANVAS_INNER_ROTATION_UL_LR, "Flip across upper left/lower right diagonal", "upper-left-diagonal"},
+			{ GST_IMX_CANVAS_INNER_ROTATION_UR_LL, "Flip across upper right/lower left diagonal", "upper-right-diagonal"},
 			{ 0, NULL, NULL },
 		};
 
@@ -38,6 +40,8 @@ gboolean gst_imx_canvas_does_rotation_transpose(GstImxCanvasInnerRotation rotati
 	{
 		case GST_IMX_CANVAS_INNER_ROTATION_90_DEGREES:
 		case GST_IMX_CANVAS_INNER_ROTATION_270_DEGREES:
+		case GST_IMX_CANVAS_INNER_ROTATION_UL_LR:
+		case GST_IMX_CANVAS_INNER_ROTATION_UR_LL:
 			return TRUE;
 		default:
 			return FALSE;
