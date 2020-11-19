@@ -321,7 +321,7 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	/* Upload the input buffer. The uploader creates a deep
 	 * copy if necessary, but tries to avoid that if possible
 	 * by passing through the buffer (if it consists purely
-	 * of imxdmabuffer backeed gstmemory blocks) or by
+	 * of imxdmabuffer backend gstmemory blocks) or by
 	 * duplicating DMA-BUF FDs with dup(). */
 	flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
 	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
