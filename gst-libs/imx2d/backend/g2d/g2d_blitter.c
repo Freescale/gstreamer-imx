@@ -292,6 +292,12 @@ static void imx_2d_backend_g2d_blitter_destroy(Imx2dBlitter *blitter)
 
 	assert(blitter != NULL);
 
+	if (g2d_blitter->g2d_handle)
+	{
+		if (g2d_close(g2d_blitter->g2d_handle) != 0)
+			IMX_2D_LOG(ERROR, "closing g2d device failed");
+	}
+
 	if (g2d_blitter->fill_g2d_surface_dmabuffer != NULL)
 	{
 		IMX_2D_LOG(DEBUG, "destroying G2D fill surface DMA buffer %p", (void *)(g2d_blitter->fill_g2d_surface_dmabuffer));
@@ -312,10 +318,13 @@ static int imx_2d_backend_g2d_blitter_start(Imx2dBlitter *blitter)
 {
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
 
-	if (g2d_open(&(g2d_blitter->g2d_handle)) != 0)
+	if (!g2d_blitter->g2d_handle)
 	{
-		IMX_2D_LOG(ERROR, "opening g2d device failed");
-		return FALSE;
+		if (g2d_open(&(g2d_blitter->g2d_handle)) != 0)
+		{
+			IMX_2D_LOG(ERROR, "opening g2d device failed");
+			return FALSE;
+		}
 	}
 
 	if (g2d_make_current(g2d_blitter->g2d_handle, G2D_HARDWARE_2D) != 0)
@@ -323,6 +332,7 @@ static int imx_2d_backend_g2d_blitter_start(Imx2dBlitter *blitter)
 		IMX_2D_LOG(ERROR, "g2d_make_current() failed");
 		if (g2d_close(g2d_blitter->g2d_handle) != 0)
 			IMX_2D_LOG(ERROR, "closing g2d device failed");
+		g2d_blitter->g2d_handle = NULL;
 		return FALSE;
 	}
 
@@ -338,9 +348,6 @@ static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 	assert(blitter != NULL);
 
 	ret = (g2d_finish(g2d_blitter->g2d_handle) == 0);
-
-	if (g2d_close(g2d_blitter->g2d_handle) != 0)
-		IMX_2D_LOG(ERROR, "closing g2d device failed");
 
 	return ret;
 }
