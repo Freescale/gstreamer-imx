@@ -47,6 +47,7 @@ enum
 	PROP_FBDEV_NAME,
 	PROP_USE_VSYNC,
 	PROP_CLEAR_AT_NULL,
+	PROP_CLEAR_ON_RELOCATE,
 	PROP_INPUT_CROP,
 	PROP_OUTPUT_ROTATION,
 	PROP_WINDOW_X_COORD,
@@ -65,6 +66,7 @@ enum
 #define DEFAULT_FBDEV_NAME "/dev/fb0"
 #define DEFAULT_USE_VSYNC FALSE
 #define DEFAULT_CLEAR_AT_NULL FALSE
+#define DEFAULT_CLEAR_ON_RELOCATE FALSE
 #define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_OUTPUT_ROTATION GST_IMX_CANVAS_INNER_ROTATION_NONE
 #define DEFAULT_WINDOW_X_COORD 0
@@ -185,6 +187,17 @@ static void gst_imx_blitter_video_sink_class_init(GstImxBlitterVideoSinkClass *k
 			"clear-at-null",
 			"Clear at null",
 			"Clear the screen by filling it with black pixels when switching to the NULL state",
+			DEFAULT_CLEAR_AT_NULL,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_CLEAR_ON_RELOCATE,
+		g_param_spec_boolean(
+			"clear-on-relocate",
+			"Clear on relocate",
+			"Clear the screen by filling it with black pixels when relocating the video window",
 			DEFAULT_CLEAR_AT_NULL,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
@@ -321,6 +334,7 @@ static void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_vide
 	blitter_video_sink->old_fb_page = 1;
 	blitter_video_sink->use_vsync = DEFAULT_USE_VSYNC;
 	blitter_video_sink->clear_at_null = DEFAULT_CLEAR_AT_NULL;
+	blitter_video_sink->clear_on_relocate = DEFAULT_CLEAR_ON_RELOCATE;
 	blitter_video_sink->input_crop = DEFAULT_INPUT_CROP;
 	blitter_video_sink->last_frame_with_cropdata = FALSE;
 
@@ -334,6 +348,7 @@ static void gst_imx_blitter_video_sink_init(GstImxBlitterVideoSink *blitter_vide
 	memset(&(blitter_video_sink->canvas), 0, sizeof(GstImxCanvas));
 	blitter_video_sink->canvas.keep_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
 	blitter_video_sink->canvas_needs_update = TRUE;
+	blitter_video_sink->canvas_bounds_changed = FALSE;
 	blitter_video_sink->canvas.fill_color = 0xFF000000;
 
 	g_mutex_init(&(blitter_video_sink->mutex));
@@ -455,6 +470,14 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			break;
 		}
 
+		case PROP_CLEAR_ON_RELOCATE:
+		{
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			blitter_video_sink->clear_on_relocate = g_value_get_boolean(value);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
+			break;
+		}
+
 		case PROP_INPUT_CROP:
 		{
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
@@ -477,6 +500,7 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			blitter_video_sink->window_x_coord = g_value_get_int(value);
 			blitter_video_sink->canvas_needs_update = TRUE;
+			blitter_video_sink->canvas_bounds_changed = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 		}
@@ -486,6 +510,7 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			blitter_video_sink->window_y_coord = g_value_get_int(value);
 			blitter_video_sink->canvas_needs_update = TRUE;
+			blitter_video_sink->canvas_bounds_changed = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 		}
@@ -495,6 +520,7 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			blitter_video_sink->window_width = g_value_get_uint(value);
 			blitter_video_sink->canvas_needs_update = TRUE;
+			blitter_video_sink->canvas_bounds_changed = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 		}
@@ -504,6 +530,7 @@ static void gst_imx_blitter_video_sink_set_property(GObject *object, guint prop_
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			blitter_video_sink->window_height = g_value_get_uint(value);
 			blitter_video_sink->canvas_needs_update = TRUE;
+			blitter_video_sink->canvas_bounds_changed = TRUE;
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 		}
@@ -574,6 +601,12 @@ static void gst_imx_blitter_video_sink_get_property(GObject *object, guint prop_
 		case PROP_CLEAR_AT_NULL:
 			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
 			g_value_set_boolean(value, blitter_video_sink->clear_at_null);
+			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
+			break;
+
+		case PROP_CLEAR_ON_RELOCATE:
+			GST_IMX_BLITTER_VIDEO_SINK_LOCK(blitter_video_sink);
+			g_value_set_boolean(value, blitter_video_sink->clear_on_relocate);
 			GST_IMX_BLITTER_VIDEO_SINK_UNLOCK(blitter_video_sink);
 			break;
 
@@ -1368,6 +1401,9 @@ static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *bli
 	GstImxRegion *outer_region = &(blitter_video_sink->canvas.outer_region);
 	GstImxRegion source_subset;
 
+	if (blitter_video_sink->canvas_bounds_changed && blitter_video_sink->clear_on_relocate)
+		gst_imx_blitter_video_sink_clear_fb_pages(blitter_video_sink);
+
 	/* Define the outer region */
 	if ((blitter_video_sink->window_width == 0) || (blitter_video_sink->window_height == 0))
 	{
@@ -1397,6 +1433,7 @@ static void gst_imx_blitter_video_sink_update_canvas(GstImxBlitterVideoSink *bli
 	gst_imx_blitter_set_output_canvas(blitter_video_sink->blitter, &(blitter_video_sink->canvas));
 
 	blitter_video_sink->canvas_needs_update = FALSE;
+	blitter_video_sink->canvas_bounds_changed = FALSE;
 }
 
 
