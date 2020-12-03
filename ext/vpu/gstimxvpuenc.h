@@ -102,6 +102,7 @@ struct _GstImxVpuEnc
 	guint gop_size;
 	guint bitrate;
 	guint quantization;
+	guint intra_refresh;
 };
 
 
