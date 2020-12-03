@@ -807,7 +807,7 @@ finish:
 }
 
 
-void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompressionFormat compression_format, gboolean with_rate_control, gboolean with_constant_quantization, gboolean with_gop_support)
+void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompressionFormat compression_format, gboolean with_rate_control, gboolean with_constant_quantization, gboolean with_gop_support, gboolean with_intra_refresh)
 {
 	GObjectClass *object_class;
 	GstElementClass *element_class;
@@ -888,18 +888,20 @@ void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompre
 			)
 		);
 	}
-	g_object_class_install_property(
-		object_class,
-		PROP_INTRA_REFRESH,
-		g_param_spec_uint(
-			"intra-refresh",
-			"Intra Refresh",
-			"Minimum number of MBs to encode as intra MB",
-			0, G_MAXUINT,
-			DEFAULT_INTRA_REFRESH,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
+	if (with_intra_refresh)
+	{
+		g_object_class_install_property(
+			object_class,
+			PROP_INTRA_REFRESH,
+			g_param_spec_uint(
+				"intra-refresh",
+				"Intra Refresh",
+				"Minimum number of MBs to encode as intra MB",
+				0, G_MAXUINT, DEFAULT_INTRA_REFRESH,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			)
+		);
+	}
 
 	longname = g_strdup_printf("i.MX VPU %s video encoder", codec_details->desc_name);
 	classification = g_strdup("Codec/Encoder/Video/Hardware");

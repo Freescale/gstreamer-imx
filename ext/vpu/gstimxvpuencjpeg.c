@@ -53,7 +53,7 @@ static void gst_imx_vpu_enc_jpeg_class_init(GstImxVpuEncJPEGClass *klass)
 	imx_vpu_enc_class = GST_IMX_VPU_ENC_CLASS(klass);
 	imx_vpu_enc_class->get_output_caps = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_jpeg_get_output_caps);
 
-	gst_imx_vpu_enc_common_class_init(imx_vpu_enc_class, IMX_VPU_API_COMPRESSION_FORMAT_JPEG, FALSE, TRUE, FALSE);
+	gst_imx_vpu_enc_common_class_init(imx_vpu_enc_class, IMX_VPU_API_COMPRESSION_FORMAT_JPEG, FALSE, TRUE, FALSE, FALSE);
 }
 
 
