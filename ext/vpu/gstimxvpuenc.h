@@ -102,6 +102,7 @@ struct _GstImxVpuEnc
 	guint gop_size;
 	guint bitrate;
 	guint quantization;
+	guint intra_refresh;
 };
 
 
@@ -121,7 +122,7 @@ struct _GstImxVpuEncClass
 };
 
 
-void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompressionFormat compression_format, gboolean with_rate_control, gboolean with_constant_quantization, gboolean with_gop_support);
+void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompressionFormat compression_format, gboolean with_rate_control, gboolean with_constant_quantization, gboolean with_gop_support, gboolean with_intra_refresh);
 void gst_imx_vpu_enc_common_init(GstImxVpuEnc *imx_vpu_enc);
 
 GType gst_imx_vpu_enc_get_type(void);

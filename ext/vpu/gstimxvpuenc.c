@@ -58,13 +58,14 @@ enum
 	PROP_0,
 	PROP_GOP_SIZE,
 	PROP_BITRATE,
-	PROP_QUANTIZATION
+	PROP_QUANTIZATION,
+	PROP_INTRA_REFRESH,
 };
 
 
 #define DEFAULT_GOP_SIZE          16
 #define DEFAULT_BITRATE           0
-
+#define DEFAULT_INTRA_REFRESH     0
 
 
 
@@ -115,6 +116,7 @@ static void gst_imx_vpu_enc_init(GstImxVpuEnc *imx_vpu_enc)
 {
 	imx_vpu_enc->gop_size = DEFAULT_GOP_SIZE;
 	imx_vpu_enc->bitrate = DEFAULT_BITRATE;
+	imx_vpu_enc->intra_refresh = DEFAULT_INTRA_REFRESH;
 
 	imx_vpu_enc->stream_buffer = NULL;
 	imx_vpu_enc->encoder = NULL;
@@ -173,6 +175,12 @@ static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue 
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
+		case PROP_INTRA_REFRESH:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			imx_vpu_enc->intra_refresh = g_value_get_uint(value);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
 		default:
 			if (klass->set_encoder_property != NULL)
 				klass->set_encoder_property(object, prop_id, value, pspec);
@@ -205,6 +213,12 @@ static void gst_imx_vpu_enc_get_property(GObject *object, guint prop_id, GValue 
 		case PROP_QUANTIZATION:
 			GST_OBJECT_LOCK(imx_vpu_enc);
 			g_value_set_uint(value, imx_vpu_enc->quantization);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
+		case PROP_INTRA_REFRESH:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			g_value_set_uint(value, imx_vpu_enc->intra_refresh);
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
@@ -380,6 +394,7 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 	open_params->bitrate = imx_vpu_enc->bitrate;
 	open_params->gop_size = imx_vpu_enc->gop_size;
 	open_params->quantization = imx_vpu_enc->quantization;
+	open_params->min_intra_refresh_mb_count = imx_vpu_enc->intra_refresh;
 	GST_OBJECT_UNLOCK(imx_vpu_enc);
 
 	GST_DEBUG_OBJECT(encoder, "setting bitrate to %u kbps and GOP size to %u", open_params->bitrate, open_params->gop_size);
@@ -790,7 +805,7 @@ finish:
 }
 
 
-void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompressionFormat compression_format, gboolean with_rate_control, gboolean with_constant_quantization, gboolean with_gop_support)
+void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompressionFormat compression_format, gboolean with_rate_control, gboolean with_constant_quantization, gboolean with_gop_support, gboolean with_intra_refresh)
 {
 	GObjectClass *object_class;
 	GstElementClass *element_class;
@@ -867,6 +882,20 @@ void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompre
 				with_rate_control ? "Constant quantization factor to use if rate control is disabled (meaning, bitrate is set to 0)" : "Constant quantization factor to use",
 				format_support_details->min_quantization, format_support_details->max_quantization,
 				gst_imx_vpu_get_default_quantization(format_support_details),
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			)
+		);
+	}
+	if (with_intra_refresh)
+	{
+		g_object_class_install_property(
+			object_class,
+			PROP_INTRA_REFRESH,
+			g_param_spec_uint(
+				"intra-refresh",
+				"Intra Refresh",
+				"Minimum number of MBs to encode as intra MB",
+				0, G_MAXUINT, DEFAULT_INTRA_REFRESH,
 				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 			)
 		);
