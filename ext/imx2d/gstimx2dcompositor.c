@@ -1144,11 +1144,8 @@ static gboolean gst_imx_2d_compositor_start(GstAggregator *aggregator)
 	 * happen later in the aggregate_frames() and
 	 * negotiated_src_caps() vfuncs, respectively. */
 	self->output_surface = imx_2d_surface_create(NULL);
-	if (self->output_surface == NULL)
-	{
-		GST_ERROR_OBJECT(self, "creating output surface failed");
-		goto error;
-	}
+	/* imx_2d_surface_create() is never supposed to return NULL. */
+	g_assert(self->output_surface != NULL);
 
 	return TRUE;
 
