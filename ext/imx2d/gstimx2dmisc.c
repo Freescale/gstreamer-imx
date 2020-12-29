@@ -279,6 +279,13 @@ GstVideoFormat gst_imx_2d_convert_to_gst_video_format(Imx2dPixelFormat imx2d_for
 
 GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities const *capabilities, GstPadDirection direction)
 {
+	return gst_imx_2d_get_caps_from_imx2d_capabilities_full(capabilities, direction, FALSE);
+}
+
+
+GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities_full(Imx2dHardwareCapabilities const *capabilities, GstPadDirection direction, gboolean add_composition_meta)
+{
+	GstCaps *caps;
 	GstStructure *structure;
 	Imx2dPixelFormat const *supported_formats;
 	int i, num_supported_formats;
@@ -353,7 +360,30 @@ GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities c
 	gst_structure_take_value(structure, "height", &height_range_gvalue);
 	gst_structure_take_value(structure, "format", &format_list_gvalue);
 
-	return gst_caps_new_full(structure, NULL);
+	caps = gst_caps_new_full(structure, NULL);
+
+	if (add_composition_meta)
+	{
+		/* Duplicate the structure we just added (which is stored in
+		 * the caps at index 0), then add caps features to that copy
+		 * (which is stored in the caps at index 1). */
+
+		structure = gst_caps_get_structure(caps, 0);
+		structure = gst_structure_copy(structure);
+		gst_caps_append_structure(caps, structure);
+
+		gst_caps_set_features(
+			caps,
+			1,
+			gst_caps_features_new(
+				GST_CAPS_FEATURE_MEMORY_SYSTEM_MEMORY,
+				GST_CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION,
+				NULL
+			)
+		);
+	}
+
+	return caps;
 }
 
 

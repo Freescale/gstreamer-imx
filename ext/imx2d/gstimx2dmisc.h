@@ -44,6 +44,7 @@ Imx2dPixelFormat gst_imx_2d_convert_from_gst_video_format(GstVideoFormat gst_vid
 GstVideoFormat gst_imx_2d_convert_to_gst_video_format(Imx2dPixelFormat imx2d_format);
 
 GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities(Imx2dHardwareCapabilities const *capabilities, GstPadDirection direction);
+GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities_full(Imx2dHardwareCapabilities const *capabilities, GstPadDirection direction, gboolean add_composition_meta);
 
 void gst_imx_2d_canvas_calculate_letterbox_margin(
 	Imx2dBlitMargin *margin,
