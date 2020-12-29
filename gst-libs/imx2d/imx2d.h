@@ -263,6 +263,9 @@ typedef struct _Imx2dHardwareCapabilities Imx2dHardwareCapabilities;
  * @min_height: Minimum allowed surface height, in pixels.
  * @max_height: Maximum allowed surface height, in pixels.
  * @height_step_size: Step size for height values, in pixels.
+ * @stride_alignment: Required stride alignment, in bytes.
+ *     This is always a power-of-two value. Stride sizes must
+ *     be an integer multiple of this value.
  *
  * Describes the capabilities of the underlying 2D hardware.
  *
@@ -281,6 +284,8 @@ struct _Imx2dHardwareCapabilities
 
 	int min_width, max_width, width_step_size;
 	int min_height, max_height, height_step_size;
+
+	int stride_alignment;
 };
 
 

@@ -663,7 +663,9 @@ static Imx2dHardwareCapabilities const capabilities = {
 	.num_supported_dest_pixel_formats = sizeof(supported_dest_pixel_formats) / sizeof(Imx2dPixelFormat),
 
 	.min_width = 4, .max_width = INT_MAX, .width_step_size = 1,
-	.min_height = 4, .max_height = INT_MAX, .height_step_size = 1
+	.min_height = 4, .max_height = INT_MAX, .height_step_size = 1,
+
+	.stride_alignment = 16
 };
 
 Imx2dHardwareCapabilities const * imx_2d_backend_g2d_get_hardware_capabilities(void)
