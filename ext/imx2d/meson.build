@@ -31,6 +31,7 @@ endif
 source = [
 	'gstimx2dmisc.c',
 	'gstimx2dvideotransform.c',
+	'gstimx2dvideooverlayhandler.c',
 	'plugin.c'
 ]
 
