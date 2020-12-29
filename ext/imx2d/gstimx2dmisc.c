@@ -572,6 +572,8 @@ void gst_imx_2d_assign_input_buffer_to_surface(
 		}
 		else
 		{
+			g_assert(input_video_info != NULL);
+
 			for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(input_video_info); ++plane_index)
 			{
 				GstMemory *in_memory = gst_buffer_peek_memory(uploaded_input_buffer, plane_index);
@@ -624,6 +626,8 @@ void gst_imx_2d_assign_input_buffer_to_surface(
 		}
 		else
 		{
+			g_assert(input_video_info != NULL);
+
 			for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(input_video_info); ++plane_index)
 			{
 				surface_desc->plane_strides[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(input_video_info, plane_index);

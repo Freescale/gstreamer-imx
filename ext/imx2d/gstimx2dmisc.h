@@ -57,6 +57,11 @@ void gst_imx_2d_canvas_calculate_letterbox_margin(
 
 gboolean gst_imx_2d_check_input_buffer_structure(GstBuffer *input_buffer, guint num_planes);
 
+/* Assigns DMA buffers of uploaded_input_buffer to the surface,
+ * and fills the surface description plane_stride values.
+ * input_video_info is used as a fallback in case original_input_buffer
+ * has no video meta. If it is 100% guaranteed that original_input_buffer
+ * _does_ have that meta, it is OK to set input_video_info to NULL. */
 void gst_imx_2d_assign_input_buffer_to_surface(
 	GstBuffer *original_input_buffer, GstBuffer *uploaded_input_buffer,
 	Imx2dSurface *surface,
