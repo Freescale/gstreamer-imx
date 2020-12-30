@@ -34,14 +34,6 @@ G_BEGIN_DECLS
 #define GST_IS_IMX_DMA_BUFFER_UPLOADER_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE((klass), GST_TYPE_IMX_DMA_BUFFER_UPLOADER))
 
 
-typedef struct _GstImxDmaBufferUploader GstImxDmaBufferUploader;
-typedef struct _GstImxDmaBufferUploaderClass GstImxDmaBufferUploaderClass;
-
-
-typedef struct _GstImxDmaBufferUploadMethodContext GstImxDmaBufferUploadMethodContext;
-typedef struct _GstImxDmaBufferUploadMethodType GstImxDmaBufferUploadMethodType;
-
-
 /**
  * GstImxDmaBufferUploader:
  *
@@ -82,23 +74,12 @@ typedef struct _GstImxDmaBufferUploadMethodType GstImxDmaBufferUploadMethodType;
  * into custom ImxDmaBuffer blocks, or simply pass through GstMemory if it already contains
  * an ImxDmaBuffer. Download = Just push ImxDmaBuffer-backed GstMemory downstream.
  */
-struct _GstImxDmaBufferUploader
-{
-	GstObject parent;
-
-	/*< private >*/
-
-	GstImxDmaBufferUploadMethodContext **upload_method_contexts;
-
-	GstAllocator *imx_dma_buffer_allocator;
-	GstCaps *output_caps;
-};
+typedef struct _GstImxDmaBufferUploader GstImxDmaBufferUploader;
+typedef struct _GstImxDmaBufferUploaderClass GstImxDmaBufferUploaderClass;
 
 
-struct _GstImxDmaBufferUploaderClass
-{
-	GstObjectClass parent_class;
-};
+typedef struct _GstImxDmaBufferUploadMethodContext GstImxDmaBufferUploadMethodContext;
+typedef struct _GstImxDmaBufferUploadMethodType GstImxDmaBufferUploadMethodType;
 
 
 

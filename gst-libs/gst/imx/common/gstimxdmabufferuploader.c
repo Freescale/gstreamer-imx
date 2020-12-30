@@ -65,6 +65,25 @@ static GstDebugCategory* gst_imx_dma_buffer_uploader_ensure_debug_category()
 
 
 
+struct _GstImxDmaBufferUploader
+{
+	GstObject parent;
+
+	/*< private >*/
+
+	GstImxDmaBufferUploadMethodContext **upload_method_contexts;
+
+	GstAllocator *imx_dma_buffer_allocator;
+	GstCaps *output_caps;
+};
+
+
+struct _GstImxDmaBufferUploaderClass
+{
+	GstObjectClass parent_class;
+};
+
+
 struct _GstImxDmaBufferUploadMethodType
 {
 	gchar const *name;
