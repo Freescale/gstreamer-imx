@@ -463,6 +463,12 @@ error:
 }
 
 
+GstAllocator* gst_imx_dma_buffer_uploader_get_allocator(GstImxDmaBufferUploader *uploader)
+{
+	return gst_object_ref(GST_OBJECT(uploader->imx_dma_buffer_allocator));
+}
+
+
 static void gst_imx_dma_buffer_uploader_destroy_upload_method_contexts(GstImxDmaBufferUploader *uploader)
 {
 	gint i;

@@ -104,6 +104,15 @@ GType gst_imx_dma_buffer_uploader_get_type(void);
 GstImxDmaBufferUploader* gst_imx_dma_buffer_uploader_new(GstAllocator *imx_dma_buffer_allocator);
 
 /**
+ * gst_imx_dma_buffer_uploader_get_allocator:
+ * @uploader: Uploader instance to get the allocator from.
+ *
+ * Returns: (transfer full) The ImxDmaBuffer allocator that this uploader uses.
+ * Unref with gst_object_unref() after use.
+ */
+GstAllocator* gst_imx_dma_buffer_uploader_get_allocator(GstImxDmaBufferUploader *uploader);
+
+/**
  * gst_imx_dma_buffer_uploader_perform:
  * @uploader: Uploader instance to use for uploading data.
  * @input_buffer: (transfer-none) Buffer that shall be uploaded.
