@@ -25,6 +25,7 @@
 #include "gst/imx/common/gstimxdmabufferuploader.h"
 #include "imx2d/imx2d.h"
 #include "gstimx2dmisc.h"
+#include "gstimx2dvideooverlayhandler.h"
 
 
 G_BEGIN_DECLS
@@ -57,6 +58,8 @@ struct _GstImx2dVideoTransform
 	gboolean inout_info_equal;
 	gboolean inout_info_set;
 
+	gboolean passing_through_overlay_meta;
+
 	GstVideoInfo input_video_info;
 	GstVideoInfo output_video_info;
 
@@ -66,6 +69,8 @@ struct _GstImx2dVideoTransform
 	Imx2dSurface *output_surface;
 
 	Imx2dSurfaceDesc input_surface_desc;
+
+	GstImx2dVideoOverlayHandler *overlay_handler;
 
 	gboolean input_crop;
 	Imx2dRotation output_rotation;

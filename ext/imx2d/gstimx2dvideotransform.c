@@ -62,6 +62,7 @@ static void gst_imx_2d_video_transform_fixate_format_caps(GstBaseTransform *tran
 static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform, GstCaps *input_caps, GstCaps *output_caps);
 
 /* Allocator. */
+static gboolean gst_imx_2d_video_transform_propose_allocation(GstBaseTransform *transform, GstQuery *decide_query, GstQuery *query);
 static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *transform, GstQuery *query);
 
 /* Frame output. */
@@ -108,6 +109,7 @@ static void gst_imx_2d_video_transform_class_init(GstImx2dVideoTransformClass *k
 	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_transform_caps);
 	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_fixate_caps);
 	base_transform_class->set_caps              = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_set_caps);
+	base_transform_class->propose_allocation    = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_propose_allocation);
 	base_transform_class->decide_allocation     = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_decide_allocation);
 	base_transform_class->prepare_output_buffer = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_prepare_output_buffer);
 	base_transform_class->transform             = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_transform_frame);
@@ -159,6 +161,8 @@ void gst_imx_2d_video_transform_init(GstImx2dVideoTransform *self)
 	self->inout_info_equal = FALSE;
 	self->inout_info_set = FALSE;
 
+	self->passing_through_overlay_meta = FALSE;
+
 	gst_video_info_init(&(self->input_video_info));
 	gst_video_info_init(&(self->output_video_info));
 
@@ -166,6 +170,8 @@ void gst_imx_2d_video_transform_init(GstImx2dVideoTransform *self)
 
 	self->input_surface = NULL;
 	self->output_surface = NULL;
+
+	self->overlay_handler = NULL;
 
 	self->input_crop = DEFAULT_INPUT_CROP;
 	self->output_rotation = DEFAULT_OUTPUT_ROTATION;
@@ -331,22 +337,34 @@ static gboolean gst_imx_2d_video_transform_src_event(GstBaseTransform *transform
 }
 
 
-static GstCaps* gst_imx_2d_video_transform_transform_caps(GstBaseTransform *transform, G_GNUC_UNUSED GstPadDirection direction, GstCaps *caps, GstCaps *filter)
+static GstCaps* gst_imx_2d_video_transform_transform_caps(GstBaseTransform *transform, GstPadDirection direction, GstCaps *caps, GstCaps *filter)
 {
-	GstCaps *tmpcaps, *result;
+	GstCaps *unfiltered_caps, *transformed_caps;
 	GstStructure *structure;
-	gint i, n;
+	GstCapsFeatures *features;
+	gint caps_idx, num_caps;
+
 
 	/* Process each structure from the caps, copy them, and modify them if necessary. */
-	tmpcaps = gst_caps_new_empty();
-	n = gst_caps_get_size(caps);
-	for (i = 0; i < n; i++)
+
+	unfiltered_caps = gst_caps_new_empty();
+	num_caps = gst_caps_get_size(caps);
+
+	for (caps_idx = 0; caps_idx < num_caps; ++caps_idx)
 	{
-		structure = gst_caps_get_structure(caps, i);
+		structure = gst_caps_get_structure(caps, caps_idx);
+		features = gst_caps_get_features(caps, caps_idx);
+
+		/* Copy the caps features since the gst_caps_append_structure_full()
+		 * call below takes ownership over the caps features object. */
+		features = gst_caps_features_copy(features);
 
 		/* If this is already expressed by the existing caps, skip this structure. */
-		if ((i > 0) && gst_caps_is_subset_structure(tmpcaps, structure))
+		if ((caps_idx > 0) && gst_caps_is_subset_structure_full(unfiltered_caps, structure, features))
+		{
+			gst_caps_features_free(features);
 			continue;
+		}
 
 		/* Make the copy. */
 		structure = gst_structure_copy(structure);
@@ -374,26 +392,105 @@ static GstCaps* gst_imx_2d_video_transform_transform_caps(GstBaseTransform *tran
 			);
 		}
 
-		gst_caps_append_structure(tmpcaps, structure);
+		gst_caps_append_structure_full(unfiltered_caps, structure, features);
 	}
+
+	GST_DEBUG_OBJECT(transform, "got unfiltered caps: %" GST_PTR_FORMAT, (gpointer)unfiltered_caps);
+
+
+	/* Create a copy of the unfiltered caps, and for each structure in the copy,
+	 * add/remove the overlay composition meta caps feature. The intent here
+	 * is to make sure the caps always contain versions of these structure with
+	 * and without that caps feature.
+	 *
+	 * If the direction is GST_PAD_SRC, it means that "caps" is the srcpad, and
+	 * we are figuring out what the corresponding sink caps are. In this case,
+	 * we want to _add_ the caps feature from the copy, since the srcpad may
+	 * have caps that don't have that caps feature (even though this transform
+	 * element _can_ handle that caps feature, therefore we do want it present
+	 * in the sink pad caps).
+	 *
+	 * If the direction is GST_PAD_SINK, it means that "caps" is the sinkpad, and
+	 * we are figuring out what the corresponding src caps are. In this case,
+	 * we want to _remove_ the caps feature from the copy, since the sinkpad
+	 * may have caps that contain that caps features while downstream doesn't
+	 * support it (leading to incompatible caps if our src pad caps only contain
+	 * structures that have that caps feature attached).
+	 *
+	 * The copy is then merged with the original to provide a result that contains
+	 * structures with and without that caps feature. Note tthat when merging,
+	 * we place the copy _first_. This causes caps with the caps feature to
+	 * come first, and those without to come after. This is important to make
+	 * sure that when gst_imx_2d_video_transform_fixate_caps() is called, the
+	 * very first caps contain the caps feature. In cases where downstream cannot
+	 * handle that caps feature, only caps without that feature will make it
+	 * through the filter below, so this case is also covered. */
+
+	num_caps = gst_caps_get_size(unfiltered_caps);
+
+	if (direction == GST_PAD_SRC)
+	{
+		GstCaps *unfiltered_caps_with_composition = gst_caps_copy(unfiltered_caps);
+
+		for (caps_idx = 0; caps_idx < num_caps; ++caps_idx)
+		{
+			features = gst_caps_get_features(unfiltered_caps_with_composition, caps_idx);
+			if (!gst_caps_features_is_any(features))
+				gst_caps_features_add(features, GST_CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION);
+		}
+
+		GST_DEBUG_OBJECT(
+			transform,
+			"created copy of unfiltered caps with overlay composition feature added: %" GST_PTR_FORMAT,
+			(gpointer)unfiltered_caps_with_composition
+		);
+
+		unfiltered_caps = gst_caps_merge(unfiltered_caps_with_composition, unfiltered_caps);
+	}
+	else
+	{
+		GstCaps *unfiltered_caps_without_composition = gst_caps_copy(unfiltered_caps);
+
+		for (caps_idx = 0; caps_idx < num_caps; ++caps_idx)
+		{
+			features = gst_caps_get_features(unfiltered_caps_without_composition, caps_idx);
+			if (gst_caps_features_contains(features, GST_CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION))
+				gst_caps_features_remove(features, GST_CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION);
+		}
+
+		GST_DEBUG_OBJECT(
+			transform,
+			"created copy of unfiltered caps with overlay composition feature removed: %" GST_PTR_FORMAT,
+			(gpointer)unfiltered_caps_without_composition
+		);
+
+		unfiltered_caps = gst_caps_merge(unfiltered_caps, unfiltered_caps_without_composition);
+	}
+
+	GST_DEBUG_OBJECT(transform, "merged the copy into the unfiltered caps: %" GST_PTR_FORMAT, (gpointer)unfiltered_caps);
+
+
+	/* Apply the filter on the unfiltered caps. */
 
 	if (filter != NULL)
 	{
-		GstCaps *unfiltered_result = tmpcaps;
-		result = gst_caps_intersect_full(unfiltered_result, filter, GST_CAPS_INTERSECT_FIRST);
-		GST_DEBUG(
-			"applied filter %" GST_PTR_FORMAT "; resulting transformed and filtered caps: %" GST_PTR_FORMAT,
+		transformed_caps = gst_caps_intersect_full(unfiltered_caps, filter, GST_CAPS_INTERSECT_FIRST);
+		GST_DEBUG_OBJECT(
+			transform,
+			"applied filter %" GST_PTR_FORMAT " -> filtered caps are the transformed caps: %" GST_PTR_FORMAT,
 			(gpointer)filter,
-			(gpointer)result
+			(gpointer)transformed_caps
 		);
-		gst_caps_unref(unfiltered_result);
+		gst_caps_unref(unfiltered_caps);
 	}
 	else
-		result = tmpcaps;
+	{
+		transformed_caps = unfiltered_caps;
+		GST_DEBUG_OBJECT(transform, "no filter specified -> unfiltered caps are the transformed caps: %" GST_PTR_FORMAT, (gpointer)transformed_caps);
+	}
 
-	GST_DEBUG_OBJECT(transform, "transformed caps %" GST_PTR_FORMAT " to %" GST_PTR_FORMAT, (gpointer)caps, (gpointer)result);
 
-	return result;
+	return transformed_caps;
 }
 
 
@@ -1045,6 +1142,10 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	GstVideoInfo input_video_info;
 	GstImx2dTileLayout input_video_tile_layout;
 	GstVideoInfo output_video_info;
+	GstCapsFeatures *input_caps_features;
+	GstCapsFeatures *output_caps_features;
+	gboolean input_has_overlay_meta;
+	gboolean output_has_overlay_meta;
 	Imx2dSurfaceDesc output_surface_desc;
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
 
@@ -1068,6 +1169,30 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 		return FALSE;
 	}
 
+	/* Check if input and output caps have the overlay meta caps feature.
+	 * If both have it, or neither have it, we can pass through the data.
+	 * In the former case, it means that downstream can handle this meta,
+	 * so we can pass the overlay composition data downstream unchanged.
+	 * If neither have it, then there's no meta to concern ourselves with.
+	 * But if the input caps have the meta and the output caps don't,
+	 * then we _have_ to render the caps into the frame, even if there
+	 * is no actual transformation going on. (The case where input caps
+	 * have no meta but output caps do does not exist.) */
+	input_caps_features = gst_caps_get_features(input_caps, 0);
+	input_has_overlay_meta = gst_caps_features_contains(input_caps_features, GST_CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION);
+	output_caps_features = gst_caps_get_features(output_caps, 0);
+	output_has_overlay_meta = gst_caps_features_contains(output_caps_features, GST_CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION);
+	GST_DEBUG_OBJECT(self, "input/output caps have overlay meta: %d/%d", input_has_overlay_meta, output_has_overlay_meta);
+
+	/* If there is an overlay meta, and downstream supports that meta,
+	 * remember this in case there are other transformations that need
+	 * to be performed. That's because in this case, while rendering the
+	 * frame, we have to make sure that we don't also render the overlays,
+	 * since downstream can handle those. */
+	self->passing_through_overlay_meta = input_has_overlay_meta && output_has_overlay_meta;
+	if (self->passing_through_overlay_meta)
+		GST_DEBUG_OBJECT(self, "there is overlay meta and downstream can handle it -> will pass through that meta");
+
 	/* Check if the input and output video are equal. This will be needed
 	 * in gst_imx_2d_video_transform_prepare_output_buffer() to decide
 	 * whether or not the input buffer needs to be passed through. */
@@ -1076,7 +1201,8 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	self->inout_info_equal = (GST_VIDEO_INFO_WIDTH(&input_video_info) == GST_VIDEO_INFO_WIDTH(&output_video_info))
 	                      && (GST_VIDEO_INFO_HEIGHT(&input_video_info) == GST_VIDEO_INFO_HEIGHT(&output_video_info))
 	                      && (GST_VIDEO_INFO_FORMAT(&input_video_info) == GST_VIDEO_INFO_FORMAT(&output_video_info))
-	                      && (input_video_tile_layout == GST_IMX_2D_TILE_LAYOUT_NONE);
+	                      && (input_video_tile_layout == GST_IMX_2D_TILE_LAYOUT_NONE)
+	                      && (input_has_overlay_meta == output_has_overlay_meta);
 
 	if (self->inout_info_equal)
 		GST_DEBUG_OBJECT(self, "input and output caps are equal");
@@ -1108,9 +1234,74 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 
 	gst_caps_replace(&(self->input_caps), input_caps);
 
+	gst_imx_2d_video_overlay_handler_clear_cached_overlays(self->overlay_handler);
+
+	GST_OBJECT_LOCK(self);
 	self->input_video_info = input_video_info;
 	self->output_video_info = output_video_info;
 	self->inout_info_set = TRUE;
+	GST_OBJECT_UNLOCK(self);
+
+	return TRUE;
+}
+
+
+static gboolean gst_imx_2d_video_transform_propose_allocation(GstBaseTransform *transform, GstQuery *decide_query, GstQuery *query)
+{
+	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
+	GstStructure *allocation_meta_structure = NULL;
+	guint output_width, output_height;
+	gboolean already_has_overlay_meta;
+	gboolean add_overlay_meta;
+	guint meta_index;
+
+	if (!GST_BASE_TRANSFORM_CLASS(gst_imx_2d_video_transform_parent_class)->propose_allocation(transform, decide_query, query))
+		return FALSE;
+
+	/* Passthrough; we are not supposed to do anything. */
+	if (decide_query == NULL)
+		return TRUE;
+
+	/* Check if we need to add the overlay meta to the query.
+	 * We have to add it in these cases:
+	 *
+	 * 1. The query does not already contain the overlay meta.
+	 *    This occurs when downstream cannot handle such an
+	 *    overlay meta.
+	 * 2. This transform element is not passing through the
+	 *    meta. In such a case, the overlays ar rendered by
+	 *    the transform element. Therefore, the window size
+	 *    used by upstream to compute the overlay rectangles
+	 *    must fit the size of this transform element's
+	 *    output frame. */
+	already_has_overlay_meta = gst_query_find_allocation_meta(query, GST_VIDEO_OVERLAY_COMPOSITION_META_API_TYPE, &meta_index);
+	add_overlay_meta = !already_has_overlay_meta || !(self->passing_through_overlay_meta);
+
+	if (add_overlay_meta)
+	{
+		GST_OBJECT_LOCK(self);
+		output_width = GST_VIDEO_INFO_WIDTH(&(self->output_video_info));
+		output_height = GST_VIDEO_INFO_HEIGHT(&(self->output_video_info));
+		GST_OBJECT_UNLOCK(self);
+
+		GST_DEBUG_OBJECT(self, "proposing overlay composition meta to allocation query with output video size %ux%u", output_width, output_height);
+
+		allocation_meta_structure = gst_structure_new(
+			"GstVideoOverlayCompositionMeta",
+			"width", G_TYPE_UINT, output_width,
+			"height", G_TYPE_UINT, output_height,
+			NULL
+		);
+
+		if (already_has_overlay_meta)
+			gst_query_remove_nth_allocation_meta(query, meta_index);
+
+		gst_query_add_allocation_meta(query, GST_VIDEO_OVERLAY_COMPOSITION_META_API_TYPE, allocation_meta_structure);
+
+		gst_structure_free(allocation_meta_structure);
+	}
+
+	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, 0);
 
 	return TRUE;
 }
@@ -1409,10 +1600,36 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 		goto error;
 	}
 
+	if (!self->passing_through_overlay_meta)
+	{
+		GST_LOG_OBJECT(self, "will render overlays into frame");
+		if (!gst_imx_2d_video_overlay_handler_render(self->overlay_handler, input_buffer))
+		{
+			GST_ERROR_OBJECT(self, "rendering overlay(s) failed");
+			goto error;
+		}
+	}
+
 	if (!imx_2d_blitter_finish(self->blitter))
 	{
 		GST_ERROR_OBJECT(self, "finishing blitter failed");
 		goto error;
+	}
+
+
+	/* Pass through the overlay meta if necessary. */
+
+	if (self->passing_through_overlay_meta)
+	{
+		GstVideoOverlayCompositionMeta *composition_meta;
+		GstVideoOverlayComposition *composition;
+
+		GST_LOG_OBJECT(self, "passing through overlay meta");
+
+		composition_meta = gst_buffer_get_video_overlay_composition_meta(input_buffer);
+		composition = composition_meta->overlay;
+
+		gst_buffer_add_video_overlay_composition_meta(output_buffer, composition);
 	}
 
 
@@ -1500,6 +1717,8 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 	self->inout_info_equal = FALSE;
 	self->inout_info_set = FALSE;
 
+	self->passing_through_overlay_meta = FALSE;
+
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
 	if (self->imx_dma_buffer_allocator == NULL)
 	{
@@ -1543,6 +1762,13 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 		goto error;
 	}
 
+	self->overlay_handler = gst_imx_2d_video_overlay_handler_new(self->uploader, self->blitter);
+	if (self->overlay_handler == NULL)
+	{
+		GST_ERROR_OBJECT(self, "creating overlay handler failed");
+		goto error;
+	}
+
 	return TRUE;
 
 error:
@@ -1559,6 +1785,12 @@ static void gst_imx_2d_video_transform_stop(GstImx2dVideoTransform *self)
 		GST_ERROR_OBJECT(self, "stop() failed");
 
 	gst_caps_replace(&(self->input_caps), NULL);
+
+	if (self->overlay_handler != NULL)
+	{
+		gst_object_unref(GST_OBJECT(self->overlay_handler));
+		self->overlay_handler = NULL;
+	}
 
 	if (self->input_surface != NULL)
 	{
@@ -1621,8 +1853,8 @@ void gst_imx_2d_video_transform_common_class_init(GstImx2dVideoTransformClass *k
 
 	element_class = GST_ELEMENT_CLASS(klass);
 
-	sink_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities(capabilities, GST_PAD_SINK);
-	src_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities(capabilities, GST_PAD_SRC);
+	sink_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities_full(capabilities, GST_PAD_SINK, TRUE);
+	src_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities_full(capabilities, GST_PAD_SRC, TRUE);
 
 	sink_template = gst_pad_template_new("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sink_template_caps);
 	src_template = gst_pad_template_new("src", GST_PAD_SRC, GST_PAD_ALWAYS, src_template_caps);
