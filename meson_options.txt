@@ -1,12 +1,14 @@
-option('vpu', type : 'feature', value : 'auto')
+option('vpu', type : 'feature', value : 'auto', description : 'hardware accelerated video en/decoding elements using the NXP i.MX VPU')
 
-option('uniaudiodec', type : 'feature', value : 'auto')
-option('mp3encoder', type : 'feature', value : 'auto')
+option('uniaudiodec', type : 'feature', value : 'auto', description : 'Audio decoder element using the NXP uniaudio codecs')
+option('mp3encoder', type : 'feature', value : 'auto', description : 'mp3 encoder element using the NXP mp3 encoder library')
 
 option('g2d', type : 'feature', value : 'auto')
 
 option('imx2d-videosink', type : 'boolean', value : true)
 option('imx2d-compositor', type : 'feature', value : 'auto')
+
+option('v4l2', type : 'boolean', value : true, description : 'build mxc_v4l2 specific V4L2 source and sink elements')
 
 option('package-name', type : 'string', value : 'Unknown package name', yield : true, description : 'package name to use in plugins')
 option('package-origin', type : 'string', value : 'Unknown package origin', yield : true, description : 'package origin URL to use in plugins')

@@ -69,6 +69,7 @@ subdir('gst-libs/gst/imx/common')
 subdir('ext/vpu')
 subdir('ext/audio')
 subdir('ext/imx2d')
+subdir('sys/v4l2video')
 
 
 configure_file(output : 'config.h', configuration : conf_data)

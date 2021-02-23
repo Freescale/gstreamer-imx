@@ -32,6 +32,28 @@ For the full list of formats that could theoretically be supported, check out th
 version 2.0.0 or later.
 
 
+Special Video4Linux2 elements for i.MX6
+---------------------------------------
+
+The `mxc_v4l2` V4L2 driver on the i.MX6 for various capture devices such as the OmniVision OV5640 is
+unfortunately severely broken, and requires numerous workarounds in userspace. Furthermore, it contains
+several i.MX specific extras for working with physical addresses. For that reason, GStreamer's `v4l2src`
+and `v4l2sink` elements do not work on the i.MX6 for these devices.
+
+To fix this, gstreamer-imx contains two elements that access V4L2 and apply workarounds for the
+driver issues. These elements are:
+
+* `imxv4l2videosrc`  : `v4l2src` equivalent for capturing video frames
+* `imxv4l2videosink` : `v4l2sink` equivalent for displaying video frames
+
+**NOTE:** These elements exist _only_ as a workaround for these driver bugs, since fixing that driver
+is impractical. They are not meant to be used on any newer i.MX platform, since starting with the
+i.MX8, a different (and better) driver is used.
+
+The `-Dv4l2` command line switch can be passed to meson to enable / disable this V4L2 plugin.
+If set to `true` (the default value), it will be enabled. `false` will disable it.
+
+
 Other elements
 --------------
 
