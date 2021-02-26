@@ -3,7 +3,8 @@ option('vpu', type : 'feature', value : 'auto', description : 'hardware accelera
 option('uniaudiodec', type : 'feature', value : 'auto', description : 'Audio decoder element using the NXP uniaudio codecs')
 option('mp3encoder', type : 'feature', value : 'auto', description : 'mp3 encoder element using the NXP mp3 encoder library')
 
-option('g2d', type : 'feature', value : 'auto')
+option('g2d', type : 'feature', value : 'auto', description : '2D elements using the Vivante G2D API')
+option('g2d-based-on-dpu', type : 'boolean', value : false, description : 'Whether or not the G2D implementation is emulated on top of the i.MX8qm or i.MX8qxp DPU')
 
 option('imx2d-videosink', type : 'boolean', value : true)
 option('imx2d-compositor', type : 'feature', value : 'auto')

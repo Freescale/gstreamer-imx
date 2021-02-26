@@ -11,6 +11,7 @@ if g2d_dep.found()
 		'imx2d_backend_g2d',
 		['g2d_blitter.c'],
 		install : false,
+		include_directories: [configinc],
 		dependencies : [imx2d_dep, g2d_dep]
 	)
 
@@ -20,6 +21,16 @@ if g2d_dep.found()
 	)
 
 	conf_data.set('WITH_IMX2D_G2D_BACKEND', 1)
+
+	# Check if G2D is built on top of the DPU. If so, we
+	# can enable some workarounds for better performance.
+	g2d_based_on_dpu = get_option('g2d-based-on-dpu')
+	conf_data.set('IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU', g2d_based_on_dpu)
+	if g2d_based_on_dpu
+		message('G2D implementation is based on the i.MX8qm / i.MX8qxp DPU')
+	else
+		message('G2D implementation is not based on the i.MX8qm / i.MX8qxp DPU')
+	endif
 
 	message('imx2d G2D backend enabled')
 else

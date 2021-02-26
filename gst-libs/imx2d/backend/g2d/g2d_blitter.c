@@ -2,8 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+
 #include <g2d.h>
 #include <g2dExt.h>
+
+#include <config.h>
+
 #include "imx2d/imx2d_priv.h"
 #include "g2d_blitter.h"
 
@@ -284,6 +288,19 @@ static Imx2dBlitterClass imx_2d_backend_g2d_blitter_class =
 };
 
 
+/* NOTE: Some code bits are enclosed in IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+ * #ifdef blocks. This is because on the i.MX8qm and the i.MX8qxp, there
+ * actually isn't a 2D GPU core. Instead, G2D is emulated via a different
+ * subsystem - the DPU, which does not exist in other i.MX8 variants. The
+ * DPU behaves somewhat differently than a "real" 2D GPU core. In particular,
+ * it does not require all calls to come from the same thread, and its
+ * implementations of the g2d_open() and g2d_close() function are slower.
+ * therefore, if we are dealing with such a G2D-on-top-of-DPU implementation,
+ * we call g2d_open() (and g2d_close()) only once to improve performance.
+ *
+ * This enhances https://github.com/Freescale/gstreamer-imx/pull/282 . */
+
+
 
 
 static void imx_2d_backend_g2d_blitter_destroy(Imx2dBlitter *blitter)
@@ -292,11 +309,14 @@ static void imx_2d_backend_g2d_blitter_destroy(Imx2dBlitter *blitter)
 
 	assert(blitter != NULL);
 
-	if (g2d_blitter->g2d_handle)
+#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+	if (g2d_blitter->g2d_handle != NULL)
 	{
 		if (g2d_close(g2d_blitter->g2d_handle) != 0)
 			IMX_2D_LOG(ERROR, "closing g2d device failed");
+		g2d_blitter->g2d_handle = NULL;
 	}
+#endif
 
 	if (g2d_blitter->fill_g2d_surface_dmabuffer != NULL)
 	{
@@ -318,7 +338,9 @@ static int imx_2d_backend_g2d_blitter_start(Imx2dBlitter *blitter)
 {
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
 
-	if (!g2d_blitter->g2d_handle)
+#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+	if (g2d_blitter->g2d_handle == NULL)
+#endif
 	{
 		if (g2d_open(&(g2d_blitter->g2d_handle)) != 0)
 		{
@@ -348,6 +370,11 @@ static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 	assert(blitter != NULL);
 
 	ret = (g2d_finish(g2d_blitter->g2d_handle) == 0);
+
+#ifndef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+	if (g2d_close(g2d_blitter->g2d_handle) != 0)
+		IMX_2D_LOG(ERROR, "closing g2d device failed");
+#endif
 
 	return ret;
 }
