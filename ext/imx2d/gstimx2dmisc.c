@@ -671,7 +671,7 @@ void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer
 			GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, plane_index)
 		);
 
-		imx_2d_surface_set_dma_buffer(surface, out_dma_buffer, 0, videometa->offset[plane_index]);
+		imx_2d_surface_set_dma_buffer(surface, out_dma_buffer, plane_index, videometa->offset[plane_index]);
 	}
 }
 
