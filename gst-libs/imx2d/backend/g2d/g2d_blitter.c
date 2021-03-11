@@ -667,7 +667,7 @@ Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void)
 		IMX_2D_LOG(ERROR, "could not create internal G2D DMA buffer allocator: %s (%d)", strerror(err), err);
 		goto error;
 	}
-	IMX_2D_LOG(DEBUG, "created new i.MX DMA buffer allocator %p", (void *)(g2d_blitter->internal_dmabuffer_allocator));
+	IMX_2D_LOG(DEBUG, "created new internal i.MX DMA buffer allocator %p", (void *)(g2d_blitter->internal_dmabuffer_allocator));
 
 	g2d_blitter->fill_g2d_surface_dmabuffer = imx_dma_buffer_allocate(g2d_blitter->internal_dmabuffer_allocator, fill_surface_dmabuffer_size, 1, &err);
 	if (g2d_blitter->fill_g2d_surface_dmabuffer == NULL)
