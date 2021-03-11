@@ -49,6 +49,9 @@ endif
 plugins_install_dir = join_paths(get_option('libdir'), 'gstreamer-1.0')
 
 
+imx_headers_path = get_option('imx-headers-path')
+
+
 configinc = include_directories('.')
 libsinc = include_directories('gst-libs')
 
