@@ -266,6 +266,10 @@ typedef struct _Imx2dHardwareCapabilities Imx2dHardwareCapabilities;
  * @stride_alignment: Required stride alignment, in bytes.
  *     This is always a power-of-two value. Stride sizes must
  *     be an integer multiple of this value.
+ * @can_handle_multi_buffer_surfaces: Nonzero if the hardware
+ *     supports blitting from/to multi-buffer surfaces. If a
+ *     surface uses a different DMA buffer for at least one
+ *     of its planes, it is considered a multi-buffer surface.
  *
  * Describes the capabilities of the underlying 2D hardware.
  *
@@ -286,6 +290,8 @@ struct _Imx2dHardwareCapabilities
 	int min_height, max_height, height_step_size;
 
 	int stride_alignment;
+
+	int can_handle_multi_buffer_surfaces;
 };
 
 

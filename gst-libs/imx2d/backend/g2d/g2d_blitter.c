@@ -699,7 +699,9 @@ static Imx2dHardwareCapabilities const capabilities = {
 	.min_width = 4, .max_width = INT_MAX, .width_step_size = 1,
 	.min_height = 4, .max_height = INT_MAX, .height_step_size = 1,
 
-	.stride_alignment = 16
+	.stride_alignment = 16,
+
+	.can_handle_multi_buffer_surfaces = 1
 };
 
 Imx2dHardwareCapabilities const * imx_2d_backend_g2d_get_hardware_capabilities(void)
