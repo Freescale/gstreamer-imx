@@ -1022,13 +1022,6 @@ static void gst_imx_2d_compositor_release_pad(GstElement *element, GstPad *pad)
 static gboolean gst_imx_2d_compositor_decide_allocation(GstAggregator *aggregator, GstQuery *query)
 {
 	GstImx2dCompositor *self = GST_IMX_2D_COMPOSITOR(aggregator);
-	GstStructure *pool_config;
-	guint i;
-	GstCaps *negotiated_caps;
-	GstAllocator *selected_allocator = NULL;
-	GstAllocationParams allocation_params;
-	GstBufferPool *new_buffer_pool = NULL;
-	guint buffer_size;
 
 	/* Chain up to the base class.
 	 * We first do that, then modify the query. That way, we can be
@@ -1042,92 +1035,28 @@ static gboolean gst_imx_2d_compositor_decide_allocation(GstAggregator *aggregato
 
 	GST_TRACE_OBJECT(self, "attempting to decide what buffer pool and allocator to use");
 
-	gst_query_parse_allocation(query, &negotiated_caps, NULL);
-
-	/* Look for an allocator that is an ImxDmaBuffer allocator. */
-	for (i = 0; i < gst_query_get_n_allocation_params(query); ++i)
+	/* Discard any previously created buffer pool before creating a new one. */
+	if (self->video_buffer_pool != NULL)
 	{
-		GstAllocator *allocator = NULL;
-
-		gst_query_parse_nth_allocation_param(query, i, &allocator, &allocation_params);
-		if (allocator == NULL)
-			continue;
-
-		if (GST_IS_IMX_DMA_BUFFER_ALLOCATOR(allocator))
-		{
-			GST_DEBUG_OBJECT(self, "allocator #%u in allocation query can allocate DMA memory", i);
-			selected_allocator = allocator;
-			break;
-		}
-		else
-			gst_object_unref(GST_OBJECT_CAST(allocator));
+		gst_object_unref(GST_OBJECT(self->video_buffer_pool));
+		self->video_buffer_pool = NULL;
 	}
 
-	/* If no suitable allocator was found, use our own. */
-	if (selected_allocator == NULL)
-	{
-		GST_DEBUG_OBJECT(self, "found no allocator in query that can allocate DMA memory, using our own");
-		gst_allocation_params_init(&allocation_params);
-		selected_allocator = gst_object_ref(self->imx_dma_buffer_allocator);
-	}
+	self->video_buffer_pool = gst_imx_2d_video_buffer_pool_new(
+		self->imx_dma_buffer_allocator,
+		query,
+		&(self->output_video_info)
+	);
 
-	/* Create our own buffer pool, and use the output video info size as
-	 * its buffer size. We do not look at the pools in the query, because
-	 * we want to make sure that the pool uses our selected allocator.
-	 * Buffer pools may ignore allocators that we pass to them, but for
-	 * this element, it is essential that the buffer pool uses the selected
-	 * ImxDmaBuffer allocator. */
-	GST_DEBUG_OBJECT(self, "creating new buffer pool");
-	new_buffer_pool = gst_video_buffer_pool_new();
-	/* decide_allocation() is called after negotiated_src_caps(),
-	 * so it is safe to use self->output_video_info here. */
-	buffer_size = GST_VIDEO_INFO_SIZE(&(self->output_video_info));
-
-	/* Make sure the selected allocator is picked by setting
-	 * it as the first entry in the allocation param list. */
-	if (gst_query_get_n_allocation_params(query) == 0)
-	{
-		GST_DEBUG_OBJECT(self, "there are no allocation params in the allocation query; adding our params to it");
-		gst_query_add_allocation_param(query, selected_allocator, &allocation_params);
-	}
-	else
-	{
-		GST_DEBUG_OBJECT(self, "there are allocation params in the allocation query; setting our params as the first ones in the query");
-		gst_query_set_nth_allocation_param(query, 0, selected_allocator, &allocation_params);
-	}
-
-	/* Make sure the selected buffer pool is picked by setting
-	 * it as the first entry in the allocation pool list. */
-	if (gst_query_get_n_allocation_pools(query) == 0)
-	{
-		GST_DEBUG_OBJECT(self, "there are no allocation pools in the allocation query; adding our buffer pool to it");
-		gst_query_add_allocation_pool(query, new_buffer_pool, buffer_size, 0, 0);
-	}
-	else
-	{
-		GST_DEBUG_OBJECT(self, "there are allocation pools in the allocation query; setting our buffer pool as the first one in the query");
-		gst_query_set_nth_allocation_pool(query, 0, new_buffer_pool, buffer_size, 0, 0);
-	}
-
-	/* Enable the videometa option in the buffer pool to make
-	 * sure it gets added to newly created buffers. */
-	pool_config = gst_buffer_pool_get_config(new_buffer_pool);
-	gst_buffer_pool_config_set_params(pool_config, negotiated_caps, buffer_size, 0, 0);
-	gst_buffer_pool_config_set_allocator(pool_config, selected_allocator, &allocation_params);
-	gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-	gst_buffer_pool_set_config(new_buffer_pool, pool_config);
-
-	/* Unref these, since we passed them to the query. */
-	gst_object_unref(GST_OBJECT(selected_allocator));
-	gst_object_unref(GST_OBJECT(new_buffer_pool));
-
-	return TRUE;
+	return (self->video_buffer_pool != NULL);
 }
 
 
 static gboolean gst_imx_2d_compositor_start(GstAggregator *aggregator)
 {
 	GstImx2dCompositor *self = GST_IMX_2D_COMPOSITOR(aggregator);
+
+	self->video_buffer_pool = NULL;
 
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
 	GST_DEBUG_OBJECT(self, "new i.MX DMA buffer allocator %" GST_PTR_FORMAT, (gpointer)(self->imx_dma_buffer_allocator));
@@ -1181,6 +1110,12 @@ static gboolean gst_imx_2d_compositor_stop(GstAggregator *aggregator)
 	{
 		gst_object_unref(GST_OBJECT(self->imx_dma_buffer_allocator));
 		self->imx_dma_buffer_allocator = NULL;
+	}
+
+	if (self->video_buffer_pool != NULL)
+	{
+		gst_object_unref(GST_OBJECT(self->video_buffer_pool));
+		self->video_buffer_pool = NULL;
 	}
 
 	return TRUE;
@@ -1341,12 +1276,23 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 	Imx2dBlitParams blit_params;
 	gboolean background_needs_to_be_cleared = TRUE;
 	gboolean blitting_started = FALSE;
+	GstBuffer *intermediate_buffer = NULL;
 
 	GST_LOG_OBJECT(self, "aggregating frames");
 
 	g_assert(self->blitter != NULL);
 
-	gst_imx_2d_assign_output_buffer_to_surface(self->output_surface, output_buffer, &(self->output_video_info));
+	/* Acquire an intermediate buffer from the internal DMA buffer pool.
+	 * If the internal DMA buffer pool and the output video buffer pool
+	 * are one and the same, this simply ref output_buffer and returns
+	 * it as the intermediate_buffer. All blitter operations are performed
+	 * on the intermediate_buffer. */
+
+	flow_ret = gst_imx_2d_video_buffer_pool_acquire_intermediate_buffer(self->video_buffer_pool, output_buffer, &intermediate_buffer);
+	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+		goto error;
+
+	gst_imx_2d_assign_output_buffer_to_surface(self->output_surface, intermediate_buffer, &(self->output_video_info));
 
 	/* Start the imx2d blit sequence. */
 	if (!imx_2d_blitter_start(self->blitter, self->output_surface))
@@ -1621,6 +1567,25 @@ finish:
 	{
 		GST_ERROR_OBJECT(self, "finishing blitter failed");
 		flow_ret = GST_FLOW_ERROR;
+	}
+
+	if (flow_ret == GST_FLOW_OK)
+	{
+		/* The blitter is done. Transfer the resulting pixels to the output buffer.
+		 * If the internal DMA buffer pool and the output video buffer pool are
+		 * one and the same, this implies that intermediate_buffer and output_buffer
+		 * are the same. Just unref it in that case. Otherwise, if these two pools
+		 * are not the same one, then neither are these buffers. Pixels are then
+		 * copied from intermediate_buffer to output_buffer. These two pools are
+		 * different if downstream can't handle video meta and the blitter requires
+		 * stride values / plane offsets that aren't tightly packed. See the
+		 * GstImx2dVideoBufferPool documentation for details. */
+
+		if (!gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(self->video_buffer_pool, intermediate_buffer, output_buffer))
+		{
+			GST_ERROR_OBJECT(self, "could not transfer intermediate buffer contents to output buffer");
+			flow_ret = GST_FLOW_ERROR;
+		}
 	}
 
 	return flow_ret;

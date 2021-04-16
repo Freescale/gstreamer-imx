@@ -657,13 +657,17 @@ void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer
 	g_assert(out_dma_buffer != NULL);
 
 	videometa = gst_buffer_get_video_meta(output_buffer);
-	g_assert(videometa != NULL);
+	if (videometa != NULL)
+	{
+		for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(output_video_info); ++plane_index)
+		{
+			videometa->stride[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(output_video_info, plane_index);
+			videometa->offset[plane_index] = GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, plane_index);
+		}
+	}
 
 	for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(output_video_info); ++plane_index)
 	{
-		videometa->stride[plane_index] = GST_VIDEO_INFO_PLANE_STRIDE(output_video_info, plane_index);
-		videometa->offset[plane_index] = GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, plane_index);
-
 		GST_LOG(
 			"output plane #%u info:  stride: %d  offset: %" G_GSIZE_FORMAT,
 			plane_index,
@@ -671,7 +675,12 @@ void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer
 			GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, plane_index)
 		);
 
-		imx_2d_surface_set_dma_buffer(surface, out_dma_buffer, plane_index, videometa->offset[plane_index]);
+		imx_2d_surface_set_dma_buffer(
+			surface,
+			out_dma_buffer,
+			plane_index,
+			GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, plane_index)
+		);
 	}
 }
 

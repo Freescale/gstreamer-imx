@@ -20,6 +20,7 @@
 #include <gst/video/video.h>
 #include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "gstimx2dvideotransform.h"
+#include "gstimx2dvideobufferpool.h"
 #include "gstimx2dmisc.h"
 
 
@@ -1339,13 +1340,6 @@ static gboolean gst_imx_2d_video_transform_propose_allocation(GstBaseTransform *
 static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *transform, GstQuery *query)
 {
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
-	GstStructure *pool_config;
-	guint i;
-	GstCaps *negotiated_caps;
-	GstAllocator *selected_allocator = NULL;
-	GstAllocationParams allocation_params;
-	GstBufferPool *new_buffer_pool = NULL;
-	guint buffer_size;
 
 	/* We are not chaining up to the base class since the default
 	 * basetransform decide_allocation method is very cautious
@@ -1355,85 +1349,20 @@ static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *t
 
 	GST_TRACE_OBJECT(self, "attempting to decide what buffer pool and allocator to use");
 
-	gst_query_parse_allocation(query, &negotiated_caps, NULL);
-
-	for (i = 0; i < gst_query_get_n_allocation_params(query); ++i)
+	/* Discard any previously created buffer pool before creating a new one. */
+	if (self->video_buffer_pool != NULL)
 	{
-		GstAllocator *allocator = NULL;
-
-		gst_query_parse_nth_allocation_param(query, i, &allocator, &allocation_params);
-		if (allocator == NULL)
-			continue;
-
-		if (GST_IS_IMX_DMA_BUFFER_ALLOCATOR(allocator))
-		{
-			GST_DEBUG_OBJECT(self, "allocator #%u in allocation query can allocate DMA memory", i);
-			selected_allocator = allocator;
-			break;
-		}
-		else
-			gst_object_unref(GST_OBJECT_CAST(allocator));
+		gst_object_unref(GST_OBJECT(self->video_buffer_pool));
+		self->video_buffer_pool = NULL;
 	}
 
-	/* If no suitable allocator was found, use our own. */
-	if (selected_allocator == NULL)
-	{
-		GST_DEBUG_OBJECT(self, "found no allocator in query that can allocate DMA memory, using our own");
-		gst_allocation_params_init(&allocation_params);
-		selected_allocator = gst_object_ref(self->imx_dma_buffer_allocator);
-	}
+	self->video_buffer_pool = gst_imx_2d_video_buffer_pool_new(
+		self->imx_dma_buffer_allocator,
+		query,
+		&(self->output_video_info)
+	);
 
-	/* Create our own buffer pool, and use the output video info size as
-	 * its buffer size. We do not look at the pools in the query, because
-	 * we want to make sure that the pool uses our selected allocator.
-	 * Buffer pools may ignore allocators that we pass to them, but for
-	 * this element, it is essential that the buffer pool uses the selected
-	 * ImxDmaBuffer allocator. */
-	GST_DEBUG_OBJECT(self, "creating new buffer pool");
-	new_buffer_pool = gst_video_buffer_pool_new();
-	/* decide_allocation() is called after set_caps(), so
-	 * it is safe to use self->output_video_info here. */
-	buffer_size = GST_VIDEO_INFO_SIZE(&(self->output_video_info));
-
-	/* Make sure the selected allocator is picked by setting
-	 * it as the first entry in the allocation param list. */
-	if (gst_query_get_n_allocation_params(query) == 0)
-	{
-		GST_DEBUG_OBJECT(self, "there are no allocation params in the allocation query; adding our params to it");
-		gst_query_add_allocation_param(query, selected_allocator, &allocation_params);
-	}
-	else
-	{
-		GST_DEBUG_OBJECT(self, "there are allocation params in the allocation query; setting our params as the first ones in the query");
-		gst_query_set_nth_allocation_param(query, 0, selected_allocator, &allocation_params);
-	}
-
-	/* Make sure the selected buffer pool is picked by setting
-	 * it as the first entry in the allocation pool list. */
-	if (gst_query_get_n_allocation_pools(query) == 0)
-	{
-		GST_DEBUG_OBJECT(self, "there are no allocation pools in the allocation query; adding our buffer pool to it");
-		gst_query_add_allocation_pool(query, new_buffer_pool, buffer_size, 0, 0);
-	}
-	else
-	{
-		GST_DEBUG_OBJECT(self, "there are allocation pools in the allocation query; setting our buffer pool as the first one in the query");
-		gst_query_set_nth_allocation_pool(query, 0, new_buffer_pool, buffer_size, 0, 0);
-	}
-
-	/* Enable the videometa option in the buffer pool to make
-	 * sure it gets added to newly created buffers. */
-	pool_config = gst_buffer_pool_get_config(new_buffer_pool);
-	gst_buffer_pool_config_set_params(pool_config, negotiated_caps, buffer_size, 0, 0);
-	gst_buffer_pool_config_set_allocator(pool_config, selected_allocator, &allocation_params);
-	gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-	gst_buffer_pool_set_config(new_buffer_pool, pool_config);
-
-	/* Unref these, since we passed them to the query. */
-	gst_object_unref(GST_OBJECT(selected_allocator));
-	gst_object_unref(GST_OBJECT(new_buffer_pool));
-
-	return TRUE;
+	return (self->video_buffer_pool != NULL);
 }
 
 
@@ -1453,6 +1382,7 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	 *
 	 * - Inout buffer is not NULL
 	 * - Input and output caps (or rather, video infos) are equal
+	 * - gst_imx_video_buffer_pool_are_both_pools_same() returns TRUE
 	 * - Input crop is disabled, or it is enabled & the input buffer's video
 	 *   crop meta defines a rectangle that contains the entire frame
 	 * - Output rotation is disabled (= set to IMX_2D_ROTATION_NONE)
@@ -1468,6 +1398,7 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	{
 		gboolean has_input_buffer = (input_buffer != NULL);
 		gboolean no_output_rotation = (output_rotation == IMX_2D_ROTATION_NONE);
+		gboolean are_both_pools_same = gst_imx_2d_video_buffer_pool_are_both_pools_same(self->video_buffer_pool);
 
 		if (input_crop)
 		{
@@ -1477,16 +1408,24 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 
 		GST_LOG_OBJECT(
 			self,
-			"has input: %d  input&output video info equal: %d  no output rotation: %d  input crop: %d  has crop meta: %d",
+			"has input: %d  "
+			"input&output video info equal: %d  "
+			"no output rotation: %d  "
+			"input crop: %d  "
+			"has crop meta: %d"
+			"are both pools same: %d",
 			has_input_buffer,
 			self->inout_info_equal,
 			no_output_rotation,
-			input_crop, has_crop_meta
+			input_crop,
+			has_crop_meta,
+			are_both_pools_same
 		);
 
 		passthrough = (input_buffer != NULL)
 		           && self->inout_info_equal
-		           && (output_rotation == IMX_2D_ROTATION_NONE);
+		           && (output_rotation == IMX_2D_ROTATION_NONE)
+		           && are_both_pools_same;
 
 		if (passthrough && input_crop && has_crop_meta)
 		{
@@ -1527,6 +1466,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	Imx2dRegion crop_rectangle;
 	Imx2dRotation output_rotation;
 	GstBuffer *uploaded_input_buffer = NULL;
+	GstBuffer *intermediate_buffer = NULL;
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
 
 	/* Initial checks. */
@@ -1568,6 +1508,17 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 		goto error;
 
 
+	/* Acquire an intermediate buffer from the internal DMA buffer pool.
+	 * If the internal DMA buffer pool and the output video buffer pool
+	 * are one and the same, this simply ref output_buffer and returns
+	 * it as the intermediate_buffer. All blitter operations are performed
+	 * on the intermediate_buffer. */
+
+	flow_ret = gst_imx_2d_video_buffer_pool_acquire_intermediate_buffer(self->video_buffer_pool, output_buffer, &intermediate_buffer);
+	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+		goto error;
+
+
 	/* Set up the input and output surfaces. */
 
 	gst_imx_2d_assign_input_buffer_to_surface(
@@ -1579,7 +1530,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 
 	imx_2d_surface_set_desc(self->input_surface, &(self->input_surface_desc));
 
-	gst_imx_2d_assign_output_buffer_to_surface(self->output_surface, output_buffer, &(self->output_video_info));
+	gst_imx_2d_assign_output_buffer_to_surface(self->output_surface, intermediate_buffer, &(self->output_video_info));
 
 
 	/* Fill the blit parameters. */
@@ -1642,6 +1593,23 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	if (!imx_2d_blitter_finish(self->blitter))
 	{
 		GST_ERROR_OBJECT(self, "finishing blitter failed");
+		goto error;
+	}
+
+
+	/* The blitter is done. Transfer the resulting pixels to the output buffer.
+	 * If the internal DMA buffer pool and the output video buffer pool are
+	 * one and the same, this implies that intermediate_buffer and output_buffer
+	 * are the same. Just unref it in that case. Otherwise, if these two pools
+	 * are not the same one, then neither are these buffers. Pixels are then
+	 * copied from intermediate_buffer to output_buffer. These two pools are
+	 * different if downstream can't handle video meta and the blitter requires
+	 * stride values / plane offsets that aren't tightly packed. See the
+	 * GstImx2dVideoBufferPool documentation for details. */
+
+	if (!gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(self->video_buffer_pool, intermediate_buffer, output_buffer))
+	{
+		GST_ERROR_OBJECT(self, "could not transfer intermediate buffer contents to output buffer");
 		goto error;
 	}
 
@@ -1748,6 +1716,8 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 
 	self->passing_through_overlay_meta = FALSE;
 
+	self->video_buffer_pool = NULL;
+
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
 	if (self->imx_dma_buffer_allocator == NULL)
 	{
@@ -1849,6 +1819,12 @@ static void gst_imx_2d_video_transform_stop(GstImx2dVideoTransform *self)
 	{
 		gst_object_unref(GST_OBJECT(self->imx_dma_buffer_allocator));
 		self->imx_dma_buffer_allocator = NULL;
+	}
+
+	if (self->video_buffer_pool != NULL)
+	{
+		gst_object_unref(GST_OBJECT(self->video_buffer_pool));
+		self->video_buffer_pool = NULL;
 	}
 }
 

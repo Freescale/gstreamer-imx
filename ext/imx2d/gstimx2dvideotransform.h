@@ -25,6 +25,7 @@
 #include "gst/imx/common/gstimxdmabufferuploader.h"
 #include "imx2d/imx2d.h"
 #include "gstimx2dmisc.h"
+#include "gstimx2dvideobufferpool.h"
 #include "gstimx2dvideooverlayhandler.h"
 
 
@@ -52,6 +53,8 @@ struct _GstImx2dVideoTransform
 
 	GstImxDmaBufferUploader *uploader;
 	GstAllocator *imx_dma_buffer_allocator;
+
+	GstImx2dVideoBufferPool *video_buffer_pool;
 
 	Imx2dBlitter *blitter;
 

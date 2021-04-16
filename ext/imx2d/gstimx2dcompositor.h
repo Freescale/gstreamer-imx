@@ -23,6 +23,7 @@
 #include <gst/video/video.h>
 #include "gst/imx/common/gstimxdmabufferuploader.h"
 #include "imx2d/imx2d.h"
+#include "gstimx2dvideobufferpool.h"
 
 
 G_BEGIN_DECLS
@@ -49,6 +50,8 @@ struct _GstImx2dCompositor
 
 	GstImxDmaBufferUploader *uploader;
 	GstAllocator *imx_dma_buffer_allocator;
+
+	GstImx2dVideoBufferPool *video_buffer_pool;
 
 	Imx2dBlitter *blitter;
 
