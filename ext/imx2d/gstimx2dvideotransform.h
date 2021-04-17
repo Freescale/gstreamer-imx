@@ -76,7 +76,8 @@ struct _GstImx2dVideoTransform
 	GstImx2dVideoOverlayHandler *overlay_handler;
 
 	gboolean input_crop;
-	Imx2dRotation output_rotation;
+	GstVideoOrientationMethod video_direction;
+	GstVideoOrientationMethod tag_video_direction;
 };
 
 

@@ -53,6 +53,8 @@ char const * imx_2d_rotation_string(Imx2dRotation rotation)
 		case IMX_2D_ROTATION_270: return "270-degree rotation";
 		case IMX_2D_ROTATION_FLIP_HORIZONTAL: return "horizontal flip";
 		case IMX_2D_ROTATION_FLIP_VERTICAL: return "vertical flip";
+		case IMX_2D_ROTATION_UL_LR: return "flip across upper left/lower right diagonal";
+		case IMX_2D_ROTATION_UR_LL: return "flip across upper right/lower left diagonal";
 		default: return "<unknown>";
 	}
 }
@@ -590,6 +592,28 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dBli
 							clipped_source_region.x2 -= source_region_width * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
 						if (dest_region->y2 > blitter->dest->region.y2)
 							clipped_source_region.y1 += source_region_height * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
+						break;
+
+					case IMX_2D_ROTATION_UL_LR:
+						if (dest_region->x1 < 0)
+							clipped_source_region.y1 += source_region_height * (-dest_region->x1) / dest_region_width;
+						if (dest_region->y1 < 0)
+							clipped_source_region.x1 += source_region_width * (-dest_region->y1) / dest_region_height;
+						if (dest_region->x2 > blitter->dest->region.x2)
+							clipped_source_region.y2 -= source_region_height * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > blitter->dest->region.y2)
+							clipped_source_region.x2 -= source_region_width * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
+						break;
+
+					case IMX_2D_ROTATION_UR_LL:
+						if (dest_region->x1 < 0)
+							clipped_source_region.y2 -= source_region_height * (-dest_region->x1) / dest_region_width;
+						if (dest_region->y1 < 0)
+							clipped_source_region.x2 -= source_region_width * (-dest_region->y1) / dest_region_height;
+						if (dest_region->x2 > blitter->dest->region.x2)
+							clipped_source_region.y1 += source_region_height * (dest_region->x2 - blitter->dest->region.x2) / dest_region_width;
+						if (dest_region->y2 > blitter->dest->region.y2)
+							clipped_source_region.x1 += source_region_width * (dest_region->y2 - blitter->dest->region.y2) / dest_region_height;
 						break;
 
 					default:

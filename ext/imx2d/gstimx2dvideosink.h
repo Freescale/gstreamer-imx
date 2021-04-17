@@ -61,8 +61,10 @@ struct _GstImx2dVideoSink
 	Imx2dSurface *framebuffer_surface;
 
 	gboolean input_crop;
-	Imx2dRotation output_rotation;
+	GstVideoOrientationMethod video_direction;
 	gboolean force_aspect_ratio;
+
+	GstVideoOrientationMethod tag_video_direction;
 };
 
 

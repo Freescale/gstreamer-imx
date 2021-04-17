@@ -70,7 +70,9 @@ void gst_imx_2d_assign_input_buffer_to_surface(
 );
 void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer *output_buffer, GstVideoInfo const *output_video_info);
 
-GType gst_imx_2d_rotation_get_type(void);
+Imx2dRotation gst_imx_2d_convert_from_video_orientation_method(GstVideoOrientationMethod method);
+
+gboolean gst_imx_2d_orientation_from_image_direction_tag(GstTagList const *taglist, GstVideoOrientationMethod *orientation);
 
 
 G_END_DECLS

@@ -125,10 +125,12 @@ struct _GstImx2dCompositorPad
 	Imx2dBlitMargin letterbox_margin;
 	Imx2dBlitMargin combined_margin;
 
+	GstVideoOrientationMethod tag_video_direction;
+
 	gint xpos, ypos;
 	gint width, height;
 	Imx2dBlitMargin extra_margin;
-	Imx2dRotation output_rotation;
+	GstVideoOrientationMethod video_direction;
 	gboolean force_aspect_ratio;
 	gboolean input_crop;
 	gdouble alpha;
@@ -153,7 +155,7 @@ enum
 	PROP_PAD_RIGHT_MARGIN,
 	PROP_PAD_BOTTOM_MARGIN,
 	PROP_PAD_MARGIN_COLOR,
-	PROP_PAD_OUTPUT_ROTATION,
+	PROP_PAD_VIDEO_DIRECTION,
 	PROP_PAD_FORCE_ASPECT_RATIO,
 	PROP_PAD_INPUT_CROP,
 	PROP_PAD_ALPHA
@@ -168,22 +170,34 @@ enum
 #define DEFAULT_PAD_RIGHT_MARGIN 0
 #define DEFAULT_PAD_BOTTOM_MARGIN 0
 #define DEFAULT_PAD_MARGIN_COLOR (0xFF000000)
-#define DEFAULT_PAD_OUTPUT_ROTATION IMX_2D_ROTATION_NONE
+#define DEFAULT_PAD_VIDEO_DIRECTION GST_VIDEO_ORIENTATION_IDENTITY
 #define DEFAULT_PAD_FORCE_ASPECT_RATIO TRUE
 #define DEFAULT_PAD_INPUT_CROP TRUE
 #define DEFAULT_PAD_ALPHA 1.0
 
 
-G_DEFINE_TYPE(GstImx2dCompositorPad, gst_imx_2d_compositor_pad, GST_TYPE_VIDEO_AGGREGATOR_PAD)
+static void gst_imx_2d_compositor_pad_video_direction_interface_init(G_GNUC_UNUSED GstVideoDirectionInterface *iface)
+{
+	/* We implement the video-direction property */
+}
+
+
+G_DEFINE_TYPE_WITH_CODE(
+	GstImx2dCompositorPad,
+	gst_imx_2d_compositor_pad,
+	GST_TYPE_VIDEO_AGGREGATOR_PAD,
+	G_IMPLEMENT_INTERFACE(GST_TYPE_VIDEO_DIRECTION, gst_imx_2d_compositor_pad_video_direction_interface_init)
+)
 
 static void gst_imx_2d_compositor_pad_finalize(GObject *object);
 
 static void gst_imx_2d_compositor_pad_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_2d_compositor_pad_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
-static GstPadProbeReturn gst_imx_2d_compositor_caps_event_probe(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);
+static GstPadProbeReturn gst_imx_2d_compositor_downstream_event_probe(GstPad *pad, GstPadProbeInfo *info, gpointer user_data);
 
 static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dCompositorPad *self, GstVideoInfo *output_video_info);
+static GstVideoOrientationMethod gst_imx_2d_compositor_pad_get_current_video_direction(GstImx2dCompositorPad *self);
 
 
 static void gst_imx_2d_compositor_pad_class_init(GstImx2dCompositorPadClass *klass)
@@ -313,18 +327,7 @@ static void gst_imx_2d_compositor_pad_class_init(GstImx2dCompositorPadClass *kla
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
 		)
 	);
-	g_object_class_install_property(
-		object_class,
-		PROP_PAD_OUTPUT_ROTATION,
-		g_param_spec_enum(
-			"output-rotation",
-			"Output rotation",
-			"Output rotation in 90-degree steps",
-			gst_imx_2d_rotation_get_type(),
-			DEFAULT_PAD_OUTPUT_ROTATION,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_CONTROLLABLE
-		)
-	);
+	g_object_class_override_property(object_class, PROP_PAD_VIDEO_DIRECTION, "video-direction");
 	g_object_class_install_property(
 		object_class,
 		PROP_PAD_FORCE_ASPECT_RATIO,
@@ -373,10 +376,12 @@ static void gst_imx_2d_compositor_pad_init(GstImx2dCompositorPad *self)
 	self->extra_margin.right_margin = DEFAULT_PAD_RIGHT_MARGIN;
 	self->extra_margin.bottom_margin = DEFAULT_PAD_BOTTOM_MARGIN;
 	self->combined_margin.color = DEFAULT_PAD_MARGIN_COLOR;
-	self->output_rotation = DEFAULT_PAD_OUTPUT_ROTATION;
+	self->video_direction = DEFAULT_PAD_VIDEO_DIRECTION;
 	self->force_aspect_ratio = DEFAULT_PAD_FORCE_ASPECT_RATIO;
 	self->input_crop = DEFAULT_PAD_INPUT_CROP;
 	self->alpha = DEFAULT_PAD_ALPHA;
+
+	self->tag_video_direction = DEFAULT_PAD_VIDEO_DIRECTION;
 
 	self->input_surface = imx_2d_surface_create(NULL);
 	memset(&(self->input_surface_desc), 0, sizeof(self->input_surface_desc));
@@ -389,7 +394,7 @@ static void gst_imx_2d_compositor_pad_init(GstImx2dCompositorPad *self)
 	memset(&(self->letterbox_margin), 0, sizeof(Imx2dRegion));
 	memcpy(&(self->combined_margin), &(self->extra_margin), sizeof(Imx2dRegion));
 
-	gst_pad_add_probe(GST_PAD(self), GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, gst_imx_2d_compositor_caps_event_probe, NULL, NULL);
+	gst_pad_add_probe(GST_PAD(self), GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM, gst_imx_2d_compositor_downstream_event_probe, NULL, NULL);
 }
 
 
@@ -472,9 +477,9 @@ static void gst_imx_2d_compositor_pad_set_property(GObject *object, guint prop_i
 			GST_OBJECT_UNLOCK(self);
 			break;
 
-		case PROP_PAD_OUTPUT_ROTATION:
+		case PROP_PAD_VIDEO_DIRECTION:
 			GST_OBJECT_LOCK(self);
-			self->output_rotation = g_value_get_enum(value);
+			self->video_direction = g_value_get_enum(value);
 			GST_OBJECT_UNLOCK(self);
 			break;
 
@@ -564,9 +569,9 @@ static void gst_imx_2d_compositor_pad_get_property(GObject *object, guint prop_i
 			GST_OBJECT_UNLOCK(self);
 			break;
 
-		case PROP_PAD_OUTPUT_ROTATION:
+		case PROP_PAD_VIDEO_DIRECTION:
 			GST_OBJECT_LOCK(self);
-			g_value_set_enum(value, self->output_rotation);
+			g_value_set_enum(value, self->video_direction);
 			GST_OBJECT_UNLOCK(self);
 			break;
 
@@ -595,18 +600,10 @@ static void gst_imx_2d_compositor_pad_get_property(GObject *object, guint prop_i
 }
 
 
-static GstPadProbeReturn gst_imx_2d_compositor_caps_event_probe(GstPad *pad, GstPadProbeInfo *info, G_GNUC_UNUSED gpointer user_data)
+static GstPadProbeReturn gst_imx_2d_compositor_downstream_event_probe(GstPad *pad, GstPadProbeInfo *info, G_GNUC_UNUSED gpointer user_data)
 {
-	/* In this probe, we intercept CAPS events to replace the format string
-	 * if necessary. Currently, the Amphion tiled format is not supported in
-	 * gstvideo, so we must replace the tiled NV12/NV21 formats with the
-	 * regular NV12/NV21 ones, otherwise the gst_video_info_from_caps() call
-	 * inside GstVideoAggregator would fail. */
-
 	GstImx2dCompositorPad *compositor_pad = GST_IMX_2D_COMPOSITOR_PAD(pad);
-	GstVideoInfo video_info;
 	GstEvent *event;
-	GstImx2dTileLayout input_video_tile_layout = GST_IMX_2D_TILE_LAYOUT_NONE;
 
 	if (G_UNLIKELY((GST_PAD_PROBE_INFO_TYPE(info) & GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM) == 0))
 		return GST_PAD_PROBE_OK;
@@ -616,8 +613,34 @@ static GstPadProbeReturn gst_imx_2d_compositor_caps_event_probe(GstPad *pad, Gst
 
 	switch (GST_EVENT_TYPE(event))
 	{
+		case GST_EVENT_TAG:
+		{
+			GstTagList *taglist;
+			GstVideoOrientationMethod new_tag_video_direction;
+
+			gst_event_parse_tag(event, &taglist);
+
+			if (gst_imx_2d_orientation_from_image_direction_tag(taglist, &new_tag_video_direction))
+			{
+				GST_OBJECT_LOCK(compositor_pad);
+				compositor_pad->tag_video_direction = new_tag_video_direction;
+				GST_OBJECT_UNLOCK(compositor_pad);
+			}
+
+			break;
+		}
+
 		case GST_EVENT_CAPS:
 		{
+			/* Here, we intercept CAPS events to replace the format string
+			 * if necessary. Currently, the Amphion tiled format is not
+			 * supported in gstvideo, so we must replace the tiled NV12/NV21
+			 * formats with the  regular NV12/NV21 ones, otherwise the
+			 * gst_video_info_from_caps() call inside GstVideoAggregator
+			 * would fail. */
+
+			GstImx2dTileLayout input_video_tile_layout = GST_IMX_2D_TILE_LAYOUT_NONE;
+			GstVideoInfo video_info;
 			GstCaps *caps;
 			GstCaps *modified_caps = NULL;
 			GstEvent *new_event;
@@ -665,6 +688,7 @@ static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dComp
 	GstVideoInfo *input_video_info;
 	gint video_width, video_height;
 	gint pad_width, pad_height;
+	GstVideoOrientationMethod video_direction;
 
 	if (!self->region_coords_need_update)
 		return;
@@ -735,8 +759,24 @@ static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dComp
 	                             && ((video_width > 0))
 	                             && ((video_height > 0)))
 	{
-		gboolean transposed = (self->output_rotation == IMX_2D_ROTATION_90)
-			               || (self->output_rotation == IMX_2D_ROTATION_270);
+		gboolean transposed = FALSE;
+
+		GST_OBJECT_LOCK(self);
+		video_direction = gst_imx_2d_compositor_pad_get_current_video_direction(self);
+		GST_OBJECT_UNLOCK(self);
+
+		switch (video_direction)
+		{
+			case GST_VIDEO_ORIENTATION_90L:
+			case GST_VIDEO_ORIENTATION_90R:
+			case GST_VIDEO_ORIENTATION_UL_LR:
+			case GST_VIDEO_ORIENTATION_UR_LL:
+				transposed = TRUE;
+				break;
+
+			default:
+				break;
+		}
 
 		gst_imx_2d_canvas_calculate_letterbox_margin(
 			&(self->letterbox_margin),
@@ -778,6 +818,12 @@ static void gst_imx_2d_compositor_pad_recalculate_regions_if_needed(GstImx2dComp
 	/* Mark the coordinates as updated so they are not
 	 * needlessly recalculated later. */
 	self->region_coords_need_update = FALSE;
+}
+
+
+static GstVideoOrientationMethod gst_imx_2d_compositor_pad_get_current_video_direction(GstImx2dCompositorPad *self)
+{
+	return (self->video_direction == GST_VIDEO_ORIENTATION_AUTO) ? self->tag_video_direction : self->video_direction;
 }
 
 
@@ -1460,7 +1506,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 		Imx2dRegion inner_region;
 		Imx2dBlitMargin combined_margin;
 		Imx2dRegion crop_rectangle;
-		Imx2dRotation output_rotation;
+		GstVideoOrientationMethod video_direction;
 		gint alpha;
 		GstBuffer *uploaded_input_buffer;
 		int blit_ret;
@@ -1485,7 +1531,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 			GST_OBJECT_LOCK(compositor_pad);
 
 			input_crop = compositor_pad->input_crop;
-			output_rotation = compositor_pad->output_rotation;
+			video_direction = gst_imx_2d_compositor_pad_get_current_video_direction(compositor_pad);
 
 			alpha = (gint)(compositor_pad->alpha * 255);
 			alpha = CLAMP(alpha, 0, 255);
@@ -1532,7 +1578,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 		blit_params.margin = &combined_margin;
 		blit_params.source_region = NULL;
 		blit_params.dest_region = &inner_region;
-		blit_params.rotation = output_rotation;
+		blit_params.rotation = gst_imx_2d_convert_from_video_orientation_method(video_direction);
 		blit_params.alpha = alpha;
 
 		if (input_crop)

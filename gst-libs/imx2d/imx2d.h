@@ -179,6 +179,8 @@ char const * imx_2d_pixel_format_to_string(Imx2dPixelFormat format);
  * @IMX_2D_ROTATION_270: 270-degree rotation.
  * @IMX_2D_ROTATION_FLIP_HORIZONTAL: Frame is flipped horizontally.
  * @IMX_2D_ROTATION_FLIP_VERTICAL: Frame is flipped vertically.
+ * @IMX_2D_ROTATION_UL_LR: Frame is flipped across the upper left/lower right diagonal.
+ * @IMX_2D_ROTATION_UR_LL: Frame is flipped across the upper right/lower left diagonal.
  *
  * The clockwise rotation to use when blitting.
  */
@@ -189,7 +191,9 @@ typedef enum
 	IMX_2D_ROTATION_180,
 	IMX_2D_ROTATION_270,
 	IMX_2D_ROTATION_FLIP_HORIZONTAL,
-	IMX_2D_ROTATION_FLIP_VERTICAL
+	IMX_2D_ROTATION_FLIP_VERTICAL,
+	IMX_2D_ROTATION_UL_LR,
+	IMX_2D_ROTATION_UR_LL
 }
 Imx2dRotation;
 

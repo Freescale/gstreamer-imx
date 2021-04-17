@@ -685,28 +685,61 @@ void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer
 }
 
 
-GType gst_imx_2d_rotation_get_type(void)
+Imx2dRotation gst_imx_2d_convert_from_video_orientation_method(GstVideoOrientationMethod method)
 {
-	static GType gst_imx_2d_rotation_type = 0;
-
-	if (!gst_imx_2d_rotation_type)
+	switch (method)
 	{
-		static GEnumValue imx_2d_rotation_values[] =
+		case GST_VIDEO_ORIENTATION_IDENTITY: return IMX_2D_ROTATION_NONE;
+		case GST_VIDEO_ORIENTATION_90R: return IMX_2D_ROTATION_90;
+		case GST_VIDEO_ORIENTATION_180: return IMX_2D_ROTATION_180;
+		case GST_VIDEO_ORIENTATION_90L: return IMX_2D_ROTATION_270;
+		case GST_VIDEO_ORIENTATION_HORIZ: return IMX_2D_ROTATION_FLIP_HORIZONTAL;
+		case GST_VIDEO_ORIENTATION_VERT: return IMX_2D_ROTATION_FLIP_VERTICAL;
+		case GST_VIDEO_ORIENTATION_UL_LR: return IMX_2D_ROTATION_UL_LR;
+		case GST_VIDEO_ORIENTATION_UR_LL: return IMX_2D_ROTATION_UR_LL;
+		default:
 		{
-			{ IMX_2D_ROTATION_NONE, "No rotation", "none" },
-			{ IMX_2D_ROTATION_90, "90-degree rotation", "rotation-90" },
-			{ IMX_2D_ROTATION_180, "180-degree rotation", "rotation-180" },
-			{ IMX_2D_ROTATION_270, "270-degree rotation", "rotation-270" },
-			{ IMX_2D_ROTATION_FLIP_HORIZONTAL, "Horizontal flipping", "horizontal" },
-			{ IMX_2D_ROTATION_FLIP_VERTICAL, "Vertical flipping", "vertical" },
-			{ 0, NULL, NULL }
-		};
-
-		gst_imx_2d_rotation_type = g_enum_register_static(
-			"Imx2dRotation",
-			imx_2d_rotation_values
-		);
+			GST_WARNING("unsupported video orientation method");
+			return IMX_2D_ROTATION_NONE;
+		}
 	}
+}
 
-	return gst_imx_2d_rotation_type;
+
+gboolean gst_imx_2d_orientation_from_image_direction_tag(GstTagList const *taglist, GstVideoOrientationMethod *orientation)
+{
+	gchar *orientation_str;
+
+	if (gst_tag_list_get_string(taglist, GST_TAG_IMAGE_ORIENTATION, &orientation_str))
+	{
+		gboolean valid = TRUE;
+
+		if (g_strcmp0("rotate-0", orientation_str) == 0)
+			*orientation = GST_VIDEO_ORIENTATION_IDENTITY;
+		else if (g_strcmp0("rotate-90", orientation_str) == 0)
+			*orientation = GST_VIDEO_ORIENTATION_90R;
+		else if (g_strcmp0("rotate-180", orientation_str) == 0)
+			*orientation = GST_VIDEO_ORIENTATION_180;
+		else if (g_strcmp0("rotate-270", orientation_str) == 0)
+			*orientation = GST_VIDEO_ORIENTATION_90L;
+		else if (g_strcmp0("flip-rotate-0", orientation_str) == 0)
+			*orientation = GST_VIDEO_ORIENTATION_HORIZ;
+		else if (g_strcmp0("flip-rotate-90", orientation_str) == 0)
+			*orientation = GST_VIDEO_ORIENTATION_UL_LR;
+		else if (g_strcmp0("flip-rotate-180", orientation_str) == 0)
+			*orientation = GST_VIDEO_ORIENTATION_VERT;
+		else if (g_strcmp0("flip-rotate-270", orientation_str) == 0)
+			*orientation = GST_VIDEO_ORIENTATION_UR_LL;
+		else
+		{
+			GST_WARNING("unknown image-orientation tag value \"%s\"", orientation_str);
+			valid = FALSE;
+		}
+
+		g_free(orientation_str);
+
+		return valid;
+	}
+	else
+		return FALSE;
 }

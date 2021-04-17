@@ -413,6 +413,14 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 		case IMX_2D_ROTATION_270: g2d_dest_surf.base.rot = G2D_ROTATION_270; break;
 		case IMX_2D_ROTATION_FLIP_HORIZONTAL: g2d_source_surf.base.rot = G2D_FLIP_H; break;
 		case IMX_2D_ROTATION_FLIP_VERTICAL: g2d_source_surf.base.rot = G2D_FLIP_V; break;
+		case IMX_2D_ROTATION_UL_LR:
+			g2d_source_surf.base.rot = G2D_FLIP_V;
+			g2d_dest_surf.base.rot = G2D_ROTATION_90;
+			break;
+		case IMX_2D_ROTATION_UR_LL:
+			g2d_source_surf.base.rot = G2D_FLIP_H;
+			g2d_dest_surf.base.rot = G2D_ROTATION_90;
+			break;
 		default: break;
 	}
 

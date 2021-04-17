@@ -32,19 +32,30 @@ enum
 {
 	PROP_0,
 	PROP_INPUT_CROP,
-	PROP_OUTPUT_ROTATION
+	PROP_VIDEO_DIRECTION
 };
 
 
 #define DEFAULT_INPUT_CROP TRUE
-#define DEFAULT_OUTPUT_ROTATION IMX_2D_ROTATION_NONE
+#define DEFAULT_VIDEO_DIRECTION GST_VIDEO_ORIENTATION_IDENTITY
 
 
 /* Cached quark to avoid contention on the global quark table lock */
 static GQuark meta_tag_video_quark;
 
 
-G_DEFINE_ABSTRACT_TYPE(GstImx2dVideoTransform, gst_imx_2d_video_transform, GST_TYPE_BASE_TRANSFORM)
+static void gst_imx_2d_video_transform_video_direction_interface_init(G_GNUC_UNUSED GstVideoDirectionInterface *iface)
+{
+	/* We implement the video-direction property */
+}
+
+
+G_DEFINE_ABSTRACT_TYPE_WITH_CODE(
+	GstImx2dVideoTransform,
+	gst_imx_2d_video_transform,
+	GST_TYPE_BASE_TRANSFORM,
+	G_IMPLEMENT_INTERFACE(GST_TYPE_VIDEO_DIRECTION, gst_imx_2d_video_transform_video_direction_interface_init)
+)
 
 
 /* Base class function overloads. */
@@ -53,6 +64,7 @@ G_DEFINE_ABSTRACT_TYPE(GstImx2dVideoTransform, gst_imx_2d_video_transform, GST_T
 static void gst_imx_2d_video_transform_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_2d_video_transform_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static GstStateChangeReturn gst_imx_2d_video_transform_change_state(GstElement *element, GstStateChange transition);
+static gboolean gst_imx_2d_video_transform_sink_event(GstBaseTransform *transform, GstEvent *event);
 static gboolean gst_imx_2d_video_transform_src_event(GstBaseTransform *transform, GstEvent *event);
 
 /* Caps handling. */
@@ -81,6 +93,7 @@ static gboolean gst_imx_2d_video_transform_copy_metadata(GstBaseTransform *trans
 static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self);
 static void gst_imx_2d_video_transform_stop(GstImx2dVideoTransform *self);
 static gboolean gst_imx_2d_video_transform_create_blitter(GstImx2dVideoTransform *self);
+static GstVideoOrientationMethod gst_imx_2d_video_transform_get_current_video_direction(GstImx2dVideoTransform *self);
 
 
 
@@ -106,6 +119,7 @@ static void gst_imx_2d_video_transform_class_init(GstImx2dVideoTransformClass *k
 
 	element_class->change_state                 = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_change_state);
 
+	base_transform_class->sink_event            = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_sink_event);
 	base_transform_class->src_event             = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_src_event);
 	base_transform_class->transform_caps        = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_transform_caps);
 	base_transform_class->fixate_caps           = GST_DEBUG_FUNCPTR(gst_imx_2d_video_transform_fixate_caps);
@@ -138,18 +152,7 @@ static void gst_imx_2d_video_transform_class_init(GstImx2dVideoTransformClass *k
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
-	g_object_class_install_property(
-		object_class,
-		PROP_OUTPUT_ROTATION,
-		g_param_spec_enum(
-			"output-rotation",
-			"Output rotation",
-			"Output rotation in 90-degree steps",
-			gst_imx_2d_rotation_get_type(),
-			DEFAULT_OUTPUT_ROTATION,
-			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
-		)
-	);
+	g_object_class_override_property(object_class, PROP_VIDEO_DIRECTION, "video-direction");
 }
 
 
@@ -175,7 +178,8 @@ void gst_imx_2d_video_transform_init(GstImx2dVideoTransform *self)
 	self->overlay_handler = NULL;
 
 	self->input_crop = DEFAULT_INPUT_CROP;
-	self->output_rotation = DEFAULT_OUTPUT_ROTATION;
+	self->video_direction = DEFAULT_VIDEO_DIRECTION;
+	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
 
 	/* Set passthrough initially to FALSE. Passthrough will
 	 * be enabled/disabled on a per-frame basis in
@@ -200,10 +204,10 @@ static void gst_imx_2d_video_transform_set_property(GObject *object, guint prop_
 			break;
 		}
 
-		case PROP_OUTPUT_ROTATION:
+		case PROP_VIDEO_DIRECTION:
 		{
 			GST_OBJECT_LOCK(self);
-			self->output_rotation = g_value_get_enum(value);
+			self->video_direction = g_value_get_enum(value);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -229,10 +233,10 @@ static void gst_imx_2d_video_transform_get_property(GObject *object, guint prop_
 			break;
 		}
 
-		case PROP_OUTPUT_ROTATION:
+		case PROP_VIDEO_DIRECTION:
 		{
 			GST_OBJECT_LOCK(self);
-			g_value_set_enum(value, self->output_rotation);
+			g_value_set_enum(value, self->video_direction);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -279,6 +283,37 @@ static GstStateChangeReturn gst_imx_2d_video_transform_change_state(GstElement *
 	}
 
 	return ret;
+}
+
+
+static gboolean gst_imx_2d_video_transform_sink_event(GstBaseTransform *transform, GstEvent *event)
+{
+	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
+
+	switch (GST_EVENT_TYPE(event))
+	{
+		case GST_EVENT_TAG:
+		{
+			GstTagList *taglist;
+			GstVideoOrientationMethod new_tag_video_direction;
+
+			gst_event_parse_tag(event, &taglist);
+
+			if (gst_imx_2d_orientation_from_image_direction_tag(taglist, &new_tag_video_direction))
+			{
+				GST_OBJECT_LOCK(self);
+				self->tag_video_direction = new_tag_video_direction;
+				GST_OBJECT_UNLOCK(self);
+			}
+
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return GST_BASE_TRANSFORM_CLASS(gst_imx_2d_video_transform_parent_class)->sink_event(transform, event);
 }
 
 
@@ -1373,7 +1408,7 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
 	GstVideoCropMeta *video_crop_meta = NULL;
 	gboolean passthrough;
-	Imx2dRotation output_rotation;
+	GstVideoOrientationMethod video_direction;
 	gboolean input_crop;
 	gboolean has_crop_meta = FALSE;
 
@@ -1393,13 +1428,13 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	g_assert(self->uploader != NULL);
 
 	GST_OBJECT_LOCK(self);
-	output_rotation = self->output_rotation;
 	input_crop = self->input_crop;
+	video_direction = gst_imx_2d_video_transform_get_current_video_direction(self);
 	GST_OBJECT_UNLOCK(self);
 
 	{
 		gboolean has_input_buffer = (input_buffer != NULL);
-		gboolean no_output_rotation = (output_rotation == IMX_2D_ROTATION_NONE);
+		gboolean identity_video_direction = (video_direction == GST_VIDEO_ORIENTATION_IDENTITY);
 		gboolean are_both_pools_same = gst_imx_2d_video_buffer_pool_are_both_pools_same(self->video_buffer_pool);
 
 		if (input_crop)
@@ -1412,13 +1447,13 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 			self,
 			"has input: %d  "
 			"input&output video info equal: %d  "
-			"no output rotation: %d  "
+			"identity video direction: %d  "
 			"input crop: %d  "
 			"has crop meta: %d"
 			"are both pools same: %d",
 			has_input_buffer,
 			self->inout_info_equal,
-			no_output_rotation,
+			identity_video_direction,
 			input_crop,
 			has_crop_meta,
 			are_both_pools_same
@@ -1426,7 +1461,7 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 
 		passthrough = (input_buffer != NULL)
 		           && self->inout_info_equal
-		           && (output_rotation == IMX_2D_ROTATION_NONE)
+		           && identity_video_direction
 		           && are_both_pools_same;
 
 		if (passthrough && input_crop && has_crop_meta)
@@ -1466,7 +1501,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	GstFlowReturn flow_ret = GST_FLOW_OK;
 	gboolean input_crop;
 	Imx2dRegion crop_rectangle;
-	Imx2dRotation output_rotation;
+	GstVideoOrientationMethod video_direction;
 	GstBuffer *uploaded_input_buffer = NULL;
 	GstBuffer *intermediate_buffer = NULL;
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
@@ -1494,7 +1529,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	 * values while this function is running. */
 	GST_OBJECT_LOCK(self);
 	input_crop = self->input_crop;
-	output_rotation = self->output_rotation;
+	video_direction = gst_imx_2d_video_transform_get_current_video_direction(self);
 	GST_OBJECT_UNLOCK(self);
 
 
@@ -1540,7 +1575,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	memset(&blit_params, 0, sizeof(blit_params));
 	blit_params.source_region = NULL;
 	blit_params.dest_region = NULL;
-	blit_params.rotation = output_rotation;
+	blit_params.rotation = gst_imx_2d_convert_from_video_orientation_method(video_direction);
 	blit_params.alpha = 255;
 
 	if (input_crop)
@@ -1720,6 +1755,8 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 
 	self->video_buffer_pool = NULL;
 
+	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
+
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
 	if (self->imx_dma_buffer_allocator == NULL)
 	{
@@ -1847,6 +1884,12 @@ static gboolean gst_imx_2d_video_transform_create_blitter(GstImx2dVideoTransform
 	GST_DEBUG_OBJECT(self, "created new blitter %" GST_PTR_FORMAT, (gpointer)(self->blitter));
 
 	return TRUE;
+}
+
+
+static GstVideoOrientationMethod gst_imx_2d_video_transform_get_current_video_direction(GstImx2dVideoTransform *self)
+{
+	return (self->video_direction == GST_VIDEO_ORIENTATION_AUTO) ? self->tag_video_direction : self->video_direction;
 }
 
 
