@@ -819,6 +819,7 @@ static void gst_imx_2d_compositor_release_pad(GstElement *element, GstPad *pad);
 
 /* Allocator. */
 static gboolean gst_imx_2d_compositor_decide_allocation(GstAggregator *aggregator, GstQuery *query);
+static gboolean gst_imx_2d_compositor_propose_allocation(GstAggregator *aggregator, GstAggregatorPad *pad, GstQuery *decide_query, GstQuery *query);
 
 /* Misc aggregator functionality. */
 static gboolean gst_imx_2d_compositor_start(GstAggregator *aggregator);
@@ -858,6 +859,7 @@ static void gst_imx_2d_compositor_class_init(GstImx2dCompositorClass *klass)
 	element_class->release_pad     = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_release_pad);
 
 	aggregator_class->decide_allocation   = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_decide_allocation);
+	aggregator_class->propose_allocation  = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_propose_allocation);
 	aggregator_class->start               = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_start);
 	aggregator_class->stop                = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_stop);
 	aggregator_class->sink_query          = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_sink_query);
@@ -1049,6 +1051,19 @@ static gboolean gst_imx_2d_compositor_decide_allocation(GstAggregator *aggregato
 	);
 
 	return (self->video_buffer_pool != NULL);
+}
+
+
+static gboolean gst_imx_2d_compositor_propose_allocation(GstAggregator *aggregator, GstAggregatorPad *pad, GstQuery *decide_query, GstQuery *query)
+{
+	if (!GST_AGGREGATOR_CLASS(gst_imx_2d_compositor_parent_class)->propose_allocation(aggregator, pad, decide_query, query))
+		return FALSE;
+
+	/* Let upstream know that we can handle GstVideoMeta and GstVideoCropMeta. */
+	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, 0);
+	gst_query_add_allocation_meta(query, GST_VIDEO_CROP_META_API_TYPE, 0);
+
+	return TRUE;
 }
 
 

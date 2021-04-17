@@ -1331,7 +1331,9 @@ static gboolean gst_imx_2d_video_transform_propose_allocation(GstBaseTransform *
 		gst_structure_free(allocation_meta_structure);
 	}
 
+	/* Let upstream know that we can handle GstVideoMeta and GstVideoCropMeta. */
 	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, 0);
+	gst_query_add_allocation_meta(query, GST_VIDEO_CROP_META_API_TYPE, 0);
 
 	return TRUE;
 }
