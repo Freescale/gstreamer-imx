@@ -93,9 +93,6 @@ GType gst_imx_dma_buffer_uploader_get_type(void);
  *
  * Creates a new upload object.
  *
- * The specified ImxDmaBuffer allocator will be used in
- * @gst_imx_dma_buffer_uploader_propose_allocation calls.
- *
  * The allocator is ref'd in this function and unref'd when
  * the uploader is destroyed.
  *
