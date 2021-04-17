@@ -1449,6 +1449,18 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 					}
 
 
+					/* Set the size of the actual buffer content. Depending on which SoC  is
+					 * being used, the buffers may have some reserved space at the end which
+					 * is not used for video pixels. That space is used by frames that belong
+					 * to the VPU's framebuffer pool; output buffers like this one don't
+					 * actually ever use that extra space. min_output_framebuffer_size is the
+					 * size of a buffer minus that extra space (but still with the space that
+					 * is required for any padding bytes). Set the output buffer's size to
+					 * this one to not confuse downstream into thinking that that extra space
+					 * is actually part of the usable buffer data. */
+					gst_buffer_set_size(out_frame->output_buffer, imx_vpu_dec->current_stream_info.min_output_framebuffer_size);
+
+
 					/* Make a tightly packed copy of the VPU output frame buffer if needed.
 					 * This function will replace the out_frame->output_buffer with the
 					 * copy and unref the original out_frame->output_buffer if such a copy
