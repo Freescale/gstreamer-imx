@@ -417,6 +417,13 @@ static gboolean mark_meta_pooled(GstBuffer *buffer, GstMeta **meta, gpointer use
 }
 
 
+GstVideoInfo const * gst_imx_vpu_dec_buffer_pool_get_video_info(GstImxVpuDecBufferPool *imx_vpu_dec_buffer_pool)
+{
+	g_assert(imx_vpu_dec_buffer_pool != NULL);
+	return &(imx_vpu_dec_buffer_pool->video_info);
+}
+
+
 GstBuffer* gst_imx_vpu_dec_buffer_pool_reserve_buffer(GstImxVpuDecBufferPool *imx_vpu_dec_buffer_pool)
 {
 	GstFlowReturn flow_ret;

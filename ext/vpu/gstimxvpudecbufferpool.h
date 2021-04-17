@@ -21,6 +21,7 @@
 
 #include <glib.h>
 #include <gst/gst.h>
+#include <gst/video/video.h>
 #include <imxvpuapi2/imxvpuapi2.h>
 #include "gstimxvpudeccontext.h"
 
@@ -97,6 +98,8 @@ GstImxVpuDecBufferPoolAcquireFlags;
 GType gst_imx_vpu_dec_buffer_pool_get_type(void);
 
 GstImxVpuDecBufferPool* gst_imx_vpu_dec_buffer_pool_new(ImxVpuApiDecStreamInfo *stream_info, GstImxVpuDecContext *decoder_context);
+
+GstVideoInfo const * gst_imx_vpu_dec_buffer_pool_get_video_info(GstImxVpuDecBufferPool *imx_vpu_dec_buffer_pool);
 
 GstBuffer* gst_imx_vpu_dec_buffer_pool_reserve_buffer(GstImxVpuDecBufferPool *imx_vpu_dec_buffer_pool);
 void gst_imx_vpu_dec_buffer_pool_select_reserved_buffer(GstImxVpuDecBufferPool *imx_vpu_dec_buffer_pool, GstBuffer *buffer);

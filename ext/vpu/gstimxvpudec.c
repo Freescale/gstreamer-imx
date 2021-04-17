@@ -76,6 +76,11 @@ struct _GstImxVpuDec
 	/* Current DMA buffer pool. Created in
 	 * gst_imx_vpu_dec_decide_allocation(). */
 	GstImxVpuDecBufferPool *dma_buffer_pool;
+	/* The "nonvideometa pool" is used when the frames the VPU
+	 * outputs aren't "tightly packed". See need_to_copy_output_frames
+	 * below for details. */
+	GstBufferPool *nonvideometa_output_buffer_pool;
+	GstVideoInfo nonvideometa_output_video_info;
 
 	/* The output buffer that is prepared for receiving
 	 * a decoded output frame. This is only used if the
@@ -109,6 +114,14 @@ struct _GstImxVpuDec
 	 * gst_imx_vpu_dec_handle_frame() will exit early. The flag is
 	 * cleared once the decoder is restarted. */
 	gboolean fatal_error_cannot_decode;
+
+	/* true if the VPU output plane stride & plane offset values are "tightly
+	 * packed", that is, they do not contain extra room for padding bytes. If
+	 * they do, and downstream can't handle videometas, then frames have to
+	 * be copied into a form that *is* tightly packed, otherwise downstream
+	 * will get frames with padding bytes and not know that these need to be
+	 * skipped. */
+	gboolean need_to_copy_output_frames;
 };
 
 
@@ -138,6 +151,7 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_dec);
 static void gst_imx_vpu_dec_unref_decoder_context(GstImxVpuDec *imx_vpu_dec);
 static gboolean gst_imx_vpu_dec_allocate_and_add_framebuffers(GstImxVpuDec *imx_vpu_dec, size_t num_framebuffers);
+static GstFlowReturn gst_imx_vpu_dec_copy_output_frame_if_needed(GstImxVpuDec *imx_vpu_dec, GstVideoCodecFrame *output_frame);
 
 
 static void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
@@ -171,6 +185,7 @@ static void gst_imx_vpu_dec_init(GstImxVpuDec *imx_vpu_dec)
 
 	imx_vpu_dec->decoder_context = NULL;
 	imx_vpu_dec->dma_buffer_pool = NULL;
+	imx_vpu_dec->nonvideometa_output_buffer_pool = NULL;
 	imx_vpu_dec->prepared_output_buffer = NULL;
 
 	imx_vpu_dec->stream_buffer = NULL;
@@ -255,6 +270,12 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 	{
 		gst_object_unref(GST_OBJECT(imx_vpu_dec->dma_buffer_pool));
 		imx_vpu_dec->dma_buffer_pool = NULL;
+	}
+
+	if (imx_vpu_dec->nonvideometa_output_buffer_pool != NULL)
+	{
+		gst_object_unref(GST_OBJECT(imx_vpu_dec->nonvideometa_output_buffer_pool));
+		imx_vpu_dec->nonvideometa_output_buffer_pool = NULL;
 	}
 
 	if (imx_vpu_dec->stream_buffer != NULL)
@@ -354,6 +375,12 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	{
 		gst_object_unref(GST_OBJECT(imx_vpu_dec->dma_buffer_pool));
 		imx_vpu_dec->dma_buffer_pool = NULL;
+	}
+
+	if (imx_vpu_dec->nonvideometa_output_buffer_pool != NULL)
+	{
+		gst_object_unref(GST_OBJECT(imx_vpu_dec->nonvideometa_output_buffer_pool));
+		imx_vpu_dec->nonvideometa_output_buffer_pool = NULL;
 	}
 
 	/* Clean up old input and output states. */
@@ -704,9 +731,13 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	GstImxVpuDec *imx_vpu_dec = GST_IMX_VPU_DEC_CAST(decoder);
 	GstBufferPool *buffer_pool = NULL;
 	GstStructure *pool_config;
-	guint buffer_size, pool_index;
+	guint buffer_size, pool_index, plane_index;
 	GstCaps *negotiated_caps;
-	GstVideoInfo video_info;
+	GstVideoInfo negotiated_video_info;
+	GstVideoInfo const *dma_bufpool_video_info;
+	gboolean vpu_output_buffers_are_tightly_packed;
+	gboolean downstream_supports_video_meta;
+	guint video_meta_index;
 	GstImxDmaBufferAllocator *imx_dma_buffer_allocator = NULL;
 
 	g_assert(imx_vpu_dec->decoder != NULL);
@@ -717,12 +748,12 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	{
 		GST_DEBUG_OBJECT(imx_vpu_dec, "no DMA buffer pool exists yet; creating one, and trying to use any i.MX DMA buffer allocator present in the query");
 
-		gst_video_info_init(&video_info);
+		gst_video_info_init(&negotiated_video_info);
 		gst_query_parse_allocation(query, &negotiated_caps, NULL);
 		if (negotiated_caps != NULL)
 		{
 			GST_DEBUG_OBJECT(imx_vpu_dec, "negotiated caps in allocation query: %" GST_PTR_FORMAT, (gpointer)negotiated_caps);
-			if (G_UNLIKELY(!gst_video_info_from_caps(&video_info, negotiated_caps)))
+			if (G_UNLIKELY(!gst_video_info_from_caps(&negotiated_video_info, negotiated_caps)))
 			{
 				GST_ERROR_OBJECT(imx_vpu_dec, "caps cannot be converted to a video info structure");
 				return FALSE;
@@ -731,7 +762,11 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 
 		GST_DEBUG_OBJECT(decoder, "number of allocation buffer pools in query: %d", gst_query_get_n_allocation_pools(query));
 
-		buffer_size = MAX(video_info.size, imx_vpu_dec->current_stream_info.min_fb_pool_framebuffer_size);
+		/* See if downstream supports video meta. */
+		downstream_supports_video_meta = gst_query_find_allocation_meta(query, GST_VIDEO_META_API_TYPE, &video_meta_index);
+		GST_DEBUG_OBJECT(imx_vpu_dec, "video meta supported by downstream: %d", downstream_supports_video_meta);
+
+		buffer_size = MAX(negotiated_video_info.size, imx_vpu_dec->current_stream_info.min_fb_pool_framebuffer_size);
 
 		/* Iterate over all pools and look for one that has an allocator
 		 * which implements the GstImxDmaBufferAllocator interface. */
@@ -774,9 +809,70 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 		pool_config = gst_buffer_pool_get_config(buffer_pool);
 		gst_buffer_pool_config_set_params(pool_config, negotiated_caps, buffer_size, 0, 0);
 		gst_buffer_pool_config_set_allocator(pool_config, GST_ALLOCATOR(imx_dma_buffer_allocator), NULL);
-		gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_VIDEO_META);
+		if (downstream_supports_video_meta)
+			gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 		gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_IMX_VPU_DEC_BUFFER_POOL);
 		gst_buffer_pool_set_config(buffer_pool, pool_config);
+
+		/* Check if the plane stride & plane offset values are "tightly packed".
+		 * See the vpu_output_buffers_are_tightly_packed for more details. */
+		dma_bufpool_video_info = gst_imx_vpu_dec_buffer_pool_get_video_info(imx_vpu_dec->dma_buffer_pool);
+		vpu_output_buffers_are_tightly_packed = TRUE;
+		for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(dma_bufpool_video_info); ++plane_index)
+		{
+			gint negotiated_info_stride = GST_VIDEO_INFO_PLANE_STRIDE(&negotiated_video_info, plane_index);
+			gint dma_bufpool_info_stride = GST_VIDEO_INFO_PLANE_STRIDE(dma_bufpool_video_info, plane_index);
+
+			if (negotiated_info_stride != dma_bufpool_info_stride)
+			{
+				GST_DEBUG_OBJECT(
+					imx_vpu_dec,
+					"found difference in stride values for plane #%d:  negotiated video info stride: %d  DMA buffer pool video info stride: %d",
+					plane_index,
+					negotiated_info_stride,
+					dma_bufpool_info_stride
+				);
+
+				vpu_output_buffers_are_tightly_packed = FALSE;
+				break;
+			}
+		}
+		GST_DEBUG_OBJECT(imx_vpu_dec, "VPU output buffers are tightly packed: %d", vpu_output_buffers_are_tightly_packed);
+
+		/* If the plane stride & plane offset values aren't "tightly packed",
+		 * _and_ downstream does not support meta, then we must copy the VPU's
+		 * output frames into a form that _is_ "tightly packed", because without
+		 * video meta, downstream cannot know which parts of the frame contain
+		 * actual pixels and which ones contain padding bytes. */
+		imx_vpu_dec->need_to_copy_output_frames = !(downstream_supports_video_meta || vpu_output_buffers_are_tightly_packed);
+
+		GST_DEBUG_OBJECT(imx_vpu_dec, "need to copy output frames: %d", imx_vpu_dec->need_to_copy_output_frames);
+
+		if (imx_vpu_dec->need_to_copy_output_frames)
+		{
+			/* Create "nonvideometa" buffer pool. We need this if frames
+			 * copies are necessary, because the final output buffers
+			 * will come from this very buffer pool. */
+
+			GstAllocationParams allocation_params;
+
+			buffer_size = GST_VIDEO_INFO_SIZE(&negotiated_video_info);
+
+			gst_allocation_params_init(&allocation_params);
+
+			imx_vpu_dec->nonvideometa_output_buffer_pool = gst_video_buffer_pool_new();
+
+			memcpy(&(imx_vpu_dec->nonvideometa_output_video_info), &negotiated_video_info, sizeof(GstVideoInfo));
+
+			pool_config = gst_buffer_pool_get_config(imx_vpu_dec->nonvideometa_output_buffer_pool);
+			gst_buffer_pool_config_set_params(pool_config, negotiated_caps, buffer_size, 0, 0);
+			gst_buffer_pool_config_set_allocator(pool_config, NULL, &allocation_params);
+			gst_buffer_pool_set_config(imx_vpu_dec->nonvideometa_output_buffer_pool, pool_config);
+
+			gst_buffer_pool_set_active(imx_vpu_dec->nonvideometa_output_buffer_pool, TRUE);
+
+			GST_INFO_OBJECT(imx_vpu_dec, "need to copy VPU output frames since downstream cannot handle those directly; this may impact performance");
+		}
 	}
 	else
 	{
@@ -867,7 +963,7 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 				{
 					gst_buffer_unref(imx_vpu_dec->prepared_output_buffer);
 					imx_vpu_dec->prepared_output_buffer = NULL;
-					GST_ERROR_OBJECT(imx_vpu_dec, "got gstbuffer from reserve_buffer(), but it does not contain a DMA buffer");
+					GST_ERROR_OBJECT(imx_vpu_dec, "got gstbuffer from acquire_buffer(), but it does not contain a DMA buffer");
 					flow_ret = GST_FLOW_ERROR;
 				}
 				else
@@ -1353,6 +1449,19 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 					}
 
 
+					/* Make a tightly packed copy of the VPU output frame buffer if needed.
+					 * This function will replace the out_frame->output_buffer with the
+					 * copy and unref the original out_frame->output_buffer if such a copy
+					 * is required (= if imx_vpu-dec->need_to_copy_output_frames is TRUE). */
+					flow_ret = gst_imx_vpu_dec_copy_output_frame_if_needed(imx_vpu_dec, out_frame);
+					if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+					{
+						gst_video_codec_frame_unref(out_frame);
+						imx_vpu_dec->fatal_error_cannot_decode = TRUE;
+						goto finish;
+					}
+
+
 					/* Set the interlacing flags in the videometa if necessary. */
 					if (G_LIKELY((out_frame->output_buffer != NULL) && ((vmeta = gst_buffer_get_video_meta(out_frame->output_buffer)) != NULL)))
 					{
@@ -1505,6 +1614,74 @@ finish:
 	g_free(fb_contexts);
 	return ret;
 
+	goto finish;
+}
+
+
+static GstFlowReturn gst_imx_vpu_dec_copy_output_frame_if_needed(GstImxVpuDec *imx_vpu_dec, GstVideoCodecFrame *output_frame)
+{
+	GstFlowReturn flow_ret;
+	GstVideoFrame vpu_output_video_frame;
+	GstVideoFrame new_output_video_frame;
+	GstBuffer *new_output_buffer;
+	GstVideoInfo vpu_video_info;
+
+	if (!(imx_vpu_dec->need_to_copy_output_frames))
+		return GST_FLOW_OK;
+
+	flow_ret = gst_buffer_pool_acquire_buffer(imx_vpu_dec->nonvideometa_output_buffer_pool, &new_output_buffer, NULL);
+	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+	{
+		GST_ERROR_OBJECT(imx_vpu_dec, "could not allocate output buffer with nonvideometa buffer pool: %s", gst_flow_get_name(flow_ret));
+		goto error;
+	}
+
+	memcpy(&vpu_video_info, gst_imx_vpu_dec_buffer_pool_get_video_info(imx_vpu_dec->dma_buffer_pool), sizeof(GstVideoInfo));
+
+	if (!gst_video_frame_map(
+		&vpu_output_video_frame,
+		&vpu_video_info,
+		output_frame->output_buffer,
+		GST_MAP_READ
+	))
+	{
+		GST_ERROR_OBJECT(imx_vpu_dec, "could not map VPU output video frame");
+		goto error;
+	}
+
+	if (!gst_video_frame_map(
+		&new_output_video_frame,
+		&(imx_vpu_dec->nonvideometa_output_video_info),
+		new_output_buffer,
+		GST_MAP_WRITE
+	))
+	{
+		GST_ERROR_OBJECT(imx_vpu_dec, "could not map new output video frame");
+		goto error;
+	}
+
+	if (!gst_video_frame_copy(&new_output_video_frame, &vpu_output_video_frame))
+	{
+		GST_ERROR_OBJECT(imx_vpu_dec, "could not copy pixels from VPU output buffer into new output buffer");
+		goto error;
+	}
+
+	GST_LOG_OBJECT(
+		imx_vpu_dec,
+		"copied pixels from VPU output buffer into new output buffer"
+	);
+
+	gst_buffer_unref(output_frame->output_buffer);
+	output_frame->output_buffer = new_output_buffer;
+
+finish:
+	gst_video_frame_unmap(&new_output_video_frame);
+	gst_video_frame_unmap(&vpu_output_video_frame);
+
+	return flow_ret;
+
+error:
+	gst_buffer_unref(new_output_buffer);
 	goto finish;
 }
 
