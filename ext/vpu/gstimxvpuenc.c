@@ -84,6 +84,7 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *cur_frame);
 static GstFlowReturn gst_imx_vpu_enc_finish(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_enc_flush(GstVideoEncoder *encoder);
+static gboolean gst_imx_vpu_enc_propose_allocation(GstVideoEncoder *encoder, GstQuery *query);
 
 static gboolean gst_imx_vpu_enc_create_dma_buffer_pool(GstImxVpuEnc *imx_vpu_enc);
 static void gst_imx_vpu_enc_free_fb_pool_dmabuffers(GstImxVpuEnc *imx_vpu_enc);
@@ -110,6 +111,7 @@ static void gst_imx_vpu_enc_class_init(GstImxVpuEncClass *klass)
 	video_encoder_class->handle_frame       = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_handle_frame);
 	video_encoder_class->finish             = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_finish);
 	video_encoder_class->flush              = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_flush);
+	video_encoder_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_propose_allocation);
 }
 
 
@@ -611,6 +613,18 @@ static gboolean gst_imx_vpu_enc_flush(GstVideoEncoder *encoder)
 
 	if (imx_vpu_enc->encoder != NULL)
 		imx_vpu_api_enc_flush(imx_vpu_enc->encoder);
+
+	return TRUE;
+}
+
+
+static gboolean gst_imx_vpu_enc_propose_allocation(GstVideoEncoder *encoder, GstQuery *query)
+{
+	if (!GST_VIDEO_ENCODER_CLASS(gst_imx_vpu_enc_parent_class)->propose_allocation(encoder, query))
+		return FALSE;
+
+	/* Inform upstream that we can handle GstVideoMeta. */
+	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, 0);
 
 	return TRUE;
 }
