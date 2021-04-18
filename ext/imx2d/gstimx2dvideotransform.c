@@ -1650,6 +1650,8 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 		goto error;
 	}
 
+	intermediate_buffer = NULL;
+
 
 	/* Pass through the overlay meta if necessary. */
 
@@ -1674,6 +1676,8 @@ finish:
 	/* Discard the uploaded version of the input buffer. */
 	if (uploaded_input_buffer != NULL)
 		gst_buffer_unref(uploaded_input_buffer);
+	if (intermediate_buffer != NULL)
+		gst_buffer_unref(intermediate_buffer);
 	return flow_ret;
 
 error:

@@ -1648,6 +1648,8 @@ finish:
 			flow_ret = GST_FLOW_ERROR;
 		}
 	}
+	else
+		gst_buffer_unref(intermediate_buffer);
 
 	return flow_ret;
 
