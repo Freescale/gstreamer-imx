@@ -771,7 +771,7 @@ static GstFlowReturn gst_imx_v4l2_video_src_create(GstPushSrc *src, GstBuffer **
 		else
 		{
 			GstClock *pipeline_clock;
-			GstClockTime pipeline_clock_now;
+			GstClockTime pipeline_clock_now = GST_CLOCK_TIME_NONE;
 			GstClockTime pipeline_base_time;
 			GstClockTime realtime_clock_now;
 			GstClockTimeDiff capture_delay;
