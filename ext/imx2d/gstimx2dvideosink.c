@@ -65,6 +65,9 @@ static gboolean gst_imx_2d_video_sink_event(GstBaseSink *sink, GstEvent *event);
 /* Caps handling. */
 static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps);
 
+/* Allocator. */
+static gboolean gst_imx_2d_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query);
+
 /* Frame output. */
 static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *input_buffer);
 
@@ -93,15 +96,16 @@ static void gst_imx_2d_video_sink_class_init(GstImx2dVideoSinkClass *klass)
 	base_sink_class = GST_BASE_SINK_CLASS(klass);
 	video_sink_class = GST_VIDEO_SINK_CLASS(klass);
 
-	object_class->set_property   = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_set_property);
-	object_class->get_property   = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_get_property);
+	object_class->set_property          = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_set_property);
+	object_class->get_property          = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_get_property);
 
-	element_class->change_state  = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_change_state);
+	element_class->change_state         = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_change_state);
 
-	base_sink_class->set_caps    = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_set_caps);
-	base_sink_class->event       = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_event);
+	base_sink_class->set_caps           = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_set_caps);
+	base_sink_class->event              = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_event);
+	base_sink_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_propose_allocation);
 
-	video_sink_class->show_frame = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_show_frame);
+	video_sink_class->show_frame        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_show_frame);
 
 	g_object_class_install_property(
 		object_class,
@@ -323,6 +327,20 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 error:
 	return FALSE;
+}
+
+
+static gboolean gst_imx_2d_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query)
+{
+	/* Not chaining up to the base class since it does not have
+	 * its own propose_allocation implementation - its vmethod
+	 * propose_allocation pointer is set to NULL. */
+
+	/* Let upstream know that we can handle GstVideoMeta and GstVideoCropMeta. */
+	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, 0);
+	gst_query_add_allocation_meta(query, GST_VIDEO_CROP_META_API_TYPE, 0);
+
+	return TRUE;
 }
 
 
