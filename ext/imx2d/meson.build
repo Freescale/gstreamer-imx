@@ -63,6 +63,13 @@ if imx2d_backend_g2d_dep.found()
 	backend_deps += [imx2d_backend_g2d_dep]
 endif
 
+if imx2d_backend_ipu_dep.found()
+	backend_source += [
+		'gstimxipuvideotransform.c'
+	]
+	backend_deps += [imx2d_backend_ipu_dep]
+endif
+
 if backend_source.length() > 0
 	library(
 		'gstimx2d',

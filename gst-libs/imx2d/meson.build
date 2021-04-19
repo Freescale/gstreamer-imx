@@ -13,3 +13,4 @@ imx2d_dep = declare_dependency(
 )
 
 subdir('backend/g2d')
+subdir('backend/ipu')

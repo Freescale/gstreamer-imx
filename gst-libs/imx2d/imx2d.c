@@ -43,7 +43,7 @@ char const * imx_2d_pixel_format_to_string(Imx2dPixelFormat format)
 }
 
 
-char const * imx_2d_rotation_string(Imx2dRotation rotation)
+char const * imx_2d_rotation_to_string(Imx2dRotation rotation)
 {
 	switch (rotation)
 	{
