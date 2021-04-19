@@ -50,6 +50,7 @@ plugins_install_dir = join_paths(get_option('libdir'), 'gstreamer-1.0')
 
 
 imx_headers_path = get_option('imx-headers-path')
+sys_root = meson.get_external_property('sys_root', '', native: false)
 
 
 configinc = include_directories('.')

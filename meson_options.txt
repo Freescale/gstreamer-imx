@@ -8,6 +8,8 @@ option('g2d-based-on-dpu', type : 'boolean', value : false, description : 'Wheth
 
 option('ipu', type : 'feature', value : 'auto', description : '2D elements using the i.MX6 Image Processing Unit (IPU)')
 
+option('pxp', type : 'feature', value : 'auto', description : '2D elements using the i.MX6 Pixel Pipeline (PxP)')
+
 option('imx-headers-path', type : 'string', value : '', description : 'path to the extra imx kernel headers')
 
 option('imx2d-videosink', type : 'boolean', value : true)
