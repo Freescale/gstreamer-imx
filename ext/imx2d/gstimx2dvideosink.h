@@ -60,6 +60,7 @@ struct _GstImx2dVideoSink
 	Imx2dLinuxFramebuffer *framebuffer;
 	Imx2dSurface *framebuffer_surface;
 
+	gboolean drop_frames;
 	gchar *framebuffer_name;
 	gboolean input_crop;
 	GstVideoOrientationMethod video_direction;
@@ -68,6 +69,8 @@ struct _GstImx2dVideoSink
 	gboolean force_aspect_ratio;
 
 	GstVideoOrientationMethod tag_video_direction;
+
+	gboolean drop_frames_changed;
 
 	int write_fb_page;
 	int display_fb_page;

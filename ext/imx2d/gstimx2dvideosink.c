@@ -29,6 +29,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_2d_video_sink_debug);
 enum
 {
 	PROP_0,
+	PROP_DROP_FRAMES,
 	PROP_FRAMEBUFFER_NAME,
 	PROP_INPUT_CROP,
 	PROP_VIDEO_DIRECTION,
@@ -38,6 +39,7 @@ enum
 };
 
 
+#define DEFAULT_DROP_FRAMES FALSE
 #define DEFAULT_FRAMEBUFFER_NAME "/dev/fb0"
 #define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_VIDEO_DIRECTION GST_VIDEO_ORIENTATION_IDENTITY
@@ -83,6 +85,7 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self);
 static void gst_imx_2d_video_sink_stop(GstImx2dVideoSink *self);
 static gboolean gst_imx_2d_video_sink_create_blitter(GstImx2dVideoSink *self);
 static GstVideoOrientationMethod gst_imx_2d_video_sink_get_current_video_direction(GstImx2dVideoSink *self);
+static gboolean gst_imx_2d_video_sink_flip_pages(GstImx2dVideoSink *self);
 
 
 
@@ -115,6 +118,17 @@ static void gst_imx_2d_video_sink_class_init(GstImx2dVideoSinkClass *klass)
 
 	video_sink_class->show_frame        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_show_frame);
 
+	g_object_class_install_property(
+		object_class,
+		PROP_DROP_FRAMES,
+		g_param_spec_boolean(
+			"drop-frames",
+			"Drop frames",
+			"Drop frames and output a black screen instead",
+			DEFAULT_DROP_FRAMES,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 	g_object_class_install_property(
 		object_class,
 		PROP_FRAMEBUFFER_NAME,
@@ -186,6 +200,7 @@ static void gst_imx_2d_video_sink_init(GstImx2dVideoSink *self)
 
 	self->framebuffer = NULL;
 
+	self->drop_frames = DEFAULT_DROP_FRAMES;
 	self->framebuffer_name = g_strdup(DEFAULT_FRAMEBUFFER_NAME);
 	self->input_crop = DEFAULT_INPUT_CROP;
 	self->video_direction = DEFAULT_VIDEO_DIRECTION;
@@ -194,6 +209,8 @@ static void gst_imx_2d_video_sink_init(GstImx2dVideoSink *self)
 	self->force_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
 
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
+
+	self->drop_frames_changed = FALSE;
 }
 
 
@@ -213,6 +230,15 @@ static void gst_imx_2d_video_sink_set_property(GObject *object, guint prop_id, G
 
 	switch (prop_id)
 	{
+		case PROP_DROP_FRAMES:
+		{
+			GST_OBJECT_LOCK(self);
+			self->drop_frames = g_value_get_boolean(value);
+			self->drop_frames_changed = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
 		case PROP_FRAMEBUFFER_NAME:
 		{
 			gchar const *new_framebuffer_name = g_value_get_string(value);
@@ -283,6 +309,15 @@ static void gst_imx_2d_video_sink_get_property(GObject *object, guint prop_id, G
 
 	switch (prop_id)
 	{
+		case PROP_DROP_FRAMES:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_boolean(value, self->drop_frames);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+
 		case PROP_FRAMEBUFFER_NAME:
 		{
 			GST_OBJECT_LOCK(self);
@@ -461,6 +496,7 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	Imx2dBlitMargin blit_margin;
 	GstFlowReturn flow_ret;
 	gboolean input_crop;
+	gboolean drop_frames, drop_frames_changed;
 	Imx2dRegion crop_rectangle;
 	Imx2dRegion dest_region;
 	GstVideoOrientationMethod video_direction;
@@ -480,7 +516,44 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	input_crop = self->input_crop;
 	video_direction = gst_imx_2d_video_sink_get_current_video_direction(self);
 	force_aspect_ratio = self->force_aspect_ratio;
+	drop_frames = self->drop_frames;
+	drop_frames_changed = self->drop_frames_changed;
+	self->drop_frames_changed = FALSE;
 	GST_OBJECT_UNLOCK(self);
+
+
+	/* Check if the drop-frames property changed. If it changed
+	 * from false to true, paint the output region black. */
+	if (drop_frames)
+	{
+		GST_LOG_OBJECT(self, "drop-frames is currently set to TRUE; dropping frame by not showing it and instead filling output with black pixels");
+
+		if (drop_frames_changed)
+		{
+			if (!imx_2d_blitter_start(self->blitter, self->framebuffer_surface))
+			{
+				GST_ERROR_OBJECT(self, "starting blitter failed");
+				goto error;
+			}
+
+			if (!imx_2d_blitter_fill_region(self->blitter, imx_2d_surface_get_region(self->framebuffer_surface), 0x00000000))
+			{
+				GST_ERROR_OBJECT(self, "blitting failed");
+				goto error;
+			}
+
+			if (!imx_2d_blitter_finish(self->blitter))
+			{
+				GST_ERROR_OBJECT(self, "finishing blitter failed");
+				goto error;
+			}
+
+			if (!gst_imx_2d_video_sink_flip_pages(self))
+				goto error;
+		}
+
+		return GST_FLOW_OK;
+	}
 
 
 	/* Upload the input buffer. The uploader creates a deep
@@ -598,18 +671,8 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	}
 
 
-	if (self->use_vsync)
-	{
-		self->display_fb_page = self->write_fb_page;
-		self->write_fb_page = (self->write_fb_page + 1) % self->num_fb_pages;
-
-		imx_2d_linux_framebuffer_set_write_fb_page(self->framebuffer, self->write_fb_page);
-		if (!imx_2d_linux_framebuffer_set_display_fb_page(self->framebuffer, self->display_fb_page))
-		{
-			GST_ERROR_OBJECT(self, "could not set new framebuffer display page");
-			goto error;
-		}
-	}
+	if (!gst_imx_2d_video_sink_flip_pages(self))
+		goto error;
 
 
 	GST_LOG_OBJECT(self, "blitting procedure finished successfully; frame output complete");
@@ -639,6 +702,7 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 	self->uploader = gst_imx_dma_buffer_uploader_new(self->imx_dma_buffer_allocator);
 
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
+	self->drop_frames_changed = TRUE;
 
 	GST_OBJECT_LOCK(self);
 	framebuffer_name = g_strdup(self->framebuffer_name);
@@ -802,6 +866,25 @@ static gboolean gst_imx_2d_video_sink_create_blitter(GstImx2dVideoSink *self)
 static GstVideoOrientationMethod gst_imx_2d_video_sink_get_current_video_direction(GstImx2dVideoSink *self)
 {
 	return (self->video_direction == GST_VIDEO_ORIENTATION_AUTO) ? self->tag_video_direction : self->video_direction;
+}
+
+
+static gboolean gst_imx_2d_video_sink_flip_pages(GstImx2dVideoSink *self)
+{
+	if (!self->use_vsync)
+		return TRUE;
+
+	self->display_fb_page = self->write_fb_page;
+	self->write_fb_page = (self->write_fb_page + 1) % self->num_fb_pages;
+
+	imx_2d_linux_framebuffer_set_write_fb_page(self->framebuffer, self->write_fb_page);
+	if (!imx_2d_linux_framebuffer_set_display_fb_page(self->framebuffer, self->display_fb_page))
+	{
+		GST_ERROR_OBJECT(self, "could not set new framebuffer display page");
+		return FALSE;
+	}
+	else
+		return TRUE;
 }
 
 
