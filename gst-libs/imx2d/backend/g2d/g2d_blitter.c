@@ -193,8 +193,9 @@ static BOOL fill_g2d_surface_info(struct g2d_surface *g2d_surface, Imx2dSurface 
 	for (i = fmt_info->num_planes; i < 3; ++i)
 		g2d_surface->planes[i] = 0;
 
-	/* XXX: G2D seems to use YV12 with incorrect plane order.
-	 * In other words, for G2D, YV12 seems to be the same as
+#if ((G2D_VERSION_MAJOR < 1) || ((G2D_VERSION_MAJOR == 1) && (G2D_VERSION_MINOR <= 2)))
+	/* XXX: Older G2D versions seem  to use YV12 with incorrect plane
+	 * order. In other words, for G2D, YV12 seems to be the same as
 	 * I420. Consequently, we have to swap U/V plane addresses. */
 	if (desc->format == IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_YV12)
 	{
@@ -202,6 +203,7 @@ static BOOL fill_g2d_surface_info(struct g2d_surface *g2d_surface, Imx2dSurface 
 		g2d_surface->planes[1] = g2d_surface->planes[2];
 		g2d_surface->planes[2] = paddr;
 	}
+#endif
 
 	return TRUE;
 }
