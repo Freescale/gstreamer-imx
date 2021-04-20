@@ -62,9 +62,15 @@ struct _GstImx2dVideoSink
 
 	gboolean input_crop;
 	GstVideoOrientationMethod video_direction;
+	gboolean use_vsync;
+	gboolean clear_at_null;
 	gboolean force_aspect_ratio;
 
 	GstVideoOrientationMethod tag_video_direction;
+
+	int write_fb_page;
+	int display_fb_page;
+	int num_fb_pages;
 };
 
 

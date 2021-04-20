@@ -31,12 +31,16 @@ enum
 	PROP_0,
 	PROP_INPUT_CROP,
 	PROP_VIDEO_DIRECTION,
+	PROP_CLEAR_AT_NULL,
+	PROP_USE_VSYNC,
 	PROP_FORCE_ASPECT_RATIO
 };
 
 
 #define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_VIDEO_DIRECTION GST_VIDEO_ORIENTATION_IDENTITY
+#define DEFAULT_CLEAR_AT_NULL FALSE
+#define DEFAULT_USE_VSYNC FALSE
 #define DEFAULT_FORCE_ASPECT_RATIO TRUE
 
 
@@ -121,6 +125,28 @@ static void gst_imx_2d_video_sink_class_init(GstImx2dVideoSinkClass *klass)
 	g_object_class_override_property(object_class, PROP_VIDEO_DIRECTION, "video-direction");
 	g_object_class_install_property(
 		object_class,
+		PROP_CLEAR_AT_NULL,
+		g_param_spec_boolean(
+			"clear-at-null",
+			"Clear at null",
+			"Clear the screen by filling it with black pixels when switching to the NULL state",
+			DEFAULT_CLEAR_AT_NULL,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_USE_VSYNC,
+		g_param_spec_boolean(
+			"use-vsync",
+			"Use VSync",
+			"Enable and use vertical synchronization (based on page flipping) to eliminate tearing",
+			DEFAULT_USE_VSYNC,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
 		PROP_FORCE_ASPECT_RATIO,
 		g_param_spec_boolean(
 			"force-aspect-ratio",
@@ -147,6 +173,8 @@ static void gst_imx_2d_video_sink_init(GstImx2dVideoSink *self)
 
 	self->input_crop = DEFAULT_INPUT_CROP;
 	self->video_direction = DEFAULT_VIDEO_DIRECTION;
+	self->clear_at_null = DEFAULT_CLEAR_AT_NULL;
+	self->use_vsync = DEFAULT_USE_VSYNC;
 	self->force_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
 
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
@@ -171,6 +199,22 @@ static void gst_imx_2d_video_sink_set_property(GObject *object, guint prop_id, G
 		{
 			GST_OBJECT_LOCK(self);
 			self->video_direction = g_value_get_enum(value);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_CLEAR_AT_NULL:
+		{
+			GST_OBJECT_LOCK(self);
+			self->clear_at_null = g_value_get_boolean(value);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_USE_VSYNC:
+		{
+			GST_OBJECT_LOCK(self);
+			self->use_vsync = g_value_get_boolean(value);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -208,6 +252,22 @@ static void gst_imx_2d_video_sink_get_property(GObject *object, guint prop_id, G
 		{
 			GST_OBJECT_LOCK(self);
 			g_value_set_enum(value, self->video_direction);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_CLEAR_AT_NULL:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_boolean(value, self->clear_at_null);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_USE_VSYNC:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_boolean(value, self->use_vsync);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -330,7 +390,7 @@ error:
 }
 
 
-static gboolean gst_imx_2d_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query)
+static gboolean gst_imx_2d_video_sink_propose_allocation(G_GNUC_UNUSED GstBaseSink *sink, GstQuery *query)
 {
 	/* Not chaining up to the base class since it does not have
 	 * its own propose_allocation implementation - its vmethod
@@ -487,6 +547,20 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	}
 
 
+	if (self->use_vsync)
+	{
+		self->display_fb_page = self->write_fb_page;
+		self->write_fb_page = (self->write_fb_page + 1) % self->num_fb_pages;
+
+		imx_2d_linux_framebuffer_set_write_fb_page(self->framebuffer, self->write_fb_page);
+		if (!imx_2d_linux_framebuffer_set_display_fb_page(self->framebuffer, self->display_fb_page))
+		{
+			GST_ERROR_OBJECT(self, "could not set new framebuffer display page");
+			goto error;
+		}
+	}
+
+
 	GST_LOG_OBJECT(self, "blitting procedure finished successfully; frame output complete");
 
 
@@ -506,11 +580,16 @@ error:
 static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 {
 	GstImx2dVideoSinkClass *klass = GST_IMX_2D_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(self));
+	gboolean use_vsync;
 
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
 	self->uploader = gst_imx_dma_buffer_uploader_new(self->imx_dma_buffer_allocator);
 
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
+
+	GST_OBJECT_LOCK(self);
+	use_vsync = self->use_vsync;
+	GST_OBJECT_UNLOCK(self);
 
 	/* We call start _after_ the allocator & uploader were
 	 * set up in case these might be needed. Currently,
@@ -534,12 +613,32 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 		goto error;
 	}
 
-	self->framebuffer = imx_2d_linux_framebuffer_create("/dev/fb0", 0);
+	self->framebuffer = imx_2d_linux_framebuffer_create("/dev/fb0", use_vsync);
 	if (self->framebuffer == NULL)
 	{
 		GST_ERROR_OBJECT(self, "creating output framebuffer failed");
 		goto error;
 	}
+
+	if (use_vsync)
+	{
+		self->write_fb_page = 1;
+		self->display_fb_page = 0;
+
+		imx_2d_linux_framebuffer_set_write_fb_page(self->framebuffer, self->write_fb_page);
+		if (!imx_2d_linux_framebuffer_set_display_fb_page(self->framebuffer, self->display_fb_page))
+		{
+			GST_ERROR_OBJECT(self, "could not set initial framebuffer display page");
+			goto error;
+		}
+	}
+	else
+	{
+		self->write_fb_page = 0;
+		self->display_fb_page = 0;
+	}
+
+	self->num_fb_pages = imx_2d_linux_framebuffer_get_num_fb_pages(self->framebuffer);
 
 	self->framebuffer_surface = imx_2d_linux_framebuffer_get_surface(self->framebuffer);
 	g_assert(self->framebuffer_surface != NULL);
@@ -567,6 +666,37 @@ static void gst_imx_2d_video_sink_stop(GstImx2dVideoSink *self)
 
 	if (self->framebuffer != NULL)
 	{
+		gboolean clear_at_null;
+
+		GST_OBJECT_LOCK(self);
+		clear_at_null = self->clear_at_null;
+		GST_OBJECT_UNLOCK(self);
+
+		if (clear_at_null && (self->blitter != NULL))
+		{
+			int ret = 1, i;
+
+			GST_DEBUG_OBJECT(self, "clearing framebuffer with black pixels at the READY->NULL state change as requested");
+
+			for (i = 0; i < imx_2d_linux_framebuffer_get_num_fb_pages(self->framebuffer); ++i)
+			{
+				if (ret)
+					ret = imx_2d_blitter_start(self->blitter, self->framebuffer_surface);
+
+				if (self->use_vsync)
+				{
+					GST_DEBUG_OBJECT(self, "clearing FB page %d", i);
+					imx_2d_linux_framebuffer_set_write_fb_page(self->framebuffer, i);
+				}
+
+				if (ret)
+					ret = imx_2d_blitter_fill_region(self->blitter, imx_2d_surface_get_region(self->framebuffer_surface), 0x00000000);
+
+				if (ret)
+					imx_2d_blitter_finish(self->blitter);
+			}
+		}
+
 		imx_2d_linux_framebuffer_destroy(self->framebuffer);
 		self->framebuffer = NULL;
 	}

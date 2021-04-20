@@ -725,6 +725,10 @@ void imx_2d_blitter_destroy(Imx2dBlitter *blitter);
  * is called, because the actual blit / fill_region operations
  * may run asynchronously until the sequence is finished.
  *
+ * Blitters can cache the destination DMA buffer physical address(es)
+ * when starting the sequence, so these must not change while a
+ * sequence is ongoing. If they change, start a new sequence.
+ *
  * IMPORTANT: All functions that are part of a sequence must
  * be called from the same thread. These functions are:
  *
