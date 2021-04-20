@@ -7,10 +7,12 @@ endif
 libfslaudiocodec_dep = dependency('libfslaudiocodec', required : get_option('uniaudiodec'))
 fslcodec_libdirvar = ''
 if libfslaudiocodec_dep.found()
-	fslcodec_libdirvar = libimxdmabuffer_dep.get_pkgconfig_variable('libdir', default : '')
+	fslcodec_libdirvar = libfslaudiocodec_dep.get_pkgconfig_variable('libdir', default : '')
 	if fslcodec_libdirvar != ''
 		message('Found installed fslaudiocodec library - uniaudio decoder will be built')
+		message('imx audio codec path: "' + fslcodec_libdirvar + '"')
 		conf_data.set_quoted('IMX_AUDIO_CODEC_PATH', fslcodec_libdirvar)
+		conf_data.set('WITH_IMX_UNIAUDIO_DECODER', 1)
 	else
 		message('Found installed fslaudiocodec library, but could not find fsl codec path - uniaudio decoder will not be built')
 	endif
@@ -21,13 +23,14 @@ endif
 # Check for the mp3 encoder library to build the mp3encoder element
 mp3encoder_dep = cc.find_library('_mp3_enc_arm12_elinux', dirs : [fslcodec_libdirvar], required : get_option('mp3encoder'))
 if mp3encoder_dep.found()
+	conf_data.set('WITH_IMX_MP3_ENCODER', 1)
 	message('Found installed _mp3_enc_arm12_elinux library - mp3 encoder will be built')
 else
 	message('Installed _mp3_enc_arm12_elinux library not found, or user disabled mp3encoder element compilation - mp3 encoder will not be built')
 endif
 
 
-source = []
+source = ['plugin.c']
 if libfslaudiocodec_dep.found()
 	source += ['gstimxuniaudiocodec.c', 'gstimxuniaudiodecoder.c']
 endif
