@@ -32,12 +32,14 @@ enum
 {
 	PROP_0,
 	PROP_INPUT_CROP,
-	PROP_VIDEO_DIRECTION
+	PROP_VIDEO_DIRECTION,
+	PROP_DISABLE_PASSTHROUGH
 };
 
 
 #define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_VIDEO_DIRECTION GST_VIDEO_ORIENTATION_IDENTITY
+#define DEFAULT_DISABLE_PASSTHROUGH FALSE
 
 
 /* Cached quark to avoid contention on the global quark table lock */
@@ -153,6 +155,17 @@ static void gst_imx_2d_video_transform_class_init(GstImx2dVideoTransformClass *k
 		)
 	);
 	g_object_class_override_property(object_class, PROP_VIDEO_DIRECTION, "video-direction");
+	g_object_class_install_property(
+		object_class,
+		PROP_DISABLE_PASSTHROUGH,
+		g_param_spec_boolean(
+			"disable-passthrough",
+			"Disable passthrough",
+			"Disable passthrough, forcing processing to occur even if there are no changes in the format",
+			DEFAULT_INPUT_CROP,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
@@ -179,6 +192,8 @@ void gst_imx_2d_video_transform_init(GstImx2dVideoTransform *self)
 
 	self->input_crop = DEFAULT_INPUT_CROP;
 	self->video_direction = DEFAULT_VIDEO_DIRECTION;
+	self->disable_passthrough = DEFAULT_DISABLE_PASSTHROUGH;
+
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
 
 	/* Set passthrough initially to FALSE. Passthrough will
@@ -212,6 +227,14 @@ static void gst_imx_2d_video_transform_set_property(GObject *object, guint prop_
 			break;
 		}
 
+		case PROP_DISABLE_PASSTHROUGH:
+		{
+			GST_OBJECT_LOCK(self);
+			self->disable_passthrough = g_value_get_boolean(value);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
 		default:
 			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 			break;
@@ -237,6 +260,14 @@ static void gst_imx_2d_video_transform_get_property(GObject *object, guint prop_
 		{
 			GST_OBJECT_LOCK(self);
 			g_value_set_enum(value, self->video_direction);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_DISABLE_PASSTHROUGH:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_boolean(value, self->disable_passthrough);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -1409,6 +1440,7 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	GstVideoCropMeta *video_crop_meta = NULL;
 	gboolean passthrough;
 	GstVideoOrientationMethod video_direction;
+	gboolean disable_passthrough;
 	gboolean input_crop;
 	gboolean has_crop_meta = FALSE;
 
@@ -1430,6 +1462,7 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	GST_OBJECT_LOCK(self);
 	input_crop = self->input_crop;
 	video_direction = gst_imx_2d_video_transform_get_current_video_direction(self);
+	disable_passthrough = self->disable_passthrough;
 	GST_OBJECT_UNLOCK(self);
 
 	{
@@ -1449,20 +1482,23 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 			"input&output video info equal: %d  "
 			"identity video direction: %d  "
 			"input crop: %d  "
-			"has crop meta: %d"
-			"are both pools same: %d",
+			"has crop meta: %d  "
+			"are both pools same: %d  "
+			"disable passthrough: %d",
 			has_input_buffer,
 			self->inout_info_equal,
 			identity_video_direction,
 			input_crop,
 			has_crop_meta,
-			are_both_pools_same
+			are_both_pools_same,
+			disable_passthrough
 		);
 
 		passthrough = (input_buffer != NULL)
 		           && self->inout_info_equal
 		           && identity_video_direction
-		           && are_both_pools_same;
+		           && are_both_pools_same
+		           && !disable_passthrough;
 
 		if (passthrough && input_crop && has_crop_meta)
 		{

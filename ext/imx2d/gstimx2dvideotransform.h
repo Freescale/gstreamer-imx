@@ -77,6 +77,8 @@ struct _GstImx2dVideoTransform
 
 	gboolean input_crop;
 	GstVideoOrientationMethod video_direction;
+	gboolean disable_passthrough;
+
 	GstVideoOrientationMethod tag_video_direction;
 };
 
