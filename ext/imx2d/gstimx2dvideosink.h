@@ -59,6 +59,7 @@ struct _GstImx2dVideoSink
 
 	Imx2dLinuxFramebuffer *framebuffer;
 	Imx2dSurface *framebuffer_surface;
+	Imx2dSurfaceDesc const *framebuffer_surface_desc;
 
 	gboolean drop_frames;
 	gchar *framebuffer_name;
@@ -66,7 +67,11 @@ struct _GstImx2dVideoSink
 	GstVideoOrientationMethod video_direction;
 	gboolean use_vsync;
 	gboolean clear_at_null;
+	gboolean clear_on_relocate;
 	gboolean force_aspect_ratio;
+	gint window_x_coord, window_y_coord;
+	guint window_width, window_height;
+	Imx2dBlitMargin extra_margin;
 
 	GstVideoOrientationMethod tag_video_direction;
 
@@ -75,6 +80,53 @@ struct _GstImx2dVideoSink
 	int write_fb_page;
 	int display_fb_page;
 	int num_fb_pages;
+
+	/* Terminology:
+	 *
+	 * inner_region = The region covered by the actual
+	 * frame, without any margin.
+	 *
+	 * outer_region = inner_region plus the margin that
+	 * is calculated to draw the letterbox. If the
+	 * aspect ratio is not kept (in other words,
+	 * force_aspect_ratio is FALSE then), then the
+	 * outer_region equals the inner_region.
+	 *
+	 * total_region = outer_region plus extra margin
+	 * specified by the GObject margin properties.
+	 *
+	 * The inner_region is always centered inside
+	 * outer_region, but outer_region may not
+	 * necessarily centered in total_region.
+	 *
+	 * The window-* properties define the total_region.
+	 * extra_margin defines the margin that is added
+	 * around outer_region.
+	 */
+	Imx2dRegion total_region;
+	Imx2dRegion outer_region;
+	Imx2dRegion inner_region;
+
+	/* letterbox_margin: Margin calculated for producing
+	 * a letterbox around the inner_region. inner_region
+	 * plus letterbox_margin result in the outer_region.
+	 *
+	 * extra_margin: Margin defined by the user via the
+	 * GObject margin properties. outer_region plus
+	 * extra_margin result in total_region.
+	 *
+	 * combined_margin: letterbox_margin plus extra_margin.
+	 * inner_region plus combined_margin result in total_region.
+	 *
+	 * The GObject margin color property value is stored
+	 * in the combined_margin's color field. The color fields
+	 * of letterbox_margin and extra_margin are not used.
+	 */
+	Imx2dBlitMargin letterbox_margin;
+	Imx2dBlitMargin combined_margin;
+
+	gboolean region_coords_need_update;
+	gboolean total_region_valid;
 };
 
 

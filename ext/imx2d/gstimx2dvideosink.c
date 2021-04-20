@@ -34,8 +34,17 @@ enum
 	PROP_INPUT_CROP,
 	PROP_VIDEO_DIRECTION,
 	PROP_CLEAR_AT_NULL,
+	PROP_CLEAR_ON_RELOCATE,
 	PROP_USE_VSYNC,
-	PROP_FORCE_ASPECT_RATIO
+	PROP_FORCE_ASPECT_RATIO,
+	PROP_WINDOW_X_COORD,
+	PROP_WINDOW_Y_COORD,
+	PROP_WINDOW_WIDTH,
+	PROP_WINDOW_HEIGHT,
+	PROP_LEFT_MARGIN,
+	PROP_TOP_MARGIN,
+	PROP_RIGHT_MARGIN,
+	PROP_BOTTOM_MARGIN
 };
 
 
@@ -44,8 +53,17 @@ enum
 #define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_VIDEO_DIRECTION GST_VIDEO_ORIENTATION_IDENTITY
 #define DEFAULT_CLEAR_AT_NULL FALSE
+#define DEFAULT_CLEAR_ON_RELOCATE FALSE
 #define DEFAULT_USE_VSYNC FALSE
 #define DEFAULT_FORCE_ASPECT_RATIO TRUE
+#define DEFAULT_WINDOW_X_COORD 0
+#define DEFAULT_WINDOW_Y_COORD 0
+#define DEFAULT_WINDOW_WIDTH 0
+#define DEFAULT_WINDOW_HEIGHT 0
+#define DEFAULT_LEFT_MARGIN 0
+#define DEFAULT_TOP_MARGIN 0
+#define DEFAULT_RIGHT_MARGIN 0
+#define DEFAULT_BOTTOM_MARGIN 0
 
 
 static void gst_imx_2d_video_sink_video_direction_interface_init(G_GNUC_UNUSED GstVideoDirectionInterface *iface)
@@ -86,6 +104,8 @@ static void gst_imx_2d_video_sink_stop(GstImx2dVideoSink *self);
 static gboolean gst_imx_2d_video_sink_create_blitter(GstImx2dVideoSink *self);
 static GstVideoOrientationMethod gst_imx_2d_video_sink_get_current_video_direction(GstImx2dVideoSink *self);
 static gboolean gst_imx_2d_video_sink_flip_pages(GstImx2dVideoSink *self);
+static gboolean gst_imx_2d_video_clear_total_region(GstImx2dVideoSink *self, gboolean clear_on_all_pages);
+static void gst_imx_2d_video_sink_recalculate_regions_if_needed(GstImx2dVideoSink *self);
 
 
 
@@ -165,6 +185,17 @@ static void gst_imx_2d_video_sink_class_init(GstImx2dVideoSinkClass *klass)
 	);
 	g_object_class_install_property(
 		object_class,
+		PROP_CLEAR_ON_RELOCATE,
+		g_param_spec_boolean(
+			"clear-on-relocate",
+			"Clear on relocate",
+			"Clear the screen by filling it with black pixels when relocating the video window",
+			DEFAULT_CLEAR_AT_NULL,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
 		PROP_USE_VSYNC,
 		g_param_spec_boolean(
 			"use-vsync",
@@ -182,6 +213,102 @@ static void gst_imx_2d_video_sink_class_init(GstImx2dVideoSinkClass *klass)
 			"Force aspect ratio",
 			"When enabled, scaling will respect original aspect ratio",
 			DEFAULT_FORCE_ASPECT_RATIO,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_WINDOW_X_COORD,
+		g_param_spec_int(
+			"window-x-coord",
+			"Window x coordinate",
+			"X coordinate of the window's top left corner, in pixels",
+			G_MININT, G_MAXINT,
+			DEFAULT_WINDOW_X_COORD,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_WINDOW_Y_COORD,
+		g_param_spec_int(
+			"window-y-coord",
+			"Window y coordinate",
+			"Y coordinate of the window's top left corner, in pixels",
+			G_MININT, G_MAXINT,
+			DEFAULT_WINDOW_Y_COORD,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_WINDOW_WIDTH,
+		g_param_spec_uint(
+			"window-width",
+			"Window width",
+			"Window width, in pixels (0 = automatically set to the video input width)",
+			0, G_MAXINT,
+			DEFAULT_WINDOW_WIDTH,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_WINDOW_HEIGHT,
+		g_param_spec_uint(
+			"window-height",
+			"Window height",
+			"Window height, in pixels (0 = automatically set to the video input height)",
+			0, G_MAXINT,
+			DEFAULT_WINDOW_HEIGHT,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_LEFT_MARGIN,
+		g_param_spec_uint(
+			"left-margin",
+			"Left margin",
+			"Left margin",
+			0, G_MAXUINT,
+			DEFAULT_LEFT_MARGIN,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_TOP_MARGIN,
+		g_param_spec_uint(
+			"top-margin",
+			"Top margin",
+			"Top margin",
+			0, G_MAXUINT,
+			DEFAULT_TOP_MARGIN,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_RIGHT_MARGIN,
+		g_param_spec_uint(
+			"right-margin",
+			"Right margin",
+			"Right margin",
+			0, G_MAXUINT,
+			DEFAULT_RIGHT_MARGIN,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
+		PROP_BOTTOM_MARGIN,
+		g_param_spec_uint(
+			"bottom-margin",
+			"Bottom margin",
+			"Bottom margin",
+			0, G_MAXUINT,
+			DEFAULT_BOTTOM_MARGIN,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
@@ -205,12 +332,23 @@ static void gst_imx_2d_video_sink_init(GstImx2dVideoSink *self)
 	self->input_crop = DEFAULT_INPUT_CROP;
 	self->video_direction = DEFAULT_VIDEO_DIRECTION;
 	self->clear_at_null = DEFAULT_CLEAR_AT_NULL;
+	self->clear_on_relocate = DEFAULT_CLEAR_ON_RELOCATE;
 	self->use_vsync = DEFAULT_USE_VSYNC;
 	self->force_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
+	self->window_x_coord = DEFAULT_WINDOW_X_COORD;
+	self->window_y_coord = DEFAULT_WINDOW_Y_COORD;
+	self->window_width = DEFAULT_WINDOW_WIDTH;
+	self->window_height = DEFAULT_WINDOW_HEIGHT;
+	self->extra_margin.left_margin = DEFAULT_LEFT_MARGIN;
+	self->extra_margin.top_margin = DEFAULT_TOP_MARGIN;
+	self->extra_margin.right_margin = DEFAULT_RIGHT_MARGIN;
+	self->extra_margin.bottom_margin = DEFAULT_BOTTOM_MARGIN;
 
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
 
 	self->drop_frames_changed = FALSE;
+
+	self->region_coords_need_update = TRUE;
 }
 
 
@@ -280,6 +418,14 @@ static void gst_imx_2d_video_sink_set_property(GObject *object, guint prop_id, G
 			break;
 		}
 
+		case PROP_CLEAR_ON_RELOCATE:
+		{
+			GST_OBJECT_LOCK(self);
+			self->clear_on_relocate = g_value_get_boolean(value);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
 		case PROP_USE_VSYNC:
 		{
 			GST_OBJECT_LOCK(self);
@@ -292,6 +438,79 @@ static void gst_imx_2d_video_sink_set_property(GObject *object, guint prop_id, G
 		{
 			GST_OBJECT_LOCK(self);
 			self->force_aspect_ratio = g_value_get_boolean(value);
+			self->region_coords_need_update = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_WINDOW_X_COORD:
+		{
+			GST_OBJECT_LOCK(self);
+			self->window_x_coord = g_value_get_int(value);
+			self->region_coords_need_update = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_WINDOW_Y_COORD:
+		{
+			GST_OBJECT_LOCK(self);
+			self->window_y_coord = g_value_get_int(value);
+			self->region_coords_need_update = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_WINDOW_WIDTH:
+		{
+			GST_OBJECT_LOCK(self);
+			self->window_width = g_value_get_uint(value);
+			self->region_coords_need_update = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_WINDOW_HEIGHT:
+		{
+			GST_OBJECT_LOCK(self);
+			self->window_height = g_value_get_uint(value);
+			self->region_coords_need_update = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_LEFT_MARGIN:
+		{
+			GST_OBJECT_LOCK(self);
+			self->extra_margin.left_margin = g_value_get_uint(value);
+			self->region_coords_need_update = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_TOP_MARGIN:
+		{
+			GST_OBJECT_LOCK(self);
+			self->extra_margin.top_margin = g_value_get_uint(value);
+			self->region_coords_need_update = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_RIGHT_MARGIN:
+		{
+			GST_OBJECT_LOCK(self);
+			self->extra_margin.right_margin = g_value_get_uint(value);
+			self->region_coords_need_update = TRUE;
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_BOTTOM_MARGIN:
+		{
+			GST_OBJECT_LOCK(self);
+			self->extra_margin.bottom_margin = g_value_get_uint(value);
+			self->region_coords_need_update = TRUE;
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -350,6 +569,14 @@ static void gst_imx_2d_video_sink_get_property(GObject *object, guint prop_id, G
 			break;
 		}
 
+		case PROP_CLEAR_ON_RELOCATE:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_boolean(value, self->clear_on_relocate);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
 		case PROP_USE_VSYNC:
 		{
 			GST_OBJECT_LOCK(self);
@@ -362,6 +589,70 @@ static void gst_imx_2d_video_sink_get_property(GObject *object, guint prop_id, G
 		{
 			GST_OBJECT_LOCK(self);
 			g_value_set_boolean(value, self->force_aspect_ratio);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_WINDOW_X_COORD:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_int(value, self->window_x_coord);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_WINDOW_Y_COORD:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_int(value, self->window_y_coord);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_WINDOW_WIDTH:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_uint(value, self->window_width);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_WINDOW_HEIGHT:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_uint(value, self->window_height);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_LEFT_MARGIN:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_uint(value, self->extra_margin.left_margin);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_TOP_MARGIN:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_uint(value, self->extra_margin.top_margin);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_RIGHT_MARGIN:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_uint(value, self->extra_margin.right_margin);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_BOTTOM_MARGIN:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_uint(value, self->extra_margin.bottom_margin);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -493,18 +784,15 @@ static gboolean gst_imx_2d_video_sink_propose_allocation(G_GNUC_UNUSED GstBaseSi
 static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_sink, GstBuffer *input_buffer)
 {
 	Imx2dBlitParams blit_params;
-	Imx2dBlitMargin blit_margin;
 	GstFlowReturn flow_ret;
 	gboolean input_crop;
 	gboolean drop_frames, drop_frames_changed;
+	Imx2dRegion inner_region;
+	Imx2dBlitMargin combined_margin;
 	Imx2dRegion crop_rectangle;
-	Imx2dRegion dest_region;
 	GstVideoOrientationMethod video_direction;
-	gboolean force_aspect_ratio;
 	GstBuffer *uploaded_input_buffer = NULL;
 	GstImx2dVideoSink *self = GST_IMX_2D_VIDEO_SINK_CAST(video_sink);
-	GstVideoInfo *input_video_info = &(self->input_video_info);
-	guint video_width, video_height;
 
 	g_assert(self->blitter != NULL);
 
@@ -513,12 +801,22 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	 * without risking race conditions if another thread is setting new
 	 * values while this function is running. */
 	GST_OBJECT_LOCK(self);
+
 	input_crop = self->input_crop;
 	video_direction = gst_imx_2d_video_sink_get_current_video_direction(self);
-	force_aspect_ratio = self->force_aspect_ratio;
 	drop_frames = self->drop_frames;
 	drop_frames_changed = self->drop_frames_changed;
 	self->drop_frames_changed = FALSE;
+
+	/* This must be called with the object lock held. */
+	gst_imx_2d_video_sink_recalculate_regions_if_needed(self);
+
+	memcpy(&inner_region, &(self->inner_region), sizeof(inner_region));
+	memcpy(&combined_margin, &(self->combined_margin), sizeof(combined_margin));
+	/* NOTE: Alpha is 0xFF. If it were 0x00, the imx2d blitter code would
+	 * assume that the margin were invisible and skip it. */
+	combined_margin.color = 0xFF000000;
+
 	GST_OBJECT_UNLOCK(self);
 
 
@@ -530,23 +828,8 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 
 		if (drop_frames_changed)
 		{
-			if (!imx_2d_blitter_start(self->blitter, self->framebuffer_surface))
-			{
-				GST_ERROR_OBJECT(self, "starting blitter failed");
+			if (!gst_imx_2d_video_clear_total_region(self, TRUE))
 				goto error;
-			}
-
-			if (!imx_2d_blitter_fill_region(self->blitter, imx_2d_surface_get_region(self->framebuffer_surface), 0x00000000))
-			{
-				GST_ERROR_OBJECT(self, "blitting failed");
-				goto error;
-			}
-
-			if (!imx_2d_blitter_finish(self->blitter))
-			{
-				GST_ERROR_OBJECT(self, "finishing blitter failed");
-				goto error;
-			}
 
 			if (!gst_imx_2d_video_sink_flip_pages(self))
 				goto error;
@@ -581,13 +864,11 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	/* Fill the blit parameters. */
 
 	memset(&blit_params, 0, sizeof(blit_params));
+	blit_params.margin = &combined_margin;
 	blit_params.source_region = NULL;
-	blit_params.dest_region = NULL;
+	blit_params.dest_region = &inner_region;
 	blit_params.rotation = gst_imx_2d_convert_from_video_orientation_method(video_direction);
 	blit_params.alpha = 255;
-
-	video_width = GST_VIDEO_INFO_WIDTH(input_video_info);
-	video_height = GST_VIDEO_INFO_HEIGHT(input_video_info);
 
 	if (input_crop)
 	{
@@ -608,43 +889,7 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 				crop_rectangle.x1, crop_rectangle.y1,
 				crop_rectangle.x2, crop_rectangle.y2
 			);
-
-			video_width = crop_meta->width;
-			video_height = crop_meta->height;
 		}
-	}
-
-	if (force_aspect_ratio)
-	{
-		gboolean transposed = FALSE;
-
-		switch (video_direction)
-		{
-			case GST_VIDEO_ORIENTATION_90L:
-			case GST_VIDEO_ORIENTATION_90R:
-			case GST_VIDEO_ORIENTATION_UL_LR:
-			case GST_VIDEO_ORIENTATION_UR_LL:
-				transposed = TRUE;
-				break;
-
-			default:
-				break;
-		}
-
-		gst_imx_2d_canvas_calculate_letterbox_margin(
-			&blit_margin,
-			&dest_region,
-			imx_2d_surface_get_region(self->framebuffer_surface),
-			transposed,
-			video_width,
-			video_height,
-			GST_VIDEO_INFO_PAR_N(input_video_info),
-			GST_VIDEO_INFO_PAR_D(input_video_info)
-		);
-
-		blit_margin.color = 0xFF000000;
-		blit_params.margin = &blit_margin;
-		blit_params.dest_region = &dest_region;
 	}
 
 
@@ -704,6 +949,9 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
 	self->drop_frames_changed = TRUE;
 
+	self->region_coords_need_update = TRUE;
+	self->total_region_valid = FALSE;
+
 	GST_OBJECT_LOCK(self);
 	framebuffer_name = g_strdup(self->framebuffer_name);
 	use_vsync = self->use_vsync;
@@ -761,6 +1009,8 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 	self->framebuffer_surface = imx_2d_linux_framebuffer_get_surface(self->framebuffer);
 	g_assert(self->framebuffer_surface != NULL);
 
+	self->framebuffer_surface_desc = imx_2d_surface_get_desc(self->framebuffer_surface);
+
 	GST_INFO_OBJECT(self, "framebuffer using device \"%s\" set up", framebuffer_name);
 
 finish:
@@ -797,27 +1047,8 @@ static void gst_imx_2d_video_sink_stop(GstImx2dVideoSink *self)
 
 		if (clear_at_null && (self->blitter != NULL))
 		{
-			int ret = 1, i;
-
-			GST_DEBUG_OBJECT(self, "clearing framebuffer with black pixels at the READY->NULL state change as requested");
-
-			for (i = 0; i < imx_2d_linux_framebuffer_get_num_fb_pages(self->framebuffer); ++i)
-			{
-				if (ret)
-					ret = imx_2d_blitter_start(self->blitter, self->framebuffer_surface);
-
-				if (self->use_vsync)
-				{
-					GST_DEBUG_OBJECT(self, "clearing FB page %d", i);
-					imx_2d_linux_framebuffer_set_write_fb_page(self->framebuffer, i);
-				}
-
-				if (ret)
-					ret = imx_2d_blitter_fill_region(self->blitter, imx_2d_surface_get_region(self->framebuffer_surface), 0x00000000);
-
-				if (ret)
-					imx_2d_blitter_finish(self->blitter);
-			}
+			GST_DEBUG_OBJECT(self, "clearing window in framebuffer with black pixels at the READY->NULL state change as requested");
+			gst_imx_2d_video_clear_total_region(self, FALSE);
 		}
 
 		imx_2d_linux_framebuffer_destroy(self->framebuffer);
@@ -885,6 +1116,173 @@ static gboolean gst_imx_2d_video_sink_flip_pages(GstImx2dVideoSink *self)
 	}
 	else
 		return TRUE;
+}
+
+
+static gboolean gst_imx_2d_video_clear_total_region(GstImx2dVideoSink *self, gboolean clear_on_all_pages)
+{
+	int page_index;
+	int num_pages;
+
+	if (!self->total_region_valid)
+		return TRUE;
+
+	num_pages = clear_on_all_pages ? imx_2d_linux_framebuffer_get_num_fb_pages(self->framebuffer) : 1;
+
+	for (page_index = 0; page_index < num_pages; ++page_index)
+	{
+		if (self->use_vsync && clear_on_all_pages)
+		{
+			GST_DEBUG_OBJECT(self, "clearing FB page %d", page_index);
+			imx_2d_linux_framebuffer_set_write_fb_page(self->framebuffer, page_index);
+		}
+
+		if (!imx_2d_blitter_start(self->blitter, self->framebuffer_surface))
+		{
+			GST_ERROR_OBJECT(self, "starting blitter failed");
+			return FALSE;
+		}
+
+		if (!imx_2d_blitter_fill_region(self->blitter, &(self->total_region), 0xFF000000))
+		{
+			GST_ERROR_OBJECT(self, "blitting failed");
+			return FALSE;
+		}
+
+		if (!imx_2d_blitter_finish(self->blitter))
+		{
+			GST_ERROR_OBJECT(self, "finishing blitter failed");
+			return FALSE;
+		}
+	}
+
+	self->write_fb_page = 0;
+	gst_imx_2d_video_sink_flip_pages(self);
+
+	return TRUE;
+}
+
+
+static void gst_imx_2d_video_sink_recalculate_regions_if_needed(GstImx2dVideoSink *self)
+{
+	/* This must be called with the object lock held. */
+
+	gint input_width, input_height;
+	gint window_width, window_height;
+
+	if (!self->region_coords_need_update)
+		return;
+
+	if (self->clear_on_relocate)
+	{
+		GST_TRACE_OBJECT(self, "need to clear total region %" IMX_2D_REGION_FORMAT " before relocating it", IMX_2D_REGION_ARGS(&(self->total_region)));
+		gst_imx_2d_video_clear_total_region(self, TRUE);
+	}
+
+	input_width = GST_VIDEO_INFO_WIDTH(&(self->input_video_info));
+	input_height = GST_VIDEO_INFO_HEIGHT(&(self->input_video_info));
+
+	window_width = (self->window_width != 0) ? (gint)(self->window_width) : self->framebuffer_surface_desc->width;
+	window_height = (self->window_height != 0) ? (gint)(self->window_height) : self->framebuffer_surface_desc->height;
+
+	/* Relations between regions and margins:
+	 *
+	 * total_region = outer_region + extra_margin.
+	 * outer_region = inner_region + letterbox_margin.
+	 * combined_margin = extra_margin + letterbox_margin.
+	 *
+	 * Also:
+	 * window_x_coord, window_y_coord, window_width, window_height
+	 * define the total_region boundaries.
+	 */
+
+	self->total_region.x1 = self->window_x_coord;
+	self->total_region.y1 = self->window_y_coord;
+	self->total_region.x2 = self->window_x_coord + window_width;
+	self->total_region.y2 = self->window_y_coord + window_height;
+
+	self->total_region_valid = TRUE;
+
+	self->outer_region.x1 = self->total_region.x1 + self->extra_margin.left_margin;
+	self->outer_region.y1 = self->total_region.y1 + self->extra_margin.top_margin;
+	self->outer_region.x2 = self->total_region.x2 - self->extra_margin.right_margin;
+	self->outer_region.y2 = self->total_region.y2 - self->extra_margin.bottom_margin;
+
+	GST_DEBUG_OBJECT(
+		self,
+		"window x/y coordinates: %d/%d  window width/height: %d/%d",
+		self->window_x_coord, self->window_y_coord,
+		window_width, window_height
+	);
+
+	/* This should not happen, and typically indicates invalid user
+	 * defined extra margins. */
+	if (G_UNLIKELY(self->outer_region.x1 > self->outer_region.x2))
+		GST_ERROR_OBJECT(self, "calculated outer region X coordinates are invalid: x1 = %d x2 = %d (x1 must be <= x2)", self->outer_region.x1, self->outer_region.x2);
+	if (G_UNLIKELY(self->outer_region.y1 > self->outer_region.y2))
+		GST_ERROR_OBJECT(self, "calculated outer region Y coordinates are invalid: y1 = %d y2 = %d (y1 must be <= y2)", self->outer_region.y1, self->outer_region.y2);
+
+	GST_DEBUG_OBJECT(self, "calculated outer region: %" IMX_2D_REGION_FORMAT, IMX_2D_REGION_ARGS(&(self->outer_region)));
+
+	self->combined_margin.left_margin = self->extra_margin.left_margin;
+	self->combined_margin.top_margin = self->extra_margin.top_margin;
+	self->combined_margin.right_margin = self->extra_margin.right_margin;
+	self->combined_margin.bottom_margin = self->extra_margin.bottom_margin;
+
+	/* Calculate a letterbox_margin if necessary.
+	 *
+	 * If force_aspect_ratio is FALSE, then the frame will always
+	 * be scaled to fill the outer_region. In other words, in that
+	 * case, inner_region == outer_region.
+	 *
+	 * In rare cases where width and height are initially 0 (can happen
+	 * with some broken video input), we cannot calculate letterbox
+	 * margins, because this would lead to divisions by zero.
+	 */
+	if (self->force_aspect_ratio && ((self->outer_region.x1 < self->outer_region.x2))
+	                             && ((self->outer_region.y1 < self->outer_region.y2))
+	                             && ((input_width > 0))
+	                             && ((input_height > 0)))
+	{
+		gboolean transposed = FALSE;
+
+		switch (gst_imx_2d_video_sink_get_current_video_direction(self))
+		{
+			case GST_VIDEO_ORIENTATION_90L:
+			case GST_VIDEO_ORIENTATION_90R:
+			case GST_VIDEO_ORIENTATION_UL_LR:
+			case GST_VIDEO_ORIENTATION_UR_LL:
+				transposed = TRUE;
+				break;
+
+			default:
+				break;
+		}
+
+		gst_imx_2d_canvas_calculate_letterbox_margin(
+			&(self->letterbox_margin),
+			&(self->inner_region),
+			&(self->outer_region),
+			transposed,
+			input_width,
+			input_height,
+			GST_VIDEO_INFO_PAR_N(&(self->input_video_info)),
+			GST_VIDEO_INFO_PAR_D(&(self->input_video_info))
+		);
+
+		self->combined_margin.left_margin += self->letterbox_margin.left_margin;
+		self->combined_margin.top_margin += self->letterbox_margin.top_margin;
+		self->combined_margin.right_margin += self->letterbox_margin.right_margin;
+		self->combined_margin.bottom_margin += self->letterbox_margin.bottom_margin;
+	}
+	else
+		memcpy(&(self->inner_region), &(self->outer_region), sizeof(Imx2dRegion));
+
+	GST_DEBUG_OBJECT(self, "calculated inner region: %" IMX_2D_REGION_FORMAT, IMX_2D_REGION_ARGS(&(self->inner_region)));
+
+	/* Mark the coordinates as updated so they are not
+	 * needlessly recalculated later. */
+	self->region_coords_need_update = FALSE;
 }
 
 
