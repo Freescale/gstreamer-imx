@@ -73,7 +73,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 );
 
 
-G_DEFINE_TYPE(GstImxAudioMp3Enc, gst_imx_audio_mp3_enc, GST_TYPE_AUDIO_ENCODER);
+G_DEFINE_TYPE(GstImxAudioMp3Enc, gst_imx_audio_mp3_enc, GST_TYPE_AUDIO_ENCODER)
 
 
 static void gst_imx_audio_mp3_enc_finalize(GObject *object);
