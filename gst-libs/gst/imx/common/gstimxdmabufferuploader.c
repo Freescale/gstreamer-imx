@@ -74,7 +74,6 @@ struct _GstImxDmaBufferUploader
 	GstImxDmaBufferUploadMethodContext **upload_method_contexts;
 
 	GstAllocator *imx_dma_buffer_allocator;
-	GstCaps *output_caps;
 };
 
 
@@ -88,6 +87,8 @@ struct _GstImxDmaBufferUploadMethodType
 {
 	gchar const *name;
 
+	/* check_if_compatible can be set to NULL, in which case the allocator is assumed to always be compatible. */
+	gboolean (*check_if_compatible)(GstAllocator *imx_dma_buffer_allocator);
 	GstImxDmaBufferUploadMethodContext* (*create)(GstImxDmaBufferUploader *uploader);
 	void (*destroy)(GstImxDmaBufferUploadMethodContext *upload_method_context);
 	GstFlowReturn (*perform)(GstImxDmaBufferUploadMethodContext *upload_method_context, GstMemory *input_memory, GstMemory **output_memory);
@@ -162,6 +163,7 @@ error:
 static const GstImxDmaBufferUploadMethodType raw_buffer_upload_method_type = {
 	"RawBufferUpload",
 
+	NULL,
 	raw_buffer_upload_method_create,
 	raw_buffer_upload_method_destroy,
 	raw_buffer_upload_method_perform
@@ -184,6 +186,12 @@ struct DmabufUploadMethodContext
 	 * expects a constant buffer size. */
 	guint last_buffer_size;
 };
+
+
+static gboolean dmabuf_upload_method_check_if_compatible(GstAllocator *imx_dma_buffer_allocator)
+{
+	return GST_IS_IMX_ION_ALLOCATOR(imx_dma_buffer_allocator);
+}
 
 
 static GstImxDmaBufferUploadMethodContext* dmabuf_upload_method_create(GstImxDmaBufferUploader *uploader)
@@ -265,6 +273,7 @@ static GstFlowReturn dmabuf_upload_method_perform(GstImxDmaBufferUploadMethodCon
 static const GstImxDmaBufferUploadMethodType dmabuf_upload_method_type = {
 	"DmabufUpload",
 
+	dmabuf_upload_method_check_if_compatible,
 	dmabuf_upload_method_create,
 	dmabuf_upload_method_destroy,
 	dmabuf_upload_method_perform
@@ -308,7 +317,6 @@ static void gst_imx_dma_buffer_uploader_init(GstImxDmaBufferUploader *uploader)
 {
 	uploader->upload_method_contexts = NULL;
 	uploader->imx_dma_buffer_allocator = NULL;
-	uploader->output_caps = NULL;
 }
 
 
@@ -318,7 +326,6 @@ static void gst_imx_dma_buffer_uploader_finalize(GObject *object)
 
 	gst_imx_dma_buffer_uploader_destroy_upload_method_contexts(self);
 
-	gst_caps_replace(&(self->output_caps), NULL);
 	gst_object_unref(GST_OBJECT(self->imx_dma_buffer_allocator));
 
 	GST_DEBUG_OBJECT(self, "destroyed GstImxDmaBufferUploader instance %" GST_PTR_FORMAT, (gpointer)self);
@@ -334,9 +341,6 @@ GstImxDmaBufferUploader* gst_imx_dma_buffer_uploader_new(GstAllocator *imx_dma_b
 
 	g_assert(imx_dma_buffer_allocator != NULL);
 	g_assert(GST_IS_IMX_DMA_BUFFER_ALLOCATOR(imx_dma_buffer_allocator));
-#ifdef WITH_GST_ION_ALLOCATOR
-	g_assert(GST_IS_IMX_ION_ALLOCATOR(imx_dma_buffer_allocator));
-#endif
 
 	uploader = g_object_new(gst_imx_dma_buffer_uploader_get_type(), NULL);
 	uploader->imx_dma_buffer_allocator = gst_object_ref(imx_dma_buffer_allocator);
@@ -352,6 +356,18 @@ GstImxDmaBufferUploader* gst_imx_dma_buffer_uploader_new(GstAllocator *imx_dma_b
 
 	for (i = 0; i < num_upload_method_types; ++i)
 	{
+		if ((upload_method_types[i]->check_if_compatible != NULL) && !(upload_method_types[i]->check_if_compatible(imx_dma_buffer_allocator)))
+		{
+			GST_DEBUG_OBJECT(
+				uploader,
+				"upload method type \"%s\" is NOT compatible with allocator %" GST_PTR_FORMAT "; skipping this type",
+				upload_method_types[i]->name,
+				(gpointer)imx_dma_buffer_allocator
+			);
+			uploader->upload_method_contexts[i] = NULL;
+			continue;
+		}
+
 		GstImxDmaBufferUploadMethodContext *context = upload_method_types[i]->create(uploader);
 		if (context == NULL)
 		{
@@ -424,8 +440,14 @@ GstFlowReturn gst_imx_dma_buffer_uploader_perform(GstImxDmaBufferUploader *uploa
 		{
 			GstMemory *input_memory = NULL;
 			GstMemory *output_memory = NULL;
+			GstImxDmaBufferUploadMethodType const *upload_method_type;
 
-			GstImxDmaBufferUploadMethodType const *upload_method_type = upload_method_types[method_idx];
+			/* If the context is NULL, then the associated upload method
+			 * type was found to be incompatible with the allocator. */
+			if (uploader->upload_method_contexts[method_idx] == NULL)
+				continue;
+
+			upload_method_type = upload_method_types[method_idx];
 			g_assert(upload_method_type != NULL);
 
 			input_memory = gst_buffer_peek_memory(input_buffer, memory_idx);
