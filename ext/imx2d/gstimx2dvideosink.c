@@ -29,6 +29,7 @@ GST_DEBUG_CATEGORY_STATIC(imx_2d_video_sink_debug);
 enum
 {
 	PROP_0,
+	PROP_FRAMEBUFFER_NAME,
 	PROP_INPUT_CROP,
 	PROP_VIDEO_DIRECTION,
 	PROP_CLEAR_AT_NULL,
@@ -37,6 +38,7 @@ enum
 };
 
 
+#define DEFAULT_FRAMEBUFFER_NAME "/dev/fb0"
 #define DEFAULT_INPUT_CROP TRUE
 #define DEFAULT_VIDEO_DIRECTION GST_VIDEO_ORIENTATION_IDENTITY
 #define DEFAULT_CLEAR_AT_NULL FALSE
@@ -61,6 +63,7 @@ G_DEFINE_ABSTRACT_TYPE_WITH_CODE(
 /* Base class function overloads. */
 
 /* General element operations. */
+static void gst_imx_2d_video_sink_dispose(GObject *object);
 static void gst_imx_2d_video_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_2d_video_sink_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static GstStateChangeReturn gst_imx_2d_video_sink_change_state(GstElement *element, GstStateChange transition);
@@ -100,6 +103,7 @@ static void gst_imx_2d_video_sink_class_init(GstImx2dVideoSinkClass *klass)
 	base_sink_class = GST_BASE_SINK_CLASS(klass);
 	video_sink_class = GST_VIDEO_SINK_CLASS(klass);
 
+	object_class->dispose               = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_dispose);
 	object_class->set_property          = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_set_property);
 	object_class->get_property          = GST_DEBUG_FUNCPTR(gst_imx_2d_video_sink_get_property);
 
@@ -111,6 +115,17 @@ static void gst_imx_2d_video_sink_class_init(GstImx2dVideoSinkClass *klass)
 
 	video_sink_class->show_frame        = GST_DEBUG_FUNCPTR(gst_imx_blitter_video_sink_show_frame);
 
+	g_object_class_install_property(
+		object_class,
+		PROP_FRAMEBUFFER_NAME,
+		g_param_spec_string(
+			"framebuffer",
+			"Framebuffer device name",
+			"The device name of the framebuffer to render to",
+			DEFAULT_FRAMEBUFFER_NAME,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 	g_object_class_install_property(
 		object_class,
 		PROP_INPUT_CROP,
@@ -171,6 +186,7 @@ static void gst_imx_2d_video_sink_init(GstImx2dVideoSink *self)
 
 	self->framebuffer = NULL;
 
+	self->framebuffer_name = g_strdup(DEFAULT_FRAMEBUFFER_NAME);
 	self->input_crop = DEFAULT_INPUT_CROP;
 	self->video_direction = DEFAULT_VIDEO_DIRECTION;
 	self->clear_at_null = DEFAULT_CLEAR_AT_NULL;
@@ -181,12 +197,39 @@ static void gst_imx_2d_video_sink_init(GstImx2dVideoSink *self)
 }
 
 
+static void gst_imx_2d_video_sink_dispose(GObject *object)
+{
+	GstImx2dVideoSink *self = GST_IMX_2D_VIDEO_SINK(object);
+
+	g_free(self->framebuffer_name);
+
+	G_OBJECT_CLASS(gst_imx_2d_video_sink_parent_class)->dispose(object);
+}
+
+
 static void gst_imx_2d_video_sink_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
 {
 	GstImx2dVideoSink *self = GST_IMX_2D_VIDEO_SINK(object);
 
 	switch (prop_id)
 	{
+		case PROP_FRAMEBUFFER_NAME:
+		{
+			gchar const *new_framebuffer_name = g_value_get_string(value);
+
+			if ((new_framebuffer_name == NULL) || (new_framebuffer_name[0] == '\0'))
+			{
+				GST_ELEMENT_ERROR(self, RESOURCE, SETTINGS, ("framebuffer device name must not be an empty string; using default framebuffer instead"), (NULL));
+				break;
+			}
+
+			GST_OBJECT_LOCK(self);
+			g_free(self->framebuffer_name);
+			self->framebuffer_name = g_strdup(new_framebuffer_name);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
 		case PROP_INPUT_CROP:
 		{
 			GST_OBJECT_LOCK(self);
@@ -240,6 +283,14 @@ static void gst_imx_2d_video_sink_get_property(GObject *object, guint prop_id, G
 
 	switch (prop_id)
 	{
+		case PROP_FRAMEBUFFER_NAME:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_string(value, self->framebuffer_name);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
 		case PROP_INPUT_CROP:
 		{
 			GST_OBJECT_LOCK(self);
@@ -579,8 +630,10 @@ error:
 
 static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 {
+	gboolean ret = TRUE;
 	GstImx2dVideoSinkClass *klass = GST_IMX_2D_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(self));
 	gboolean use_vsync;
+	gchar *framebuffer_name;
 
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
 	self->uploader = gst_imx_dma_buffer_uploader_new(self->imx_dma_buffer_allocator);
@@ -588,6 +641,7 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
 
 	GST_OBJECT_LOCK(self);
+	framebuffer_name = g_strdup(self->framebuffer_name);
 	use_vsync = self->use_vsync;
 	GST_OBJECT_UNLOCK(self);
 
@@ -613,10 +667,10 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 		goto error;
 	}
 
-	self->framebuffer = imx_2d_linux_framebuffer_create("/dev/fb0", use_vsync);
+	self->framebuffer = imx_2d_linux_framebuffer_create(framebuffer_name, use_vsync);
 	if (self->framebuffer == NULL)
 	{
-		GST_ERROR_OBJECT(self, "creating output framebuffer failed");
+		GST_ERROR_OBJECT(self, "creating output framebuffer using device \"%s\" failed", framebuffer_name);
 		goto error;
 	}
 
@@ -643,11 +697,16 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 	self->framebuffer_surface = imx_2d_linux_framebuffer_get_surface(self->framebuffer);
 	g_assert(self->framebuffer_surface != NULL);
 
-	return TRUE;
+	GST_INFO_OBJECT(self, "framebuffer using device \"%s\" set up", framebuffer_name);
+
+finish:
+	g_free(framebuffer_name);
+	return ret;
 
 error:
 	gst_imx_2d_video_sink_stop(self);
-	return FALSE;
+	ret = FALSE;
+	goto finish;
 }
 
 

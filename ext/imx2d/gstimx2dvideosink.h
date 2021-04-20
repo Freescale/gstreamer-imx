@@ -60,6 +60,7 @@ struct _GstImx2dVideoSink
 	Imx2dLinuxFramebuffer *framebuffer;
 	Imx2dSurface *framebuffer_surface;
 
+	gchar *framebuffer_name;
 	gboolean input_crop;
 	GstVideoOrientationMethod video_direction;
 	gboolean use_vsync;

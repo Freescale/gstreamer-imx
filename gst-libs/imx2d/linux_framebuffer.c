@@ -131,6 +131,9 @@ static BOOL imx_2d_linux_framebuffer_set_virtual_fb_height(Imx2dLinuxFramebuffer
 
 static BOOL imx_2d_linux_framebuffer_restore_original_fb_height(Imx2dLinuxFramebuffer *linux_framebuffer)
 {
+	if (linux_framebuffer->fd < 0)
+		return TRUE;
+
 	IMX_2D_LOG(DEBUG, "resetting framebuffer display Y offset to 0 and physical address for writing back to basic physical address");
 	imx_2d_linux_framebuffer_set_write_fb_page(linux_framebuffer, 0);
 	imx_2d_linux_framebuffer_set_display_fb_page(linux_framebuffer, 0);
@@ -166,7 +169,7 @@ Imx2dLinuxFramebuffer* imx_2d_linux_framebuffer_create(char const *device_name, 
 
 	if (linux_framebuffer->fd < 0)
 	{
-		IMX_2D_LOG(ERROR, "could not open %s: %s (%d)", device_name, strerror(errno), errno);
+		IMX_2D_LOG(ERROR, "could not open framebuffer device \"%s\": %s (%d)", device_name, strerror(errno), errno);
 		goto error;
 	}
 
