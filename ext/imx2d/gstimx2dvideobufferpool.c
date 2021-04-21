@@ -357,7 +357,9 @@ gboolean gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(GstImx2dVideoBuf
 {
 	gboolean ret = TRUE;
 	GstVideoFrame intermediate_video_frame;
+	gboolean intermediate_video_frame_mapped;
 	GstVideoFrame output_video_frame;
+	gboolean output_video_frame_mapped;
 
 	if (imx_2d_video_buffer_pool->both_pools_same)
 	{
@@ -370,6 +372,9 @@ gboolean gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(GstImx2dVideoBuf
 		return TRUE;
 	}
 
+	intermediate_video_frame_mapped = FALSE;
+	output_video_frame_mapped = FALSE;
+
 	if (!gst_video_frame_map(
 		&intermediate_video_frame,
 		&(imx_2d_video_buffer_pool->intermediate_video_info),
@@ -380,6 +385,7 @@ gboolean gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(GstImx2dVideoBuf
 		GST_ERROR_OBJECT(imx_2d_video_buffer_pool, "could not map intermediate video frame");
 		goto error;
 	}
+	intermediate_video_frame_mapped = TRUE;
 
 	if (!gst_video_frame_map(
 		&output_video_frame,
@@ -391,6 +397,7 @@ gboolean gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(GstImx2dVideoBuf
 		GST_ERROR_OBJECT(imx_2d_video_buffer_pool, "could not map output video frame");
 		goto error;
 	}
+	output_video_frame_mapped = TRUE;
 
 	if (!gst_video_frame_copy(&output_video_frame, &intermediate_video_frame))
 	{
@@ -398,14 +405,16 @@ gboolean gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(GstImx2dVideoBuf
 		goto error;
 	}
 
-		GST_LOG_OBJECT(
-			imx_2d_video_buffer_pool,
-			"copied pixels from intermediate buffer into output buffer"
-		);
+	GST_LOG_OBJECT(
+		imx_2d_video_buffer_pool,
+		"copied pixels from intermediate buffer into output buffer"
+	);
 
 finish:
-	gst_video_frame_unmap(&output_video_frame);
-	gst_video_frame_unmap(&intermediate_video_frame);
+	if (output_video_frame_mapped)
+		gst_video_frame_unmap(&output_video_frame);
+	if (intermediate_video_frame_mapped)
+		gst_video_frame_unmap(&intermediate_video_frame);
 
 	gst_buffer_unref(intermediate_buffer);
 
