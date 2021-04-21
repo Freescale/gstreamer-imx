@@ -89,7 +89,7 @@ GType gst_imx_dma_buffer_uploader_get_type(void);
 /**
  * gst_imx_dma_buffer_uploader_new:
  * @imx_dma_buffer_allocator: ImxDmaBuffer allocator to use in this
- *     object. If ION support is enabled, this must be an ION allocator.
+ *     object. If ION support is enabled, this allows for DMA-BUF based uploads.
  *
  * Creates a new upload object.
  *
