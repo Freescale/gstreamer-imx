@@ -270,6 +270,9 @@ typedef struct _Imx2dHardwareCapabilities Imx2dHardwareCapabilities;
  * @stride_alignment: Required stride alignment, in bytes.
  *     This is always a power-of-two value. Stride sizes must
  *     be an integer multiple of this value.
+ * @total_row_count_alignment: Required row count alignment.
+ *     "Total" row count means the sum of actual frame rows
+ *     and of additional padding rows.
  * @can_handle_multi_buffer_surfaces: Nonzero if the hardware
  *     supports blitting from/to multi-buffer surfaces. If a
  *     surface uses a different DMA buffer for at least one
@@ -294,6 +297,7 @@ struct _Imx2dHardwareCapabilities
 	int min_height, max_height, height_step_size;
 
 	int stride_alignment;
+	int total_row_count_alignment;
 
 	int can_handle_multi_buffer_surfaces;
 };
