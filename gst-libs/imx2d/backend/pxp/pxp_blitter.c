@@ -170,7 +170,6 @@ static int imx_2d_backend_pxp_blitter_start(Imx2dBlitter *blitter)
 	Imx2dPixelFormatInfo const *fmt_info;
 	imx_physical_address_t phys_address;
 	ImxDmaBuffer *dest_dma_buffer;
-	int second_plane_offset;
 	unsigned int pxp_pixel_format;
 	struct pxp_layer_param *out_param;
 
@@ -191,14 +190,6 @@ static int imx_2d_backend_pxp_blitter_start(Imx2dBlitter *blitter)
 	phys_address = imx_dma_buffer_get_physical_address(dest_dma_buffer);
 	assert(phys_address != 0);
 
-	/* If the destination surface uses a planar format, we need to know the
-	 * offset of the second plane to compute the amount of padding rows at
-	 * the bottom of output frames. */
-	if (fmt_info->num_planes > 1)
-		second_plane_offset = imx_2d_surface_get_dma_buffer_offset(blitter->dest, 1) - imx_2d_surface_get_dma_buffer_offset(blitter->dest, 0);
-	else
-		second_plane_offset = dest_surface_desc->plane_strides[0] * dest_surface_desc->height;
-
 	memset(&(pxp_blitter->pxp_config), 0, sizeof(pxp_blitter->pxp_config));
 	pxp_blitter->pxp_config.handle = pxp_blitter->pxp_channel.handle;
 
@@ -208,7 +199,7 @@ static int imx_2d_backend_pxp_blitter_start(Imx2dBlitter *blitter)
 	 * padding columns and rows. The drect rectangle then defines the
 	 * region inside the frame where the actual pixels are drawn to. */
 	out_param->width = dest_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
-	out_param->height = second_plane_offset / dest_surface_desc->plane_strides[0];
+	out_param->height = dest_surface_desc->height + dest_surface_desc->num_padding_rows;
 	out_param->stride = dest_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
 
 	out_param->paddr = (dma_addr_t)(phys_address);
@@ -245,7 +236,6 @@ static int imx_2d_backend_pxp_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	Imx2dRegion const *dest_region;
 	Imx2dRegion const *expanded_dest_region;
 	ImxDmaBuffer *src_dma_buffer;
-	int second_plane_offset;
 	unsigned int pxp_format;
 	struct pxp_config_data *pconf;
 	struct pxp_layer_param *src_param;
@@ -275,14 +265,6 @@ static int imx_2d_backend_pxp_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	dest_region = internal_blit_params->dest_region;
 	expanded_dest_region = (internal_blit_params->expanded_dest_region != NULL) ? internal_blit_params->expanded_dest_region : dest_region;
 
-	/* If the source surface uses a planar format, we need to know the
-	 * offset of the second plane to compute the amount of padding rows
-	 * at the bottom of output frames. */
-	if (fmt_info->num_planes > 1)
-		second_plane_offset = imx_2d_surface_get_dma_buffer_offset(internal_blit_params->source, 1) - imx_2d_surface_get_dma_buffer_offset(internal_blit_params->source, 0);
-	else
-		second_plane_offset = src_surface_desc->plane_strides[0] * src_surface_desc->height;
-
 	pconf = &(pxp_blitter->pxp_config);
 
 	src_param = &(pconf->s0_param);
@@ -290,7 +272,7 @@ static int imx_2d_backend_pxp_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	 * padding columns and rows. The srect rectangle then defines the
 	 * region inside the frame where the actual pixels are drawn from. */
 	src_param->width = src_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
-	src_param->height = second_plane_offset / src_surface_desc->plane_strides[0];
+	src_param->height = src_surface_desc->height + src_surface_desc->num_padding_rows;
 	src_param->stride = src_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
 	src_param->pixel_fmt = pxp_format;
 	src_param->paddr = (dma_addr_t)(phys_address);

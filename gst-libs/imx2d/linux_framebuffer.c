@@ -201,6 +201,7 @@ Imx2dLinuxFramebuffer* imx_2d_linux_framebuffer_create(char const *device_name, 
 	}
 
 	desc.plane_strides[0] = linux_framebuffer->fb_fix.line_length;
+	desc.num_padding_rows = 0;
 
 	IMX_2D_LOG(INFO, "page flipping enabled: %d", enable_page_flipping);
 

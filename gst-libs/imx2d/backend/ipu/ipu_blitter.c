@@ -198,7 +198,6 @@ static int imx_2d_backend_ipu_blitter_start(Imx2dBlitter *blitter)
 	Imx2dPixelFormatInfo const *fmt_info;
 	imx_physical_address_t phys_address;
 	ImxDmaBuffer *dest_dma_buffer;
-	int second_plane_offset;
 	uint32_t ipu_format;
 
 	assert(blitter->dest);
@@ -218,24 +217,13 @@ static int imx_2d_backend_ipu_blitter_start(Imx2dBlitter *blitter)
 	phys_address = imx_dma_buffer_get_physical_address(dest_dma_buffer);
 	assert(phys_address != 0);
 
-	/* If the destination surface uses a planar format, we need to know the
-	 * offset of the second plane to compute the amount of padding rows at
-	 * the bottom of output frames. */
-	if (fmt_info->num_planes > 1)
-		second_plane_offset = imx_2d_surface_get_dma_buffer_offset(blitter->dest, 1) - imx_2d_surface_get_dma_buffer_offset(blitter->dest, 0);
-	else
-		second_plane_offset = dest_surface_desc->plane_strides[0] * dest_surface_desc->height;
-
 	/* Set up the output width/height of main_task. The output width & height
 	 * contain the width & height _and_ any existing additional padding
 	 * rows & columns. The latter are excluded later when setting the
-	 * output crop rectangle.
-	 * second_plane_offset implicitly contains the height and number
-	 * of padding rows, because all of these are present before the
-	 * second plane starts in the DMA buffer. */
+	 * output crop rectangle. */
 	memset(&(ipu_blitter->main_task), 0, sizeof(struct ipu_task));
 	ipu_blitter->main_task.output.width = dest_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
-	ipu_blitter->main_task.output.height = second_plane_offset / dest_surface_desc->plane_strides[0];
+	ipu_blitter->main_task.output.height = dest_surface_desc->height + dest_surface_desc->num_padding_rows;
 
 	ipu_blitter->main_task.output.paddr = (dma_addr_t)(phys_address);
 
@@ -300,7 +288,6 @@ static int imx_2d_backend_ipu_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	Imx2dRegion const *source_region;
 	Imx2dRegion const *dest_region;
 	ImxDmaBuffer *src_dma_buffer;
-	int second_plane_offset;
 	int input_width, input_height;
 	int output_width, output_height;
 	uint32_t ipu_format;
@@ -324,24 +311,13 @@ static int imx_2d_backend_ipu_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	source_region = (internal_blit_params->source_region != NULL) ? internal_blit_params->source_region : &(internal_blit_params->source->region);
 	dest_region = internal_blit_params->dest_region;
 
-	/* If the source surface uses a planar format, we need to know the
-	 * offset of the second plane to compute the amount of padding rows
-	 * at the bottom of output frames. */
-	if (fmt_info->num_planes > 1)
-		second_plane_offset = imx_2d_surface_get_dma_buffer_offset(internal_blit_params->source, 1) - imx_2d_surface_get_dma_buffer_offset(internal_blit_params->source, 0);
-	else
-		second_plane_offset = src_surface_desc->plane_strides[0] * src_surface_desc->height;
-
 	/* Set up the input width/height of main_task. The input width & height
 	 * contain the width & height _and_ any existing additional padding
 	 * rows & columns. The latter are excluded later when setting the
-	 * input crop rectangle.
-	 * second_plane_offset implicitly contains the height and number
-	 * of padding rows, because all of these are present before the
-	 * second plane starts in the DMA buffer. */
+	 * input crop rectangle. */
 	memset(&(ipu_blitter->main_task.input), 0, sizeof(struct ipu_input));
 	ipu_blitter->main_task.input.width = src_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
-	ipu_blitter->main_task.input.height = second_plane_offset / src_surface_desc->plane_strides[0];
+	ipu_blitter->main_task.input.height = src_surface_desc->height + src_surface_desc->num_padding_rows;
 
 	ipu_blitter->main_task.input.paddr = (dma_addr_t)(phys_address);
 

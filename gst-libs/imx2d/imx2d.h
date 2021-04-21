@@ -473,6 +473,7 @@ typedef struct _Imx2dSurface Imx2dSurface;
  * @width: Width of the surface, in pixels.
  * @height: Height of the surface, in pixels.
  * @plane_strides: Plane stride values, in bytes.
+ * @num_padding_rows: Number of extra padding rows at the bottom.
  * @format: Pixel format of the surface.
  *
  * Describes a surface by specifying metrics like width, height,
@@ -491,6 +492,7 @@ struct _Imx2dSurfaceDesc
 {
 	int width, height;
 	int plane_strides[3];
+	int num_padding_rows;
 	Imx2dPixelFormat format;
 };
 
