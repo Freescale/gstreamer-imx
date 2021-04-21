@@ -70,6 +70,7 @@ endif
 
 subdir('gst-libs/imx2d')
 subdir('gst-libs/gst/imx/common')
+subdir('gst-libs/gst/imx/video')
 subdir('ext/vpu')
 subdir('ext/audio')
 subdir('ext/imx2d')
