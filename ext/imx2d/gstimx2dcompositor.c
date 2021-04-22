@@ -1246,6 +1246,7 @@ static gboolean gst_imx_2d_compositor_negotiated_src_caps(GstAggregator *aggrega
 {
 	GstImx2dCompositor *self = GST_IMX_2D_COMPOSITOR(aggregator);
 	guint i;
+	gint num_padding_rows;
 	GList *walk;
 	GstVideoInfo output_video_info;
 	Imx2dSurfaceDesc output_surface_desc;
@@ -1264,32 +1265,7 @@ static gboolean gst_imx_2d_compositor_negotiated_src_caps(GstAggregator *aggrega
 
 	/* The stride values may require alignment according to the blitter's
 	 * capabilities. Adjust the output video's fields to match those. */
-	{
-		GstVideoInfo original_output_video_info;
-		GstVideoAlignment video_alignment;
-		Imx2dHardwareCapabilities const *capabilities = imx_2d_blitter_get_hardware_capabilities(self->blitter);
-
-		gst_video_alignment_reset(&video_alignment);
-
-		GST_DEBUG_OBJECT(self, "aligning output video info stride; blitter's stride alignment = %d", capabilities->stride_alignment);
-
-		for (i = 0; i < GST_VIDEO_INFO_N_PLANES(&output_video_info); ++i)
-			video_alignment.stride_align[i] = capabilities->stride_alignment - 1;
-
-		memcpy(&original_output_video_info, &output_video_info, sizeof(GstVideoInfo));
-		gst_video_info_align(&output_video_info, &video_alignment);
-
-		for (i = 0; i < GST_VIDEO_INFO_N_PLANES(&output_video_info); ++i)
-		{
-			GST_DEBUG_OBJECT(
-				self,
-				"plane %u of output video info: original stride %d aligned stride %d",
-				i,
-				GST_VIDEO_INFO_PLANE_STRIDE(&original_output_video_info, i),
-				GST_VIDEO_INFO_PLANE_STRIDE(&output_video_info, i)
-			);
-		}
-	}
+	gst_imx_2d_align_output_video_info(&output_video_info, &num_padding_rows, imx_2d_blitter_get_hardware_capabilities(self->blitter));
 
 	/* Fill the output surface description. None of its values can change
 	 * in between buffers, since we allocate the output buffers ourselves.
@@ -1304,6 +1280,8 @@ static gboolean gst_imx_2d_compositor_negotiated_src_caps(GstAggregator *aggrega
 
 	for (i = 0; i < GST_VIDEO_INFO_N_PLANES(&output_video_info); ++i)
 		output_surface_desc.plane_strides[i] = GST_VIDEO_INFO_PLANE_STRIDE(&output_video_info, i);
+
+	output_surface_desc.num_padding_rows = num_padding_rows;
 
 	imx_2d_surface_set_desc(self->output_surface, &output_surface_desc);
 

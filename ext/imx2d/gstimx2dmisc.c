@@ -685,6 +685,72 @@ void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer
 }
 
 
+void gst_imx_2d_align_output_video_info(GstVideoInfo *output_video_info, gint *num_padding_rows, Imx2dHardwareCapabilities const *hardware_capabilities)
+{
+	GstVideoInfo original_output_video_info;
+	GstVideoAlignment video_alignment;
+	gint num_planes;
+	gint stride;
+	guint i;
+	gint num_plane_rows, plane_row_remainder;
+	int stride_alignment;
+	int total_row_count_alignment;
+
+	memcpy(&original_output_video_info, output_video_info, sizeof(GstVideoInfo));
+
+	num_planes = GST_VIDEO_INFO_N_PLANES(output_video_info);
+	stride = GST_VIDEO_INFO_PLANE_STRIDE(output_video_info, 0);
+
+	stride_alignment = hardware_capabilities->stride_alignment;
+	total_row_count_alignment = hardware_capabilities->total_row_count_alignment;
+
+	/* The number of plane rows are derived from the plane offsets.
+	 * This assumes that the distance between the first and the second plane offsets
+	 * is an integer multiple of the first plane's stride, because the first plane
+	 * _has_ to fit in there, along with any additional padding rows.
+	 * For single-plane formats, we just use the height as the number of plane rows. */
+	if (num_planes > 1)
+	{
+		gint second_plane_offset = GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, 1) - GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, 0);
+		num_plane_rows = second_plane_offset / stride;
+	}
+	else
+		num_plane_rows = GST_VIDEO_INFO_HEIGHT(output_video_info);
+
+	plane_row_remainder = ((num_plane_rows + (total_row_count_alignment - 1)) / total_row_count_alignment) * total_row_count_alignment - num_plane_rows;
+
+	GST_DEBUG("aligning output video info stride;  stride alignment: %d  total row count alignment: %d  num extra padding rows: %d", stride_alignment, total_row_count_alignment, plane_row_remainder);
+
+	gst_video_alignment_reset(&video_alignment);
+
+	for (i = 0; i < GST_VIDEO_INFO_N_PLANES(output_video_info); ++i)
+		video_alignment.stride_align[i] = stride_alignment - 1;
+	video_alignment.padding_bottom = plane_row_remainder;
+	gst_video_info_align(output_video_info, &video_alignment);
+
+	/* There is no way to instruct gst_video_info_align() to just align the plane
+	 * offsets. Setting the GstVideoAlignment padding_bottom field adjusts those,
+	 * but also modifies the height value. Since we don't want that, we reset
+	 * the height back to its original value. */
+	GST_VIDEO_INFO_HEIGHT(output_video_info) = GST_VIDEO_INFO_HEIGHT(&original_output_video_info);
+
+	for (i = 0; i < GST_VIDEO_INFO_N_PLANES(output_video_info); ++i)
+	{
+		GST_DEBUG(
+			"plane %u of output video info:  original/aligned stride %d/%d  original/aligned plane offset %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT,
+			i,
+			GST_VIDEO_INFO_PLANE_STRIDE(&original_output_video_info, i),
+			GST_VIDEO_INFO_PLANE_STRIDE(output_video_info, i),
+			GST_VIDEO_INFO_PLANE_OFFSET(&original_output_video_info, i),
+			GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, i)
+		);
+	}
+
+	if (num_padding_rows != NULL)
+		*num_padding_rows = plane_row_remainder;
+}
+
+
 Imx2dRotation gst_imx_2d_convert_from_video_orientation_method(GstVideoOrientationMethod method)
 {
 	switch (method)
