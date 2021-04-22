@@ -741,13 +741,19 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 	g_assert(self->blitter != NULL);
 
-	/* Convert the caps to video info structures for easier acess. */
+	/* Convert the caps to video info structures for easier access. */
 
 	GST_DEBUG_OBJECT(self, "setting caps %" GST_PTR_FORMAT, (gpointer)caps);
 
 	if (G_UNLIKELY(!gst_imx_video_info_from_caps(&input_video_info, caps, &tile_layout, NULL)))
 	{
 		GST_ERROR_OBJECT(self, "could not set caps %" GST_PTR_FORMAT, (gpointer)caps);
+		goto error;
+	}
+
+	if (!gst_imx_video_uploader_set_input_video_info(self->uploader, &input_video_info))
+	{
+		GST_ERROR_OBJECT(self, "could not configure uploader with new caps / video info");
 		goto error;
 	}
 
@@ -839,12 +845,12 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	}
 
 
-	/* Upload the input buffer. The uploader creates a deep
-	 * copy if necessary, but tries to avoid that if possible
-	 * by passing through the buffer (if it consists purely
-	 * of imxdmabuffer backend gstmemory blocks) or by
-	 * duplicating DMA-BUF FDs with dup(). */
-	flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
+	/* Upload the input buffer. The uploader creates a deep  copy if necessary,
+	 * but tries to avoid that if possible by passing through the buffer (if it
+	 * consists purely of imxdmabuffer backend gstmemory blocks) or by
+	 * duplicating DMA-BUF FDs with dup(). A deep copy is also made if the input
+	 * video frames are not properly aligned. */
+	flow_ret = gst_imx_video_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
 	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
 		return flow_ret;
 
@@ -852,7 +858,7 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	/* Set up the input surface. */
 
 	gst_imx_2d_assign_input_buffer_to_surface(
-		input_buffer, uploaded_input_buffer,
+		uploaded_input_buffer,
 		self->input_surface,
 		&(self->input_surface_desc),
 		&(self->input_video_info)
@@ -941,10 +947,15 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 	gboolean ret = TRUE;
 	GstImx2dVideoSinkClass *klass = GST_IMX_2D_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(self));
 	gboolean use_vsync;
-	gchar *framebuffer_name;
+	gchar *framebuffer_name = NULL;
 
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
-	self->uploader = gst_imx_dma_buffer_uploader_new(self->imx_dma_buffer_allocator);
+	self->uploader = gst_imx_video_uploader_new(self->imx_dma_buffer_allocator, klass->hardware_capabilities->stride_alignment, klass->hardware_capabilities->total_row_count_alignment);
+	if (self->uploader == NULL)
+	{
+		GST_ERROR_OBJECT(self, "creating DMA video uploader failed");
+		goto error;
+	}
 
 	self->tag_video_direction = DEFAULT_VIDEO_DIRECTION;
 	self->drop_frames_changed = TRUE;
@@ -1293,6 +1304,8 @@ void gst_imx_2d_video_sink_common_class_init(GstImx2dVideoSinkClass *klass, Imx2
 	GstPadTemplate *sink_template;
 
 	element_class = GST_ELEMENT_CLASS(klass);
+
+	klass->hardware_capabilities = capabilities;
 
 	sink_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities(capabilities, GST_PAD_SINK);
 	sink_template = gst_pad_template_new("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sink_template_caps);

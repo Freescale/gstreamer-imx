@@ -22,7 +22,7 @@
 #include <gst/gst.h>
 #include <gst/base/gstbasetransform.h>
 #include <gst/video/video.h>
-#include "gst/imx/common/gstimxdmabufferuploader.h"
+#include "gst/imx/video/gstimxvideouploader.h"
 #include "imx2d/imx2d.h"
 #include "gstimx2dmisc.h"
 #include "gstimx2dvideobufferpool.h"
@@ -51,7 +51,7 @@ struct _GstImx2dVideoTransform
 
 	/*< private >*/
 
-	GstImxDmaBufferUploader *uploader;
+	GstImxVideoUploader *uploader;
 	GstAllocator *imx_dma_buffer_allocator;
 
 	GstImx2dVideoBufferPool *video_buffer_pool;
@@ -91,6 +91,8 @@ struct _GstImx2dVideoTransformClass
 	gboolean (*stop)(GstImx2dVideoTransform *imx_2d_video_transform);
 
 	Imx2dBlitter* (*create_blitter)(GstImx2dVideoTransform *imx_2d_video_transform);
+
+	Imx2dHardwareCapabilities const *hardware_capabilities;
 };
 
 

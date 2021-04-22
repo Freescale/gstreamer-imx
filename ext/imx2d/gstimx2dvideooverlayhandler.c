@@ -497,7 +497,7 @@ static gboolean gst_imx_2d_video_overlay_handler_cache_buffers(GstImx2dVideoOver
 		surface_desc.format = gst_imx_2d_convert_from_gst_video_format(video_meta->format, NULL);
 
 		gst_imx_2d_assign_input_buffer_to_surface(
-			uploaded_buffer, uploaded_buffer,
+			uploaded_buffer,
 			cached_overlay->surface,
 			&surface_desc,
 			NULL

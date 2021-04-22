@@ -21,7 +21,6 @@
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
-#include "gst/imx/common/gstimxdmabufferuploader.h"
 #include "imx2d/imx2d.h"
 #include "gstimx2dvideobufferpool.h"
 
@@ -48,7 +47,6 @@ struct _GstImx2dCompositor
 
 	/*< private >*/
 
-	GstImxDmaBufferUploader *uploader;
 	GstAllocator *imx_dma_buffer_allocator;
 
 	GstImx2dVideoBufferPool *video_buffer_pool;
@@ -67,6 +65,8 @@ struct _GstImx2dCompositorClass
 	GstVideoAggregatorClass parent_class;
 
 	Imx2dBlitter* (*create_blitter)(GstImx2dCompositor *imx_2d_compositor);
+
+	Imx2dHardwareCapabilities const *hardware_capabilities;
 };
 
 

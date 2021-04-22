@@ -1219,7 +1219,7 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 
 	g_assert(self->blitter != NULL);
 
-	/* Convert the caps to video info structures for easier acess. */
+	/* Convert the caps to video info structures for easier access. */
 
 	GST_DEBUG_OBJECT(self, "setting caps: input caps: %" GST_PTR_FORMAT "  output caps: %" GST_PTR_FORMAT, (gpointer)input_caps, (gpointer)output_caps);
 
@@ -1233,6 +1233,13 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	if (!gst_video_info_from_caps(&output_video_info, output_caps))
 	{
 		GST_ERROR_OBJECT(self, "cannot convert output caps to video info; output caps: %" GST_PTR_FORMAT, (gpointer)output_caps);
+		self->inout_info_set = FALSE;
+		return FALSE;
+	}
+
+	if (!gst_imx_video_uploader_set_input_video_info(self->uploader, &input_video_info))
+	{
+		GST_ERROR_OBJECT(self, "could not configure uploader with new caps / video info");
 		self->inout_info_set = FALSE;
 		return FALSE;
 	}
@@ -1549,12 +1556,12 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 
 	GST_LOG_OBJECT(self, "beginning frame transform by uploading input buffer");
 
-	/* Upload the input buffer. The uploader creates a deep
-	 * copy if necessary, but tries to avoid that if possible
-	 * by passing through the buffer (if it consists purely
-	 * of imxdmabuffer backeed gstmemory blocks) or by
-	 * duplicating DMA-BUF FDs with dup(). */
-	flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
+	/* Upload the input buffer. The uploader creates a deep  copy if necessary,
+	 * but tries to avoid that if possible by passing through the buffer (if it
+	 * consists purely of imxdmabuffer backend gstmemory blocks) or by
+	 * duplicating DMA-BUF FDs with dup(). A deep copy is also made if the input
+	 * video frames are not properly aligned. */
+	flow_ret = gst_imx_video_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
 	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
 		goto error;
 
@@ -1573,7 +1580,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	/* Set up the input and output surfaces. */
 
 	gst_imx_2d_assign_input_buffer_to_surface(
-		input_buffer, uploaded_input_buffer,
+		uploaded_input_buffer,
 		self->input_surface,
 		&(self->input_surface_desc),
 		&(self->input_video_info)
@@ -1765,6 +1772,7 @@ static gboolean gst_imx_2d_video_transform_copy_metadata(G_GNUC_UNUSED GstBaseTr
 static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 {
 	GstImx2dVideoTransformClass *klass = GST_IMX_2D_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(self));
+	GstImxDmaBufferUploader *dma_buffer_uploader;
 
 	self->inout_info_equal = FALSE;
 	self->inout_info_set = FALSE;
@@ -1782,10 +1790,10 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 		goto error;
 	}
 
-	self->uploader = gst_imx_dma_buffer_uploader_new(self->imx_dma_buffer_allocator);
+	self->uploader = gst_imx_video_uploader_new(self->imx_dma_buffer_allocator, klass->hardware_capabilities->stride_alignment, klass->hardware_capabilities->total_row_count_alignment);
 	if (self->uploader == NULL)
 	{
-		GST_ERROR_OBJECT(self, "creating DMA buffer uploader failed");
+		GST_ERROR_OBJECT(self, "creating DMA video uploader failed");
 		goto error;
 	}
 
@@ -1818,7 +1826,9 @@ static gboolean gst_imx_2d_video_transform_start(GstImx2dVideoTransform *self)
 		goto error;
 	}
 
-	self->overlay_handler = gst_imx_2d_video_overlay_handler_new(self->uploader, self->blitter);
+	dma_buffer_uploader = gst_imx_video_uploader_get_dma_buffer_uploader(self->uploader);
+	self->overlay_handler = gst_imx_2d_video_overlay_handler_new(dma_buffer_uploader, self->blitter);
+	gst_object_unref(GST_OBJECT(dma_buffer_uploader));
 	if (self->overlay_handler == NULL)
 	{
 		GST_ERROR_OBJECT(self, "creating overlay handler failed");
@@ -1920,6 +1930,8 @@ void gst_imx_2d_video_transform_common_class_init(GstImx2dVideoTransformClass *k
 	GstPadTemplate *src_template;
 
 	element_class = GST_ELEMENT_CLASS(klass);
+
+	klass->hardware_capabilities = capabilities;
 
 	sink_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities_full(capabilities, GST_PAD_SINK, TRUE);
 	src_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities_full(capabilities, GST_PAD_SRC, TRUE);

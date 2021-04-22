@@ -87,6 +87,6 @@ if backend_source.length() > 0
 		install : true,
 		install_dir: plugins_install_dir,
 		include_directories: [configinc, libsinc],
-		dependencies : [gstimxcommon_dep, gstreamer_video_dep, imx2d_dep] + backend_deps
+		dependencies : [gstimxcommon_dep, gstimxvideo_dep, gstreamer_video_dep, imx2d_dep] + backend_deps
 	)
 endif

@@ -1,5 +1,6 @@
 #include "gstimx2dmisc.h"
 #include "gst/imx/common/gstimxdmabufferallocator.h"
+#include "gst/imx/video/gstimxvideoutils.h"
 #include "imx2d/imx2d.h"
 
 
@@ -527,7 +528,7 @@ gboolean gst_imx_2d_check_input_buffer_structure(GstBuffer *input_buffer, guint 
 
 
 void gst_imx_2d_assign_input_buffer_to_surface(
-	GstBuffer *original_input_buffer, GstBuffer *uploaded_input_buffer,
+	GstBuffer *uploaded_input_buffer,
 	Imx2dSurface *surface,
 	Imx2dSurfaceDesc *surface_desc,
 	GstVideoInfo const *input_video_info
@@ -537,13 +538,16 @@ void gst_imx_2d_assign_input_buffer_to_surface(
 	guint plane_index;
 	GstVideoMeta *videometa;
 	ImxDmaBuffer *in_dma_buffer;
+	int num_plane_rows;
+	int height;
 
 	/* Check the structure of the input buffer. */
-	num_memory_blocks = gst_buffer_n_memory(original_input_buffer);
+	num_memory_blocks = gst_buffer_n_memory(uploaded_input_buffer);
+
+	videometa = gst_buffer_get_video_meta(uploaded_input_buffer);
 
 	if (num_memory_blocks > 1)
 	{
-		videometa = gst_buffer_get_video_meta(original_input_buffer);
 		if (videometa != NULL)
 		{
 			for (plane_index = 0; plane_index < videometa->n_planes; ++plane_index)
@@ -607,7 +611,6 @@ void gst_imx_2d_assign_input_buffer_to_surface(
 
 		GST_LOG("setting ImxDmaBuffer %p as input DMA buffer for all planes", (gpointer)in_dma_buffer);
 
-		videometa = gst_buffer_get_video_meta(original_input_buffer);
 		if (videometa != NULL)
 		{
 			for (plane_index = 0; plane_index < videometa->n_planes; ++plane_index)
@@ -643,6 +646,14 @@ void gst_imx_2d_assign_input_buffer_to_surface(
 			}
 		}
 	}
+
+	GST_LOG("XXXXXXXXXXXXX %" GST_PTR_FORMAT, (gpointer)uploaded_input_buffer);
+	num_plane_rows = gst_imx_video_utils_calculate_total_num_frame_rows(uploaded_input_buffer, input_video_info);
+	height = (videometa != NULL) ? (int)(videometa->height) : GST_VIDEO_INFO_HEIGHT(input_video_info);
+
+	surface_desc->num_padding_rows = num_plane_rows - height;
+	g_assert(surface_desc->num_padding_rows >= 0);
+	GST_LOG("total num input plane rows: %d  height: %d  -> num padding rows: %d", num_plane_rows, height, surface_desc->num_padding_rows);
 }
 
 
@@ -689,8 +700,6 @@ void gst_imx_2d_align_output_video_info(GstVideoInfo *output_video_info, gint *n
 {
 	GstVideoInfo original_output_video_info;
 	GstVideoAlignment video_alignment;
-	gint num_planes;
-	gint stride;
 	guint i;
 	gint num_plane_rows, plane_row_remainder;
 	int stride_alignment;
@@ -698,24 +707,10 @@ void gst_imx_2d_align_output_video_info(GstVideoInfo *output_video_info, gint *n
 
 	memcpy(&original_output_video_info, output_video_info, sizeof(GstVideoInfo));
 
-	num_planes = GST_VIDEO_INFO_N_PLANES(output_video_info);
-	stride = GST_VIDEO_INFO_PLANE_STRIDE(output_video_info, 0);
-
 	stride_alignment = hardware_capabilities->stride_alignment;
 	total_row_count_alignment = hardware_capabilities->total_row_count_alignment;
 
-	/* The number of plane rows are derived from the plane offsets.
-	 * This assumes that the distance between the first and the second plane offsets
-	 * is an integer multiple of the first plane's stride, because the first plane
-	 * _has_ to fit in there, along with any additional padding rows.
-	 * For single-plane formats, we just use the height as the number of plane rows. */
-	if (num_planes > 1)
-	{
-		gint second_plane_offset = GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, 1) - GST_VIDEO_INFO_PLANE_OFFSET(output_video_info, 0);
-		num_plane_rows = second_plane_offset / stride;
-	}
-	else
-		num_plane_rows = GST_VIDEO_INFO_HEIGHT(output_video_info);
+	num_plane_rows = gst_imx_video_utils_calculate_total_num_frame_rows(NULL, output_video_info);
 
 	plane_row_remainder = ((num_plane_rows + (total_row_count_alignment - 1)) / total_row_count_alignment) * total_row_count_alignment - num_plane_rows;
 

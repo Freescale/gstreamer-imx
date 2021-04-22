@@ -19,6 +19,7 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include "gst/imx/common/gstimxdmabufferallocator.h"
+#include "gst/imx/video/gstimxvideouploader.h"
 #include "gstimx2dcompositor.h"
 #include "gstimx2dmisc.h"
 
@@ -126,6 +127,8 @@ struct _GstImx2dCompositorPad
 	Imx2dBlitMargin combined_margin;
 
 	GstVideoOrientationMethod tag_video_direction;
+
+	GstImxVideoUploader *uploader;
 
 	gint xpos, ypos;
 	gint width, height;
@@ -383,6 +386,8 @@ static void gst_imx_2d_compositor_pad_init(GstImx2dCompositorPad *self)
 
 	self->tag_video_direction = DEFAULT_PAD_VIDEO_DIRECTION;
 
+	self->uploader = NULL;
+
 	self->input_surface = imx_2d_surface_create(NULL);
 	memset(&(self->input_surface_desc), 0, sizeof(self->input_surface_desc));
 
@@ -404,6 +409,12 @@ static void gst_imx_2d_compositor_pad_finalize(GObject *object)
 
 	if (self->input_surface != NULL)
 		imx_2d_surface_destroy(self->input_surface);
+
+	if (self->uploader != NULL)
+	{
+		gst_object_unref(GST_OBJECT(self->uploader));
+		self->uploader = NULL;
+	}
 
 	G_OBJECT_CLASS(gst_imx_2d_compositor_pad_parent_class)->finalize(object);
 }
@@ -670,6 +681,9 @@ static GstPadProbeReturn gst_imx_2d_compositor_downstream_event_probe(GstPad *pa
 
 			compositor_pad->region_coords_need_update = TRUE;
 
+			/* TODO: There is currently no way to report an error if this call fails. */
+			gst_imx_video_uploader_set_input_video_info(compositor_pad->uploader, &video_info);
+
 			GST_OBJECT_UNLOCK(compositor_pad);
 
 			break;
@@ -858,6 +872,7 @@ G_DEFINE_ABSTRACT_TYPE_WITH_CODE(
 /* Base class function overloads. */
 
 /* General element operations. */
+static void gst_imx_2d_compositor_dispose(GObject *object);
 static void gst_imx_2d_compositor_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_2d_compositor_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 static GstPad* gst_imx_2d_compositor_request_new_pad(GstElement *element, GstPadTemplate *templ, const gchar *req_name, GstCaps const *caps);
@@ -898,6 +913,7 @@ static void gst_imx_2d_compositor_class_init(GstImx2dCompositorClass *klass)
 	aggregator_class = GST_AGGREGATOR_CLASS(klass);
 	video_aggregator_class = GST_VIDEO_AGGREGATOR_CLASS(klass);
 
+	object_class->dispose      = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_dispose);
 	object_class->set_property = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_set_property);
 	object_class->get_property = GST_DEBUG_FUNCPTR(gst_imx_2d_compositor_get_property);
 
@@ -934,6 +950,13 @@ static void gst_imx_2d_compositor_class_init(GstImx2dCompositorClass *klass)
 static void gst_imx_2d_compositor_init(GstImx2dCompositor *self)
 {
 	self->background_color = DEFAULT_BACKGROUND_COLOR;
+
+	/* NOTE: This is created here instead of in start() because new
+	 * compositor pads may appear before start() runs. When a new pad
+	 * appears, request_new_pad() is called, and in that function, this
+	 * allocator is accessed, so it must exist at that time already. */
+	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
+	GST_DEBUG_OBJECT(self, "new i.MX DMA buffer allocator %" GST_PTR_FORMAT, (gpointer)(self->imx_dma_buffer_allocator));
 }
 
 
@@ -975,6 +998,20 @@ static guint gst_imx_2d_compositor_child_proxy_get_children_count(GstChildProxy 
 	GST_OBJECT_UNLOCK(self);
 
 	return count;	
+}
+
+
+static void gst_imx_2d_compositor_dispose(GObject *object)
+{
+	GstImx2dCompositor *self = GST_IMX_2D_COMPOSITOR(object);
+
+	if (self->imx_dma_buffer_allocator != NULL)
+	{
+		gst_object_unref(GST_OBJECT(self->imx_dma_buffer_allocator));
+		self->imx_dma_buffer_allocator = NULL;
+	}
+
+	G_OBJECT_CLASS(gst_imx_2d_compositor_parent_class)->dispose(object);
 }
 
 
@@ -1022,6 +1059,9 @@ static void gst_imx_2d_compositor_get_property(GObject *object, guint prop_id, G
 
 static GstPad* gst_imx_2d_compositor_request_new_pad(GstElement *element, GstPadTemplate *templ, const gchar *req_name, GstCaps const *caps)
 {
+	GstImx2dCompositor *self = GST_IMX_2D_COMPOSITOR(element);
+	GstImx2dCompositorClass *klass = GST_IMX_2D_COMPOSITOR_CLASS(G_OBJECT_GET_CLASS(self));
+	GstImxVideoUploader *uploader;
 	GstPad *new_pad;
 
 	/* We intercept the new-pad request to add the new pad
@@ -1040,6 +1080,14 @@ static GstPad* gst_imx_2d_compositor_request_new_pad(GstElement *element, GstPad
 		GST_ERROR_OBJECT(element, "new request pad has no imx2d input surface");
 		goto error;
 	}
+
+	uploader = gst_imx_video_uploader_new(self->imx_dma_buffer_allocator, klass->hardware_capabilities->stride_alignment, klass->hardware_capabilities->total_row_count_alignment);
+	if (uploader == NULL)
+	{
+		GST_ERROR_OBJECT(self, "creating DMA video uploader failed");
+		goto error;
+	}
+	GST_IMX_2D_COMPOSITOR_PAD(new_pad)->uploader = uploader;
 
 	GST_DEBUG_OBJECT(element, "created and added new request pad %s:%s", GST_DEBUG_PAD_NAME(new_pad));
 
@@ -1119,10 +1167,6 @@ static gboolean gst_imx_2d_compositor_start(GstAggregator *aggregator)
 
 	self->video_buffer_pool = NULL;
 
-	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
-	GST_DEBUG_OBJECT(self, "new i.MX DMA buffer allocator %" GST_PTR_FORMAT, (gpointer)(self->imx_dma_buffer_allocator));
-	self->uploader = gst_imx_dma_buffer_uploader_new(self->imx_dma_buffer_allocator);
-
 	if (!gst_imx_2d_compositor_create_blitter(self))
 	{
 		GST_ERROR_OBJECT(self, "creating blitter failed");
@@ -1159,18 +1203,6 @@ static gboolean gst_imx_2d_compositor_stop(GstAggregator *aggregator)
 	{
 		imx_2d_blitter_destroy(self->blitter);
 		self->blitter = NULL;
-	}
-
-	if (self->uploader != NULL)
-	{
-		gst_object_unref(GST_OBJECT(self->uploader));
-		self->uploader = NULL;
-	}
-
-	if (self->imx_dma_buffer_allocator != NULL)
-	{
-		gst_object_unref(GST_OBJECT(self->imx_dma_buffer_allocator));
-		self->imx_dma_buffer_allocator = NULL;
 	}
 
 	if (self->video_buffer_pool != NULL)
@@ -1253,7 +1285,7 @@ static gboolean gst_imx_2d_compositor_negotiated_src_caps(GstAggregator *aggrega
 
 	g_assert(self->blitter != NULL);
 
-	/* Convert the caps to video info structures for easier acess. */
+	/* Convert the caps to video info structures for easier access. */
 
 	GST_DEBUG_OBJECT(self, "setting caps: output caps: %" GST_PTR_FORMAT, (gpointer)caps);
 
@@ -1525,14 +1557,14 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 		 * by passing through the buffer (if it consists purely
 		 * of imxdmabuffer backeed gstmemory blocks) or by
 		 * duplicating DMA-BUF FDs with dup(). */
-		flow_ret = gst_imx_dma_buffer_uploader_perform(self->uploader, input_buffer, &uploaded_input_buffer);
+		flow_ret = gst_imx_video_uploader_perform(compositor_pad->uploader, input_buffer, &uploaded_input_buffer);
 		if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
 			goto error_while_locked;
 
 		/* Set up the pad's input surface. */
 
 		gst_imx_2d_assign_input_buffer_to_surface(
-			input_buffer, uploaded_input_buffer,
+			uploaded_input_buffer,
 			compositor_pad->input_surface,
 			&(compositor_pad->input_surface_desc),
 			&(videoaggregator_pad->info)
@@ -1670,6 +1702,8 @@ void gst_imx_2d_compositor_common_class_init(GstImx2dCompositorClass *klass, Imx
 	GstPadTemplate *src_template;
 
 	element_class = GST_ELEMENT_CLASS(klass);
+
+	klass->hardware_capabilities = capabilities;
 
 	sink_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities(capabilities, GST_PAD_SINK);
 	src_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities(capabilities, GST_PAD_SRC);
