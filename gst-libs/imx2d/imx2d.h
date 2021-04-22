@@ -844,6 +844,17 @@ int imx_2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dRegion const *dest_re
  * Provides hardware capabilities that describe what the 2D
  * hardware associated with @blitter is capable of.
  *
+ * Individual backends have their own additional functions for
+ * accessing the same capabilities, but without having to pass
+ * a blitter instance. These are useful for static initializations,
+ * but aren't implementation agnostic. For example, the G2D backend
+ * has imx_2d_backend_g2d_get_hardware_capabilities().
+ *
+ * In other words: Prefer this function for access hardware capabilities
+ * in a backend agnostic way if there is a blitter instance available.
+ * Otherwise, if there is no blitter instance, use the backend specific
+ * functions.
+ *
  * Returns: Const pointer to @Imx2dHardwareCapabilities structure.
  */
 Imx2dHardwareCapabilities const * imx_2d_blitter_get_hardware_capabilities(Imx2dBlitter *blitter);
