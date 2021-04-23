@@ -59,6 +59,10 @@ struct _GstImxV4L2Object
 	/* Opened Unix file descriptor for accessing the V4L2 device. */
 	int v4l2_fd;
 
+	/* Used for setting the interlacing video buffer flags. */
+	gboolean interlaced_video;
+	gboolean interlace_top_field_first;
+
 	/* One of V4L2_BUF_TYPE_VIDEO_CAPTURE or V4L2_BUF_TYPE_VIDEO_OUTPUT,
 	 * depending on the value of device_type (see above). */
 	guint32 v4l2_buffer_type;
@@ -537,6 +541,18 @@ GstFlowReturn gst_imx_v4l2_object_dequeue_buffer(GstImxV4L2Object *imx_v4l2_obje
 		*buffer = imx_v4l2_object->queued_gstbuffers[v4l2_buf_index];
 		GST_BUFFER_PTS(*buffer) = timestamp;
 
+		/* Set the buffer's interlace flags. */
+		if (imx_v4l2_object->interlaced_video)
+		{
+			GST_BUFFER_FLAG_SET(*buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+			if (imx_v4l2_object->interlace_top_field_first)
+				GST_BUFFER_FLAG_SET(*buffer, GST_VIDEO_BUFFER_FLAG_TFF);
+			else
+				GST_BUFFER_FLAG_UNSET(*buffer, GST_VIDEO_BUFFER_FLAG_TFF);
+		}
+		else
+			GST_BUFFER_FLAG_UNSET(*buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
+
 		/* Clear the entry where the queued GstBuffer used to be. */
 		imx_v4l2_object->queued_gstbuffers[v4l2_buf_index] = NULL;
 
@@ -742,10 +758,16 @@ static gboolean setup_device(GstImxV4L2Object *self)
 				std_fps_d = 1;
 			}
 
+			/* M/NTSC transmits the bottom field first,
+			 * all other standards the top field first. */
+			self->interlace_top_field_first = !(video_standard_id & V4L2_STD_NTSC);
+
 			GST_DEBUG_OBJECT(self, "will use the video standard's frame rate %d/%d", std_fps_n, std_fps_d);
+			GST_DEBUG_OBJECT(self, "standard uses top-field-first interlace: %d", self->interlace_top_field_first);
 		}
 		else 
 		{
+			self->interlace_top_field_first = FALSE;
 			GST_DEBUG_OBJECT(self, "standard video timings are not supported or could not be detected");
 		}
 	}
@@ -989,11 +1011,13 @@ static gboolean setup_device(GstImxV4L2Object *self)
 		{
 			case V4L2_FIELD_INTERLACED:
 				actual_interlace_mode = GST_VIDEO_INTERLACE_MODE_INTERLEAVED;
+				self->interlaced_video = TRUE;
 				break;
 
 			case V4L2_FIELD_NONE:
 			default:
 				actual_interlace_mode = GST_VIDEO_INTERLACE_MODE_PROGRESSIVE;
+				self->interlaced_video = FALSE;
 		}
 
 		switch (self->video_info.type)
