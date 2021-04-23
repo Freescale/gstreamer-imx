@@ -1,0 +1,10 @@
+prefix=/usr
+exec_prefix=${prefix}
+includedir=${prefix}/include
+libdir=${exec_prefix}/lib
+
+Name: gstimxcommon
+Description: GStreamer IMX common code
+Version: @VERSION@
+Cflags: @CFLAGS@
+Libs: -L${libdir} @LIBS@
