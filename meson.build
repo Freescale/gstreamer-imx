@@ -1,4 +1,4 @@
-project('gstreamer-imx', 'c', default_options : ['c_std=c99'], version : '2.0.0')
+project('gstreamer-imx', 'c', default_options : ['c_std=c99'], version : '2.0.0', license: 'LGPL-2.0-or-later', meson_version: '>= 0.54.0')
 
 message('Setting up build configuration for gstreamer-imx version ' + meson.project_version())
 
@@ -15,7 +15,7 @@ libm_dep  = cc.find_library('m', required : true)
 
 # test for libimxdmabuffer
 
-libimxdmabuffer_dep = dependency('libimxdmabuffer', required : true, method : 'pkg-config')
+libimxdmabuffer_dep = dependency('libimxdmabuffer', version : '>=1.0.1', required : true, method : 'pkg-config')
 libimxdmabuffer_ion = libimxdmabuffer_dep.get_pkgconfig_variable('libimxdmabuffer_ion', default : '')
 ion_support = (libimxdmabuffer_ion != '0') and (libimxdmabuffer_ion != '')
 if ion_support
