@@ -647,7 +647,6 @@ void gst_imx_2d_assign_input_buffer_to_surface(
 		}
 	}
 
-	GST_LOG("XXXXXXXXXXXXX %" GST_PTR_FORMAT, (gpointer)uploaded_input_buffer);
 	num_plane_rows = gst_imx_video_utils_calculate_total_num_frame_rows(uploaded_input_buffer, input_video_info);
 	height = (videometa != NULL) ? (int)(videometa->height) : GST_VIDEO_INFO_HEIGHT(input_video_info);
 
