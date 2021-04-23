@@ -502,6 +502,7 @@ finish:
 static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *cur_frame)
 {
 	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC_CAST(encoder);
+	GstImxVpuEncClass *klass = GST_IMX_VPU_ENC_CLASS(G_OBJECT_GET_CLASS(encoder));
 	GstFlowReturn flow_ret = GST_FLOW_OK;
 
 	if (G_UNLIKELY(imx_vpu_enc->encoder == NULL))
@@ -527,6 +528,8 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 		ImxVpuApiEncReturnCodes enc_ret;
 		GstBuffer *uploaded_input_buffer;
 
+		GST_LOG_OBJECT(imx_vpu_enc, "about to prepare and queue frame with number #%" G_GUINT32_FORMAT " for encoding", cur_frame->system_frame_number);
+
 		flow_ret = gst_imx_dma_buffer_uploader_perform(imx_vpu_enc->uploader, cur_frame->input_buffer, &uploaded_input_buffer);
 		if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
 			goto finish;
@@ -546,6 +549,12 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 		 * have a delay (= output frames only show up after N complete input
 		 * frames), and others like h.264 even reorder frames. */
 		raw_frame.context = (void *)((guintptr)(cur_frame->system_frame_number));
+
+		if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(cur_frame))
+		{
+			GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
+			raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
+		}
 
 		/* The actual encoding */
 		if ((enc_ret = imx_vpu_api_enc_push_raw_frame(imx_vpu_enc->encoder, &raw_frame)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
@@ -853,6 +862,8 @@ void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompre
 
 	gst_element_class_add_pad_template(element_class, sink_template);
 	gst_element_class_add_pad_template(element_class, src_template);
+
+	klass->use_idr_frame_type_for_keyframes = FALSE;
 
 	object_class->set_property = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_set_property);
 	object_class->get_property = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_get_property);

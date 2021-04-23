@@ -119,6 +119,8 @@ struct _GstImxVpuEncClass
 
 	gboolean (*set_open_params)(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncOpenParams *open_params);
 	GstCaps* (*get_output_caps)(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncStreamInfo const *stream_info);
+
+	gboolean use_idr_frame_type_for_keyframes;
 };
 
 
