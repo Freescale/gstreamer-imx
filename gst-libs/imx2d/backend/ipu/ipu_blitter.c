@@ -585,7 +585,7 @@ static Imx2dHardwareCapabilities const capabilities = {
 	.min_height = 64, .max_height = INT_MAX, .height_step_size = 1,
 
 	.stride_alignment = 16,
-	.total_row_count_alignment = 16,
+	.total_row_count_alignment = 8,
 
 	.can_handle_multi_buffer_surfaces = 0
 };
