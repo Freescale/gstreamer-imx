@@ -77,7 +77,6 @@ struct _GstImxBlitterVideoSink
 	guint old_fb_page;
 	gboolean use_vsync;
 	gboolean clear_at_null;
-	gboolean clear_on_relocate;
 	gboolean input_crop;
 	gboolean last_frame_with_cropdata;
 
@@ -98,7 +97,6 @@ struct _GstImxBlitterVideoSink
 	GstImxRegion input_region;
 	GstImxRegion last_source_region;
 	gboolean canvas_needs_update;
-	gboolean canvas_bounds_changed;
 };
 
 

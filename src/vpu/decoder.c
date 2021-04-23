@@ -744,7 +744,7 @@ static GstFlowReturn gst_imx_vpu_decoder_handle_frame(GstVideoDecoder *decoder, 
 					case IMX_VPU_INTERLACING_MODE_BOTTOM_FIELD_FIRST:
 						GST_LOG_OBJECT(vpu_decoder, "interlaced frame, 1 field, bottom field first");
 						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_INTERLACED);
-						GST_BUFFER_FLAG_UNSET(out_buffer, GST_VIDEO_BUFFER_FLAG_TFF);
+						GST_BUFFER_FLAG_SET(out_buffer, GST_VIDEO_BUFFER_FLAG_TFF);
 						break;
 
 					default:
@@ -1126,10 +1126,7 @@ static void gst_imx_vpu_decoder_close(GstImxVpuDecoder *vpu_decoder)
 static void gst_imx_vpu_decoder_close_and_clear_decoder_context(GstImxVpuDecoder *vpu_decoder)
 {
 	if (vpu_decoder->decoder_context == NULL)
-	{	
-		gst_imx_vpu_decoder_close(vpu_decoder);
 		return;
-	}
 
 	GST_INFO_OBJECT(vpu_decoder, "Clearing decoder context");
 
@@ -1356,7 +1353,6 @@ static int gst_imx_vpu_decoder_initial_info_callback(G_GNUC_UNUSED ImxVpuDecoder
 		gst_imx_vpu_decoder_context_set_decoder_as_gone(vpu_decoder->decoder_context);
 	}
 
-	new_initial_info->min_num_required_framebuffers += vpu_decoder->num_additional_framebuffers;
 	vpu_decoder->decoder_context = gst_imx_vpu_decoder_context_new(vpu_decoder->decoder, new_initial_info, vpu_decoder->chroma_interleave, (GstImxPhysMemAllocator *)(vpu_decoder->phys_mem_allocator));
 
 	if (vpu_decoder->decoder_context == NULL)

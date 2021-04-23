@@ -238,6 +238,6 @@ Further notes on how to build for some Linux distributions:
 * Yocto / OpenEmbedded build instructions:
   An OpenEmbedded recipe for gstreamer-imx is included in [meta-freescale](https://git.yoctoproject.org/cgit/cgit.cgi/meta-freescale).
   Also check out the [Freescale Github space](http://freescale.github.io/).
-  Add the meta-freescale layer to your setup's `bblayers.conf`. Then it should be possible to
+  Add the meta-freescale layer to your setup's `bblayers.conf`. Then it should be possiblet to
   build the `gstreamer1.0-plugins-imx` recipe. This will also automatically build libimxvpuapi,
   which too has a recipe in meta-freescale.

@@ -2254,17 +2254,11 @@ gst_imx_g2d_base_text_overlay_blend_g2d(GstImxG2DBaseTextOverlay * overlay,
 {
   void *g2d_handle;
   gboolean ret = TRUE;
-  GstMemory *video_mem;
-  gboolean is_phys_mem;
 
   g_assert_nonnull(video_frame);
   g_assert_nonnull(overlay->text_image);
 
-  video_mem = gst_buffer_get_memory(video_frame, 0);
-  is_phys_mem = gst_imx_is_phys_memory(video_mem);
-  gst_memory_unref(video_mem);
-
-  if (!is_phys_mem) {
+  if (!gst_imx_is_phys_memory(gst_buffer_get_memory(video_frame, 0))) {
     GST_ERROR_OBJECT (overlay, "video frame data is not contiguous physical memory");
     return FALSE;
   }

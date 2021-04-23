@@ -147,13 +147,6 @@ static gboolean gst_imx_v4l2src_is_tvin(GstImxV4l2VideoSrc *v4l2src, gint fd_v4l
 	else
 		v4l2src->fps_n = (!v4l2src->fps_n || v4l2src->fps_n > 25) ? 25 : v4l2src->fps_n;
 
-	/* M/NTSC transmits the bottom field first,
-	 * all other standards the top field first */
-	if (std_id & V4L2_STD_NTSC)
-		v4l2src->top_field_first = FALSE;
-	else
-		v4l2src->top_field_first = TRUE;
-
 	GST_DEBUG_OBJECT(v4l2src,
 		"found TV decoder: adjusted fps = %d/%d, std_id = %#" G_GINT64_MODIFIER "x",
 		v4l2src->fps_n, v4l2src->fps_d, std_id);
@@ -257,14 +250,14 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 			v4l2src->fps_n, v4l2src->fps_d);
 	}
 
-	/* Determine the desired input pixelformat (UYVY, YUY2 or I420)
+	/* Determine the desired input pixelformat (UYVY or I420)
 	 * by looking at the allowed srccaps */
 	{
 		GstCaps *allowed_src_caps, *available_format_caps, *allowed_format_caps;
 
 		pixelformat = V4L2_PIX_FMT_YUV420;
 
-		available_format_caps = gst_caps_from_string("video/x-raw, format = { UYVY, YUY2, I420 }");
+		available_format_caps = gst_caps_from_string("video/x-raw, format = { UYVY, I420 }");
 		allowed_src_caps = gst_pad_get_allowed_caps(GST_BASE_SRC_PAD(v4l2src));
 
 		/* Apply intersection to get caps with a valid pixelformat */
@@ -289,8 +282,6 @@ static gint gst_imx_v4l2src_capture_setup(GstImxV4l2VideoSrc *v4l2src)
 						pixelformat = V4L2_PIX_FMT_UYVY;
 					else if (g_strcmp0(format_str, "I420") == 0)
 						pixelformat = V4L2_PIX_FMT_YUV420;
-					else if (g_strcmp0(format_str, "YUY2") == 0)
-						pixelformat = V4L2_PIX_FMT_YUYV;
 					else
 					{
 						GST_ERROR_OBJECT(v4l2src, "pixel format \"%s\" is unsupported", format_str);
@@ -466,17 +457,6 @@ static GstFlowReturn gst_imx_v4l2src_fill(GstPushSrc *src, GstBuffer *buf)
 
 	GST_BUFFER_TIMESTAMP(buf) = ts;
 	GST_BUFFER_DURATION(buf) = v4l2src->time_per_frame;
-
-	if (v4l2src->interlaced) {
-		GST_BUFFER_FLAG_SET(buf, GST_VIDEO_BUFFER_FLAG_INTERLACED);
-		if (v4l2src->top_field_first)
-			GST_BUFFER_FLAG_SET(buf, GST_VIDEO_BUFFER_FLAG_TFF);
-		else
-			GST_BUFFER_FLAG_UNSET(buf, GST_VIDEO_BUFFER_FLAG_TFF);
-	}
-	else
-		GST_BUFFER_FLAG_UNSET(buf, GST_VIDEO_BUFFER_FLAG_INTERLACED);
-
 	return GST_FLOW_OK;
 }
 
@@ -627,11 +607,9 @@ static GstCaps *gst_imx_v4l2src_caps_for_current_setup(GstImxV4l2VideoSrc *v4l2s
 		case V4L2_FIELD_INTERLACED:
 		case V4L2_FIELD_INTERLACED_TB:
 		case V4L2_FIELD_INTERLACED_BT:
-			v4l2src->interlaced = TRUE;
 			interlace_mode = "interleaved";
 			break;
 		default:
-			v4l2src->interlaced = FALSE;
 			interlace_mode = "progressive";
 	}
 
@@ -670,7 +648,7 @@ static GstCaps *gst_imx_v4l2src_get_caps(GstBaseSrc *src, GstCaps *filter)
 
 	caps = gst_caps_from_string(
 		"video/x-raw"
-		", format = (string) { UYVY, YUY2, I420 }"
+		", format = (string) { UYVY, I420 }"
 		", width = (gint) [ 16, MAX ]"
 		", height = (gint) [ 16, MAX ]"
 		", interlace-mode = (string) { progressive, interleaved }"

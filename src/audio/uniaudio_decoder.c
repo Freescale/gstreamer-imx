@@ -623,6 +623,7 @@ static void gst_imx_audio_uniaudio_dec_fill_channel_positions(GstImxAudioUniaudi
 	gsize num_chanpos_bytes = num_channels * sizeof(GstAudioChannelPosition);
 
 	imx_audio_uniaudio_dec->original_channel_positions = g_malloc0(num_chanpos_bytes);
+	imx_audio_uniaudio_dec->reordered_channel_positions = g_malloc0(num_chanpos_bytes);
 
 	if (num_channels == 1)
 	{
@@ -660,7 +661,6 @@ static void gst_imx_audio_uniaudio_dec_fill_channel_positions(GstImxAudioUniaudi
 	else
 	{
 		GST_DEBUG_OBJECT(imx_audio_uniaudio_dec, "channel positions are not in valid order -> need to reorder channels");
-		imx_audio_uniaudio_dec->reordered_channel_positions = g_malloc0(num_chanpos_bytes);
 		memcpy(imx_audio_uniaudio_dec->reordered_channel_positions, imx_audio_uniaudio_dec->original_channel_positions, num_chanpos_bytes);
 		gst_audio_channel_positions_to_valid_order(imx_audio_uniaudio_dec->reordered_channel_positions, num_channels);
 	}

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 
 from waflib.Build import BuildContext, CleanContext, InstallContext, UninstallContext, Logs
@@ -7,7 +7,7 @@ import re
 top = '.'
 out = 'build'
 
-gstimx_version = "0.13.1"
+gstimx_version = "0.13.0"
 
 # the code inside fragment deliberately does an unsafe implicit cast float->char to trigger a
 # compiler warning; sometimes, gcc does not tell about an unsupported parameter *unless* the
@@ -152,8 +152,7 @@ def configure(conf):
 
 	# test for GStreamer libraries
 
-	conf.check_cfg(package = 'gstreamer-1.0 >= 1.2.0', uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
-	gst_version_str = conf.check_cfg(modversion = "gstreamer-1.0", uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
+	gst_version_str = conf.check_cfg(package = 'gstreamer-1.0 >= 1.2.0', modversion = "gstreamer-1.0", uselib_store = 'GSTREAMER', args = '--cflags --libs', mandatory = 1)
 	gst_version = [int(x) for x in re.match('(\d*)\.(\d*)\.(\d*)', gst_version_str).groups()]
 	conf.env['GSTREAMER_VERSION'] = gst_version
 
@@ -167,9 +166,7 @@ def configure(conf):
 		conf.env['WITH_GSTVIDEO'] = True
 	else:
 		Logs.pprint('RED', 'could not find gstvideo library - not building video plugins')
-	if gst_version[0] == 1 and gst_version[1] >= 14:
-		conf.check_cfg(package = 'gstreamer-allocators-1.0', uselib_store = 'GSTREAMER_ALLOCATORS', args = '--cflags --libs', mandatory = 0)
-	elif conf.check_cfg(package = 'gstreamer-bad-allocators-1.0', uselib_store = 'GSTREAMER_BAD_ALLOCATORS', args = '--cflags --libs', mandatory = 0):
+	if conf.check_cfg(package = 'gstreamer-bad-allocators-1.0', uselib_store = 'GSTREAMER_BAD_ALLOCATORS', args = '--cflags --libs', mandatory = 0):
 		conf.env['WITH_GSTBADALLOCATORS'] = True
 	if conf.check_cc(lib = 'gstphotography-1.0', uselib_store = 'GSTPHOTOGRAPHY', mandatory = 0):
 		conf.env['WITH_GSTPHOTOGRAPHY'] = True
@@ -203,7 +200,7 @@ def configure(conf):
 		conf.define('WITH_GSTBADALLOCATORS', 1)
 
 	conf.env['GSTIMX_VERSION'] = gstimx_version
-	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_AUDIO', 'GSTREAMER_VIDEO', 'GSTREAMER_BAD_ALLOCATORS', 'GSTREAMER_ALLOCATORS', 'PTHREAD', 'M']
+	conf.env['COMMON_USELIB'] = ['GSTREAMER', 'GSTREAMER_BASE', 'GSTREAMER_AUDIO', 'GSTREAMER_VIDEO', 'GSTREAMER_BAD_ALLOCATORS', 'PTHREAD', 'M']
 
 
 	conf.recurse('src/common')
