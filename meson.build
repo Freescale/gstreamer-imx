@@ -50,7 +50,13 @@ plugins_install_dir = join_paths(get_option('libdir'), 'gstreamer-1.0')
 
 
 imx_headers_path = get_option('imx-headers-path')
-sys_root = meson.get_external_property('sys_root', '', native: false)
+sys_root = get_option('sysroot')
+if sys_root != ''
+	message('Using sysroot from command line argument: "' + sys_root + '"')
+else
+	sys_root = meson.get_external_property('sys_root', '', native: false)
+	message('Using sysroot from meson external properties: "' + sys_root + '"')
+endif
 
 
 configinc = include_directories('.')

@@ -11,6 +11,7 @@ option('ipu', type : 'feature', value : 'auto', description : '2D elements using
 option('pxp', type : 'feature', value : 'auto', description : '2D elements using the i.MX6 Pixel Pipeline (PxP)')
 
 option('imx-headers-path', type : 'string', value : '', description : 'path to the extra imx kernel headers')
+option('sysroot', type : 'string', value : '', description : 'sysroot path (if empty, the sysroot path from the meson external properties is used)')
 
 option('imx2d-videosink', type : 'boolean', value : true)
 option('imx2d-compositor', type : 'feature', value : 'auto')
