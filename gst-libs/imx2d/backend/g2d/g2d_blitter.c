@@ -49,7 +49,10 @@ static Imx2dPixelFormat const supported_source_pixel_formats[] =
 };
 
 
-/* G2D only supports RGB formats as destination. */
+/* G2D only supports RGB formats as destination.
+ * Exception: When G2D is actually emulated on top of the DPU,
+ * some YUV formats are also usable as destination formats.
+ * The DPU only exists in some i.MX8 variants, however. */
 static Imx2dPixelFormat const supported_dest_pixel_formats[] =
 {
 	IMX_2D_PIXEL_FORMAT_RGBX8888,
@@ -62,6 +65,12 @@ static Imx2dPixelFormat const supported_dest_pixel_formats[] =
 	IMX_2D_PIXEL_FORMAT_ABGR8888,
 	IMX_2D_PIXEL_FORMAT_RGB565,
 	IMX_2D_PIXEL_FORMAT_BGR565,
+
+#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+	IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV12,
+	IMX_2D_PIXEL_FORMAT_PACKED_YUV422_UYVY,
+	IMX_2D_PIXEL_FORMAT_PACKED_YUV422_YUYV,
+#endif
 };
 
 
