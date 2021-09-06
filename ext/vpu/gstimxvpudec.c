@@ -407,6 +407,8 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 
 		if (allowed_srccaps != NULL)
 		{
+			GST_DEBUG_OBJECT(imx_vpu_dec, "allowed srcccaps: %" GST_PTR_FORMAT, (gpointer)allowed_srccaps);
+
 			/* Look at the sample format values from the first structure */
 			GstStructure *structure = gst_caps_get_structure(allowed_srccaps, 0);
 			format_value = gst_structure_get_value(structure, "format");

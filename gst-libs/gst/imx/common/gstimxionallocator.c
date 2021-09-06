@@ -496,10 +496,10 @@ static GstMemory* gst_imx_ion_allocator_gstalloc_alloc(GstAllocator *allocator, 
 	dmabuf_fd = imx_dma_buffer_ion_allocate_dmabuf(imx_ion_allocator->ion_fd, total_size, alignment, imx_ion_allocator->ion_heap_id_mask, imx_ion_allocator->ion_heap_flags, &error);
 	if (dmabuf_fd < 0)
 	{
-		GST_ERROR_OBJECT(imx_ion_allocator, "could not open ION allocator device node: %s (%d)", strerror(error), error);
+		GST_ERROR_OBJECT(imx_ion_allocator, "could not allocate DMA-BUF backed memory: %s (%d)", strerror(error), error);
 		goto finish;
 	}
-	GST_DEBUG_OBJECT(imx_ion_allocator, "allocated new DMA-BUF buffer with FD %d", dmabuf_fd);
+	GST_DEBUG_OBJECT(imx_ion_allocator, "allocated new DMA-BUF buffer;  FD: %d  total size: %" G_GSIZE_FORMAT "  alignment: %zu", dmabuf_fd, total_size, alignment);
 
 	memory = gst_imx_ion_allocator_alloc_internal(imx_ion_allocator, dmabuf_fd, total_size);
 
