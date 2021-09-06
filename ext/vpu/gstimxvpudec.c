@@ -228,17 +228,22 @@ static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder)
 
 	imx_vpu_dec->default_dma_buf_allocator = gst_imx_allocator_new();
 
-	imx_vpu_dec->stream_buffer = gst_allocator_alloc(
-		imx_vpu_dec->default_dma_buf_allocator,
-		stream_buffer_size,
-		&alloc_params
-	);
-	if (G_UNLIKELY(imx_vpu_dec->stream_buffer == NULL))
+	if (stream_buffer_size > 0)
 	{
-		GST_ELEMENT_ERROR(imx_vpu_dec, RESOURCE, FAILED, ("could not allocate DMA memory for stream buffer"), (NULL));
-		ret = FALSE;
-		goto finish;
+		imx_vpu_dec->stream_buffer = gst_allocator_alloc(
+			imx_vpu_dec->default_dma_buf_allocator,
+			stream_buffer_size,
+			&alloc_params
+		);
+		if (G_UNLIKELY(imx_vpu_dec->stream_buffer == NULL))
+		{
+			GST_ELEMENT_ERROR(imx_vpu_dec, RESOURCE, FAILED, ("could not allocate DMA memory for stream buffer"), (NULL));
+			ret = FALSE;
+			goto finish;
+		}
 	}
+	else
+		GST_DEBUG_OBJECT(imx_vpu_dec, "not allocating stream buffer since the VPU does not need one");
 
 
 	/* VPU decoder setup continues in set_format(), since we need to
@@ -551,7 +556,7 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	if ((dec_ret = imx_vpu_api_dec_open(
 		&(imx_vpu_dec->decoder),
 		open_params,
-		gst_imx_get_dma_buffer_from_memory(imx_vpu_dec->stream_buffer)
+		(imx_vpu_dec->stream_buffer != NULL) ? gst_imx_get_dma_buffer_from_memory(imx_vpu_dec->stream_buffer) : NULL
 	)) != IMX_VPU_API_DEC_RETURN_CODE_OK)
 	{
 		GST_ERROR_OBJECT(imx_vpu_dec, "could not open decoder: %s", imx_vpu_api_dec_return_code_string(dec_ret));
