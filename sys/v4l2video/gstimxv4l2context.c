@@ -1002,7 +1002,7 @@ static gboolean fill_caps_with_probed_info(GstImxV4L2Context *self, int fd, GstC
 						gst_value_set_fraction(&framerate_gvalue, fps_num, fps_denom);
 						gst_value_list_append_value(&framerates_gvalue, &framerate_gvalue);
 
-						if (ioctl(fd, VIDIOC_ENUM_FRAMESIZES, &v4l2_frame_interval) < 0)
+						if (ioctl(fd, VIDIOC_ENUM_FRAMEINTERVALS, &v4l2_frame_interval) < 0)
 						{
 							if (errno == EINVAL)
 							{
@@ -1016,6 +1016,7 @@ static gboolean fill_caps_with_probed_info(GstImxV4L2Context *self, int fd, GstC
 								break;
 							}
 						}
+						v4l2_frame_interval.index++;
 					}
 
 					gst_structure_set_value(structure, "framerate", &framerates_gvalue);
