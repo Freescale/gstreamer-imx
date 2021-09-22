@@ -263,17 +263,22 @@ static gboolean gst_imx_vpu_enc_start(GstVideoEncoder *encoder)
 
 	imx_vpu_enc->uploader = gst_imx_dma_buffer_uploader_new(imx_vpu_enc->default_dma_buf_allocator);
 
-	imx_vpu_enc->stream_buffer = gst_allocator_alloc(
-		imx_vpu_enc->default_dma_buf_allocator,
-		stream_buffer_size,
-		&alloc_params
-	);
-	if (G_UNLIKELY(imx_vpu_enc->stream_buffer == NULL))
+	if (stream_buffer_size > 0)
 	{
-		GST_ELEMENT_ERROR(imx_vpu_enc, RESOURCE, FAILED, ("could not allocate DMA memory for stream buffer"), (NULL));
-		ret = FALSE;
-		goto finish;
+		imx_vpu_enc->stream_buffer = gst_allocator_alloc(
+			imx_vpu_enc->default_dma_buf_allocator,
+			stream_buffer_size,
+			&alloc_params
+		);
+		if (G_UNLIKELY(imx_vpu_enc->stream_buffer == NULL))
+		{
+			GST_ELEMENT_ERROR(imx_vpu_enc, RESOURCE, FAILED, ("could not allocate DMA memory for stream buffer"), (NULL));
+			ret = FALSE;
+			goto finish;
+		}
 	}
+	else
+		GST_DEBUG_OBJECT(imx_vpu_enc, "not allocating stream buffer since the VPU does not need one");
 
 	/* VPU encoder setup continues in set_format(), since we need to
 	 * know the input caps to fill the open_params structure. */
@@ -414,7 +419,11 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 
 
 	/* Open and configure encoder. */
-	if ((enc_ret = imx_vpu_api_enc_open(&(imx_vpu_enc->encoder), &(imx_vpu_enc->open_params), gst_imx_get_dma_buffer_from_memory(imx_vpu_enc->stream_buffer)) != IMX_VPU_API_ENC_RETURN_CODE_OK))
+	if ((enc_ret = imx_vpu_api_enc_open(
+		&(imx_vpu_enc->encoder),
+		&(imx_vpu_enc->open_params),
+		(imx_vpu_enc->stream_buffer != NULL) ? gst_imx_get_dma_buffer_from_memory(imx_vpu_enc->stream_buffer) : NULL
+	)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
 	{
 		GST_ERROR_OBJECT(imx_vpu_enc, "could not open encoder: %s", imx_vpu_api_enc_return_code_string(enc_ret));
 		ret = FALSE;
