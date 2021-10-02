@@ -149,6 +149,7 @@ static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
 
 static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_dec);
+static void gst_imx_vpu_dec_teardown_current_decoder(GstImxVpuDec *imx_vpu_dec);
 static void gst_imx_vpu_dec_unref_decoder_context(GstImxVpuDec *imx_vpu_dec);
 static gboolean gst_imx_vpu_dec_allocate_and_add_framebuffers(GstImxVpuDec *imx_vpu_dec, size_t num_framebuffers);
 static GstFlowReturn gst_imx_vpu_dec_copy_output_frame_if_needed(GstImxVpuDec *imx_vpu_dec, GstVideoCodecFrame *output_frame);
@@ -263,55 +264,12 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 	ImxVpuApiCompressionFormat compression_format = GST_IMX_VPU_GET_ELEMENT_COMPRESSION_FORMAT(decoder);
 	GstImxVpuCodecDetails const * codec_details = gst_imx_vpu_get_codec_details(compression_format);
 
-	gst_imx_vpu_dec_unref_decoder_context(imx_vpu_dec);
-
-	if (imx_vpu_dec->prepared_output_buffer != NULL)
-	{
-		gst_buffer_unref(imx_vpu_dec->prepared_output_buffer);
-		imx_vpu_dec->prepared_output_buffer = NULL;
-	}
-
-	if (imx_vpu_dec->dma_buffer_pool != NULL)
-	{
-		gst_object_unref(GST_OBJECT(imx_vpu_dec->dma_buffer_pool));
-		imx_vpu_dec->dma_buffer_pool = NULL;
-	}
-
-	if (imx_vpu_dec->nonvideometa_output_buffer_pool != NULL)
-	{
-		gst_object_unref(GST_OBJECT(imx_vpu_dec->nonvideometa_output_buffer_pool));
-		imx_vpu_dec->nonvideometa_output_buffer_pool = NULL;
-	}
+	gst_imx_vpu_dec_teardown_current_decoder(imx_vpu_dec);
 
 	if (imx_vpu_dec->stream_buffer != NULL)
 	{
 		gst_memory_unref(imx_vpu_dec->stream_buffer);
 		imx_vpu_dec->stream_buffer = NULL;
-	}
-
-	if (imx_vpu_dec->codec_data != NULL)
-	{
-		if (imx_vpu_dec->codec_data_is_mapped)
-		{
-			gst_buffer_unmap(imx_vpu_dec->codec_data, &(imx_vpu_dec->codecdata_map_info));
-			imx_vpu_dec->codec_data_is_mapped = FALSE;
-		}
-
-		GST_DEBUG_OBJECT(imx_vpu_dec, "unref'ing codec data gstbuffer %p", (gpointer)(imx_vpu_dec->codec_data));
-		gst_buffer_unref(imx_vpu_dec->codec_data);
-		imx_vpu_dec->codec_data = NULL;
-	}
-
-	if (imx_vpu_dec->input_state != NULL)
-	{
-		gst_video_codec_state_unref(imx_vpu_dec->input_state);
-		imx_vpu_dec->input_state = NULL;
-	}
-
-	if (imx_vpu_dec->output_state != NULL)
-	{
-		gst_video_codec_state_unref(imx_vpu_dec->output_state);
-		imx_vpu_dec->output_state = NULL;
 	}
 
 	if (imx_vpu_dec->default_dma_buf_allocator != NULL)
@@ -350,55 +308,9 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	}
 
 
+
 	/* Cleanup any existing data and states. */
-
-	/* Cleanup old decoder context. */
-	gst_imx_vpu_dec_unref_decoder_context(imx_vpu_dec);
-
-	/* Clean up the old codec data copy. */
-	if (imx_vpu_dec->codec_data != NULL)
-	{
-		GST_DEBUG_OBJECT(decoder, "cleaning up existing codec data gstbuffer %p", (gpointer)(imx_vpu_dec->codec_data));
-
-		if (imx_vpu_dec->codec_data_is_mapped)
-		{
-			gst_buffer_unmap(imx_vpu_dec->codec_data, &(imx_vpu_dec->codecdata_map_info));
-			imx_vpu_dec->codec_data_is_mapped = FALSE;
-		}
-
-		gst_buffer_unref(imx_vpu_dec->codec_data);
-		imx_vpu_dec->codec_data = NULL;
-	}
-
-	if (imx_vpu_dec->prepared_output_buffer != NULL)
-	{
-		gst_buffer_unref(imx_vpu_dec->prepared_output_buffer);
-		imx_vpu_dec->prepared_output_buffer = NULL;
-	}
-
-	if (imx_vpu_dec->dma_buffer_pool != NULL)
-	{
-		gst_object_unref(GST_OBJECT(imx_vpu_dec->dma_buffer_pool));
-		imx_vpu_dec->dma_buffer_pool = NULL;
-	}
-
-	if (imx_vpu_dec->nonvideometa_output_buffer_pool != NULL)
-	{
-		gst_object_unref(GST_OBJECT(imx_vpu_dec->nonvideometa_output_buffer_pool));
-		imx_vpu_dec->nonvideometa_output_buffer_pool = NULL;
-	}
-
-	/* Clean up old input and output states. */
-	if (imx_vpu_dec->input_state != NULL)
-	{
-		gst_video_codec_state_unref(imx_vpu_dec->input_state);
-		imx_vpu_dec->input_state = NULL;
-	}
-	if (imx_vpu_dec->output_state != NULL)
-	{
-		gst_video_codec_state_unref(imx_vpu_dec->output_state);
-		imx_vpu_dec->output_state = NULL;
-	}
+	gst_imx_vpu_dec_teardown_current_decoder(imx_vpu_dec);
 
 
 	/* Get the caps that downstream allows. Amongst other things, this allows
@@ -1560,6 +1472,59 @@ static void gst_imx_vpu_dec_unref_decoder_context(GstImxVpuDec *imx_vpu_dec)
 
 	gst_object_unref(GST_OBJECT(imx_vpu_dec->decoder_context));
 	imx_vpu_dec->decoder_context = NULL;
+}
+
+
+static void gst_imx_vpu_dec_teardown_current_decoder(GstImxVpuDec *imx_vpu_dec)
+{
+	/* Cleanup old decoder context. */
+	gst_imx_vpu_dec_unref_decoder_context(imx_vpu_dec);
+
+	/* Clean up the old codec data copy. */
+	if (imx_vpu_dec->codec_data != NULL)
+	{
+		GST_DEBUG_OBJECT(imx_vpu_dec, "cleaning up existing codec data gstbuffer %p", (gpointer)(imx_vpu_dec->codec_data));
+
+		if (imx_vpu_dec->codec_data_is_mapped)
+		{
+			gst_buffer_unmap(imx_vpu_dec->codec_data, &(imx_vpu_dec->codecdata_map_info));
+			imx_vpu_dec->codec_data_is_mapped = FALSE;
+		}
+
+		GST_DEBUG_OBJECT(imx_vpu_dec, "unref'ing codec data gstbuffer %p", (gpointer)(imx_vpu_dec->codec_data));
+		gst_buffer_unref(imx_vpu_dec->codec_data);
+		imx_vpu_dec->codec_data = NULL;
+	}
+
+	if (imx_vpu_dec->prepared_output_buffer != NULL)
+	{
+		gst_buffer_unref(imx_vpu_dec->prepared_output_buffer);
+		imx_vpu_dec->prepared_output_buffer = NULL;
+	}
+
+	if (imx_vpu_dec->dma_buffer_pool != NULL)
+	{
+		gst_object_unref(GST_OBJECT(imx_vpu_dec->dma_buffer_pool));
+		imx_vpu_dec->dma_buffer_pool = NULL;
+	}
+
+	if (imx_vpu_dec->nonvideometa_output_buffer_pool != NULL)
+	{
+		gst_object_unref(GST_OBJECT(imx_vpu_dec->nonvideometa_output_buffer_pool));
+		imx_vpu_dec->nonvideometa_output_buffer_pool = NULL;
+	}
+
+	/* Clean up old input and output states. */
+	if (imx_vpu_dec->input_state != NULL)
+	{
+		gst_video_codec_state_unref(imx_vpu_dec->input_state);
+		imx_vpu_dec->input_state = NULL;
+	}
+	if (imx_vpu_dec->output_state != NULL)
+	{
+		gst_video_codec_state_unref(imx_vpu_dec->output_state);
+		imx_vpu_dec->output_state = NULL;
+	}
 }
 
 
