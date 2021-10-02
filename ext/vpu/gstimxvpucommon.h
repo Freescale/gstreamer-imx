@@ -79,6 +79,10 @@ struct _GstImxVpuCodecDetails
 	guint rank;
 	/* The compression format the element handles. */
 	ImxVpuApiCompressionFormat compression_format;
+    /* Determines whether or not frame reodering is needed depending on
+     * the format in the GstStructure. If this is NULL, frame reodering
+     * is enabled by default. */
+    gboolean (*is_frame_reordering_required)(GstStructure *format);
 	/* If TRUE, then out-of-band codec data is required for decoding.
 	 * Unused in encoders. */
 	gboolean requires_codec_data;

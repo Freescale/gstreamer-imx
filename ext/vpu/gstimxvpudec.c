@@ -129,6 +129,8 @@ struct _GstImxVpuDecClass
 {
 	GstVideoDecoderClass parent_class;
 
+	gboolean (*is_frame_reordering_required)(GstStructure *format);
+
 	/* This is a copy of the flag from the entry from the
 	 * GstImxVpuCodecDetails table that corresponds to the compression
 	 * format the decoder handles. */
@@ -173,6 +175,9 @@ static void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 	video_decoder_class->drain             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_drain);
 	video_decoder_class->finish            = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_finish);
 	video_decoder_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_decide_allocation);
+
+	klass->is_frame_reordering_required = NULL;
+	klass->requires_codec_data = FALSE;
 }
 
 
@@ -390,12 +395,21 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 		}
 	}
 
-	/* We want the VPU to reorder the frames. We can keep track of this reordering
-	 * through the GstVideoDecoder system frame numbers. */
-	open_params->flags |= IMX_VPU_API_DEC_OPEN_PARAMS_FLAG_ENABLE_FRAME_REORDERING;
 	open_params->frame_width = state->info.width;
 	open_params->frame_height = state->info.height;
 	open_params->compression_format = compression_format;
+
+	/* By default, we want the VPU to reorder the frames. We can keep track of
+	 * this reordering through the GstVideoDecoder system frame numbers. In
+	 * some cases though, it may be beneficial to disable it. It may lower
+	 * latency to turn it off if it is not necessary, for example. */
+	if ((klass->is_frame_reordering_required == NULL) || klass->is_frame_reordering_required(gst_caps_get_structure(state->caps, 0)))
+	{
+		GST_DEBUG_OBJECT(imx_vpu_dec, "using frame reodering");
+		open_params->flags |= IMX_VPU_API_DEC_OPEN_PARAMS_FLAG_ENABLE_FRAME_REORDERING;
+	}
+	else
+		GST_DEBUG_OBJECT(imx_vpu_dec, "not using frame reodering");
 
 
 	/* Check if 10-bit decoding is required. */
@@ -1705,6 +1719,7 @@ static void derived_class_init(void *klass)
 	gst_element_class_add_pad_template(element_class, sink_template);
 	gst_element_class_add_pad_template(element_class, src_template);
 
+	imx_vpu_dec_class->is_frame_reordering_required = codec_details->is_frame_reordering_required;
 	imx_vpu_dec_class->requires_codec_data = codec_details->requires_codec_data;
 
 	longname = g_strdup_printf("i.MX VPU %s video decoder", codec_details->desc_name);

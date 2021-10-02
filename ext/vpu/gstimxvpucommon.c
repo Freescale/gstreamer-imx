@@ -28,28 +28,31 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_api_debug);
 GST_DEBUG_CATEGORY_EXTERN(gst_imx_vpu_common_debug);
 
 
+static gboolean gst_imx_vpu_h264_is_frame_reordering_required(GstStructure *format);
+
+
 static GstImxVpuCodecDetails const decoder_details_table[NUM_IMX_VPU_API_COMPRESSION_FORMATS] =
 {
-	{ "jpeg",   "Jpeg",   "JPEG",                                              GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_JPEG,           FALSE },
-	{ "webp",   "WebP",   "WebP",                                              GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_WEBP,           FALSE },
-	{ "mpeg2",  "Mpeg2",  "MPEG-1 & 2",                                        GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_MPEG2,          TRUE  },
-	{ "mpeg4",  "Mpeg4",  "MPEG-4",                                            GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_MPEG4,          TRUE  },
-	{ "h263",   "H263",   "h.263",                                             GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_H263,           FALSE },
-	{ "h264",   "H264",   "h.264 / AVC",                                       GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_H264,           FALSE },
-	{ "h265",   "H265",   "h.265 / HEVC",                                      GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_H265,           FALSE },
-	{ "wmv3",   "Wmv3",   "WMV3 / Window Media Video 9 / VC-1 simple profile", GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_WMV3,           TRUE  },
-	{ "vc1",    "Vc1",    "VC-1 advanced profile",                             GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_WVC1,           TRUE  },
-	{ "vp6",    "Vp6",    "VP6",                                               GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_VP6,            FALSE },
-	{ "vp7",    "Vp7",    "VP7",                                               GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_VP7,            FALSE },
-	{ "vp8",    "Vp8",    "VP8",                                               GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_VP8,            FALSE },
-	{ "vp9",    "Vp9",    "VP9",                                               GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_VP9,            FALSE },
-	{ "cavs",   "Avs",    "AVS (Audio and Video Coding Standard)",             GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_AVS,            FALSE },
-	{ "rv30",   "Rv30",   "RealVideo 8",                                       GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_RV30,           TRUE  },
-	{ "rv40",   "Rv40",   "RealVideo 9 & 10",                                  GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_RV40,           TRUE  },
-	{ "divx3",  "DivX3" , "DivX 3",                                            GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_DIVX3,          FALSE },
-	{ "divx4",  "DivX4",  "DivX 4",                                            GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_DIVX4,          FALSE },
-	{ "divx5",  "DivX5",  "DivX 5 & 6",                                        GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_DIVX5,          FALSE },
-	{ "sspark", "SSpark", "Sorenson Spark",                                    GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_SORENSON_SPARK, FALSE }
+	{ "jpeg",   "Jpeg",   "JPEG",                                              GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_JPEG,           NULL, FALSE },
+	{ "webp",   "WebP",   "WebP",                                              GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_WEBP,           NULL, FALSE },
+	{ "mpeg2",  "Mpeg2",  "MPEG-1 & 2",                                        GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_MPEG2,          NULL, TRUE  },
+	{ "mpeg4",  "Mpeg4",  "MPEG-4",                                            GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_MPEG4,          NULL, TRUE  },
+	{ "h263",   "H263",   "h.263",                                             GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_H263,           NULL, FALSE },
+	{ "h264",   "H264",   "h.264 / AVC",                                       GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_H264,           gst_imx_vpu_h264_is_frame_reordering_required, FALSE },
+	{ "h265",   "H265",   "h.265 / HEVC",                                      GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_H265,           NULL, FALSE },
+	{ "wmv3",   "Wmv3",   "WMV3 / Window Media Video 9 / VC-1 simple profile", GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_WMV3,           NULL, TRUE  },
+	{ "vc1",    "Vc1",    "VC-1 advanced profile",                             GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_WVC1,           NULL, TRUE  },
+	{ "vp6",    "Vp6",    "VP6",                                               GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_VP6,            NULL, FALSE },
+	{ "vp7",    "Vp7",    "VP7",                                               GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_VP7,            NULL, FALSE },
+	{ "vp8",    "Vp8",    "VP8",                                               GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_VP8,            NULL, FALSE },
+	{ "vp9",    "Vp9",    "VP9",                                               GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_VP9,            NULL, FALSE },
+	{ "cavs",   "Avs",    "AVS (Audio and Video Coding Standard)",             GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_AVS,            NULL, FALSE },
+	{ "rv30",   "Rv30",   "RealVideo 8",                                       GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_RV30,           NULL, TRUE  },
+	{ "rv40",   "Rv40",   "RealVideo 9 & 10",                                  GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_RV40,           NULL, TRUE  },
+	{ "divx3",  "DivX3" , "DivX 3",                                            GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_DIVX3,          NULL, FALSE },
+	{ "divx4",  "DivX4",  "DivX 4",                                            GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_DIVX4,          NULL, FALSE },
+	{ "divx5",  "DivX5",  "DivX 5 & 6",                                        GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_DIVX5,          NULL, FALSE },
+	{ "sspark", "SSpark", "Sorenson Spark",                                    GST_RANK_PRIMARY + 1, IMX_VPU_API_COMPRESSION_FORMAT_SORENSON_SPARK, NULL, FALSE }
 };
 
 
@@ -408,6 +411,26 @@ gboolean gst_imx_vpu_get_caps_for_format(ImxVpuApiCompressionFormat compression_
 	}
 
 	return TRUE;
+}
+
+
+static gboolean gst_imx_vpu_h264_is_frame_reordering_required(GstStructure *format)
+{
+	gchar const *media_type_str;
+	gchar const *profile_str;
+
+	g_assert(format != NULL);
+
+	/* Disable frame reordering if we are handling h.264 baseline / constrained baseline.
+	 * These h.264 profiles do not use frame reodering, and some decoders (Amphion Malone,
+	 * most notably) seem to actually have lower latency when it is disabled. */
+
+	media_type_str = gst_structure_get_name(format);
+	g_assert(g_strcmp0(media_type_str, "video/x-h264") == 0);
+
+	profile_str = gst_structure_get_string(format, "profile");
+
+	return (profile_str == NULL) || ((g_strcmp0(profile_str, "constrained-baseline") != 0) && (g_strcmp0(profile_str, "baseline") != 0));
 }
 
 
