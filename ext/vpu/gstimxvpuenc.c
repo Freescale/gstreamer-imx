@@ -543,35 +543,75 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 		if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
 			goto finish;
 
-		fb_dma_buffer = gst_imx_get_dma_buffer_from_buffer(uploaded_input_buffer);
-
 		g_hash_table_insert(imx_vpu_enc->uploaded_buffers_table, (gpointer)(gintptr)(cur_frame->system_frame_number), uploaded_input_buffer);
 
-		g_assert(fb_dma_buffer != NULL);
-
-		raw_frame.fb_dma_buffer = fb_dma_buffer;
-		raw_frame.frame_types[0] = raw_frame.frame_types[1] = IMX_VPU_API_FRAME_TYPE_UNKNOWN;
-		raw_frame.pts = cur_frame->pts;
-		raw_frame.dts = cur_frame->dts;
-		/* The system frame number is necessary to correctly associate encoded
-		 * frames and decoded frames. This is required, because some formats
-		 * have a delay (= output frames only show up after N complete input
-		 * frames), and others like h.264 even reorder frames. */
-		raw_frame.context = (void *)((guintptr)(cur_frame->system_frame_number));
-
-		if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(cur_frame))
+		if (gst_buffer_n_memory(uploaded_input_buffer) == 1)
 		{
-			GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
-			raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
+			fb_dma_buffer = gst_imx_get_dma_buffer_from_buffer(uploaded_input_buffer);
+
+			g_assert(fb_dma_buffer != NULL);
+
+			raw_frame.fb_dma_buffer = fb_dma_buffer;
+			raw_frame.frame_types[0] = raw_frame.frame_types[1] = IMX_VPU_API_FRAME_TYPE_UNKNOWN;
+			raw_frame.pts = cur_frame->pts;
+			raw_frame.dts = cur_frame->dts;
+			/* The system frame number is necessary to correctly associate encoded
+			 * frames and decoded frames. This is required, because some formats
+			 * have a delay (= output frames only show up after N complete input
+			 * frames), and others like h.264 even reorder frames. */
+			raw_frame.context = (void *)((guintptr)(cur_frame->system_frame_number));
+
+			if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(cur_frame))
+			{
+				GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
+				raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
+			}
+
+			/* The actual encoding */
+			if ((enc_ret = imx_vpu_api_enc_push_raw_frame(imx_vpu_enc->encoder, &raw_frame)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
+			{
+				GST_ERROR_OBJECT(imx_vpu_enc, "could not push raw frame into encoder: %s", imx_vpu_api_enc_return_code_string(enc_ret));
+
+				flow_ret = GST_FLOW_ERROR;
+				goto finish;
+			}
 		}
-
-		/* The actual encoding */
-		if ((enc_ret = imx_vpu_api_enc_push_raw_frame(imx_vpu_enc->encoder, &raw_frame)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
+		else
 		{
-			GST_ERROR_OBJECT(imx_vpu_enc, "could not push raw frame into encoder: %s", imx_vpu_api_enc_return_code_string(enc_ret));
+			GstMemory *memory;
 
-			flow_ret = GST_FLOW_ERROR;
-			goto finish;
+			memory = gst_buffer_peek_memory(uploaded_input_buffer, 0);
+			fb_dma_buffer = gst_imx_get_dma_buffer_from_memory(memory);
+			g_assert(fb_dma_buffer != NULL);
+
+			raw_frame.fb_dma_buffer = fb_dma_buffer;
+			raw_frame.frame_types[0] = raw_frame.frame_types[1] = IMX_VPU_API_FRAME_TYPE_UNKNOWN;
+			raw_frame.pts = cur_frame->pts;
+			raw_frame.dts = cur_frame->dts;
+			/* The system frame number is necessary to correctly associate encoded
+			 * frames and decoded frames. This is required, because some formats
+			 * have a delay (= output frames only show up after N complete input
+			 * frames), and others like h.264 even reorder frames. */
+			raw_frame.context = (void *)((guintptr)(cur_frame->system_frame_number));
+
+			memory = gst_buffer_peek_memory(uploaded_input_buffer, 1);
+			fb_dma_buffer = gst_imx_get_dma_buffer_from_memory(memory);
+			g_assert(fb_dma_buffer != NULL);
+
+			if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(cur_frame))
+			{
+				GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
+				raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
+			}
+
+			/* The actual encoding */
+			if ((enc_ret = imx_vpu_api_enc_push_raw_frame_2(imx_vpu_enc->encoder, &raw_frame, &fb_dma_buffer)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
+			{
+				GST_ERROR_OBJECT(imx_vpu_enc, "could not push raw frame into encoder: %s", imx_vpu_api_enc_return_code_string(enc_ret));
+
+				flow_ret = GST_FLOW_ERROR;
+				goto finish;
+			}
 		}
 
 		/* The GstVideoCodecFrame passed to handle_frame() gets ref'd prior
