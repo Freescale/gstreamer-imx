@@ -45,6 +45,25 @@ typedef struct _GstImxVpuEnc GstImxVpuEnc;
 typedef struct _GstImxVpuEncClass GstImxVpuEncClass;
 
 
+typedef enum
+{
+	/* Thread has not been started. */
+	GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_INACTIVE = 0,
+	/* Thread is running normally. Pushing frames to the raw frame queue is possible. */
+	GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_RUNNING,
+	/* Encoder is being drained. Pushing frames to the raw frame queue is not possible.
+	 * This changes back to the RUNNING state once draining completes. */
+	GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_DRAINING,
+	/* Thread is being stopped. Pushing frames to the raw frame queue is not possible.
+	 * Any queued frames are discarded and do not get encoded. */
+	GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING,
+	/* Encoding failed because of an error. The thread is stopped. This state is used
+	 * for informing the main streaming thread that there was a failure. */
+	GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED
+}
+GstImxVpuEncEncodingThreadState;
+
+
 struct _GstImxVpuEnc
 {
 	GstVideoEncoder parent;
@@ -103,6 +122,17 @@ struct _GstImxVpuEnc
 	guint bitrate;
 	guint quantization;
 	guint intra_refresh;
+
+	/* Encoding thread states. */
+	GThread *encoding_thread;
+	GstImxVpuEncEncodingThreadState encoding_thread_state;
+	GMutex encoding_thread_mutex;
+	GCond encoding_thread_cond;
+
+	/* A small queue (max. 3 items) that contains frames to be encoded.
+	 * Frames are queued into it in gst_imx_vpu_enc_handle_frame(), and
+	 * dequeued in gst_imx_vpu_enc_dequeue_and_push_frame(). */
+	GQueue *raw_frame_queue;
 };
 
 

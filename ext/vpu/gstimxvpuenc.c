@@ -70,10 +70,17 @@ enum
 
 
 
+#define ENCODING_THREAD_LOCK(imx_vpu_enc) g_mutex_lock(&((imx_vpu_enc)->encoding_thread_mutex))
+#define ENCODING_THREAD_UNLOCK(imx_vpu_enc) g_mutex_unlock(&((imx_vpu_enc)->encoding_thread_mutex))
+#define ENCODING_THREAD_SIGNAL(imx_vpu_enc) g_cond_signal(&((imx_vpu_enc)->encoding_thread_cond))
+#define ENCODING_THREAD_WAIT(imx_vpu_enc) g_cond_wait(&((imx_vpu_enc)->encoding_thread_cond), &((imx_vpu_enc)->encoding_thread_mutex))
+
+
 G_DEFINE_ABSTRACT_TYPE(GstImxVpuEnc, gst_imx_vpu_enc, GST_TYPE_VIDEO_ENCODER)
 
 
 static void gst_imx_vpu_enc_dispose(GObject *object);
+static void gst_imx_vpu_enc_finalize(GObject *object);
 
 static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_vpu_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
@@ -86,6 +93,12 @@ static GstFlowReturn gst_imx_vpu_enc_finish(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_enc_flush(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_enc_propose_allocation(GstVideoEncoder *encoder, GstQuery *query);
 
+static void gst_imx_vpu_enc_start_encoding_thread(GstImxVpuEnc *imx_vpu_enc);
+static gboolean gst_imx_vpu_enc_drain_encoding_thread(GstImxVpuEnc *imx_vpu_enc);
+static void gst_imx_vpu_enc_stop_encoding_thread(GstImxVpuEnc *imx_vpu_enc);
+static gpointer gst_imx_vpu_enc_encoding_thread(gpointer user_data);
+
+static gboolean gst_imx_vpu_enc_dequeue_and_push_frame(GstImxVpuEnc *imx_vpu_enc);
 static gboolean gst_imx_vpu_enc_create_dma_buffer_pool(GstImxVpuEnc *imx_vpu_enc);
 static void gst_imx_vpu_enc_free_fb_pool_dmabuffers(GstImxVpuEnc *imx_vpu_enc);
 static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_enc);
@@ -104,6 +117,7 @@ static void gst_imx_vpu_enc_class_init(GstImxVpuEncClass *klass)
 	video_encoder_class = GST_VIDEO_ENCODER_CLASS(klass);
 
 	object_class->dispose                   = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_dispose);
+	object_class->finalize                  = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_finalize);
 
 	video_encoder_class->start              = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_start);
 	video_encoder_class->stop               = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_stop);
@@ -133,6 +147,12 @@ static void gst_imx_vpu_enc_init(GstImxVpuEnc *imx_vpu_enc)
 	imx_vpu_enc->fb_pool_buffers = NULL;
 
 	imx_vpu_enc->fatal_error_cannot_encode = FALSE;
+
+	imx_vpu_enc->encoding_thread = NULL;
+	imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_INACTIVE;
+	g_mutex_init(&(imx_vpu_enc->encoding_thread_mutex));
+	g_cond_init(&(imx_vpu_enc->encoding_thread_cond));
+	imx_vpu_enc->raw_frame_queue = g_queue_new();
 }
 
 
@@ -148,6 +168,18 @@ static void gst_imx_vpu_enc_dispose(GObject *object)
 	}
 
 	G_OBJECT_CLASS(gst_imx_vpu_enc_parent_class)->dispose(object);
+}
+
+
+static void gst_imx_vpu_enc_finalize(GObject *object)
+{
+	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC(object);
+
+	g_mutex_clear(&(imx_vpu_enc->encoding_thread_mutex));
+	g_cond_clear(&(imx_vpu_enc->encoding_thread_cond));
+	g_queue_free(imx_vpu_enc->raw_frame_queue);
+
+	G_OBJECT_CLASS(gst_imx_vpu_enc_parent_class)->finalize(object);
 }
 
 
@@ -297,6 +329,10 @@ static gboolean gst_imx_vpu_enc_stop(GstVideoEncoder *encoder)
 	ImxVpuApiCompressionFormat compression_format = GST_IMX_VPU_GET_ELEMENT_COMPRESSION_FORMAT(encoder);
 	GstImxVpuCodecDetails const * codec_details = gst_imx_vpu_get_codec_details(compression_format);
 
+	/* Immediately stop the encoding thread. Any queued
+	 * but not yet encoded frames are discarded. */
+	gst_imx_vpu_enc_stop_encoding_thread(imx_vpu_enc);
+
 	g_hash_table_remove_all(imx_vpu_enc->uploaded_buffers_table);
 
 	if (imx_vpu_enc->uploader != NULL)
@@ -355,6 +391,19 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 	g_assert(klass->get_output_caps != NULL);
 
 	GST_DEBUG_OBJECT(encoder, "setting encoder format");
+
+
+	/* Drain frames that are already encoded but not yet output. */
+	GST_DEBUG_OBJECT(encoder, "draining remaining frames from encoder");
+	if ((imx_vpu_enc->encoder != NULL) && (gst_imx_vpu_enc_encode_queued_frames(imx_vpu_enc) != GST_FLOW_OK))
+	ret = gst_imx_vpu_enc_drain_encoding_thread(imx_vpu_enc);
+	gst_imx_vpu_enc_stop_encoding_thread(imx_vpu_enc);
+	if (!ret)
+	{
+		imx_vpu_enc->fatal_error_cannot_encode = TRUE;
+		GST_ERROR_OBJECT(imx_vpu_enc, "cannot set new format: draining existing encoder failed");
+		goto finish;
+	}
 
 
 	if (imx_vpu_enc->encoder != NULL)
@@ -503,6 +552,10 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 	}
 
 
+	/* The encoder is set up, encoding can begin. */
+	gst_imx_vpu_enc_start_encoding_thread(imx_vpu_enc);
+
+
 finish:
 	return ret;
 }
@@ -510,133 +563,72 @@ finish:
 
 static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstVideoCodecFrame *cur_frame)
 {
+	/* In here, we queue cur_frame into raw_frame_queue. The actual
+	 * encoding happens in gst_imx_vpu_enc_encoding_thread(). */
+
 	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC_CAST(encoder);
-	GstImxVpuEncClass *klass = GST_IMX_VPU_ENC_CLASS(G_OBJECT_GET_CLASS(encoder));
-	GstFlowReturn flow_ret = GST_FLOW_OK;
+	GstFlowReturn flow_ret;
+
+	/* Sanity checks. */
 
 	if (G_UNLIKELY(imx_vpu_enc->encoder == NULL))
 	{
 		GST_ERROR_OBJECT(imx_vpu_enc, "encoder was not initialized; cannot continue");
-		flow_ret = GST_FLOW_ERROR;
-		goto finish;
+		gst_video_codec_frame_unref(cur_frame);
+		imx_vpu_enc->fatal_error_cannot_encode = TRUE;
+		return GST_FLOW_ERROR;
 	}
 
 	if (G_UNLIKELY(imx_vpu_enc->fatal_error_cannot_encode))
 	{
 		GST_ERROR_OBJECT(imx_vpu_enc, "fatal error previously recorded; cannot encode");
-		flow_ret = GST_FLOW_ERROR;
-		goto finish;
+		gst_video_codec_frame_unref(cur_frame);
+		return GST_FLOW_ERROR;
 	}
+
+	if (G_UNLIKELY(cur_frame == NULL))
+		return GST_FLOW_OK;
 
 	flow_ret = GST_FLOW_OK;
 
-	if (G_LIKELY(cur_frame != NULL))
+	ENCODING_THREAD_LOCK(imx_vpu_enc);
+
+	while (TRUE)
 	{
-		ImxDmaBuffer *fb_dma_buffer = NULL;
-		ImxVpuApiRawFrame raw_frame;
-		ImxVpuApiEncReturnCodes enc_ret;
-		GstBuffer *uploaded_input_buffer;
+		/* We are only supposed to queue frames in the RUNNING state. */
 
-		GST_LOG_OBJECT(imx_vpu_enc, "about to prepare and queue frame with number #%" G_GUINT32_FORMAT " for encoding", cur_frame->system_frame_number);
-
-		flow_ret = gst_imx_dma_buffer_uploader_perform(imx_vpu_enc->uploader, cur_frame->input_buffer, &uploaded_input_buffer);
-		if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
-			goto finish;
-
-		g_hash_table_insert(imx_vpu_enc->uploaded_buffers_table, (gpointer)(gintptr)(cur_frame->system_frame_number), uploaded_input_buffer);
-
-		if (gst_buffer_n_memory(uploaded_input_buffer) == 1)
+		if (imx_vpu_enc->encoding_thread_state == GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_RUNNING)
 		{
-			fb_dma_buffer = gst_imx_get_dma_buffer_from_buffer(uploaded_input_buffer);
-
-			g_assert(fb_dma_buffer != NULL);
-
-			raw_frame.fb_dma_buffer = fb_dma_buffer;
-			raw_frame.frame_types[0] = raw_frame.frame_types[1] = IMX_VPU_API_FRAME_TYPE_UNKNOWN;
-			raw_frame.pts = cur_frame->pts;
-			raw_frame.dts = cur_frame->dts;
-			/* The system frame number is necessary to correctly associate encoded
-			 * frames and decoded frames. This is required, because some formats
-			 * have a delay (= output frames only show up after N complete input
-			 * frames), and others like h.264 even reorder frames. */
-			raw_frame.context = (void *)((guintptr)(cur_frame->system_frame_number));
-
-			if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(cur_frame))
+			if (g_queue_get_length(imx_vpu_enc->raw_frame_queue) > 2)
 			{
-				GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
-				raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
+				GST_LOG_OBJECT(imx_vpu_enc, "encoded frame queue is full; waiting until there is free space");
+
+				GST_VIDEO_ENCODER_STREAM_UNLOCK(imx_vpu_enc);
+				ENCODING_THREAD_WAIT(imx_vpu_enc);
+				GST_VIDEO_ENCODER_STREAM_LOCK(imx_vpu_enc);
 			}
-
-			/* The actual encoding */
-			if ((enc_ret = imx_vpu_api_enc_push_raw_frame(imx_vpu_enc->encoder, &raw_frame)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
+			else
 			{
-				GST_ERROR_OBJECT(imx_vpu_enc, "could not push raw frame into encoder: %s", imx_vpu_api_enc_return_code_string(enc_ret));
-
-				flow_ret = GST_FLOW_ERROR;
-				goto finish;
+				GST_LOG_OBJECT(imx_vpu_enc, "encoded frame queue is not full; pushing encoded frame into it");
+				g_queue_push_head(imx_vpu_enc->raw_frame_queue, cur_frame);
+				ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+				break;
 			}
 		}
 		else
 		{
-			GstMemory *memory;
-
-			memory = gst_buffer_peek_memory(uploaded_input_buffer, 0);
-			fb_dma_buffer = gst_imx_get_dma_buffer_from_memory(memory);
-			g_assert(fb_dma_buffer != NULL);
-
-			raw_frame.fb_dma_buffer = fb_dma_buffer;
-			raw_frame.frame_types[0] = raw_frame.frame_types[1] = IMX_VPU_API_FRAME_TYPE_UNKNOWN;
-			raw_frame.pts = cur_frame->pts;
-			raw_frame.dts = cur_frame->dts;
-			/* The system frame number is necessary to correctly associate encoded
-			 * frames and decoded frames. This is required, because some formats
-			 * have a delay (= output frames only show up after N complete input
-			 * frames), and others like h.264 even reorder frames. */
-			raw_frame.context = (void *)((guintptr)(cur_frame->system_frame_number));
-
-			memory = gst_buffer_peek_memory(uploaded_input_buffer, 1);
-			fb_dma_buffer = gst_imx_get_dma_buffer_from_memory(memory);
-			g_assert(fb_dma_buffer != NULL);
-
-			if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(cur_frame))
+			if (imx_vpu_enc->encoding_thread_state == GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED)
 			{
-				GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
-				raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
-			}
-
-			/* The actual encoding */
-			if ((enc_ret = imx_vpu_api_enc_push_raw_frame_2(imx_vpu_enc->encoder, &raw_frame, &fb_dma_buffer)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
-			{
-				GST_ERROR_OBJECT(imx_vpu_enc, "could not push raw frame into encoder: %s", imx_vpu_api_enc_return_code_string(enc_ret));
-
+				imx_vpu_enc->fatal_error_cannot_encode = TRUE;
 				flow_ret = GST_FLOW_ERROR;
-				goto finish;
 			}
-		}
 
-		/* The GstVideoCodecFrame passed to handle_frame() gets ref'd prior
-		 * to that call. Since we don't pass it directly to finish_frame()
-		 * here (because we aren't done with it yet), we have to unref it
-		 * here. We'll pull the frame from the GstVideoEncoder queue based
-		 * on its system frame number later, and then we finish it.
-		 * (We explicitely unref it here, even though the code below unrefs
-		 * it as well if it is non-NULL. That's because this way, it is
-		 * ensured that it is unref'd *before* encoding queued frames, thus
-		 * making sure that buffers with encoded data are finished as soon
-		 * as possible once downstream are done with them.) */
-		gst_video_codec_frame_unref(cur_frame);
-		cur_frame = NULL;
+			gst_video_codec_frame_unref(cur_frame);
+			break;
+		}
 	}
 
-	flow_ret = gst_imx_vpu_enc_encode_queued_frames(imx_vpu_enc);
-
-
-finish:
-	if (cur_frame != NULL)
-		gst_video_codec_frame_unref(cur_frame);
-
-	if (flow_ret == GST_FLOW_ERROR)
-		imx_vpu_enc->fatal_error_cannot_encode = TRUE;
+	ENCODING_THREAD_UNLOCK(imx_vpu_enc);
 
 	return flow_ret;
 }
@@ -653,13 +645,12 @@ static GstFlowReturn gst_imx_vpu_enc_finish(GstVideoEncoder *encoder)
 	if (G_UNLIKELY(imx_vpu_enc->fatal_error_cannot_encode))
 		return GST_FLOW_OK;
 
-	imx_vpu_api_enc_enable_drain_mode(imx_vpu_enc->encoder);
+	GST_VIDEO_ENCODER_STREAM_UNLOCK(imx_vpu_enc);
+	flow_ret = gst_imx_vpu_enc_drain_encoding_thread(imx_vpu_enc) ? GST_FLOW_OK : GST_FLOW_ERROR;
+	GST_VIDEO_ENCODER_STREAM_LOCK(imx_vpu_enc);
 
-	GST_INFO_OBJECT(imx_vpu_enc, "pushing out all remaining unfinished frames");
-
-	flow_ret = gst_imx_vpu_enc_encode_queued_frames(imx_vpu_enc);
-	if (flow_ret == GST_FLOW_EOS)
-		flow_ret = GST_FLOW_OK;
+	if (G_UNLIKELY(flow_ret == GST_FLOW_ERROR))
+		imx_vpu_enc->fatal_error_cannot_encode = TRUE;
 
 	return flow_ret;
 }
@@ -669,8 +660,33 @@ static gboolean gst_imx_vpu_enc_flush(GstVideoEncoder *encoder)
 {
 	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC_CAST(encoder);
 
+	GST_DEBUG_OBJECT(imx_vpu_enc, "flushing encoder");
+
 	if (imx_vpu_enc->encoder != NULL)
+	{
+		gboolean is_encoding_thread_running = (imx_vpu_enc->encoding_thread != NULL);
+
+		if (is_encoding_thread_running)
+		{
+			/* Stop the thread. This immediately stop the ongoing encoding
+			 * and discards any queued and not yet encoded frames. */
+			gst_imx_vpu_enc_stop_encoding_thread(imx_vpu_enc);
+		}
+
+		if (imx_vpu_enc->encoding_thread_state == GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED)
+		{
+			imx_vpu_enc->fatal_error_cannot_encode = TRUE;
+			return FALSE;
+		}
+
+		if (is_encoding_thread_running)
+		{
+			/* Restart the thread after the encoder was fully flushed. */
+			gst_imx_vpu_enc_start_encoding_thread(imx_vpu_enc);
+		}
+
 		imx_vpu_api_enc_flush(imx_vpu_enc->encoder);
+	}
 
 	return TRUE;
 }
@@ -876,6 +892,400 @@ finish:
 		imx_vpu_enc->fatal_error_cannot_encode = TRUE;
 
 	return flow_ret;
+}
+
+
+static void gst_imx_vpu_enc_start_encoding_thread(GstImxVpuEnc *imx_vpu_enc)
+{
+	if (imx_vpu_enc->encoding_thread != NULL)
+		return;
+
+	imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_RUNNING;
+	imx_vpu_enc->encoding_thread = g_thread_new(
+		"ImxVpuEnc",
+		gst_imx_vpu_enc_encoding_thread,
+		(gpointer)imx_vpu_enc
+	);
+	g_assert(imx_vpu_enc->encoding_thread != NULL);
+}
+
+
+static gboolean gst_imx_vpu_enc_drain_encoding_thread(GstImxVpuEnc *imx_vpu_enc)
+{
+	gboolean retval = TRUE;
+
+	if (imx_vpu_enc->encoding_thread == NULL)
+		return TRUE;
+
+	ENCODING_THREAD_LOCK(imx_vpu_enc);
+
+	/* No point in draining if the current state isn't RUNNING. */
+	if (imx_vpu_enc->encoding_thread_state != GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_RUNNING)
+		goto finish;
+
+	GST_DEBUG_OBJECT(imx_vpu_enc, "starting drain");
+
+	/* Change the state to DRAINING and notify the encoding thread. */
+	imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_DRAINING;
+	ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+
+	GST_DEBUG_OBJECT(imx_vpu_enc, "waiting for drain to complete");
+
+	/* Wait for draining to be completed. */
+	while (imx_vpu_enc->encoding_thread_state == GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_DRAINING)
+		ENCODING_THREAD_WAIT(imx_vpu_enc);
+
+	retval = (imx_vpu_enc->encoding_thread_state != GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED);
+
+finish:
+	ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+	return retval;
+}
+
+
+static void gst_imx_vpu_enc_stop_encoding_thread(GstImxVpuEnc *imx_vpu_enc)
+{
+	if (imx_vpu_enc->encoding_thread == NULL)
+		return;
+
+	/* Change to the STOPPING state to force the encoding
+	 * thread loop to immediately exit. */
+	ENCODING_THREAD_LOCK(imx_vpu_enc);
+	imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING;
+	ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+	ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+
+	/* Wait until the loop exits and the encoding thread function ends. */
+	g_thread_join(imx_vpu_enc->encoding_thread);
+
+	/* Thread is stopped. Discard it and reset the associated states. */
+	g_thread_unref(imx_vpu_enc->encoding_thread);
+	imx_vpu_enc->encoding_thread = NULL;
+	imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_INACTIVE;
+
+	/* Unref the contents of raw_frame_queue since these
+	 * frames will not be encoded anymore. */
+	while (!g_queue_is_empty(imx_vpu_enc->raw_frame_queue))
+	{
+		GstVideoCodecFrame *gst_frame;
+
+		gst_frame = g_queue_pop_tail(imx_vpu_enc->raw_frame_queue);
+		gst_video_codec_frame_unref(gst_frame);
+	}
+}
+
+
+static gpointer gst_imx_vpu_enc_encoding_thread(gpointer user_data)
+{
+	gboolean keep_running = TRUE;
+	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC(user_data);
+
+	while (keep_running)
+	{
+		GstFlowReturn flow_ret;
+		gboolean skip_loop = FALSE;
+		gboolean draining = FALSE;
+
+		/* Lock the encoding thread mutex since we need to evaluate
+		 * the current encoding state. */
+		ENCODING_THREAD_LOCK(imx_vpu_enc);
+
+		switch (imx_vpu_enc->encoding_thread_state)
+		{
+			/* In the RUNNING state, we dequeue frames from the raw_frame_queue and
+			 * feed them to the encoder. If the raw_frame_queue is empty, we wait
+			 * until the queue is filled with frames or an encoding state change occurs. */
+			case GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_RUNNING:
+			{
+				if (g_queue_is_empty(imx_vpu_enc->raw_frame_queue))
+				{
+					ENCODING_THREAD_WAIT(imx_vpu_enc);
+					/* Skip the rest of the loop to reevaluate the current encoding thread state. */
+					skip_loop = TRUE;
+				}
+				else
+				{
+					if (!gst_imx_vpu_enc_dequeue_and_push_frame(imx_vpu_enc))
+					{
+						/* An error occurred. We need to exit the loop. To inform the main
+						 * streaming thread about the failure, we set the state to FAILED.
+						 * Not signaling here since this will happen anyway below
+						 * when leaving the loop. */
+						keep_running = FALSE;
+						imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED;
+					}
+					else
+					{
+						if (imx_vpu_enc->encoding_thread_state != GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_RUNNING)
+						{
+							/* If the state changed during the gst_imx_vpu_enc_dequeue_and_push_frame()
+							 * call, we skip the current loop to reevaluate the state. */
+							skip_loop = TRUE;
+						}
+						else
+						{
+							/* Signal that there is now room in the encoded frame queue. */
+							ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+						}
+					}
+				}
+
+				break;
+			}
+
+			/* In the DRAINING state, we first work through all frames in the raw_frame_queue.
+			 * Once that queue is empty, we enable the drain mode to force the encoder to encode
+			 * any frames that may be in its own internal queue. */
+			case GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_DRAINING:
+			{
+				if (g_queue_is_empty(imx_vpu_enc->raw_frame_queue))
+				{
+					/* We worked through all the frames in raw_frame_queue.
+					 * Now enable the draining mode if not already done so. */
+					if (!draining)
+					{
+						draining = TRUE;
+						imx_vpu_api_enc_enable_drain_mode(imx_vpu_enc->encoder);
+					}
+				}
+				else
+				{
+					/* We still need to process frames in the raw_frame_queue
+					 * before we can enable the drain mode. */
+					if (!gst_imx_vpu_enc_dequeue_and_push_frame(imx_vpu_enc))
+					{
+						keep_running = FALSE;
+						imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED;
+						/* An error occurred. We need to exit the loop. To inform the main
+						 * streaming thread about the failure, we set the state to FAILED.
+						 * Not signaling here since this will happen anyway below
+						 * when leaving the loop. */
+					}
+					else
+					{
+						if (imx_vpu_enc->encoding_thread_state != GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_DRAINING)
+						{
+							/* If the state changed during the gst_imx_vpu_enc_dequeue_and_push_frame()
+							 * call, we skip the current loop to reevaluate the state. */
+							skip_loop = TRUE;
+						}
+					}
+				}
+
+				break;
+			}
+
+			/* In this state, the encoding loop is supposed to be stopped immediately. */
+			case GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING:
+			{
+				keep_running = FALSE;
+				break;
+			}
+
+			/* Similarly to STOPPING, we must stop the loop immediately in this state. */
+			case GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED:
+			{
+				keep_running = FALSE;
+				break;
+			}
+
+			/* Should not occur.. */
+			default:
+				keep_running = FALSE;
+				g_assert_not_reached();
+				break;
+		}
+
+		ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+
+		if (skip_loop)
+		{
+			GST_TRACE_OBJECT(imx_vpu_enc, "skipping loop");
+			continue;
+		}
+
+		if (!keep_running)
+		{
+			GST_DEBUG_OBJECT(imx_vpu_enc, "stopping thread");
+			break;
+		}
+
+		/* Perform the actual frame encoding. This function blocks until
+		 * the VPU ran out of data to encode or an error occurred. In the
+		 * DRAINING state, the VPU does not really "run out of data";
+		 * rather, it just encodes all remaining data. Consequently,
+		 * once this function call finishes successfully, we can consider
+		 * the encoder to be fully drained. */
+		flow_ret = gst_imx_vpu_enc_encode_queued_frames(imx_vpu_enc);
+
+		switch (flow_ret)
+		{
+			case GST_FLOW_FLUSHING:
+			case GST_FLOW_EOS:
+				keep_running = FALSE;
+				ENCODING_THREAD_LOCK(imx_vpu_enc);
+				imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING;
+				ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+				break;
+
+			case GST_FLOW_OK:
+				break;
+
+			default:
+				keep_running = FALSE;
+				ENCODING_THREAD_LOCK(imx_vpu_enc);
+				imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED;
+				ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+				break;
+		}
+
+		/* As mentioned above, in DRAINING mode, only one call to
+		 * gst_imx_vpu_enc_encode_queued_frames() occurs, since one call
+		 * is enough to fully drain the encoder.. */
+		if (draining)
+		{
+			ENCODING_THREAD_LOCK(imx_vpu_enc);
+
+			if (imx_vpu_enc->encoding_thread_state != GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_FAILED)
+			{
+				draining = FALSE;
+				/* XXX: Not undoing drain mode here because drain mode is only
+				 * ever done in finish(), which does not require the encoder
+				 * to continue working. */
+				imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING;
+				GST_DEBUG_OBJECT(imx_vpu_enc, "drain complete");
+				ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+			}
+
+			ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+		}
+	}
+
+	ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+
+	return NULL;
+}
+
+
+static gboolean gst_imx_vpu_enc_dequeue_and_push_frame(GstImxVpuEnc *imx_vpu_enc)
+{
+	/* This must be called with the encoding thread mutex locked. */
+
+	GstVideoCodecFrame *gst_frame;
+	ImxDmaBuffer *fb_dma_buffer = NULL;
+	ImxVpuApiRawFrame raw_frame;
+	ImxVpuApiEncReturnCodes enc_ret;
+	GstBuffer *uploaded_input_buffer;
+	GstFlowReturn flow_ret = GST_FLOW_OK;
+	GstImxVpuEncClass *klass = GST_IMX_VPU_ENC_CLASS(G_OBJECT_GET_CLASS(imx_vpu_enc));
+
+	g_assert(!g_queue_is_empty(imx_vpu_enc->raw_frame_queue));
+	gst_frame = g_queue_pop_tail(imx_vpu_enc->raw_frame_queue);
+
+	/* Unlock the mutex here since we won't touch the encoding state
+	 * after this point until this function finishes. Since the
+	 * imx_vpu_api_enc_push_raw_frame() may block for a little
+	 * while, we unlock the mutex to allow other threads to fill the
+	 * raw_frame_queue in the meantime. */
+	ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+
+	GST_LOG_OBJECT(imx_vpu_enc, "about to prepare and queue frame with number #%" G_GUINT32_FORMAT " for encoding", gst_frame->system_frame_number);
+
+	flow_ret = gst_imx_dma_buffer_uploader_perform(imx_vpu_enc->uploader, gst_frame->input_buffer, &uploaded_input_buffer);
+	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
+			goto finish;
+
+	g_hash_table_insert(imx_vpu_enc->uploaded_buffers_table, (gpointer)(gintptr)(gst_frame->system_frame_number), uploaded_input_buffer);
+
+	if (gst_buffer_n_memory(uploaded_input_buffer) == 1)
+	{
+		fb_dma_buffer = gst_imx_get_dma_buffer_from_buffer(uploaded_input_buffer);
+
+		g_assert(fb_dma_buffer != NULL);
+
+		raw_frame.fb_dma_buffer = fb_dma_buffer;
+		raw_frame.frame_types[0] = raw_frame.frame_types[1] = IMX_VPU_API_FRAME_TYPE_UNKNOWN;
+		raw_frame.pts = gst_frame->pts;
+		raw_frame.dts = gst_frame->dts;
+		/* The system frame number is necessary to correctly associate encoded
+		 * frames and decoded frames. This is required, because some formats
+		 * have a delay (= output frames only show up after N complete input
+		 * frames), and others like h.264 even reorder frames. */
+		raw_frame.context = (void *)((guintptr)(gst_frame->system_frame_number));
+
+		if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(gst_frame))
+		{
+			GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
+			raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
+		}
+
+		/* The actual encoding */
+		if ((enc_ret = imx_vpu_api_enc_push_raw_frame(imx_vpu_enc->encoder, &raw_frame)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
+		{
+			GST_ERROR_OBJECT(imx_vpu_enc, "could not push raw frame into encoder: %s", imx_vpu_api_enc_return_code_string(enc_ret));
+
+			flow_ret = GST_FLOW_ERROR;
+			goto finish;
+		}
+	}
+	else
+	{
+		GstMemory *memory;
+
+		memory = gst_buffer_peek_memory(uploaded_input_buffer, 0);
+		fb_dma_buffer = gst_imx_get_dma_buffer_from_memory(memory);
+		g_assert(fb_dma_buffer != NULL);
+
+		raw_frame.fb_dma_buffer = fb_dma_buffer;
+		raw_frame.frame_types[0] = raw_frame.frame_types[1] = IMX_VPU_API_FRAME_TYPE_UNKNOWN;
+		raw_frame.pts = gst_frame->pts;
+		raw_frame.dts = gst_frame->dts;
+		/* The system frame number is necessary to correctly associate encoded
+		 * frames and decoded frames. This is required, because some formats
+		 * have a delay (= output frames only show up after N complete input
+		 * frames), and others like h.264 even reorder frames. */
+		raw_frame.context = (void *)((guintptr)(gst_frame->system_frame_number));
+
+		memory = gst_buffer_peek_memory(uploaded_input_buffer, 1);
+		fb_dma_buffer = gst_imx_get_dma_buffer_from_memory(memory);
+		g_assert(fb_dma_buffer != NULL);
+
+		if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(gst_frame))
+		{
+			GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
+			raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
+		}
+
+		/* The actual encoding */
+		if ((enc_ret = imx_vpu_api_enc_push_raw_frame_2(imx_vpu_enc->encoder, &raw_frame, &fb_dma_buffer)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
+		{
+			GST_ERROR_OBJECT(imx_vpu_enc, "could not push raw frame into encoder: %s", imx_vpu_api_enc_return_code_string(enc_ret));
+
+			flow_ret = GST_FLOW_ERROR;
+			goto finish;
+		}
+	}
+
+	/* The GstVideoCodecFrame passed to handle_frame() gets ref'd prior
+	 * to that call. Since we don't pass it directly to finish_frame()
+	 * here (because we aren't done with it yet), we have to unref it
+	 * here. We'll pull the frame from the GstVideoEncoder queue based
+	 * on its system frame number later, and then we finish it.
+	 * (We explicitely unref it here, even though the code below unrefs
+	 * it as well if it is non-NULL. That's because this way, it is
+	 * ensured that it is unref'd *before* encoding queued frames, thus
+	 * making sure that buffers with encoded data are finished as soon
+	 * as possible once downstream are done with them.) */
+	gst_video_codec_frame_unref(gst_frame);
+	gst_frame = NULL;
+
+finish:
+	if (gst_frame != NULL)
+		gst_video_codec_frame_unref(gst_frame);
+
+	/* Re-lock the mutex since this function was called with the lock held. */
+	ENCODING_THREAD_LOCK(imx_vpu_enc);
+	return (flow_ret == GST_FLOW_OK);
 }
 
 
