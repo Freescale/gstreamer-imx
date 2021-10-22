@@ -1,5 +1,5 @@
-source = ['gstimxvideouploader.c', 'gstimxvideoutils.c']
-public_headers = ['gstimxvideouploader.h', 'gstimxvideoutils.h']
+source = ['gstimxvideouploader.c', 'gstimxvideodmabufferpool.c', 'gstimxvideoutils.c']
+public_headers = ['gstimxvideouploader.h', 'gstimxvideodmabufferpool.h', 'gstimxvideoutils.h']
 
 gstimxvideo = library(
 	'gstimxvideo',
