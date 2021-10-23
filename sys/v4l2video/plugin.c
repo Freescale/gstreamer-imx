@@ -20,6 +20,7 @@
 #include <gst/gst.h>
 #include "gstimxv4l2videosrc.h"
 #include "gstimxv4l2videosink.h"
+#include "gstimxv4l2videotransform.h"
 
 
 GST_DEBUG_CATEGORY(imx_v4l2_utils_debug);
@@ -34,6 +35,7 @@ static gboolean plugin_init(GstPlugin *plugin)
 	gboolean ret = TRUE;
 	ret = ret && gst_element_register(plugin, "imxv4l2videosrc", GST_RANK_PRIMARY, gst_imx_v4l2_video_src_get_type());
 	ret = ret && gst_element_register(plugin, "imxv4l2videosink", GST_RANK_NONE, gst_imx_v4l2_video_sink_get_type());
+	ret = ret && gst_element_register(plugin, "imxv4l2videotransform", GST_RANK_NONE, gst_imx_v4l2_video_transform_get_type());
 	return ret;
 }
 

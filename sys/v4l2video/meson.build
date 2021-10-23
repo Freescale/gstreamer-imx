@@ -9,6 +9,7 @@ if v4l2_enabled
 		'gstimxv4l2videoformat.c',
 		'gstimxv4l2videosrc.c',
 		'gstimxv4l2videosink.c',
+		'gstimxv4l2videotransform.c',
 		'plugin.c'
 	]
 
@@ -18,7 +19,7 @@ if v4l2_enabled
 		install : true,
 		install_dir: plugins_install_dir,
 		include_directories: [configinc, libsinc],
-		dependencies : [gstimxcommon_dep, gstreamer_video_dep]
+		dependencies : [gstimxcommon_dep, gstimxvideo_dep, gstreamer_allocators_dep, gstreamer_video_dep]
 	)
 else
 	message('mxc_v4l2 Video4Linux2 source and sink elements disabled')
