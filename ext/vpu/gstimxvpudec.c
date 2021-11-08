@@ -914,6 +914,8 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 			{
 				GST_ERROR_OBJECT(imx_vpu_dec, "could not prepare output buffer: %s", gst_flow_get_name(flow_ret));
 				imx_vpu_dec->fatal_error_cannot_decode = TRUE;
+				if (imx_vpu_dec->decoder_context != NULL)
+					GST_IMX_VPU_DEC_CONTEXT_UNLOCK(imx_vpu_dec->decoder_context);
 				goto finish;
 			}
 		}
