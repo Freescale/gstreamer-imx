@@ -141,16 +141,24 @@ gboolean gst_imx_vpu_get_caps_for_format(ImxVpuApiCompressionFormat compression_
 					g_value_init(&list_value, GST_TYPE_LIST);
 					g_value_init(&string_value, G_TYPE_STRING);
 
+					/* Add au alignment. All known i.MX decoders support access units. */
 					if (h264_support_details->flags & IMX_VPU_API_H264_FLAG_ACCESS_UNITS_SUPPORTED)
 					{
 						g_value_set_static_string(&string_value, "au");
 						gst_value_list_append_value(&list_value, &string_value);
 					}
 
-					if (!(h264_support_details->flags & IMX_VPU_API_H264_FLAG_ACCESS_UNITS_REQUIRED))
+					/* Only add nal alignment to encoders. That's because nal alignment
+					 * does not guarantee that upstream delivers complete h.264 frames.
+					 * In case of a decoder, complete frames are a requirement, so we
+					 * disable nal alignment in decoders to always meet that requirement. */
+					if (for_encoder)
 					{
-						g_value_set_static_string(&string_value, "nal");
-						gst_value_list_append_value(&list_value, &string_value);
+						if (!(h264_support_details->flags & IMX_VPU_API_H264_FLAG_ACCESS_UNITS_REQUIRED))
+						{
+							g_value_set_static_string(&string_value, "nal");
+							gst_value_list_append_value(&list_value, &string_value);
+						}
 					}
 
 					gst_structure_set_value(structure, "alignment", &list_value);
