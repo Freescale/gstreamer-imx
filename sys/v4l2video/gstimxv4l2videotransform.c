@@ -39,11 +39,22 @@ GST_DEBUG_CATEGORY_STATIC(imx_v4l2_video_transform_debug);
 #define GST_CAT_DEFAULT imx_v4l2_video_transform_debug
 
 
+/* Enforce 16-pixel alignment in width and height, since
+ * resizing is only doable with such an alignment, otherwise
+ * the image gets corrupted. */
+#define IMX_V4L2_VIDEO_CAPS \
+	"video/x-raw, " \
+    "format = (string) " GST_VIDEO_FORMATS_ALL ", " \
+    "width = (int) [ 16, 1073741824, 16 ], " \
+    "height = (int) [ 16, 1073741824, 16 ], " \
+    "framerate = " GST_VIDEO_FPS_RANGE
+
+
 static GstStaticPadTemplate static_sink_template = GST_STATIC_PAD_TEMPLATE(
 	"sink",
 	GST_PAD_SINK,
 	GST_PAD_ALWAYS,
-	GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE(GST_VIDEO_FORMATS_ALL))
+	GST_STATIC_CAPS(IMX_V4L2_VIDEO_CAPS)
 );
 
 
@@ -51,7 +62,7 @@ static GstStaticPadTemplate static_src_template = GST_STATIC_PAD_TEMPLATE(
 	"src",
 	GST_PAD_SRC,
 	GST_PAD_ALWAYS,
-	GST_STATIC_CAPS(GST_VIDEO_CAPS_MAKE(GST_VIDEO_FORMATS_ALL))
+	GST_STATIC_CAPS(IMX_V4L2_VIDEO_CAPS)
 );
 
 
@@ -363,6 +374,8 @@ static GstCaps* gst_imx_v4l2_video_transform_transform_caps(GstBaseTransform *tr
 
 	for (caps_idx = 0; caps_idx < num_caps; ++caps_idx)
 	{
+		gchar const *sidelength_field_names[] = { "width", "height", NULL };
+
 		structure = gst_caps_get_structure(input_caps, caps_idx);
 		features = gst_caps_get_features(input_caps, caps_idx);
 
@@ -380,6 +393,60 @@ static GstCaps* gst_imx_v4l2_video_transform_transform_caps(GstBaseTransform *tr
 		/* Make the stripped copy. */
 		structure = gst_structure_copy(structure);
 		gst_structure_remove_fields(structure, "colorimetry", "chroma-site", "format", NULL);
+
+		/* Restrict the valid width and height values according to the pad direction.
+		 * The i.MX8 ISI can only downscale, not upscale. This means that if the
+		 * pad_direction is GST_PAD_SINK, the structure has to be modified to
+		 * contain a range of all width less than or equal to the maximum width
+		 * original value in the structure. (Same goes for height.) Otherwise, if
+		 * sizes _larger_ than the one in the structure were permitted, this could
+		 * lead to an attempt to upscale. Likewise, if pad_direction is GST_PAD_SRC,
+		 * the structure's original size values must be replaced by ranges that
+		 * encompass all values greater than or equal to the original sizes. */
+		for (gchar const **sidelength_field_name = sidelength_field_names; (*sidelength_field_name) != NULL; ++sidelength_field_name)
+		{
+			if (gst_structure_has_field(structure, *sidelength_field_name))
+			{
+				GValue const *gvalue = gst_structure_get_value(structure, *sidelength_field_name);
+
+				if (G_VALUE_HOLDS_INT(gvalue))
+				{
+					if (direction == GST_PAD_SINK)
+					{
+						gint max_size = g_value_get_int(gvalue);
+						gst_structure_set(structure, *sidelength_field_name, GST_TYPE_INT_RANGE, 1, max_size, NULL);
+					}
+					else
+					{
+						gint min_size = g_value_get_int(gvalue);
+						gst_structure_set(structure, *sidelength_field_name, GST_TYPE_INT_RANGE, min_size, G_MAXINT, NULL);
+					}
+				}
+				else if (GST_VALUE_HOLDS_INT_RANGE(gvalue))
+				{
+					if (direction == GST_PAD_SINK)
+					{
+						gint max_size = gst_value_get_int_range_max(gvalue);
+						gst_structure_set(structure, *sidelength_field_name, GST_TYPE_INT_RANGE, 1, max_size, NULL);
+					}
+					else
+					{
+						gint min_size = gst_value_get_int_range_min(gvalue);
+						gst_structure_set(structure, *sidelength_field_name, GST_TYPE_INT_RANGE, min_size, G_MAXINT, NULL);
+					}
+				}
+				else
+				{
+					/* Other types like lists can be arbitrarily complex, so these
+					 * are handled by removing the fields. It is unfortunately
+					 * not possible to process all types of caps in such a manner
+					 * that rules out upscaling, but at least the bits of code
+					 * above take care of the most common cases. */
+					gst_structure_remove_field(structure, *sidelength_field_name);
+				}
+			}
+		}
+
 		gst_caps_append_structure_full(stripped_input_caps, structure, features);
 	}
 
