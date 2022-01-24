@@ -39,14 +39,13 @@ GST_DEBUG_CATEGORY_STATIC(imx_v4l2_video_transform_debug);
 #define GST_CAT_DEFAULT imx_v4l2_video_transform_debug
 
 
-/* Enforce 16-pixel alignment in width and height, since
- * resizing is only doable with such an alignment, otherwise
- * the image gets corrupted. */
+/* Enforce with to a 16-pixel alignment, since resizing is only
+ * doable with such an alignment, otherwise the image gets corrupted. */
 #define IMX_V4L2_VIDEO_CAPS \
 	"video/x-raw, " \
     "format = (string) " GST_VIDEO_FORMATS_ALL ", " \
     "width = (int) [ 16, 1073741824, 16 ], " \
-    "height = (int) [ 16, 1073741824, 16 ], " \
+    "height = (int) [ 16, 1073741824 ], " \
     "framerate = " GST_VIDEO_FPS_RANGE
 
 
