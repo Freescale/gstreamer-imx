@@ -195,7 +195,7 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 
 static void gst_imx_vpu_dec_start_decoding_thread(GstImxVpuDec *imx_vpu_dec);
 static gboolean gst_imx_vpu_dec_drain_decoding_thread(GstImxVpuDec *imx_vpu_dec);
-static void gst_imx_vpu_dec_stop_decoding_thread(GstImxVpuDec *imx_vpu_dec);
+static void gst_imx_vpu_dec_stop_decoding_thread(GstImxVpuDec *imx_vpu_dec, gboolean release_stream_lock_before_joining);
 static gpointer gst_imx_vpu_dec_decoding_thread(gpointer user_data);
 
 static gboolean gst_imx_vpu_dec_dequeue_and_push_frame(GstImxVpuDec *imx_vpu_dec);
@@ -341,7 +341,7 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder)
 
 	/* Immediately stop the decoding thread. Any queued
 	 * but not yet decoded frames are discarded. */
-	gst_imx_vpu_dec_stop_decoding_thread(imx_vpu_dec);
+	gst_imx_vpu_dec_stop_decoding_thread(imx_vpu_dec, FALSE);
 	gst_imx_vpu_dec_teardown_current_decoder(imx_vpu_dec);
 
 	if (imx_vpu_dec->stream_buffer != NULL)
@@ -379,7 +379,7 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 
 	/* Drain frames that are already decoded but not yet displayed. */
 	ret = gst_imx_vpu_dec_drain_decoding_thread(imx_vpu_dec);
-	gst_imx_vpu_dec_stop_decoding_thread(imx_vpu_dec);
+	gst_imx_vpu_dec_stop_decoding_thread(imx_vpu_dec, TRUE);
 	if (!ret)
 	{
 		imx_vpu_dec->fatal_error_cannot_decode = TRUE;
@@ -677,7 +677,7 @@ static gboolean gst_imx_vpu_dec_flush(GstVideoDecoder *decoder)
 	{
 		/* Stop the thread. This immediately stop the ongoing decoding
 		 * and discards any queued and not yet decoded frames. */
-		gst_imx_vpu_dec_stop_decoding_thread(imx_vpu_dec);
+		gst_imx_vpu_dec_stop_decoding_thread(imx_vpu_dec, TRUE);
 
 		GST_IMX_VPU_DEC_CONTEXT_LOCK(imx_vpu_dec->decoder_context);
 		imx_vpu_api_dec_flush(imx_vpu_dec->decoder);
@@ -975,7 +975,7 @@ finish:
 }
 
 
-static void gst_imx_vpu_dec_stop_decoding_thread(GstImxVpuDec *imx_vpu_dec)
+static void gst_imx_vpu_dec_stop_decoding_thread(GstImxVpuDec *imx_vpu_dec, gboolean release_stream_lock_before_joining)
 {
 	if (imx_vpu_dec->decoding_thread == NULL)
 		return;
@@ -987,8 +987,20 @@ static void gst_imx_vpu_dec_stop_decoding_thread(GstImxVpuDec *imx_vpu_dec)
 	DECODING_THREAD_SIGNAL(imx_vpu_dec);
 	DECODING_THREAD_UNLOCK(imx_vpu_dec);
 
-	/* Wait until the loop exits and the decoding thread function ends. */
+	/* Wait until the loop exits and the decoding thread function ends.
+	 * If the stream lock is held, release it first. The decoding thread
+	 * may be calling gst_imx_vpu_dec_decode_queued_frames(), which in
+	 * turn may call gst_video_decoder_get_frame(), and that function
+	 * takes that stream lock, leading to a deadlock if the stream lock
+	 * was already held.
+	 * This means that release_stream_lock_before_joining must be set to
+	 * TRUE if the lock is held when gst_imx_vpu_dec_stop_decoding_thread()
+	 * is called, and FALSE otherwise. */
+	if (release_stream_lock_before_joining)
+		GST_VIDEO_DECODER_STREAM_UNLOCK(imx_vpu_dec);
 	g_thread_join(imx_vpu_dec->decoding_thread);
+	if (release_stream_lock_before_joining)
+		GST_VIDEO_DECODER_STREAM_LOCK(imx_vpu_dec);
 
 	/* Thread is stopped. Discard it and reset the associated states. */
 	g_thread_unref(imx_vpu_dec->decoding_thread);
