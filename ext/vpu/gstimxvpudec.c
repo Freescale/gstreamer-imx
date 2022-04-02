@@ -743,7 +743,23 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	guint video_meta_index;
 	GstImxDmaBufferAllocator *imx_dma_buffer_allocator = NULL;
 
-	g_assert(imx_vpu_dec->decoder != NULL);
+	/* This happens if gap events are sent downstream before the first caps event.
+	 * GstVideoDecoder then produces default sink caps and negotiates with these
+	 * caps, which ultimately ends up calling decide_allocation() even though there
+	 * is no decoder instance yet. */
+	if (G_UNLIKELY(imx_vpu_dec->decoder == NULL))
+	{
+		gst_query_parse_allocation(query, &negotiated_caps, NULL);
+		GST_WARNING_OBJECT(
+			imx_vpu_dec,
+			"not responding to allocation query since no decoder exists (yet); negotiated caps = %" GST_PTR_FORMAT,
+			(gpointer)negotiated_caps
+		);
+
+		return FALSE;
+	}
+
+	GST_DEBUG_OBJECT(imx_vpu_dec, "can respond to allocation query since decoder exists");
 
 
 	/* Create and set up a DMA buffer pool if one does not exist already. */
