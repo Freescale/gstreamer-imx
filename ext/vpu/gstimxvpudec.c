@@ -55,7 +55,7 @@ GstImxVpuDecDecodingThreadState;
 
 #define DECODING_THREAD_LOCK(imx_vpu_dec) g_mutex_lock(&((imx_vpu_dec)->decoding_thread_mutex))
 #define DECODING_THREAD_UNLOCK(imx_vpu_dec) g_mutex_unlock(&((imx_vpu_dec)->decoding_thread_mutex))
-#define DECODING_THREAD_SIGNAL(imx_vpu_dec) g_cond_signal(&((imx_vpu_dec)->decoding_thread_cond))
+#define DECODING_THREAD_SIGNAL(imx_vpu_dec) g_cond_broadcast(&((imx_vpu_dec)->decoding_thread_cond))
 #define DECODING_THREAD_WAIT(imx_vpu_dec) g_cond_wait(&((imx_vpu_dec)->decoding_thread_cond), &((imx_vpu_dec)->decoding_thread_mutex))
 
 
@@ -649,6 +649,10 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 			{
 				imx_vpu_dec->fatal_error_cannot_decode = TRUE;
 				flow_ret = GST_FLOW_ERROR;
+			}
+			else if (imx_vpu_dec->decoding_thread_state == GST_IMX_VPU_DEC_DECODING_THREAD_STATE_STOPPING || imx_vpu_dec->decoding_thread_state == GST_IMX_VPU_DEC_DECODING_THREAD_STATE_INACTIVE)
+			{
+				flow_ret = GST_FLOW_FLUSHING;
 			}
 
 			gst_video_codec_frame_unref(cur_frame);
