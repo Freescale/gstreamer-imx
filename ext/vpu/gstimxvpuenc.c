@@ -72,7 +72,7 @@ enum
 
 #define ENCODING_THREAD_LOCK(imx_vpu_enc) g_mutex_lock(&((imx_vpu_enc)->encoding_thread_mutex))
 #define ENCODING_THREAD_UNLOCK(imx_vpu_enc) g_mutex_unlock(&((imx_vpu_enc)->encoding_thread_mutex))
-#define ENCODING_THREAD_SIGNAL(imx_vpu_enc) g_cond_signal(&((imx_vpu_enc)->encoding_thread_cond))
+#define ENCODING_THREAD_SIGNAL(imx_vpu_enc) g_cond_broadcast(&((imx_vpu_enc)->encoding_thread_cond))
 #define ENCODING_THREAD_WAIT(imx_vpu_enc) g_cond_wait(&((imx_vpu_enc)->encoding_thread_cond), &((imx_vpu_enc)->encoding_thread_mutex))
 
 
@@ -621,6 +621,10 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 			{
 				imx_vpu_enc->fatal_error_cannot_encode = TRUE;
 				flow_ret = GST_FLOW_ERROR;
+			}
+			else if (imx_vpu_enc->encoding_thread_state == GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING || imx_vpu_enc->encoding_thread_state == GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_INACTIVE)
+			{
+				flow_ret = GST_FLOW_FLUSHING;
 			}
 
 			gst_video_codec_frame_unref(cur_frame);
