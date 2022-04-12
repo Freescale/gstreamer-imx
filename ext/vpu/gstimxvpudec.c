@@ -184,6 +184,8 @@ G_DEFINE_ABSTRACT_TYPE(GstImxVpuDec, gst_imx_vpu_dec, GST_TYPE_VIDEO_DECODER)
 
 static void gst_imx_vpu_dec_finalize(GObject *object);
 
+static GstStateChangeReturn gst_imx_vpu_dec_change_state(GstElement *element, GstStateChange transition);
+
 static gboolean gst_imx_vpu_dec_start(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state);
@@ -192,6 +194,7 @@ static gboolean gst_imx_vpu_dec_flush(GstVideoDecoder *decoder);
 static GstFlowReturn gst_imx_vpu_dec_drain(GstVideoDecoder *decoder);
 static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
+static gboolean gst_imx_vpu_dec_sink_event(GstVideoDecoder *decoder, GstEvent *event);
 
 static void gst_imx_vpu_dec_start_decoding_thread(GstImxVpuDec *imx_vpu_dec);
 static gboolean gst_imx_vpu_dec_drain_decoding_thread(GstImxVpuDec *imx_vpu_dec);
@@ -209,6 +212,7 @@ static GstFlowReturn gst_imx_vpu_dec_copy_output_frame_if_needed(GstImxVpuDec *i
 static void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 {
 	GObjectClass *object_class;
+	GstElementClass *element_class;
 	GstVideoDecoderClass *video_decoder_class;
 
 	gst_imx_vpu_api_setup_logging();
@@ -216,9 +220,11 @@ static void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 	GST_DEBUG_CATEGORY_INIT(imx_vpu_dec_debug, "imxvpudec", 0, "NXP i.MX VPU video decoder");
 
 	object_class = G_OBJECT_CLASS(klass);
+	element_class = GST_ELEMENT_CLASS(klass);
 	video_decoder_class = GST_VIDEO_DECODER_CLASS(klass);
 
 	object_class->finalize                 = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_finalize);
+	element_class->change_state            = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_change_state);
 	video_decoder_class->start             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_start);
 	video_decoder_class->stop              = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_stop);
 	video_decoder_class->set_format        = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_set_format);
@@ -227,6 +233,7 @@ static void gst_imx_vpu_dec_class_init(GstImxVpuDecClass *klass)
 	video_decoder_class->drain             = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_drain);
 	video_decoder_class->finish            = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_finish);
 	video_decoder_class->decide_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_decide_allocation);
+	video_decoder_class->sink_event        = GST_DEBUG_FUNCPTR(gst_imx_vpu_dec_sink_event);
 
 	klass->is_frame_reordering_required = NULL;
 	klass->requires_codec_data = FALSE;
@@ -271,6 +278,31 @@ static void gst_imx_vpu_dec_finalize(GObject *object)
 	g_queue_free(imx_vpu_dec->encoded_frame_queue);
 
 	G_OBJECT_CLASS(gst_imx_vpu_dec_parent_class)->finalize(object);
+}
+
+
+static GstStateChangeReturn gst_imx_vpu_dec_change_state(GstElement *element, GstStateChange transition)
+{
+	GstImxVpuDec *imx_vpu_dec = GST_IMX_VPU_DEC(element);
+
+	switch (transition)
+	{
+		case GST_STATE_CHANGE_PAUSED_TO_READY:
+			if (imx_vpu_dec->decoder_context != NULL)
+			{
+				/* Change to the STOPPING state to force the decoding
+				* thread loop to immediately exit. */
+				DECODING_THREAD_LOCK(imx_vpu_dec);
+				imx_vpu_dec->decoding_thread_state = GST_IMX_VPU_DEC_DECODING_THREAD_STATE_STOPPING;
+				DECODING_THREAD_SIGNAL(imx_vpu_dec);
+				DECODING_THREAD_UNLOCK(imx_vpu_dec);
+			}
+			break;
+		default:
+			break;
+	}
+
+	return GST_ELEMENT_CLASS(gst_imx_vpu_dec_parent_class)->change_state (element, transition);
 }
 
 
@@ -930,6 +962,32 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 	return TRUE;
 }
 
+static gboolean gst_imx_vpu_dec_sink_event(GstVideoDecoder *decoder, GstEvent *event)
+{
+	GstImxVpuDec *imx_vpu_dec = GST_IMX_VPU_DEC_CAST(decoder);
+	gboolean ret;
+
+	switch (GST_EVENT_TYPE(event))
+	{
+		case GST_EVENT_FLUSH_START:
+			if (imx_vpu_dec->decoder_context != NULL)
+			{
+				/* Change to the STOPPING state to force the decoding
+				* thread loop to immediately exit. */
+				DECODING_THREAD_LOCK(imx_vpu_dec);
+				imx_vpu_dec->decoding_thread_state = GST_IMX_VPU_DEC_DECODING_THREAD_STATE_STOPPING;
+				DECODING_THREAD_SIGNAL(imx_vpu_dec);
+				DECODING_THREAD_UNLOCK(imx_vpu_dec);
+			}
+			break;
+		default:
+			break;
+	}
+
+	ret = GST_VIDEO_DECODER_CLASS (gst_imx_vpu_dec_parent_class)->sink_event (decoder, event);
+
+	return ret;
+}
 
 static void gst_imx_vpu_dec_start_decoding_thread(GstImxVpuDec *imx_vpu_dec)
 {
