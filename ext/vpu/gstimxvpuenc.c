@@ -85,6 +85,8 @@ static void gst_imx_vpu_enc_finalize(GObject *object);
 static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
 static void gst_imx_vpu_enc_get_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
 
+static GstStateChangeReturn gst_imx_vpu_enc_change_state(GstElement *element, GstStateChange transition);
+
 static gboolean gst_imx_vpu_enc_start(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_enc_stop(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCodecState *state);
@@ -92,6 +94,7 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 static GstFlowReturn gst_imx_vpu_enc_finish(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_enc_flush(GstVideoEncoder *encoder);
 static gboolean gst_imx_vpu_enc_propose_allocation(GstVideoEncoder *encoder, GstQuery *query);
+static gboolean gst_imx_vpu_enc_sink_event(GstVideoEncoder *encoder, GstEvent *event);
 
 static void gst_imx_vpu_enc_start_encoding_thread(GstImxVpuEnc *imx_vpu_enc);
 static gboolean gst_imx_vpu_enc_drain_encoding_thread(GstImxVpuEnc *imx_vpu_enc);
@@ -107,6 +110,7 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 static void gst_imx_vpu_enc_class_init(GstImxVpuEncClass *klass)
 {
 	GObjectClass *object_class;
+	GstElementClass *element_class;
 	GstVideoEncoderClass *video_encoder_class;
 
 	gst_imx_vpu_api_setup_logging();
@@ -114,10 +118,13 @@ static void gst_imx_vpu_enc_class_init(GstImxVpuEncClass *klass)
 	GST_DEBUG_CATEGORY_INIT(imx_vpu_enc_debug, "imxvpuenc", 0, "NXP i.MX VPU video encoder");
 
 	object_class = G_OBJECT_CLASS(klass);
+	element_class = GST_ELEMENT_CLASS(klass);
 	video_encoder_class = GST_VIDEO_ENCODER_CLASS(klass);
 
 	object_class->dispose                   = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_dispose);
 	object_class->finalize                  = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_finalize);
+
+	element_class->change_state             = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_change_state);
 
 	video_encoder_class->start              = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_start);
 	video_encoder_class->stop               = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_stop);
@@ -126,6 +133,7 @@ static void gst_imx_vpu_enc_class_init(GstImxVpuEncClass *klass)
 	video_encoder_class->finish             = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_finish);
 	video_encoder_class->flush              = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_flush);
 	video_encoder_class->propose_allocation = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_propose_allocation);
+	video_encoder_class->sink_event         = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_sink_event);
 }
 
 
@@ -180,6 +188,31 @@ static void gst_imx_vpu_enc_finalize(GObject *object)
 	g_queue_free(imx_vpu_enc->raw_frame_queue);
 
 	G_OBJECT_CLASS(gst_imx_vpu_enc_parent_class)->finalize(object);
+}
+
+
+static GstStateChangeReturn gst_imx_vpu_enc_change_state(GstElement *element, GstStateChange transition)
+{
+	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC(element);
+
+	switch (transition)
+	{
+		case GST_STATE_CHANGE_PAUSED_TO_READY:
+			if (imx_vpu_enc->encoding_thread != NULL)
+			{
+				/* Change to the STOPPING state to force the encoding
+				* thread loop to immediately exit. */
+				ENCODING_THREAD_LOCK(imx_vpu_enc);
+				imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING;
+				ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+				ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+			}
+			break;
+		default:
+			break;
+	}
+
+	return GST_ELEMENT_CLASS(gst_imx_vpu_enc_parent_class)->change_state (element, transition);
 }
 
 
@@ -705,6 +738,34 @@ static gboolean gst_imx_vpu_enc_propose_allocation(GstVideoEncoder *encoder, Gst
 	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, 0);
 
 	return TRUE;
+}
+
+
+static gboolean gst_imx_vpu_enc_sink_event(GstVideoEncoder *encoder, GstEvent *event)
+{
+	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC_CAST(encoder);
+	gboolean ret;
+
+	switch (GST_EVENT_TYPE(event))
+	{
+		case GST_EVENT_FLUSH_START:
+			if (imx_vpu_enc->encoding_thread != NULL)
+			{
+				/* Change to the STOPPING state to force the encoding
+				* thread loop to immediately exit. */
+				ENCODING_THREAD_LOCK(imx_vpu_enc);
+				imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING;
+				ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+				ENCODING_THREAD_UNLOCK(imx_vpu_enc);
+			}
+			break;
+		default:
+			break;
+	}
+
+	ret = GST_VIDEO_ENCODER_CLASS (gst_imx_vpu_enc_parent_class)->sink_event (encoder, event);
+
+	return ret;
 }
 
 
