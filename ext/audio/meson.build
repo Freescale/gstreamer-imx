@@ -7,7 +7,7 @@ endif
 libfslaudiocodec_dep = dependency('libfslaudiocodec', required : get_option('uniaudiodec'))
 fslcodec_libdirvar = ''
 if libfslaudiocodec_dep.found()
-	fslcodec_libdirvar = libfslaudiocodec_dep.get_pkgconfig_variable('libdir', default : '')
+	fslcodec_libdirvar = libfslaudiocodec_dep.get_variable(pkgconfig: 'libdir', default_value : '')
 	if fslcodec_libdirvar != ''
 		message('Found installed fslaudiocodec library - uniaudio decoder will be built')
 		message('imx audio codec path: "' + fslcodec_libdirvar + '"')

@@ -16,7 +16,7 @@ libm_dep  = cc.find_library('m', required : true)
 # test for libimxdmabuffer
 
 libimxdmabuffer_dep = dependency('libimxdmabuffer', version : '>=1.0.1', required : true, method : 'pkg-config')
-libimxdmabuffer_ion = libimxdmabuffer_dep.get_pkgconfig_variable('libimxdmabuffer_ion', default : '')
+libimxdmabuffer_ion = libimxdmabuffer_dep.get_variable(pkgconfig : 'libimxdmabuffer_ion', default_value : '')
 ion_support = (libimxdmabuffer_ion != '0') and (libimxdmabuffer_ion != '')
 if ion_support
 	message('libimxdmabuffer supports ION allocation - enabling ION GstAllocator')
