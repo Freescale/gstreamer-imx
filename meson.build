@@ -1,4 +1,4 @@
-project('gstreamer-imx', 'c', default_options : ['c_std=c99'], version : '2.0.0', license: 'LGPL-2.0-or-later', meson_version: '>= 0.54.0')
+project('gstreamer-imx', 'c', default_options : ['c_std=c99'], version : '2.0.0', license: 'LGPL-2.0-or-later', meson_version: '>= 0.53.2')
 
 message('Setting up build configuration for gstreamer-imx version ' + meson.project_version())
 
@@ -54,8 +54,12 @@ sys_root = get_option('sysroot')
 if sys_root != ''
 	message('Using sysroot from command line argument: "' + sys_root + '"')
 else
-	sys_root = meson.get_external_property('sys_root', '', native: false)
-	message('Using sysroot from meson external properties: "' + sys_root + '"')
+	if meson.version().version_compare('>= 0.54.0')
+		sys_root = meson.get_external_property('sys_root', '', native: false)
+		message('Using sysroot from meson external properties: "' + sys_root + '"')
+	else
+		error('sysroot must be specified as a build option when using Meson older than 0.54.0')
+	endif
 endif
 
 
