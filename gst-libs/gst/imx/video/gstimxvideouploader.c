@@ -294,6 +294,23 @@ GstFlowReturn gst_imx_video_uploader_perform(GstImxVideoUploader *uploader, GstB
 		flow_ret = gst_imx_dma_buffer_uploader_perform(uploader->dma_buffer_uploader, input_buffer, output_buffer);
 		if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
 			goto error;
+
+		/* gst_buffer_copy_into() is used by the DMA buffer uploader, but it does not
+		 * copy memory metas like videometa by default. Do this manually here. */
+		if ((video_meta != NULL) && (gst_buffer_get_video_meta(*output_buffer) == NULL))
+		{
+			GST_TRACE_OBJECT(uploader, "copying videometa from input to output buffer");
+			gst_buffer_add_video_meta_full(
+				*output_buffer,
+				video_meta->flags,
+				video_meta->format,
+				video_meta->width,
+				video_meta->height,
+				video_meta->n_planes,
+				video_meta->offset,
+				video_meta->stride
+			);
+		}
 	}
 
 finish:
