@@ -16,10 +16,39 @@ libm_dep  = cc.find_library('m', required : true)
 # test for libimxdmabuffer
 
 libimxdmabuffer_dep = dependency('libimxdmabuffer', version : '>=1.0.1', required : true, method : 'pkg-config')
-libimxdmabuffer_ion = libimxdmabuffer_dep.get_variable(pkgconfig : 'libimxdmabuffer_ion', default_value : '')
-ion_support = (libimxdmabuffer_ion != '0') and (libimxdmabuffer_ion != '')
+
+dmabuf_allocator_available = false
+
+dma_heap_support = cc.compiles(
+	'''
+	#include <imxdmabuffer/imxdmabuffer_config.h>
+	#ifndef IMXDMABUFFER_DMA_HEAP_ALLOCATOR_ENABLED
+	#error dma-heap support is disabled
+	#endif
+	''',
+	dependencies : [libimxdmabuffer_dep],
+	name : 'dma-heap allocator support'
+)
+if dma_heap_support
+	message('libimxdmabuffer supports dma-heap allocation - enabling dma-heap GstAllocator')
+	dmabuf_allocator_available = true
+else
+	message('libimxdmabuffer does not support dma-heap allocation - not enabling dma-heap GstAllocator')
+endif
+
+ion_support = cc.compiles(
+	'''
+	#include <imxdmabuffer/imxdmabuffer_config.h>
+	#ifndef IMXDMABUFFER_ION_ALLOCATOR_ENABLED
+	#error ION support is disabled
+	#endif
+	''',
+	dependencies : [libimxdmabuffer_dep],
+	name : 'ION allocator support'
+)
 if ion_support
 	message('libimxdmabuffer supports ION allocation - enabling ION GstAllocator')
+	dmabuf_allocator_available = true
 else
 	message('libimxdmabuffer does not support ION allocation - not enabling ION GstAllocator')
 endif
@@ -73,8 +102,14 @@ conf_data.set_quoted('GST_PACKAGE_ORIGIN', get_option('package-origin'))
 conf_data.set_quoted('PACKAGE', 'gstreamer-imx')
 conf_data.set_quoted('PACKAGE_BUGREPORT', 'https://github.com/Freescale/gstreamer-imx')
 conf_data.set_quoted('VERSION', meson.project_version())
+if dma_heap_support
+	conf_data.set('WITH_GST_DMA_HEAP_ALLOCATOR', 1)
+endif
 if ion_support
 	conf_data.set('WITH_GST_ION_ALLOCATOR', 1)
+endif
+if dmabuf_allocator_available
+	conf_data.set('GST_DMABUF_ALLOCATOR_AVAILABLE', 1)
 endif
 
 

@@ -26,11 +26,8 @@
 
 #include <gst/gst.h>
 #include "gstimxdmabufferallocator.h"
-#ifdef WITH_GST_ION_ALLOCATOR
-#include "gstimxionallocator.h"
-#else
+#include "gstimxdmabufallocator.h"
 #include "gstimxdefaultallocator.h"
-#endif
 
 
 GST_DEBUG_CATEGORY_STATIC(gst_imx_dma_buffer_allocator_debug);
@@ -105,18 +102,15 @@ ImxDmaBuffer* gst_imx_get_dma_buffer_from_buffer(GstBuffer *buffer)
  * gst_imx_allocator_new:
  *
  * Creates a new allocator that allocates ImxDmaBuffer instances. Internally,
- * this chooses either the ION allocator if ION support is enabled, or the
- * libimxdmabuffer default allocator otherwise.
- *
- * The ION allocator is preferred since it is based on GstDmaBufAllocator
- * and therefore is DMA-BUF backed.
+ * this chooses a DMA-BUF capable allocator like dma-heap or ION one is
+ * enabled. Otherwise, it chooses the libimxdmabuffer default allocator.
  *
  * Returns: (transfer full) (nullable): Newly created allocator, or NULL in case of failure.
  */
 GstAllocator* gst_imx_allocator_new(void)
 {
-#ifdef WITH_GST_ION_ALLOCATOR
-	return gst_imx_ion_allocator_new();
+#ifdef GST_DMABUF_ALLOCATOR_AVAILABLE
+	return gst_imx_dmabuf_allocator_new();
 #else
 	return gst_imx_default_allocator_new();
 #endif

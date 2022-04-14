@@ -23,8 +23,8 @@
 #include <gst/allocators/allocators.h>
 #include "gstimxdmabufferuploader.h"
 #include "gstimxdmabufferallocator.h"
-#ifdef WITH_GST_ION_ALLOCATOR
-#include "gstimxionallocator.h"
+#ifdef GST_DMABUF_ALLOCATOR_AVAILABLE
+#include "gstimxdmabufallocator.h"
 #endif
 
 
@@ -172,7 +172,7 @@ static const GstImxDmaBufferUploadMethodType raw_buffer_upload_method_type = {
 
 
 
-#ifdef WITH_GST_ION_ALLOCATOR
+#ifdef GST_DMABUF_ALLOCATOR_AVAILABLE
 
 
 struct DmabufUploadMethodContext
@@ -190,7 +190,7 @@ struct DmabufUploadMethodContext
 
 static gboolean dmabuf_upload_method_check_if_compatible(GstAllocator *imx_dma_buffer_allocator)
 {
-	return GST_IS_IMX_ION_ALLOCATOR(imx_dma_buffer_allocator);
+	return GST_IS_IMX_DMABUF_ALLOCATOR(imx_dma_buffer_allocator);
 }
 
 
@@ -198,7 +198,7 @@ static GstImxDmaBufferUploadMethodContext* dmabuf_upload_method_create(GstImxDma
 {
 	struct DmabufUploadMethodContext *upload_method_context;
 
-	g_assert(GST_IS_IMX_ION_ALLOCATOR(uploader->imx_dma_buffer_allocator));
+	g_assert(GST_IS_IMX_DMABUF_ALLOCATOR(uploader->imx_dma_buffer_allocator));
 
 	upload_method_context = g_new0(struct DmabufUploadMethodContext, 1);
 
@@ -236,8 +236,8 @@ static GstFlowReturn dmabuf_upload_method_perform(GstImxDmaBufferUploadMethodCon
 	/* We do not actually copy the bytes, like the raw upload method does.
 	 * Instead, we dup() the DMA-BUF FD so we can share ownership over it
 	 * and close() our FD when we are done with it. Then, we wrap the FD
-	 * in an GstImxIonAllocator-allocated GstMemory. In other words, the FD
-	 * is wrapped in a custom ImxDmaBuffer. This is how we "upload". */
+	 * in an GstImxDmaBufAllocator-allocated GstMemory. In other words,
+	 * the FD is wrapped in a custom ImxDmaBuffer. This is how we "upload". */
 
 	size = input_memory->size;
 	dmabuf_fd = gst_dmabuf_memory_get_fd(input_memory);
@@ -261,7 +261,7 @@ static GstFlowReturn dmabuf_upload_method_perform(GstImxDmaBufferUploadMethodCon
 		input_memory->offset
 	);
 
-	*output_memory = gst_imx_ion_allocator_wrap_dmabuf(self->parent.uploader->imx_dma_buffer_allocator, dup_dmabuf_fd, size);
+	*output_memory = gst_imx_dmabuf_allocator_wrap_dmabuf(self->parent.uploader->imx_dma_buffer_allocator, dup_dmabuf_fd, size);
 	(*output_memory)->maxsize = input_memory->maxsize;
 	(*output_memory)->align = input_memory->align;
 	(*output_memory)->offset = input_memory->offset;
@@ -286,7 +286,7 @@ static const GstImxDmaBufferUploadMethodType dmabuf_upload_method_type = {
 
 
 static GstImxDmaBufferUploadMethodType const *upload_method_types[] = {
-#ifdef WITH_GST_ION_ALLOCATOR
+#ifdef GST_DMABUF_ALLOCATOR_AVAILABLE
 	&dmabuf_upload_method_type,
 #endif
 	&raw_buffer_upload_method_type

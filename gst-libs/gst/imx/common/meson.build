@@ -1,5 +1,10 @@
-source = ['gstimxdmabufferallocator.c', 'gstimxdefaultallocator.c', 'gstimxdmabufferuploader.c']
-public_headers = ['gstimxdmabufferallocator.h', 'gstimxdefaultallocator.h', 'gstimxdmabufferuploader.h']
+source = ['gstimxdmabufferallocator.c', 'gstimxdmabufallocator.c', 'gstimxdefaultallocator.c', 'gstimxdmabufferuploader.c']
+public_headers = ['gstimxdmabufferallocator.h', 'gstimxdmabufallocator.h', 'gstimxdefaultallocator.h', 'gstimxdmabufferuploader.h']
+
+if dma_heap_support
+	source += ['gstimxdmaheapallocator.c']
+	public_headers += ['gstimxdmaheapallocator.h']
+endif
 
 if ion_support
 	source += ['gstimxionallocator.c']

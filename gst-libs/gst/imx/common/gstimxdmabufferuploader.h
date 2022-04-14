@@ -45,16 +45,16 @@ G_BEGIN_DECLS
  *
  * An allocator that implements the @GstImxDmaBufferAllocatorInterface can allocate
  * @GstMemory blocks that contain ImxDmaBuffer instances. In gstreamer-imx, such allocators
- * also implement @GstPhysMemoryAllocatorInterface. Additionally, the @GstImxIonAllocator
- * allows for allocating DMA-BUF memory through the system wide ION allocator.
+ * also implement @GstPhysMemoryAllocatorInterface. Additionally, if the allocator is based
+ * on @GstImxDmaBufAllocator, it is able to allocate DMA-BUF memory.
  *
  * This means that a @GstMemory that is backed by ImxDmaBuffer is the most "generic" type
  * of memory in gstreamer-imx. It can be accessed like system memory, its physical address
  * can be obtained via @gst_phys_memory_get_phys_addr, its ImxDmaBuffer can be retrieved
  * by using @gst_imx_get_dma_buffer_from_memory or @gst_imx_get_dma_buffer_from_buffer,
- * and, on an ION-enabled i.MX platform, the @gst_dmabuf_memory_get_fd function can be used
- * for retrieving the DMA-BUF FD. Therefore, it makes sense to unify these three ways of
- * access into one.
+ * and, if the allocator is DMA-BUF capable, the @gst_dmabuf_memory_get_fd function can be
+ * used for retrieving the DMA-BUF FD. Therefore, it makes sense to unify these three ways
+ * of access into one.
  *
  * For input, this "uploader" takes care of getting incoming data into ImxDmaBuffer-backed
  * @GstMemory. Internally, the uploader has "upload methods". The uploader asks each method
@@ -89,7 +89,8 @@ GType gst_imx_dma_buffer_uploader_get_type(void);
 /**
  * gst_imx_dma_buffer_uploader_new:
  * @imx_dma_buffer_allocator: ImxDmaBuffer allocator to use in this
- *     object. If ION support is enabled, this allows for DMA-BUF based uploads.
+ *     object. If the allocator is based on @GstImxDmaBufAllocator,
+ *     this allows for DMA-BUF based uploads.
  *
  * Creates a new upload object.
  *
