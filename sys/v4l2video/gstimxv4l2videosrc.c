@@ -550,6 +550,8 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 		gboolean has_video_meta_option = FALSE;
 
 		gst_query_parse_nth_allocation_pool(query, i, &buffer_pool, &buffer_size, &min_num_buffers, &max_num_buffers);
+		if (buffer_pool == NULL)
+			continue;
 
 		has_video_meta_option = gst_buffer_pool_has_option(buffer_pool, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
