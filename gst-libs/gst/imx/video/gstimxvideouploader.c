@@ -274,14 +274,15 @@ GstFlowReturn gst_imx_video_uploader_perform(GstImxVideoUploader *uploader, GstB
 		 * yet have the plane stride / offset values from our aligned video info. */
 		{
 			GstVideoInfo *aligned_video_info = &(uploader->aligned_input_video_info);
+			GstVideoMeta *output_video_meta;
 
-			video_meta = gst_buffer_get_video_meta(*output_buffer);
-			g_assert(video_meta != NULL);
+			output_video_meta = gst_buffer_get_video_meta(*output_buffer);
+			g_assert(output_video_meta != NULL);
 
 			for (i = 0; i < GST_VIDEO_INFO_N_PLANES(aligned_video_info); ++i)
 			{
-				video_meta->stride[i] = GST_VIDEO_INFO_PLANE_STRIDE(aligned_video_info, i);
-				video_meta->offset[i] = GST_VIDEO_INFO_PLANE_OFFSET(aligned_video_info, i);
+				output_video_meta->stride[i] = GST_VIDEO_INFO_PLANE_STRIDE(aligned_video_info, i);
+				output_video_meta->offset[i] = GST_VIDEO_INFO_PLANE_OFFSET(aligned_video_info, i);
 			}
 		}
 	}
