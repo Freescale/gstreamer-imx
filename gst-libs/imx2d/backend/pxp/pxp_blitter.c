@@ -274,7 +274,6 @@ static int imx_2d_backend_pxp_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	src_param->width = src_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
 	src_param->height = src_surface_desc->height + src_surface_desc->num_padding_rows;
 	src_param->stride = src_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
-	src_param->pixel_fmt = pxp_format;
 	src_param->paddr = (dma_addr_t)(phys_address);
 	pconf->proc_data.srect.left = source_region->x1;
 	pconf->proc_data.srect.top = source_region->y1;
