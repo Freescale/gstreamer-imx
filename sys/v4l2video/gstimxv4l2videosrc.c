@@ -502,7 +502,7 @@ error:
 static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQuery *query)
 {
 	GstStructure *pool_config;
-	guint i;
+	guint i, num;
 	GstCaps *negotiated_caps;
 	GstAllocator *selected_allocator = NULL;
 	GstAllocationParams allocation_params;
@@ -519,11 +519,23 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 	gst_query_parse_allocation(query, &negotiated_caps, NULL);
 
 	/* See if there's an allocator that can allocate DMA memory. */
-	for (i = 0; i < gst_query_get_n_allocation_params(query); ++i)
+	num = gst_query_get_n_allocation_params(query);
+	GST_DEBUG_OBJECT(self, "evaluating %u allocation param(s) from query", num);
+	for (i = 0; i < num; ++i)
 	{
 		GstAllocator *allocator = NULL;
 
 		gst_query_parse_nth_allocation_param(query, i, &allocator, &allocation_params);
+		GST_DEBUG_OBJECT(
+			self,
+			"allocation pool param #%u from query:  allocator: %" GST_PTR_FORMAT "  flags: %#08x align: %" G_GSIZE_FORMAT " prefix: %" G_GSIZE_FORMAT " padding: %" G_GSIZE_FORMAT,
+			i,
+			(gpointer)allocator,
+			allocation_params.flags,
+			allocation_params.align,
+			allocation_params.prefix,
+			allocation_params.padding
+		);
 
 		if (GST_IS_IMX_DMA_BUFFER_ALLOCATOR(allocator))
 		{
@@ -544,12 +556,22 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 	}
 
 	/* Look for a buffer pool with both video meta and video alignment options. */
-	for (i = 0; i < gst_query_get_n_allocation_pools(query); ++i)
+	num = gst_query_get_n_allocation_pools(query);
+	GST_DEBUG_OBJECT(self, "evaluating %u allocation pool(s) from query", num);
+	for (i = 0; i < num; ++i)
 	{
 		GstBufferPool *buffer_pool = NULL;
 		gboolean has_video_meta_option = FALSE;
 
 		gst_query_parse_nth_allocation_pool(query, i, &buffer_pool, &buffer_size, &min_num_buffers, &max_num_buffers);
+		GST_DEBUG_OBJECT(
+			self,
+			"allocation pool #%u from query:  buffer pool: %" GST_PTR_FORMAT "  buffer size: %u  min/max num buffers: %u/%u",
+			i,
+			(gpointer)buffer_pool,
+			buffer_size,
+			min_num_buffers, max_num_buffers
+		);
 		if (buffer_pool == NULL)
 			continue;
 
