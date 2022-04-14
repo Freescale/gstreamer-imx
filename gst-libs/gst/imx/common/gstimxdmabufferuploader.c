@@ -144,7 +144,7 @@ static GstFlowReturn raw_buffer_upload_method_perform(GstImxDmaBufferUploadMetho
 
 	memcpy(out_map_info.data, in_map_info.data, in_map_info.size);
 
-	GST_LOG_OBJECT(self, "copied %" G_GSIZE_FORMAT " byte(s) from memory %p to memory %p", in_map_info.size, (gpointer)input_memory, (gpointer)(*output_memory));
+	GST_LOG_OBJECT(self->parent.uploader, "copied %" G_GSIZE_FORMAT " byte(s) from memory %p to memory %p", in_map_info.size, (gpointer)input_memory, (gpointer)(*output_memory));
 
 finish:
 	if ((*output_memory) != NULL)
