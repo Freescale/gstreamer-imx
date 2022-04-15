@@ -536,6 +536,8 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 			allocation_params.prefix,
 			allocation_params.padding
 		);
+		if (allocator == NULL)
+			continue;
 
 		if (GST_IS_IMX_DMA_BUFFER_ALLOCATOR(allocator))
 		{
