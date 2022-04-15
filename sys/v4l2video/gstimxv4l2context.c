@@ -879,6 +879,10 @@ static gboolean fill_caps_with_probed_info(GstImxV4L2Context *self, int fd, GstC
 			format_str = gst_imx_v4l2_bayer_format_to_string(imx_v4l2_format->format.bayer_format);
 			break;
 
+		case GST_IMX_V4L2_VIDEO_FORMAT_TYPE_CODEC:
+			format_str = NULL;
+			break;
+
 		default:
 			g_assert_not_reached();
 	}
@@ -887,9 +891,11 @@ static gboolean fill_caps_with_probed_info(GstImxV4L2Context *self, int fd, GstC
 		media_type_str,
 		"width", G_TYPE_INT, (gint)width,
 		"height", G_TYPE_INT, (gint)height,
-		"format", G_TYPE_STRING, format_str,
 		NULL
 	);
+
+	if (format_str != NULL)
+		gst_structure_set(structure, "format", G_TYPE_STRING, format_str, NULL);
 
 	switch (probe_result->capture_chip)
 	{
