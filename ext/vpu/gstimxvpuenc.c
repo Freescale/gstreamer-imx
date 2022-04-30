@@ -205,6 +205,7 @@ static GstStateChangeReturn gst_imx_vpu_enc_change_state(GstElement *element, Gs
 				ENCODING_THREAD_LOCK(imx_vpu_enc);
 				imx_vpu_enc->encoding_thread_state = GST_IMX_VPU_ENC_ENCODING_THREAD_STATE_STOPPING;
 				ENCODING_THREAD_SIGNAL(imx_vpu_enc);
+				imx_vpu_api_enc_cancel_encode(imx_vpu_enc->encoder);
 				ENCODING_THREAD_UNLOCK(imx_vpu_enc);
 			}
 			break;
