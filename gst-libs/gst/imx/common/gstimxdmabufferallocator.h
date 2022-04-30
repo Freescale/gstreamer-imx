@@ -33,6 +33,13 @@ G_BEGIN_DECLS
 #define GST_IMX_DMA_BUFFER_ALLOCATOR_GET_INTERFACE(obj) (G_TYPE_INSTANCE_GET_INTERFACE((obj), GST_TYPE_IMX_DMA_BUFFER_ALLOCATOR, GstImxDmaBufferAllocatorInterface))
 
 
+/* Extra GstMemory map flag to underlying libimxdmabuffer allocators
+ * to disable automatic cache sync. Needed if the allocated buffers
+ * will be manually synced with imx_dma_buffer_start_sync_session()
+ * and imx_dma_buffer_stop_sync_session(). */
+#define GST_MAP_FLAG_IMX_MANUAL_SYNC (GST_MAP_FLAG_LAST + 0)
+
+
 typedef struct _GstImxDmaBufferAllocator GstImxDmaBufferAllocator;
 typedef struct _GstImxDmaBufferAllocatorInterface GstImxDmaBufferAllocatorInterface;
 

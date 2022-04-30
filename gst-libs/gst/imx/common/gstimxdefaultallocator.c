@@ -206,6 +206,8 @@ static gpointer gst_imx_default_allocator_map(GstMemory *memory, GstMapInfo *inf
 		flags |= IMX_DMA_BUFFER_MAPPING_FLAG_READ;
 	if (info->flags & GST_MAP_WRITE)
 		flags |= IMX_DMA_BUFFER_MAPPING_FLAG_WRITE;
+	if (info->flags & GST_MAP_FLAG_IMX_MANUAL_SYNC)
+		flags |= IMX_DMA_BUFFER_MAPPING_FLAG_MANUAL_SYNC;
 
 	mapped_virtual_address = imx_dma_buffer_map(imx_dma_memory->dmabuffer, flags, &error);
 	if (mapped_virtual_address == NULL)
