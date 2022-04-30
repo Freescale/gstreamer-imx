@@ -295,6 +295,7 @@ static GstStateChangeReturn gst_imx_vpu_dec_change_state(GstElement *element, Gs
 				DECODING_THREAD_LOCK(imx_vpu_dec);
 				imx_vpu_dec->decoding_thread_state = GST_IMX_VPU_DEC_DECODING_THREAD_STATE_STOPPING;
 				DECODING_THREAD_SIGNAL(imx_vpu_dec);
+				imx_vpu_api_dec_cancel_decode(imx_vpu_dec->decoder);
 				DECODING_THREAD_UNLOCK(imx_vpu_dec);
 			}
 			break;
