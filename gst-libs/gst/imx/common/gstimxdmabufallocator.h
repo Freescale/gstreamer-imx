@@ -21,6 +21,7 @@
 
 #include <gst/gst.h>
 #include <gst/allocators/allocators.h>
+#include <imxdmabuffer/imxdmabuffer.h>
 
 
 G_BEGIN_DECLS
@@ -37,6 +38,7 @@ G_BEGIN_DECLS
 
 typedef struct _GstImxDmaBufAllocator GstImxDmaBufAllocator;
 typedef struct _GstImxDmaBufAllocatorClass GstImxDmaBufAllocatorClass;
+typedef struct _GstImxDmaBufAllocatorPrivate GstImxDmaBufAllocatorPrivate;
 
 
 struct _GstImxDmaBufAllocator
@@ -45,9 +47,7 @@ struct _GstImxDmaBufAllocator
 
     /*< private >*/
 
-    ImxDmaBufferAllocator internal_imxdmabuffer_allocator;
-
-    gboolean active;
+    GstImxDmaBufAllocatorPrivate *priv;
 };
 
 
@@ -57,7 +57,7 @@ struct _GstImxDmaBufAllocatorClass
 
     gboolean (*activate)(GstImxDmaBufAllocator *allocator);
     guintptr (*get_physical_address)(GstImxDmaBufAllocator *allocator, int dmabuf_fd);
-    int (*allocate_dmabuf)(GstImxDmaBufAllocator *allocator, gsize size, gsize alignment);
+    ImxDmaBufferAllocator* (*get_allocator)(GstImxDmaBufAllocator *allocator);
 };
 
 

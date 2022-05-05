@@ -56,14 +56,9 @@ struct _GstImxIonAllocator
 {
 	GstImxDmaBufAllocator parent;
 
-	/* The /dev/ion FD. This can be a FD from an internal open() call in
-	 * gst_imx_ion_allocator_gstalloc_alloc(), or it may be an FD that
-	 * was supplied over the GObject "external-ion-fd" property. In the
-	 * latter case, it is important to know that this FD is not internal
-	 * to avoid calling close() on it. */
-	gboolean ion_fd_is_internal;
-	int ion_fd;
+	ImxDmaBufferAllocator *imxdmabuffer_allocator;
 
+	int external_ion_fd;
 	/* Bitmask for selecting ION heaps during allocations. See the
 	 * libimxdmabuffer ION allocator documentation for more. */
 	guint ion_heap_id_mask;
@@ -87,7 +82,7 @@ static void gst_imx_ion_allocator_get_property(GObject *object, guint prop_id, G
 
 static gboolean gst_imx_ion_allocator_activate(GstImxDmaBufAllocator *allocator);
 static guintptr gst_imx_ion_allocator_get_physical_address(GstImxDmaBufAllocator *allocator, int dmabuf_fd);
-static int gst_imx_ion_allocator_allocate_dmabuf(GstImxDmaBufAllocator *allocator, gsize size, gsize alignment);
+static ImxDmaBufferAllocator* gst_imx_ion_allocator_get_allocator(GstImxDmaBufAllocator *allocator);
 
 
 static void gst_imx_ion_allocator_class_init(GstImxIonAllocatorClass *klass)
@@ -106,7 +101,7 @@ static void gst_imx_ion_allocator_class_init(GstImxIonAllocatorClass *klass)
 
 	imx_dmabuf_allocator_class->activate = GST_DEBUG_FUNCPTR(gst_imx_ion_allocator_activate);
 	imx_dmabuf_allocator_class->get_physical_address = GST_DEBUG_FUNCPTR(gst_imx_ion_allocator_get_physical_address);
-	imx_dmabuf_allocator_class->allocate_dmabuf = GST_DEBUG_FUNCPTR(gst_imx_ion_allocator_allocate_dmabuf);
+	imx_dmabuf_allocator_class->get_allocator = GST_DEBUG_FUNCPTR(gst_imx_ion_allocator_get_allocator);
 
 	g_object_class_install_property(
 		object_class,
@@ -149,8 +144,7 @@ static void gst_imx_ion_allocator_class_init(GstImxIonAllocatorClass *klass)
 
 static void gst_imx_ion_allocator_init(GstImxIonAllocator *self)
 {
-	self->ion_fd_is_internal = FALSE;
-	self->ion_fd = -1;
+	self->external_ion_fd = DEFAULT_EXTERNAL_ION_FD;
 	self->ion_heap_id_mask = DEFAULT_ION_HEAP_ID_MASK;
 	self->ion_heap_flags = DEFAULT_ION_HEAP_FLAGS;
 }
@@ -159,13 +153,12 @@ static void gst_imx_ion_allocator_init(GstImxIonAllocator *self)
 static void gst_imx_ion_allocator_dispose(GObject *object)
 {
 	GstImxIonAllocator *self = GST_IMX_ION_ALLOCATOR(object);
-
 	GST_TRACE_OBJECT(self, "finalizing ION GstAllocator %p", (gpointer)self);
 
-	if ((self->ion_fd >= 0) && self->ion_fd_is_internal)
+	if (self->imxdmabuffer_allocator != NULL)
 	{
-		close(self->ion_fd);
-		self->ion_fd = -1;
+		imx_dma_buffer_allocator_destroy(self->imxdmabuffer_allocator);
+		self->imxdmabuffer_allocator = NULL;
 	}
 
 	G_OBJECT_CLASS(gst_imx_ion_allocator_parent_class)->dispose(object);
@@ -188,9 +181,8 @@ static void gst_imx_ion_allocator_set_property(GObject *object, guint prop_id, G
 	{
 		case PROP_EXTERNAL_ION_FD:
 		{
-			self->ion_fd = g_value_get_int(value);
-			self->ion_fd_is_internal = (self->ion_fd < 0);
-			GST_DEBUG_OBJECT(self, "set ION FD to %d", self->ion_fd);
+			self->external_ion_fd = g_value_get_int(value);
+			GST_DEBUG_OBJECT(self, "set external ION FD to %d", self->external_ion_fd);
 			GST_OBJECT_UNLOCK(object);
 			break;
 		}
@@ -221,7 +213,7 @@ static void gst_imx_ion_allocator_get_property(GObject *object, guint prop_id, G
 	{
 		case PROP_EXTERNAL_ION_FD:
 			GST_OBJECT_LOCK(object);
-			g_value_set_int(value, self->ion_fd);
+			g_value_set_int(value, self->external_ion_fd);
 			GST_OBJECT_UNLOCK(object);
 			break;
 
@@ -247,18 +239,25 @@ static void gst_imx_ion_allocator_get_property(GObject *object, guint prop_id, G
 static gboolean gst_imx_ion_allocator_activate(GstImxDmaBufAllocator *allocator)
 {
 	GstImxIonAllocator *self = GST_IMX_ION_ALLOCATOR(allocator);
+	int error;
 
-	if (self->ion_fd > 0)
+	if (self->imxdmabuffer_allocator != NULL)
 		return TRUE;
 
-	self->ion_fd = open("/dev/ion", O_RDONLY);
-	if (self->ion_fd < 0)
+	self->imxdmabuffer_allocator = imx_dma_buffer_ion_allocator_new(
+		self->external_ion_fd,
+		self->ion_heap_id_mask,
+		self->ion_heap_flags,
+		&error
+	);
+
+	if (self->imxdmabuffer_allocator == NULL)
 	{
-		GST_ERROR_OBJECT(self, "could not open ION allocator device node: %s (%d)", strerror(errno), errno);
+		GST_ERROR_OBJECT(self, "could not create ION allocator: %s (%d)", strerror(error), error);
 		return FALSE;
 	}
 
-	GST_DEBUG_OBJECT(self, "opened ION device node, FD: %d", self->ion_fd);
+	GST_DEBUG_OBJECT(self, "created ION allocator");
 
 	return TRUE;
 }
@@ -270,25 +269,18 @@ static guintptr gst_imx_ion_allocator_get_physical_address(GstImxDmaBufAllocator
 	guintptr physical_address;
 	int error;
 
-	physical_address = imx_dma_buffer_ion_get_physical_address_from_dmabuf_fd(self->ion_fd, dmabuf_fd, &error);
+	physical_address = imx_dma_buffer_ion_get_physical_address_from_dmabuf_fd(imx_dma_buffer_ion_allocator_get_ion_fd(self->imxdmabuffer_allocator), dmabuf_fd, &error);
 	if (physical_address == 0)
-		GST_ERROR_OBJECT(self, "could not open get physical address from dmabuf FD: %s (%d)", strerror(error), error);
+		GST_ERROR_OBJECT(allocator, "could not open get physical address from dmabuf FD: %s (%d)", strerror(error), error);
 
 	return physical_address;
 }
 
 
-static int gst_imx_ion_allocator_allocate_dmabuf(GstImxDmaBufAllocator *allocator, gsize size, gsize alignment)
+static ImxDmaBufferAllocator* gst_imx_ion_allocator_get_allocator(GstImxDmaBufAllocator *allocator)
 {
 	GstImxIonAllocator *self = GST_IMX_ION_ALLOCATOR(allocator);
-	int dmabuf_fd;
-	int error;
-
-	dmabuf_fd = imx_dma_buffer_ion_allocate_dmabuf(self->ion_fd, size, alignment, self->ion_heap_id_mask, self->ion_heap_flags, &error);
-	if (dmabuf_fd < 0)
-		GST_ERROR_OBJECT(self, "could not allocate DMA-BUF backed memory with ION: %s (%d)", strerror(error), error);
-
-	return dmabuf_fd;
+	return self->imxdmabuffer_allocator;
 }
 
 

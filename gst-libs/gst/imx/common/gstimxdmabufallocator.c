@@ -51,23 +51,6 @@ GST_DEBUG_CATEGORY_STATIC(imx_dmabuf_allocator_debug);
 static GQuark gst_imx_dmabuf_memory_internal_imxdmabuffer_quark;
 
 
-/* ImxDmaBuffer derivative to be able to fulfill all requirements of the
- * GstDmaBufAllocator as well as those of the GstPhysMemoryAllocatorInterface
- * and GstImxDmaBufferAllocatorInterface. */
-typedef struct
-{
-    ImxDmaBuffer parent;
-    GstMemory *gstmemory;
-    imx_physical_address_t physical_address;
-    int dmabuf_fd;
-    size_t size;
-
-    GstMapInfo map_info;
-    int mapping_refcount;
-}
-InternalImxDmaBuffer;
-
-
 static void gst_imx_dmabuf_allocator_phys_mem_allocator_iface_init(gpointer iface, gpointer iface_data);
 static guintptr gst_imx_dmabuf_allocator_get_phys_addr(GstPhysMemoryAllocator *allocator, GstMemory *mem);
 
@@ -75,436 +58,365 @@ static void gst_imx_dmabuf_allocator_dma_buffer_allocator_iface_init(gpointer if
 static ImxDmaBuffer* gst_imx_dmabuf_allocator_get_dma_buffer(GstImxDmaBufferAllocator *allocator, GstMemory *memory);
 
 
+struct _GstImxDmaBufAllocatorPrivate
+{
+	gboolean active;
+};
+
+
 G_DEFINE_ABSTRACT_TYPE_WITH_CODE(
-    GstImxDmaBufAllocator, gst_imx_dmabuf_allocator, GST_TYPE_DMABUF_ALLOCATOR,
-    G_IMPLEMENT_INTERFACE(GST_TYPE_PHYS_MEMORY_ALLOCATOR,    gst_imx_dmabuf_allocator_phys_mem_allocator_iface_init)
-    G_IMPLEMENT_INTERFACE(GST_TYPE_IMX_DMA_BUFFER_ALLOCATOR, gst_imx_dmabuf_allocator_dma_buffer_allocator_iface_init)
+	GstImxDmaBufAllocator, gst_imx_dmabuf_allocator, GST_TYPE_DMABUF_ALLOCATOR,
+	G_IMPLEMENT_INTERFACE(GST_TYPE_PHYS_MEMORY_ALLOCATOR, gst_imx_dmabuf_allocator_phys_mem_allocator_iface_init)
+	G_IMPLEMENT_INTERFACE(GST_TYPE_IMX_DMA_BUFFER_ALLOCATOR, gst_imx_dmabuf_allocator_dma_buffer_allocator_iface_init)
+	G_ADD_PRIVATE(GstImxDmaBufAllocator)
 )
 
 static void gst_imx_dmabuf_allocator_dispose(GObject *object);
 
+static GstMemory* gst_imx_dmabuf_allocator_alloc(GstAllocator *allocator, gsize size, GstAllocationParams *params);
+static void gst_imx_dmabuf_allocator_free(GstAllocator* allocator, GstMemory *memory);
+
 static gboolean gst_imx_dmabuf_allocator_activate(GstImxDmaBufAllocator *imx_dmabuf_allocator);
-static GstMemory* gst_imx_dmabuf_allocator_alloc_internal(GstImxDmaBufAllocator *imx_dmabuf_allocator, int dmabuf_fd, gsize size);
 
-static GstMemory* gst_imx_dmabuf_allocator_gstalloc_alloc(GstAllocator *allocator, gsize size, GstAllocationParams *params);
-static void gst_imx_dmabuf_allocator_gstalloc_free(GstAllocator* allocator, GstMemory *memory);
-static GstMemory * gst_imx_dmabuf_allocator_copy(GstMemory *memory, gssize offset, gssize size);
-
-
-/* Integration of libimxdmabuffer DMA-BUF allocators with GstDmaBufAllocator
- * is not straightforward. This is because the GstDmaBufAllocator closes the
- * DMA-BUF FDs on its own, and because both the GstAllocator/GstMemory and
- * the libimxdmabuffer allocator APIs have functions for (un)mapping buffers,
- * and both are in use (imx_dma_buffer_map() and friends may be used inside
- * libimxvpuapi for example).
- *
- * The solution is to create our own internal libimxdmabuffer allocator that
- * is never intended to be used from the outside. This allocator does not
- * actually have allocate/deallocate/destroy functionality, and only exists
- * so that we can (un)map ImxDmaBuffer instances properly over both APIs.
- * To that end, this allocator internally maps using gst_memory_map().
- *
- * This "dummy" allocator is internal_imxdmabuffer_allocator. It is set up
- * in gst_imx_dmabuf_allocator_init(). The function declarations below are
- * specific to this dummy allocator.
- *
- * This design also allows us to combine GstDmaBufAllocator, the DMA-BUF
- * allocator from libimxdmabuffer, and the GstPhysMemoryAllocator and
- * GstImxDmaBufferAllocator interfaces into one GStreamer allocator.
- */
-
-static void gst_imx_dmabuf_allocator_imxdmabufalloc_destroy(ImxDmaBufferAllocator *allocator);
-
-static ImxDmaBuffer* gst_imx_dmabuf_allocator_imxdmabufalloc_allocate(ImxDmaBufferAllocator *allocator, size_t size, size_t alignment, int *error);
-static void gst_imx_dmabuf_allocator_imxdmabufalloc_deallocate(ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer);
-
-static uint8_t* gst_imx_dmabuf_allocator_imxdmabufalloc_map(ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer, unsigned int flags, int *error);
-static void gst_imx_dmabuf_allocator_imxdmabufalloc_unmap(ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer);
-
-static imx_physical_address_t gst_imx_dmabuf_allocator_imxdmabufalloc_get_physical_address(ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer);
-static int gst_imx_dmabuf_allocator_imxdmabufalloc_get_fd(ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer);
-
-static size_t gst_imx_dmabuf_allocator_imxdmabufalloc_get_size(ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer);
-
-
-
-
-/**** GstImxDmaBufAllocator internal function definitions ****/
+static GstMemory * gst_imx_dmabuf_allocator_mem_copy(GstMemory *memory, gssize offset, gssize size);
+static gboolean gst_imx_dmabuf_allocator_mem_is_span(GstMemory *memory1, GstMemory *memory2, gsize *offset);
+static gpointer gst_imx_dmabuf_allocator_mem_map_full(GstMemory *memory, GstMapInfo *info, gsize maxsize);
+static void gst_imx_dmabuf_allocator_mem_unmap_full(GstMemory *memory, GstMapInfo *info);
 
 
 static void gst_imx_dmabuf_allocator_class_init(GstImxDmaBufAllocatorClass *klass)
 {
-    GObjectClass *object_class;
-    GstAllocatorClass *allocator_class;
+	GObjectClass *object_class;
+	GstAllocatorClass *allocator_class;
 
-    GST_DEBUG_CATEGORY_INIT(imx_dmabuf_allocator_debug, "imxdmabufallocator", 0, "physical memory allocator which allocates DMA-BUF memory");
+	GST_DEBUG_CATEGORY_INIT(imx_dmabuf_allocator_debug, "imxdmabufallocator", 0, "physical memory allocator which allocates DMA-BUF memory");
 
-    gst_imx_dmabuf_memory_internal_imxdmabuffer_quark = g_quark_from_static_string("gst-imxdmabuffer-dmabuf-memory");
+	gst_imx_dmabuf_memory_internal_imxdmabuffer_quark = g_quark_from_static_string("gst-imxdmabuffer-dmabuf-memory");
 
-    object_class = G_OBJECT_CLASS(klass);
-    allocator_class = GST_ALLOCATOR_CLASS(klass);
+	object_class = G_OBJECT_CLASS(klass);
+	allocator_class = GST_ALLOCATOR_CLASS(klass);
 
-    object_class->dispose = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_dispose);
-    allocator_class->alloc = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_gstalloc_alloc);
-    allocator_class->free = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_gstalloc_free);
+	object_class->dispose = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_dispose);
+	allocator_class->alloc = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_alloc);
+	allocator_class->free = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_free);
 
-    klass->activate = NULL;
-    klass->get_physical_address = NULL;
-    klass->allocate_dmabuf = NULL;
+	klass->activate = NULL;
+	klass->get_allocator = NULL;
 }
 
 
 static void gst_imx_dmabuf_allocator_init(GstImxDmaBufAllocator *imx_dmabuf_allocator)
 {
-    GstAllocator *allocator = GST_ALLOCATOR(imx_dmabuf_allocator);
-    allocator->mem_type = GST_IMX_DMABUF_MEMORY_TYPE;
-    allocator->mem_copy = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_copy);
+	GstAllocator *allocator = GST_ALLOCATOR(imx_dmabuf_allocator);
 
-    imx_dmabuf_allocator->active = FALSE;
+	imx_dmabuf_allocator->priv = gst_imx_dmabuf_allocator_get_instance_private(imx_dmabuf_allocator);
+	imx_dmabuf_allocator->priv->active = FALSE;
 
-    imx_dmabuf_allocator->internal_imxdmabuffer_allocator.destroy              = gst_imx_dmabuf_allocator_imxdmabufalloc_destroy;
-    imx_dmabuf_allocator->internal_imxdmabuffer_allocator.allocate             = gst_imx_dmabuf_allocator_imxdmabufalloc_allocate;
-    imx_dmabuf_allocator->internal_imxdmabuffer_allocator.deallocate           = gst_imx_dmabuf_allocator_imxdmabufalloc_deallocate;
-    imx_dmabuf_allocator->internal_imxdmabuffer_allocator.map                  = gst_imx_dmabuf_allocator_imxdmabufalloc_map;
-    imx_dmabuf_allocator->internal_imxdmabuffer_allocator.unmap                = gst_imx_dmabuf_allocator_imxdmabufalloc_unmap;
-    imx_dmabuf_allocator->internal_imxdmabuffer_allocator.get_physical_address = gst_imx_dmabuf_allocator_imxdmabufalloc_get_physical_address;
-    imx_dmabuf_allocator->internal_imxdmabuffer_allocator.get_fd               = gst_imx_dmabuf_allocator_imxdmabufalloc_get_fd;
-    imx_dmabuf_allocator->internal_imxdmabuffer_allocator.get_size             = gst_imx_dmabuf_allocator_imxdmabufalloc_get_size;
+	allocator->mem_type = GST_IMX_DMABUF_MEMORY_TYPE;
+	allocator->mem_copy = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_mem_copy);
+	allocator->mem_is_span = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_mem_is_span);
+	allocator->mem_map_full = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_mem_map_full);
+	allocator->mem_unmap_full = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_mem_unmap_full);
 
-    GST_TRACE_OBJECT(imx_dmabuf_allocator, "new i.MX DMA-BUF GstAllocator %p", (gpointer)imx_dmabuf_allocator);
+	GST_TRACE_OBJECT(imx_dmabuf_allocator, "new i.MX DMA-BUF GstAllocator %p", (gpointer)imx_dmabuf_allocator);
 }
 
 
 static void gst_imx_dmabuf_allocator_dispose(GObject *object)
 {
-    GstImxDmaBufAllocator *self = GST_IMX_DMABUF_ALLOCATOR(object);
-    GST_TRACE_OBJECT(self, "finalizing i.MX DMA-BUF GstAllocator %p", (gpointer)self);
-    G_OBJECT_CLASS(gst_imx_dmabuf_allocator_parent_class)->dispose(object);
+	GstImxDmaBufAllocator *self = GST_IMX_DMABUF_ALLOCATOR(object);
+	GST_TRACE_OBJECT(self, "finalizing i.MX DMA-BUF GstAllocator %p", (gpointer)self);
+	G_OBJECT_CLASS(gst_imx_dmabuf_allocator_parent_class)->dispose(object);
 }
 
-
-static gboolean gst_imx_dmabuf_allocator_activate(GstImxDmaBufAllocator *imx_dmabuf_allocator)
-{
-    /* must be called with object lock held */
-
-    GstImxDmaBufAllocatorClass *klass = GST_IMX_DMABUF_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(imx_dmabuf_allocator));
-
-    g_assert(klass->activate != NULL);
-
-    if (imx_dmabuf_allocator->active)
-        return TRUE;
-
-    if (!klass->activate(imx_dmabuf_allocator))
-    {
-        GST_ERROR_OBJECT(imx_dmabuf_allocator, "could not activate i.MX DMA-BUF allocator");
-        return FALSE;
-    }
-
-    GST_DEBUG_OBJECT(imx_dmabuf_allocator, "i.MX DMA-BUF allocator activated");
-
-    imx_dmabuf_allocator->active = TRUE;
-
-    return TRUE;
-}
-
-
-static GstMemory* gst_imx_dmabuf_allocator_alloc_internal(GstImxDmaBufAllocator *imx_dmabuf_allocator, int dmabuf_fd, gsize size)
-{
-    imx_physical_address_t physical_address;
-    InternalImxDmaBuffer *internal_imx_dma_buffer;
-    GstMemory *memory = NULL;
-    GstImxDmaBufAllocatorClass *klass = GST_IMX_DMABUF_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(imx_dmabuf_allocator));
-
-    g_assert(klass->get_physical_address != NULL);
-
-    /* must be called with object lock held */
-
-    physical_address = klass->get_physical_address(imx_dmabuf_allocator, dmabuf_fd);
-    if (physical_address == 0)
-    {
-        GST_ERROR_OBJECT(imx_dmabuf_allocator, "could not open get physical address from dmabuf FD %d", dmabuf_fd);
-        goto finish;
-    }
-    GST_DEBUG_OBJECT(imx_dmabuf_allocator, "got physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " from DMA-BUF buffer", physical_address);
-
-    memory = gst_dmabuf_allocator_alloc(GST_ALLOCATOR_CAST(imx_dmabuf_allocator), dmabuf_fd, size);
-    if (!memory)
-    {
-        GST_ERROR_OBJECT(imx_dmabuf_allocator, "could not allocate GstMemory with GstDmaBufAllocator");
-        goto finish;
-    }
-
-    internal_imx_dma_buffer = g_malloc0(sizeof(InternalImxDmaBuffer));
-    internal_imx_dma_buffer->parent.allocator = (ImxDmaBufferAllocator *)&(imx_dmabuf_allocator->internal_imxdmabuffer_allocator);
-    internal_imx_dma_buffer->gstmemory = memory;
-    internal_imx_dma_buffer->physical_address = physical_address;
-    internal_imx_dma_buffer->dmabuf_fd = dmabuf_fd;
-    internal_imx_dma_buffer->size = size;
-    internal_imx_dma_buffer->mapping_refcount = 0;
-    gst_mini_object_set_qdata(GST_MINI_OBJECT_CAST(memory), gst_imx_dmabuf_memory_internal_imxdmabuffer_quark, (gpointer)internal_imx_dma_buffer, g_free);
-
-finish:
-    return memory;
-}
-
-
-
-
-/**** GstPhysMemoryAllocatorInterface internal function definitions ****/
 
 static void gst_imx_dmabuf_allocator_phys_mem_allocator_iface_init(gpointer iface, G_GNUC_UNUSED gpointer iface_data)
 {
-    GstPhysMemoryAllocatorInterface *phys_mem_allocator_iface = (GstPhysMemoryAllocatorInterface *)iface;
-    phys_mem_allocator_iface->get_phys_addr = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_get_phys_addr);
+	GstPhysMemoryAllocatorInterface *phys_mem_allocator_iface = (GstPhysMemoryAllocatorInterface *)iface;
+	phys_mem_allocator_iface->get_phys_addr = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_get_phys_addr);
 }
 
 
 static guintptr gst_imx_dmabuf_allocator_get_phys_addr(GstPhysMemoryAllocator *allocator, GstMemory *mem)
 {
-    gpointer qdata;
+	gpointer qdata;
 
-    qdata = gst_mini_object_get_qdata(GST_MINI_OBJECT_CAST(mem), gst_imx_dmabuf_memory_internal_imxdmabuffer_quark);
-    if (G_LIKELY(qdata == NULL))
-    {
-        GST_WARNING_OBJECT(allocator, "GstMemory object %p does not contain imxionbuffer qdata; returning 0 as physical address", (gpointer)mem);
-        return 0;
-    }
+	qdata = gst_mini_object_get_qdata(GST_MINI_OBJECT_CAST(mem), gst_imx_dmabuf_memory_internal_imxdmabuffer_quark);
+	if (G_UNLIKELY(qdata == NULL))
+	{
+		GST_WARNING_OBJECT(allocator, "GstMemory object %p does not contain imxionbuffer qdata; returning 0 as physical address", (gpointer)mem);
+		return 0;
+	}
 
-    return ((InternalImxDmaBuffer *)qdata)->physical_address + mem->offset;
+	return imx_dma_buffer_get_physical_address((ImxDmaBuffer *)qdata) + mem->offset;
 }
 
 
 static void gst_imx_dmabuf_allocator_dma_buffer_allocator_iface_init(gpointer iface, G_GNUC_UNUSED gpointer iface_data)
 {
-    GstImxDmaBufferAllocatorInterface *imx_dma_buffer_allocator_iface = (GstImxDmaBufferAllocatorInterface *)iface;
-    imx_dma_buffer_allocator_iface->get_dma_buffer = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_get_dma_buffer);
+	GstImxDmaBufferAllocatorInterface *imx_dma_buffer_allocator_iface = (GstImxDmaBufferAllocatorInterface *)iface;
+	imx_dma_buffer_allocator_iface->get_dma_buffer = GST_DEBUG_FUNCPTR(gst_imx_dmabuf_allocator_get_dma_buffer);
 }
 
 
-
-
-/**** GstImxDmaBufferAllocatorInterface internal function definitions ****/
+static ImxDmaBuffer* get_dma_buffer_from_memory(GstMemory *memory)
+{
+	gpointer qdata;
+	qdata = gst_mini_object_get_qdata(GST_MINI_OBJECT_CAST(memory), gst_imx_dmabuf_memory_internal_imxdmabuffer_quark);
+	return ((ImxDmaBuffer *)qdata);
+}
 
 
 static ImxDmaBuffer* gst_imx_dmabuf_allocator_get_dma_buffer(GstImxDmaBufferAllocator *allocator, GstMemory *memory)
 {
-    gpointer qdata;
-
-    qdata = gst_mini_object_get_qdata(GST_MINI_OBJECT_CAST(memory), gst_imx_dmabuf_memory_internal_imxdmabuffer_quark);
-    if (G_LIKELY(qdata == NULL))
-    {
-        GST_ERROR_OBJECT(allocator, "GstMemory object %p does not contain ImxDmaBufMemory qdata", (gpointer)memory);
-        return NULL;
-    }
-
-    return ((ImxDmaBuffer *)qdata);
+	ImxDmaBuffer *imx_dma_buffer = get_dma_buffer_from_memory(memory);
+	if (G_UNLIKELY(imx_dma_buffer == NULL))
+	{
+		GST_ERROR_OBJECT(allocator, "GstMemory object %p does not contain ImxDmaBufMemory qdata", (gpointer)memory);
+		return NULL;
+	}
+	return imx_dma_buffer;
 }
 
 
-
-
-/**** GstAllocator internal function definitions ****/
-
-
-static GstMemory* gst_imx_dmabuf_allocator_gstalloc_alloc(GstAllocator *allocator, gsize size, GstAllocationParams *params)
+static GstMemory* gst_imx_dmabuf_allocator_alloc(GstAllocator *allocator, gsize size, GstAllocationParams *params)
 {
-    int dmabuf_fd = -1;
-    GstMemory *memory = NULL;
-    GstImxDmaBufAllocator *self = GST_IMX_DMABUF_ALLOCATOR(allocator);
-    gsize total_size = size + params->prefix + params->padding;
-    size_t alignment;
-    GstImxDmaBufAllocatorClass *klass = GST_IMX_DMABUF_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(self));
+	GstImxDmaBufAllocator *self = GST_IMX_DMABUF_ALLOCATOR(allocator);
+	GstImxDmaBufAllocatorClass *klass = GST_IMX_DMABUF_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(self));
+	gsize total_size = size + params->prefix + params->padding;
+	GstMemory *memory = NULL;
+	size_t alignment;
+	int error;
+	int dmabuf_fd = -1;
+	ImxDmaBuffer *imx_dma_buffer = NULL;
+	ImxDmaBufferAllocator *imxdmabuffer_allocator;
+	gboolean qdata_set = FALSE;
 
-    g_assert(klass->allocate_dmabuf != NULL);
+	g_assert(klass->get_allocator != NULL);
 
-    GST_OBJECT_LOCK(self);
+	GST_OBJECT_LOCK(self);
 
-    if (!gst_imx_dmabuf_allocator_activate(self))
-        goto finish;
+	if (!gst_imx_dmabuf_allocator_activate(self))
+		goto error;
 
-    /* TODO: is this the correct way to calculate alignment?
-    alignment = (params->align > 1) ? (params->align - 1) : 0; */
-    alignment = params->align + 1;
+	imxdmabuffer_allocator = klass->get_allocator(self);
+	alignment = params->align + 1;
 
-    /* Perform the actual allocation. */
-    dmabuf_fd = klass->allocate_dmabuf(self, total_size, alignment);
-    if (dmabuf_fd < 0)
-    {
-        GST_ERROR_OBJECT(self, "could not allocate DMA-BUF buffer");
-        goto finish;
-    }
-    GST_DEBUG_OBJECT(self, "allocated new DMA-BUF buffer;  FD: %d  total size: %" G_GSIZE_FORMAT "  alignment: %zu", dmabuf_fd, total_size, alignment);
+	/* Perform the actual allocation. */
+	imx_dma_buffer = imx_dma_buffer_allocate(imxdmabuffer_allocator, total_size, alignment, &error);
+	if (imx_dma_buffer == NULL)
+	{
+		GST_ERROR_OBJECT(self, "could not allocate DMA-BUF buffer: %s (%d)", strerror(error), error);
+		goto error;
+	}
+	dmabuf_fd = imx_dma_buffer_get_fd(imx_dma_buffer);
+	g_assert(dmabuf_fd > 0);
 
-    memory = gst_imx_dmabuf_allocator_alloc_internal(self, dmabuf_fd, total_size);
+	/* Use GST_FD_MEMORY_FLAG_DONT_CLOSE since
+	 * libimxdmabuffer takes care of closing the FD. */
+	memory = gst_fd_allocator_alloc(allocator, dmabuf_fd, total_size, GST_FD_MEMORY_FLAG_DONT_CLOSE);
+	if (memory == NULL)
+	{
+		GST_ERROR_OBJECT(self, "could not allocate GstMemory with GstDmaBufAllocator");
+		goto error;
+	}
+
+	gst_mini_object_set_qdata(
+		GST_MINI_OBJECT_CAST(memory),
+		gst_imx_dmabuf_memory_internal_imxdmabuffer_quark,
+		(gpointer)imx_dma_buffer,
+		(GDestroyNotify)imx_dma_buffer_deallocate
+	);
+	qdata_set = TRUE;
+
+	GST_DEBUG_OBJECT(
+		self,
+		"allocated new DMA-BUF buffer;  FD: %d  imxdmabuffer: %p  total size: %" G_GSIZE_FORMAT "  alignment: %zu  gstmemory: %p",
+		dmabuf_fd,
+		(gpointer)imx_dma_buffer,
+		total_size,
+		alignment,
+		(gpointer)memory
+	);
 
 finish:
-    GST_OBJECT_UNLOCK(self);
-    return memory;
-}
-
-
-static void gst_imx_dmabuf_allocator_gstalloc_free(GstAllocator* allocator, GstMemory *memory)
-{
-    GST_DEBUG_OBJECT(allocator, "freeing DMA-BUF buffer with FD %d", gst_dmabuf_memory_get_fd(memory));
-    GST_ALLOCATOR_CLASS(gst_imx_dmabuf_allocator_parent_class)->free(allocator, memory);
-}
-
-
-static GstMemory * gst_imx_dmabuf_allocator_copy(GstMemory *memory, gssize offset, gssize size)
-{
-    /* We explicitely do the copy here. GstAllocator has a fallback
-     * mem_copy function that works in a very similar manner. But
-     * we cannot rely on it, since the GstFdAllocator's
-     * GST_ALLOCATOR_FLAG_CUSTOM_ALLOC flag is set, and we inherit
-     * from that class indirectly. This causes the fallback mem_copy
-     * to not use our DMA-BUF allocator, picking the sysmem allocator
-     * instead. To make sure the copy is DMA-BUF backed, we perform
-     * the copy manually. */
-
-    int dmabuf_fd = -1;
-    GstMemory *copy = NULL;
-    GstMapInfo src_map_info;
-    GstMapInfo dest_map_info;
-    GstImxDmaBufAllocator *self = GST_IMX_DMABUF_ALLOCATOR_CAST(memory->allocator);
-    GstImxDmaBufAllocatorClass *klass = GST_IMX_DMABUF_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(self));
-
-    g_assert(klass->allocate_dmabuf != NULL);
-
-    if (G_UNLIKELY(!gst_memory_map(memory, &src_map_info, GST_MAP_READ)))
-    {
-        GST_ERROR_OBJECT(memory, "could not map source memory %p for copy", (gpointer)memory);
-        return NULL;
-    }
-
-    if (size == -1)
-        size = (gssize)(src_map_info.size) > offset ? (src_map_info.size - offset) : 0;
-
-    dmabuf_fd = klass->allocate_dmabuf(self, size, 1);
-    if (G_UNLIKELY(dmabuf_fd < 0))
-    {
-        GST_ERROR_OBJECT(self, "could not allocate DMA-BUF buffer");
-        goto error;
-    }
-    GST_DEBUG_OBJECT(self, "allocated new DMA-BUF buffer with FD %d for gstmemory copy", dmabuf_fd);
-
-    copy = gst_imx_dmabuf_allocator_alloc_internal(self, dmabuf_fd, size);
-    if (G_UNLIKELY(copy == NULL))
-        goto error;
-
-    if (G_UNLIKELY(!gst_memory_map(copy, &dest_map_info, GST_MAP_WRITE)))
-    {
-        GST_ERROR_OBJECT(memory, "could not map destination memory %p for copy", (gpointer)copy);
-        goto error;
-    }
-
-    GST_LOG_OBJECT(
-        self,
-        "copying %" G_GSSIZE_FORMAT " byte(s) from gstmemory %p to gstmemory %p with offset %" G_GSSIZE_FORMAT,
-        size,
-        (gpointer)memory,
-        (gpointer)copy,
-        offset
-    );
-
-    memcpy(dest_map_info.data, src_map_info.data + offset, size);
-
-    gst_memory_unmap(copy, &dest_map_info);
-
-
-finish:
-    gst_memory_unmap(memory, &src_map_info);
-    return copy;
+	GST_OBJECT_UNLOCK(self);
+	return memory;
 
 error:
-    if (copy != NULL)
-    {
-        gst_memory_unref(copy);
-        /* The copy handles ownership over dmabuf_fd, so by
-         * unref'ing it, the DMA-BUF FD got closed as well. */
-        dmabuf_fd = -1;
-    }
+	if (!qdata_set)
+		imx_dma_buffer_deallocate(imx_dma_buffer);
 
-    if (dmabuf_fd > 0)
-    {
-        close(dmabuf_fd);
-        dmabuf_fd = -1;
-    }
-
-    goto finish;
+	goto finish;
 }
 
 
-
-
-/**** internal_imxdmabuffer_allocator internal function definitions ****/
-
-static void gst_imx_dmabuf_allocator_imxdmabufalloc_destroy(G_GNUC_UNUSED ImxDmaBufferAllocator *allocator)
+static void gst_imx_dmabuf_allocator_free(GstAllocator* allocator, GstMemory *memory)
 {
+	int fd = gst_dmabuf_memory_get_fd(memory);
+
+	/* We only log the free() call here. The DMA-BUF FD is closed by
+	 * the imx_dma_buffer_deallocate() call that was passed to the
+	 * gst_mini_object_set_qdata() function. */
+	GST_ALLOCATOR_CLASS(gst_imx_dmabuf_allocator_parent_class)->free(allocator, memory);
+	GST_DEBUG_OBJECT(allocator, "freed DMA-BUF buffer %p with FD %d", (gpointer)memory, fd);
 }
 
 
-static ImxDmaBuffer* gst_imx_dmabuf_allocator_imxdmabufalloc_allocate(G_GNUC_UNUSED ImxDmaBufferAllocator *allocator, G_GNUC_UNUSED size_t size, G_GNUC_UNUSED size_t alignment, G_GNUC_UNUSED int *error)
+static gboolean gst_imx_dmabuf_allocator_activate(GstImxDmaBufAllocator *imx_dmabuf_allocator)
 {
-    return NULL;
+	/* must be called with object lock held */
+
+	GstImxDmaBufAllocatorClass *klass = GST_IMX_DMABUF_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(imx_dmabuf_allocator));
+
+	g_assert(klass->activate != NULL);
+
+	if (imx_dmabuf_allocator->priv->active)
+		return TRUE;
+
+	if (!klass->activate(imx_dmabuf_allocator))
+	{
+		GST_ERROR_OBJECT(imx_dmabuf_allocator, "could not activate i.MX DMA-BUF allocator");
+		return FALSE;
+	}
+
+	GST_DEBUG_OBJECT(imx_dmabuf_allocator, "i.MX DMA-BUF allocator activated");
+
+	imx_dmabuf_allocator->priv->active = TRUE;
+
+	return TRUE;
 }
 
 
-static void gst_imx_dmabuf_allocator_imxdmabufalloc_deallocate(G_GNUC_UNUSED ImxDmaBufferAllocator *allocator, G_GNUC_UNUSED ImxDmaBuffer *buffer)
+static GstMemory * gst_imx_dmabuf_allocator_mem_copy(GstMemory *original_memory, gssize offset, gssize size)
 {
+	GstImxDmaBufAllocator *imx_dmabuf_allocator = GST_IMX_DMABUF_ALLOCATOR(original_memory->allocator);
+	ImxDmaBuffer *orig_imx_dma_buffer, *copy_imx_dma_buffer;
+	GstMemory *copy_memory = NULL;
+	uint8_t *mapped_src_data = NULL, *mapped_dest_data = NULL;
+	int error;
+	GstAllocationParams copy_params = {
+		.flags = 0,
+		.align = original_memory->align,
+		.prefix = 0,
+		.padding = 0
+	};
+
+	orig_imx_dma_buffer = get_dma_buffer_from_memory(original_memory);
+
+	if (size == -1)
+	{
+		size = imx_dma_buffer_get_size(orig_imx_dma_buffer);
+		size = (size > offset) ? (size - offset) : 0;
+	}
+
+	copy_memory = gst_imx_dmabuf_allocator_alloc(original_memory->allocator, size, &copy_params);
+	if (G_UNLIKELY(copy_memory == NULL))
+	{
+		GST_ERROR_OBJECT(imx_dmabuf_allocator, "could not allocate gstmemory for copy gstmemory");
+		goto error;
+	}
+
+	copy_imx_dma_buffer = get_dma_buffer_from_memory(copy_memory);
+
+	mapped_src_data = imx_dma_buffer_map(orig_imx_dma_buffer, IMX_DMA_BUFFER_MAPPING_FLAG_READ, &error);
+	if (mapped_src_data == NULL)
+	{
+		GST_ERROR_OBJECT(imx_dmabuf_allocator, "could not map original DMA buffer: %s (%d)", strerror(error), error);
+		goto error;
+	}
+
+	mapped_dest_data = imx_dma_buffer_map(copy_imx_dma_buffer, IMX_DMA_BUFFER_MAPPING_FLAG_WRITE, &error);
+	if (mapped_dest_data == NULL)
+	{
+		GST_ERROR_OBJECT(imx_dmabuf_allocator, "could not map new DMA buffer: %s (%d)", strerror(error), error);
+		goto error;
+	}
+
+	/* TODO: Is it perhaps possible to copy over DMA instead of by using the CPU? */
+	memcpy(mapped_dest_data, mapped_src_data + offset, size);
+
+finish:
+	if (mapped_src_data != NULL)
+		imx_dma_buffer_unmap(orig_imx_dma_buffer);
+	if (mapped_dest_data != NULL)
+		imx_dma_buffer_unmap(copy_imx_dma_buffer);
+
+	return copy_memory;
+
+error:
+	if (copy_memory != NULL)
+		gst_memory_unref(copy_memory);
+
+	goto finish;
 }
 
 
-static uint8_t* gst_imx_dmabuf_allocator_imxdmabufalloc_map(G_GNUC_UNUSED ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer, unsigned int flags, G_GNUC_UNUSED int *error)
+static gboolean gst_imx_dmabuf_allocator_mem_is_span(G_GNUC_UNUSED GstMemory *memory1, G_GNUC_UNUSED GstMemory *memory2, G_GNUC_UNUSED gsize *offset)
 {
-    InternalImxDmaBuffer *internal_imx_dma_buffer = (InternalImxDmaBuffer *)buffer;
-    if (internal_imx_dma_buffer->mapping_refcount == 0)
-    {
-        GstMapFlags gstflags = 0;
-        if (flags & IMX_DMA_BUFFER_MAPPING_FLAG_READ) gstflags |= GST_MAP_READ;
-        if (flags & IMX_DMA_BUFFER_MAPPING_FLAG_WRITE) gstflags |= GST_MAP_WRITE;
-
-        gst_memory_map(internal_imx_dma_buffer->gstmemory, &(internal_imx_dma_buffer->map_info), gstflags);
-    }
-
-    internal_imx_dma_buffer->mapping_refcount++;
-
-    return internal_imx_dma_buffer->map_info.data;
+	/* We cannot reliably detect spans with physically contiguous memory blocks,
+	 * since the whole notion of "span" is ambiguous with such memory. Two blocks
+	 * may be spans (= they may be contiguous) in the physical address space but
+	 * not in the virtual address space, and vice versa. */
+	return FALSE;
 }
 
 
-static void gst_imx_dmabuf_allocator_imxdmabufalloc_unmap(G_GNUC_UNUSED ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer)
+static gpointer gst_imx_dmabuf_allocator_mem_map_full(GstMemory *memory, GstMapInfo *info, G_GNUC_UNUSED gsize maxsize)
 {
-    InternalImxDmaBuffer *internal_imx_dma_buffer = (InternalImxDmaBuffer *)buffer;
+	ImxDmaBuffer *imx_dma_buffer;
+	unsigned int flags = 0;
+	uint8_t *mapped_virtual_address;
+	int error;
 
-    if (internal_imx_dma_buffer->mapping_refcount == 0)
-        return;
+	imx_dma_buffer = get_dma_buffer_from_memory(memory);
+	g_assert(imx_dma_buffer != NULL);
 
-    internal_imx_dma_buffer->mapping_refcount--;
-    if (internal_imx_dma_buffer->mapping_refcount != 0)
-        return;
+	flags |= (info->flags & GST_MAP_READ) ? IMX_DMA_BUFFER_MAPPING_FLAG_READ : 0;
+	flags |= (info->flags & GST_MAP_WRITE) ? IMX_DMA_BUFFER_MAPPING_FLAG_WRITE : 0;
+	flags |= (info->flags & GST_MAP_FLAG_IMX_MANUAL_SYNC) ? IMX_DMA_BUFFER_MAPPING_FLAG_MANUAL_SYNC : 0;
 
-    gst_memory_unmap(internal_imx_dma_buffer->gstmemory, &(internal_imx_dma_buffer->map_info));
+	mapped_virtual_address = imx_dma_buffer_map(imx_dma_buffer, flags, &error);
+	if (G_UNLIKELY(mapped_virtual_address == NULL))
+	{
+		GST_ERROR_OBJECT(
+			memory->allocator,
+			"could not map imxdmabuffer %p with FD %d: %s (%d)",
+			(gpointer)imx_dma_buffer,
+			imx_dma_buffer_get_fd(imx_dma_buffer),
+			strerror(error), error
+		);
+		goto finish;
+	}
+
+	GST_LOG_OBJECT(
+		memory->allocator,
+		"mapped imxdmabuffer %p with FD %d, mapped virtual address: %p",
+		(gpointer)imx_dma_buffer,
+		imx_dma_buffer_get_fd(imx_dma_buffer),
+		(gpointer)mapped_virtual_address
+	);
+
+finish:
+	return mapped_virtual_address;
 }
 
 
-static imx_physical_address_t gst_imx_dmabuf_allocator_imxdmabufalloc_get_physical_address(G_GNUC_UNUSED ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer)
+static void gst_imx_dmabuf_allocator_mem_unmap_full(GstMemory *memory, G_GNUC_UNUSED GstMapInfo *info)
 {
-    InternalImxDmaBuffer *internal_imx_dma_buffer = (InternalImxDmaBuffer *)buffer;
-    return internal_imx_dma_buffer->physical_address;
-}
+	ImxDmaBuffer *imx_dma_buffer;
 
+	imx_dma_buffer = get_dma_buffer_from_memory(memory);
+	g_assert(imx_dma_buffer != NULL);
 
-static int gst_imx_dmabuf_allocator_imxdmabufalloc_get_fd(G_GNUC_UNUSED ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer)
-{
-    InternalImxDmaBuffer *internal_imx_dma_buffer = (InternalImxDmaBuffer *)buffer;
-    return internal_imx_dma_buffer->dmabuf_fd;
-}
+	GST_LOG_OBJECT(
+		memory->allocator,
+		"unmapped imxdmabuffer %p with FD %d",
+		(gpointer)imx_dma_buffer,
+		imx_dma_buffer_get_fd(imx_dma_buffer)
+	);
 
-
-static size_t gst_imx_dmabuf_allocator_imxdmabufalloc_get_size(G_GNUC_UNUSED ImxDmaBufferAllocator *allocator, ImxDmaBuffer *buffer)
-{
-    InternalImxDmaBuffer *internal_imx_dma_buffer = (InternalImxDmaBuffer *)buffer;
-    return internal_imx_dma_buffer->size;
+	imx_dma_buffer_unmap(imx_dma_buffer);
 }
 
 
@@ -515,43 +427,100 @@ static size_t gst_imx_dmabuf_allocator_imxdmabufalloc_get_size(G_GNUC_UNUSED Imx
 
 GstMemory* gst_imx_dmabuf_allocator_wrap_dmabuf(GstAllocator *allocator, int dmabuf_fd, gsize dmabuf_size)
 {
-    GstImxDmaBufAllocator *self;
-    GstMemory *memory = NULL;
+	GstImxDmaBufAllocator *self = GST_IMX_DMABUF_ALLOCATOR(allocator);
+	GstImxDmaBufAllocatorClass *klass = GST_IMX_DMABUF_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(self));
+	imx_physical_address_t physical_address;
+	GstMemory *memory = NULL;
+	ImxWrappedDmaBuffer *wrapped_dma_buffer = NULL;
 
-    g_assert(allocator != NULL);
+	g_assert(dmabuf_fd > 0);
+	g_assert(dmabuf_size > 0);
+	g_assert(klass->get_physical_address != NULL);
 
-    self = GST_IMX_DMABUF_ALLOCATOR(allocator);
+	GST_OBJECT_LOCK(self);
 
-    assert(dmabuf_fd > 0);
-    assert(dmabuf_size > 0);
+	physical_address = klass->get_physical_address(self, dmabuf_fd);
+	if (physical_address == 0)
+	{
+		GST_ERROR_OBJECT(self, "could not open get physical address from dmabuf FD %d", dmabuf_fd);
+		goto error;
+	}
+	GST_DEBUG_OBJECT(self, "got physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " from DMA-BUF buffer", physical_address);
 
-    GST_OBJECT_LOCK(self);
-    gst_imx_dmabuf_allocator_activate(self);
-    memory = gst_imx_dmabuf_allocator_alloc_internal(self, dmabuf_fd, dmabuf_size);
-    GST_OBJECT_UNLOCK(self);
+	if (!gst_imx_dmabuf_allocator_activate(self))
+		goto error;
 
-    return memory;
+	wrapped_dma_buffer = g_malloc(sizeof(ImxWrappedDmaBuffer));
+	imx_dma_buffer_init_wrapped_buffer(wrapped_dma_buffer);
+	wrapped_dma_buffer->fd = dmabuf_fd;
+	wrapped_dma_buffer->size = dmabuf_size;
+	wrapped_dma_buffer->physical_address = physical_address;
+
+	/* Use GST_FD_MEMORY_FLAG_DONT_CLOSE since
+	 * libimxdmabuffer takes care of closing the FD. */
+	memory = gst_fd_allocator_alloc(allocator, dmabuf_fd, dmabuf_size, GST_FD_MEMORY_FLAG_DONT_CLOSE);
+	if (memory == NULL)
+	{
+		GST_ERROR_OBJECT(self, "could not allocate GstMemory with GstDmaBufAllocator");
+		goto error;
+	}
+
+	gst_mini_object_set_qdata(
+		GST_MINI_OBJECT_CAST(memory),
+		gst_imx_dmabuf_memory_internal_imxdmabuffer_quark,
+		(gpointer)wrapped_dma_buffer,
+		g_free
+	);
+
+	GST_DEBUG_OBJECT(
+		self,
+		"wrapped existing DMA-BUF into an imxdmabuffer:  DMA-BUF FD: %d  imxdmabuffer: %p  DMA-BUF size: %" G_GSIZE_FORMAT "  gstmemory: %p",
+		dmabuf_fd,
+		(gpointer)wrapped_dma_buffer,
+		dmabuf_size,
+		(gpointer)memory
+	);
+
+finish:
+	GST_OBJECT_UNLOCK(self);
+	return memory;
+
+error:
+	g_free(wrapped_dma_buffer);
+
+	goto finish;
 }
 
 
 gboolean gst_imx_dmabuf_allocator_is_active(GstAllocator *allocator)
 {
-    GstImxDmaBufAllocator *self;
-    g_assert(allocator != NULL);
-    self = GST_IMX_DMABUF_ALLOCATOR(allocator);
-    return self->active;
+	GstImxDmaBufAllocator *self;
+	gboolean active;
+
+	g_assert(allocator != NULL);
+	self = GST_IMX_DMABUF_ALLOCATOR(allocator);
+
+	GST_OBJECT_LOCK(self);
+	active = self->priv->active;
+	GST_OBJECT_UNLOCK(self);
+
+	return active;
 }
 
 
 GstAllocator* gst_imx_dmabuf_allocator_new(void)
 {
 #if defined(WITH_GST_DMA_HEAP_ALLOCATOR)
-    return gst_imx_dma_heap_allocator_new();
-#elif defined(WITH_GST_ION_ALLOCATOR)
-    return gst_imx_ion_allocator_new();
-#else
-    /* No DMA-BUF capable allocator enabled. In such a case, calling this is an error. */
-    g_assert_not_reached();
-    return NULL;
+	if (g_strcmp0(g_getenv("GSTREAMER_IMX_DISABLE_DMA_HEAP_ALLOCATOR"), "1") != 0)
+		return gst_imx_dma_heap_allocator_new();
 #endif
+
+#if defined(WITH_GST_ION_ALLOCATOR)
+	if (g_strcmp0(g_getenv("GSTREAMER_IMX_DISABLE_ION_ALLOCATOR"), "1") != 0)
+		return gst_imx_ion_allocator_new();
+#endif
+
+	/* No DMA-BUF capable allocator enabled. In such a case, calling this is an error. */
+	g_assert_not_reached();
+	return NULL;
 }

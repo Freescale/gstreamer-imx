@@ -55,14 +55,9 @@ struct _GstImxDmaHeapAllocator
 {
 	GstImxDmaBufAllocator parent;
 
-	/* The dma-heap FD. This can be a FD from an internal open() call in
-	 * gst_imx_dma_heap_allocator_gstalloc_alloc(), or it may be an FD that
-	 * was supplied over the GObject "external-dma-heap-fd" property. In the
-	 * latter case, it is important to know that this FD is not internal
-	 * to avoid calling close() on it. */
-	gboolean dma_heap_fd_is_internal;
-	int dma_heap_fd;
+	ImxDmaBufferAllocator *imxdmabuffer_allocator;
 
+	int external_dma_heap_fd;
 	guint heap_flags;
 	guint fd_flags;
 };
@@ -82,7 +77,7 @@ static void gst_imx_dma_heap_allocator_get_property(GObject *object, guint prop_
 
 static gboolean gst_imx_dma_heap_allocator_activate(GstImxDmaBufAllocator *allocator);
 static guintptr gst_imx_dma_heap_allocator_get_physical_address(GstImxDmaBufAllocator *allocator, int dmabuf_fd);
-static int gst_imx_dma_heap_allocator_allocate_dmabuf(GstImxDmaBufAllocator *allocator, gsize size, gsize alignment);
+static ImxDmaBufferAllocator* gst_imx_dma_heap_allocator_get_allocator(GstImxDmaBufAllocator *allocator);
 
 
 static void gst_imx_dma_heap_allocator_class_init(GstImxDmaHeapAllocatorClass *klass)
@@ -101,7 +96,7 @@ static void gst_imx_dma_heap_allocator_class_init(GstImxDmaHeapAllocatorClass *k
 
 	imx_dmabuf_allocator_class->activate = GST_DEBUG_FUNCPTR(gst_imx_dma_heap_allocator_activate);
 	imx_dmabuf_allocator_class->get_physical_address = GST_DEBUG_FUNCPTR(gst_imx_dma_heap_allocator_get_physical_address);
-	imx_dmabuf_allocator_class->allocate_dmabuf = GST_DEBUG_FUNCPTR(gst_imx_dma_heap_allocator_allocate_dmabuf);
+	imx_dmabuf_allocator_class->get_allocator = GST_DEBUG_FUNCPTR(gst_imx_dma_heap_allocator_get_allocator);
 
 	g_object_class_install_property(
 		object_class,
@@ -144,8 +139,8 @@ static void gst_imx_dma_heap_allocator_class_init(GstImxDmaHeapAllocatorClass *k
 
 static void gst_imx_dma_heap_allocator_init(GstImxDmaHeapAllocator *self)
 {
-	self->dma_heap_fd_is_internal = FALSE;
-	self->dma_heap_fd = -1;
+	self->imxdmabuffer_allocator = NULL;
+	self->external_dma_heap_fd = DEFAULT_EXTERNAL_DMA_HEAP_FD;
 	self->heap_flags = IMX_DMA_BUFFER_DMA_HEAP_ALLOCATOR_DEFAULT_HEAP_FLAGS;
 	self->fd_flags = IMX_DMA_BUFFER_DMA_HEAP_ALLOCATOR_DEFAULT_FD_FLAGS;
 }
@@ -154,13 +149,12 @@ static void gst_imx_dma_heap_allocator_init(GstImxDmaHeapAllocator *self)
 static void gst_imx_dma_heap_allocator_dispose(GObject *object)
 {
 	GstImxDmaHeapAllocator *self = GST_IMX_DMA_HEAP_ALLOCATOR(object);
-
 	GST_TRACE_OBJECT(self, "finalizing dma-heap GstAllocator %p", (gpointer)self);
 
-	if ((self->dma_heap_fd >= 0) && self->dma_heap_fd_is_internal)
+	if (self->imxdmabuffer_allocator != NULL)
 	{
-		close(self->dma_heap_fd);
-		self->dma_heap_fd = -1;
+		imx_dma_buffer_allocator_destroy(self->imxdmabuffer_allocator);
+		self->imxdmabuffer_allocator = NULL;
 	}
 
 	G_OBJECT_CLASS(gst_imx_dma_heap_allocator_parent_class)->dispose(object);
@@ -183,9 +177,8 @@ static void gst_imx_dma_heap_allocator_set_property(GObject *object, guint prop_
 	{
 		case PROP_EXTERNAL_DMA_HEAP_FD:
 		{
-			self->dma_heap_fd = g_value_get_int(value);
-			self->dma_heap_fd_is_internal = (self->dma_heap_fd < 0);
-			GST_DEBUG_OBJECT(self, "set dma-heap FD to %d", self->dma_heap_fd);
+			self->external_dma_heap_fd = g_value_get_int(value);
+			GST_DEBUG_OBJECT(self, "set external dma-heap FD to %d", self->external_dma_heap_fd);
 			GST_OBJECT_UNLOCK(object);
 			break;
 		}
@@ -216,7 +209,7 @@ static void gst_imx_dma_heap_allocator_get_property(GObject *object, guint prop_
 	{
 		case PROP_EXTERNAL_DMA_HEAP_FD:
 			GST_OBJECT_LOCK(object);
-			g_value_set_int(value, self->dma_heap_fd);
+			g_value_set_int(value, self->external_dma_heap_fd);
 			GST_OBJECT_UNLOCK(object);
 			break;
 
@@ -242,18 +235,25 @@ static void gst_imx_dma_heap_allocator_get_property(GObject *object, guint prop_
 static gboolean gst_imx_dma_heap_allocator_activate(GstImxDmaBufAllocator *allocator)
 {
 	GstImxDmaHeapAllocator *self = GST_IMX_DMA_HEAP_ALLOCATOR(allocator);
+	int error;
 
-	if (self->dma_heap_fd > 0)
+	if (self->imxdmabuffer_allocator != NULL)
 		return TRUE;
 
-	self->dma_heap_fd = open(IMXDMABUFFER_DMA_HEAP_DEVICE_NODE_PATH, O_RDWR);
-	if (self->dma_heap_fd < 0)
+	self->imxdmabuffer_allocator = imx_dma_buffer_dma_heap_allocator_new(
+		self->external_dma_heap_fd,
+		self->heap_flags,
+		self->fd_flags,
+		&error
+	);
+
+	if (self->imxdmabuffer_allocator == NULL)
 	{
-		GST_ERROR_OBJECT(self, "could not open dma-heap allocator device node: %s (%d)", strerror(errno), errno);
+		GST_ERROR_OBJECT(self, "could not create dma-heap allocator: %s (%d)", strerror(error), error);
 		return FALSE;
 	}
 
-	GST_DEBUG_OBJECT(self, "opened dma-heap device node, FD: %d", self->dma_heap_fd);
+	GST_DEBUG_OBJECT(self, "created dma-heap allocator");
 
 	return TRUE;
 }
@@ -261,29 +261,21 @@ static gboolean gst_imx_dma_heap_allocator_activate(GstImxDmaBufAllocator *alloc
 
 static guintptr gst_imx_dma_heap_allocator_get_physical_address(GstImxDmaBufAllocator *allocator, int dmabuf_fd)
 {
-	GstImxDmaHeapAllocator *self = GST_IMX_DMA_HEAP_ALLOCATOR(allocator);
 	guintptr physical_address;
 	int error;
 
 	physical_address = imx_dma_buffer_dma_heap_get_physical_address_from_dmabuf_fd(dmabuf_fd, &error);
 	if (physical_address == 0)
-		GST_ERROR_OBJECT(self, "could not open get physical address from dmabuf FD: %s (%d)", strerror(error), error);
+		GST_ERROR_OBJECT(allocator, "could not open get physical address from dmabuf FD: %s (%d)", strerror(error), error);
 
 	return physical_address;
 }
 
 
-static int gst_imx_dma_heap_allocator_allocate_dmabuf(GstImxDmaBufAllocator *allocator, gsize size, G_GNUC_UNUSED gsize alignment)
+static ImxDmaBufferAllocator* gst_imx_dma_heap_allocator_get_allocator(GstImxDmaBufAllocator *allocator)
 {
 	GstImxDmaHeapAllocator *self = GST_IMX_DMA_HEAP_ALLOCATOR(allocator);
-	int dmabuf_fd;
-	int error;
-
-	dmabuf_fd = imx_dma_buffer_dma_heap_allocate_dmabuf(self->dma_heap_fd, size, self->heap_flags, self->fd_flags, &error);
-	if (dmabuf_fd < 0)
-		GST_ERROR_OBJECT(self, "could not allocate DMA-BUF backed memory with dma-heap: %s (%d)", strerror(error), error);
-
-	return dmabuf_fd;
+	return self->imxdmabuffer_allocator;
 }
 
 
