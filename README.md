@@ -148,7 +148,8 @@ Building and installing
 gstreamer-imx uses [meson](https://mesonbuild.com) as its build system. Amongst other reasons, this makes
 integration with existing GStreamer build setups easier, such as [Cerbero](https://gitlab.freedesktop.org/gstreamer/cerbero).
 
-At least version 0.54.0 is required. (Older versions can (partially) work, but build scripts may require changes/workarounds.)
+At least version 0.53.2 is required. (Older versions can (partially) work, but build scripts may require changes/workarounds.) Versions prior to 0.54.0 require passing the `-Dsysroot` option; with Meson 0.54.0 and above,
+using `-Dsysroot` is optional. It allows for explicitly specifying the sysroot path.
 
 First, set up [the necessary cross compilation configuration for meson](https://mesonbuild.com/Cross-compilation.html).
 

@@ -1,4 +1,4 @@
-project('gstreamer-imx', 'c', default_options : ['c_std=c99'], version : '2.0.0', license: 'LGPL-2.0-or-later', meson_version: '>= 0.53.2')
+project('gstreamer-imx', 'c', default_options : ['c_std=c99'], version : '2.1.0', license: 'LGPL-2.0-or-later', meson_version: '>= 0.53.2')
 
 message('Setting up build configuration for gstreamer-imx version ' + meson.project_version())
 

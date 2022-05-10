@@ -1,3 +1,48 @@
+==== version 2.1.0 (2022-05-10) ===
+
+* meson:
+  * New sysroot option in case the external sysroot property is unusable
+    Normally, this option should not be needed. However, with some BSPs
+    whose sysroot properties are broken, having this option is useful.
+  * Reduce minimum required Meson version from 0.54.0 to 0.53.2
+    This is mainly introduced for Yocto Dunfell support.
+    (Meson <0.54 requires the new sysroot property though.)
+  * Cleanup deprecated code
+
+* imx2d: UYVY and YUYV formats are supported by G2D if it is emulated on
+  top of the DPU (found in i.MX8 QuadMax and i.MX8 QuadXPlus SocS).
+
+* vpu:
+  * Correctly handle case when a stream buffer is not needed
+  * Disable frame reordering if it is not needed
+  * imxvpudec_h264 needs au alignment to guarantee complete frames
+  * Unlock decoder_context on fatal error while decoding
+
+* v4l2video:
+  * v4l2videosrc: Skip allocation pools with NULL buffer pool
+    Prevents assertions like:
+    gst_buffer_pool_has_option: assertion 'GST_IS_BUFFER_POOL (pool)' failed
+    See: https://github.com/Freescale/gstreamer-imx/issues/304
+  * v4l2videosrc: Skip allocation params with NULL allocator
+    Prevents assertions like:
+    gst_object_unref: assertion 'object != NULL' failed
+    See: https://github.com/Freescale/gstreamer-imx/issues/304
+  * v4l2videosrc: Use correct ioctl for frame intervals
+  * Minor logging fixes
+
+* imx-gst-libs:
+  * common: Add GST_MAP_FLAG_IMX_MANUAL_SYNC
+  * common: Add dma-heap allocator and GstImxDmaBufAllocator
+    dma-heap is the replacement for the ION allocator, which
+    is phased out in newer Linux kernels.
+    GstImxDmaBufAllocator (not to be confused with
+    GstImxDmaBufferAllocator) is a base class for allocators
+    that produce DMA-BUF memory. That base class delegates
+    (un)mapping to imxdmabuffer map/unmap functions.
+  * common: Fix logging in raw_buffer_upload_method_perform()
+  * video: Copy input video meta to output buffer if necessary
+    See: https://github.com/Freescale/gstreamer-imx/issues/303
+
 ==== version 2.0.0 (2021-04-25) ===
 
 * Complete rewrite based on GStreamer 1.14, libimxvpuapi 2.1.2,
