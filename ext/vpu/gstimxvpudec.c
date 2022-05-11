@@ -146,7 +146,7 @@ static gboolean gst_imx_vpu_dec_stop(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCodecState *state);
 static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstVideoCodecFrame *cur_frame);
 static gboolean gst_imx_vpu_dec_flush(GstVideoDecoder *decoder);
-static gboolean gst_imx_vpu_dec_drain(GstVideoDecoder *decoder);
+static GstFlowReturn gst_imx_vpu_dec_drain(GstVideoDecoder *decoder);
 static GstFlowReturn gst_imx_vpu_dec_finish(GstVideoDecoder *decoder);
 static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQuery *query);
 
@@ -604,7 +604,7 @@ static gboolean gst_imx_vpu_dec_flush(GstVideoDecoder *decoder)
 }
 
 
-static gboolean gst_imx_vpu_dec_drain(GstVideoDecoder *decoder)
+static GstFlowReturn gst_imx_vpu_dec_drain(GstVideoDecoder *decoder)
 {
 	GstFlowReturn flow_ret;
 	GstImxVpuDec *imx_vpu_dec = GST_IMX_VPU_DEC_CAST(decoder);
