@@ -2,14 +2,14 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include "gst/imx/common/gstimxdmabufferallocator.h"
-#include "gstimx2dvideobufferpool.h"
+#include "gstimxvideobufferpool.h"
 
 
-GST_DEBUG_CATEGORY_STATIC(imx_2d_video_buffer_pool_debug);
-#define GST_CAT_DEFAULT imx_2d_video_buffer_pool_debug
+GST_DEBUG_CATEGORY_STATIC(imx_video_buffer_pool_debug);
+#define GST_CAT_DEFAULT imx_video_buffer_pool_debug
 
 
-struct _GstImx2dVideoBufferPool
+struct _GstImxVideoBufferPool
 {
 	GstObject parent;
 
@@ -25,30 +25,30 @@ struct _GstImx2dVideoBufferPool
 };
 
 
-struct _GstImx2dVideoBufferPoolClass
+struct _GstImxVideoBufferPoolClass
 {
 	GstObjectClass parent_class;
 };
 
 
-G_DEFINE_TYPE(GstImx2dVideoBufferPool, gst_imx_2d_video_buffer_pool, GST_TYPE_OBJECT)
+G_DEFINE_TYPE(GstImxVideoBufferPool, gst_imx_video_buffer_pool, GST_TYPE_OBJECT)
 
 
-static void gst_imx_2d_video_buffer_pool_dispose(GObject *object);
+static void gst_imx_video_buffer_pool_dispose(GObject *object);
 
 
-static void gst_imx_2d_video_buffer_pool_class_init(GstImx2dVideoBufferPoolClass *klass)
+static void gst_imx_video_buffer_pool_class_init(GstImxVideoBufferPoolClass *klass)
 {
 	GObjectClass *object_class;
 
-	GST_DEBUG_CATEGORY_INIT(imx_2d_video_buffer_pool_debug, "imx2dvideobufferpool", 0, "NXP i.MX 2D video buffer pool class");
+	GST_DEBUG_CATEGORY_INIT(imx_video_buffer_pool_debug, "imxvideobufferpool", 0, "NXP i.MX video buffer pool");
 
 	object_class = G_OBJECT_CLASS(klass);
-	object_class->dispose = GST_DEBUG_FUNCPTR(gst_imx_2d_video_buffer_pool_dispose);
+	object_class->dispose = GST_DEBUG_FUNCPTR(gst_imx_video_buffer_pool_dispose);
 }
 
 
-static void gst_imx_2d_video_buffer_pool_init(GstImx2dVideoBufferPool *self)
+static void gst_imx_video_buffer_pool_init(GstImxVideoBufferPool *self)
 {
 	self->internal_dma_buffer_pool = NULL;
 	self->output_video_buffer_pool = NULL;
@@ -57,9 +57,9 @@ static void gst_imx_2d_video_buffer_pool_init(GstImx2dVideoBufferPool *self)
 }
 
 
-static void gst_imx_2d_video_buffer_pool_dispose(GObject *object)
+static void gst_imx_video_buffer_pool_dispose(GObject *object)
 {
-	GstImx2dVideoBufferPool *self = GST_IMX_2D_VIDEO_BUFFER_POOL(object);
+	GstImxVideoBufferPool *self = GST_IMX_VIDEO_BUFFER_POOL(object);
 
 	if (self->internal_dma_buffer_pool != NULL)
 	{
@@ -82,17 +82,17 @@ static void gst_imx_2d_video_buffer_pool_dispose(GObject *object)
 		self->imx_dma_buffer_allocator = NULL;
 	}
 
-	G_OBJECT_CLASS(gst_imx_2d_video_buffer_pool_parent_class)->dispose(object);
+	G_OBJECT_CLASS(gst_imx_video_buffer_pool_parent_class)->dispose(object);
 }
 
 
-GstImx2dVideoBufferPool* gst_imx_2d_video_buffer_pool_new(
+GstImxVideoBufferPool* gst_imx_video_buffer_pool_new(
 	GstAllocator *imx_dma_buffer_allocator,
 	GstQuery *query,
 	GstVideoInfo const *intermediate_video_info
 )
 {
-	GstImx2dVideoBufferPool *self;
+	GstImxVideoBufferPool *self;
 	GstAllocator *dma_buffer_allocator = NULL;
 	GstAllocator *output_allocator;
 	GstAllocationParams allocation_params;
@@ -110,18 +110,18 @@ GstImx2dVideoBufferPool* gst_imx_2d_video_buffer_pool_new(
 	g_assert(imx_dma_buffer_allocator != NULL);
 	g_assert(query != NULL);
 	g_assert(intermediate_video_info != NULL);
+	g_assert(GST_QUERY_TYPE(query) == GST_QUERY_ALLOCATION);
 
 
 	/* Create the object. */
 
-	self = g_object_new(gst_imx_2d_video_buffer_pool_get_type(), NULL);
+	self = g_object_new(gst_imx_video_buffer_pool_get_type(), NULL);
 
 	self->imx_dma_buffer_allocator = imx_dma_buffer_allocator;
 	gst_object_ref(GST_OBJECT(imx_dma_buffer_allocator));
 
-	gst_object_ref_sink(self);
 
-
+	/* Get the negotiated caps out of the allocation query. */
 
 	gst_query_parse_allocation(query, &negotiated_caps, NULL);
 
@@ -296,33 +296,33 @@ error:
 }
 
 
-GstBufferPool* gst_imx_2d_video_buffer_pool_get_internal_dma_buffer_pool(GstImx2dVideoBufferPool *imx_2d_video_buffer_pool)
+GstBufferPool* gst_imx_video_buffer_pool_get_internal_dma_buffer_pool(GstImxVideoBufferPool *imx_video_buffer_pool)
 {
-	g_assert(imx_2d_video_buffer_pool != NULL);
-	g_assert(imx_2d_video_buffer_pool->internal_dma_buffer_pool != NULL);
-	return imx_2d_video_buffer_pool->internal_dma_buffer_pool;
+	g_assert(imx_video_buffer_pool != NULL);
+	g_assert(imx_video_buffer_pool->internal_dma_buffer_pool != NULL);
+	return imx_video_buffer_pool->internal_dma_buffer_pool;
 }
 
 
-GstBufferPool* gst_imx_2d_video_buffer_pool_get_output_video_buffer_pool(GstImx2dVideoBufferPool *imx_2d_video_buffer_pool)
+GstBufferPool* gst_imx_video_buffer_pool_get_output_video_buffer_pool(GstImxVideoBufferPool *imx_video_buffer_pool)
 {
-	g_assert(imx_2d_video_buffer_pool != NULL);
-	g_assert(imx_2d_video_buffer_pool->output_video_buffer_pool != NULL);
-	return imx_2d_video_buffer_pool->output_video_buffer_pool;
+	g_assert(imx_video_buffer_pool != NULL);
+	g_assert(imx_video_buffer_pool->output_video_buffer_pool != NULL);
+	return imx_video_buffer_pool->output_video_buffer_pool;
 }
 
 
-GstFlowReturn gst_imx_2d_video_buffer_pool_acquire_intermediate_buffer(GstImx2dVideoBufferPool *imx_2d_video_buffer_pool, GstBuffer *output_buffer, GstBuffer **intermediate_buffer)
+GstFlowReturn gst_imx_video_buffer_pool_acquire_intermediate_buffer(GstImxVideoBufferPool *imx_video_buffer_pool, GstBuffer *output_buffer, GstBuffer **intermediate_buffer)
 {
-	g_assert(imx_2d_video_buffer_pool != NULL);
+	g_assert(imx_video_buffer_pool != NULL);
 	g_assert(output_buffer != NULL);
 	g_assert(intermediate_buffer != NULL);
 
-	if (imx_2d_video_buffer_pool->both_pools_same)
+	if (imx_video_buffer_pool->both_pools_same)
 	{
 		*intermediate_buffer = gst_buffer_ref(output_buffer);
 		GST_LOG_OBJECT(
-			imx_2d_video_buffer_pool,
+			imx_video_buffer_pool,
 			"buffer pools are the same -> ref'ing and using output buffer as intermediate_buffer; intermediate buffer: %" GST_PTR_FORMAT,
 			(gpointer)output_buffer
 		);
@@ -331,19 +331,19 @@ GstFlowReturn gst_imx_2d_video_buffer_pool_acquire_intermediate_buffer(GstImx2dV
 	else
 	{
 		GstFlowReturn flow_ret = gst_buffer_pool_acquire_buffer(
-			imx_2d_video_buffer_pool->internal_dma_buffer_pool,
+			imx_video_buffer_pool->internal_dma_buffer_pool,
 			intermediate_buffer,
 			NULL
 		);
 
 		if (flow_ret != GST_FLOW_OK)
 		{
-			GST_ERROR_OBJECT(imx_2d_video_buffer_pool, "could not acquire intermediate buffer from internal DMA buffer pool: %s", gst_flow_get_name(flow_ret));
+			GST_ERROR_OBJECT(imx_video_buffer_pool, "could not acquire intermediate buffer from internal DMA buffer pool: %s", gst_flow_get_name(flow_ret));
 			intermediate_buffer = NULL;
 		}
 
 		GST_LOG_OBJECT(
-			imx_2d_video_buffer_pool,
+			imx_video_buffer_pool,
 			"buffer pools are not the same -> acquired intermediate buffer from DMA buffer pool; intermediate buffer: %" GST_PTR_FORMAT,
 			(gpointer)intermediate_buffer
 		);
@@ -353,7 +353,7 @@ GstFlowReturn gst_imx_2d_video_buffer_pool_acquire_intermediate_buffer(GstImx2dV
 }
 
 
-gboolean gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(GstImx2dVideoBufferPool *imx_2d_video_buffer_pool, GstBuffer *intermediate_buffer, GstBuffer *output_buffer)
+gboolean gst_imx_video_buffer_pool_transfer_to_output_buffer(GstImxVideoBufferPool *imx_video_buffer_pool, GstBuffer *intermediate_buffer, GstBuffer *output_buffer)
 {
 	gboolean ret = TRUE;
 	GstVideoFrame intermediate_video_frame;
@@ -361,10 +361,10 @@ gboolean gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(GstImx2dVideoBuf
 	GstVideoFrame output_video_frame;
 	gboolean output_video_frame_mapped;
 
-	if (imx_2d_video_buffer_pool->both_pools_same)
+	if (imx_video_buffer_pool->both_pools_same)
 	{
 		GST_LOG_OBJECT(
-			imx_2d_video_buffer_pool,
+			imx_video_buffer_pool,
 			"both buffer pools are the same -> no need to transfer anything, intermediate and output buffer are the same, just unref intermediate buffer"
 		);
 
@@ -377,36 +377,36 @@ gboolean gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(GstImx2dVideoBuf
 
 	if (!gst_video_frame_map(
 		&intermediate_video_frame,
-		&(imx_2d_video_buffer_pool->intermediate_video_info),
+		&(imx_video_buffer_pool->intermediate_video_info),
 		intermediate_buffer,
 		GST_MAP_READ
 	))
 	{
-		GST_ERROR_OBJECT(imx_2d_video_buffer_pool, "could not map intermediate video frame");
+		GST_ERROR_OBJECT(imx_video_buffer_pool, "could not map intermediate video frame");
 		goto error;
 	}
 	intermediate_video_frame_mapped = TRUE;
 
 	if (!gst_video_frame_map(
 		&output_video_frame,
-		&(imx_2d_video_buffer_pool->output_video_info),
+		&(imx_video_buffer_pool->output_video_info),
 		output_buffer,
 		GST_MAP_WRITE
 	))
 	{
-		GST_ERROR_OBJECT(imx_2d_video_buffer_pool, "could not map output video frame");
+		GST_ERROR_OBJECT(imx_video_buffer_pool, "could not map output video frame");
 		goto error;
 	}
 	output_video_frame_mapped = TRUE;
 
 	if (!gst_video_frame_copy(&output_video_frame, &intermediate_video_frame))
 	{
-		GST_ERROR_OBJECT(imx_2d_video_buffer_pool, "could not copy pixels from intermediate buffer into output buffer");
+		GST_ERROR_OBJECT(imx_video_buffer_pool, "could not copy pixels from intermediate buffer into output buffer");
 		goto error;
 	}
 
 	GST_LOG_OBJECT(
-		imx_2d_video_buffer_pool,
+		imx_video_buffer_pool,
 		"copied pixels from intermediate buffer into output buffer"
 	);
 
@@ -426,15 +426,15 @@ error:
 }
 
 
-gboolean gst_imx_2d_video_buffer_pool_are_both_pools_same(GstImx2dVideoBufferPool *imx_2d_video_buffer_pool)
+gboolean gst_imx_video_buffer_pool_are_both_pools_same(GstImxVideoBufferPool *imx_video_buffer_pool)
 {
-	g_assert(imx_2d_video_buffer_pool != NULL);
-	return imx_2d_video_buffer_pool->both_pools_same;
+	g_assert(imx_video_buffer_pool != NULL);
+	return imx_video_buffer_pool->both_pools_same;
 }
 
 
-gboolean gst_imx_2d_video_buffer_pool_video_meta_supported(GstImx2dVideoBufferPool *imx_2d_video_buffer_pool)
+gboolean gst_imx_video_buffer_pool_video_meta_supported(GstImxVideoBufferPool *imx_video_buffer_pool)
 {
-	g_assert(imx_2d_video_buffer_pool != NULL);
-	return imx_2d_video_buffer_pool->video_meta_supported;
+	g_assert(imx_video_buffer_pool != NULL);
+	return imx_video_buffer_pool->video_meta_supported;
 }

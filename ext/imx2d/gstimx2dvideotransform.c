@@ -19,8 +19,8 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include "gst/imx/common/gstimxdmabufferallocator.h"
+#include "gst/imx/video/gstimxvideobufferpool.h"
 #include "gstimx2dvideotransform.h"
-#include "gstimx2dvideobufferpool.h"
 #include "gstimx2dmisc.h"
 
 
@@ -1409,11 +1409,13 @@ static gboolean gst_imx_2d_video_transform_decide_allocation(GstBaseTransform *t
 		self->video_buffer_pool = NULL;
 	}
 
-	self->video_buffer_pool = gst_imx_2d_video_buffer_pool_new(
+	self->video_buffer_pool = gst_imx_video_buffer_pool_new(
 		self->imx_dma_buffer_allocator,
 		query,
 		&(self->output_video_info)
 	);
+
+	gst_object_ref_sink(self->video_buffer_pool);
 
 	return (self->video_buffer_pool != NULL);
 }
@@ -1453,7 +1455,7 @@ static GstFlowReturn gst_imx_2d_video_transform_prepare_output_buffer(GstBaseTra
 	{
 		gboolean has_input_buffer = (input_buffer != NULL);
 		gboolean identity_video_direction = (video_direction == GST_VIDEO_ORIENTATION_IDENTITY);
-		gboolean are_both_pools_same = gst_imx_2d_video_buffer_pool_are_both_pools_same(self->video_buffer_pool);
+		gboolean are_both_pools_same = gst_imx_video_buffer_pool_are_both_pools_same(self->video_buffer_pool);
 
 		if (input_crop)
 		{
@@ -1572,7 +1574,7 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	 * it as the intermediate_buffer. All blitter operations are performed
 	 * on the intermediate_buffer. */
 
-	flow_ret = gst_imx_2d_video_buffer_pool_acquire_intermediate_buffer(self->video_buffer_pool, output_buffer, &intermediate_buffer);
+	flow_ret = gst_imx_video_buffer_pool_acquire_intermediate_buffer(self->video_buffer_pool, output_buffer, &intermediate_buffer);
 	if (G_UNLIKELY(flow_ret != GST_FLOW_OK))
 		goto error;
 
@@ -1663,9 +1665,9 @@ static GstFlowReturn gst_imx_2d_video_transform_transform_frame(GstBaseTransform
 	 * copied from intermediate_buffer to output_buffer. These two pools are
 	 * different if downstream can't handle video meta and the blitter requires
 	 * stride values / plane offsets that aren't tightly packed. See the
-	 * GstImx2dVideoBufferPool documentation for details. */
+	 * GstImxVideoBufferPool documentation for details. */
 
-	if (!gst_imx_2d_video_buffer_pool_transfer_to_output_buffer(self->video_buffer_pool, intermediate_buffer, output_buffer))
+	if (!gst_imx_video_buffer_pool_transfer_to_output_buffer(self->video_buffer_pool, intermediate_buffer, output_buffer))
 	{
 		GST_ERROR_OBJECT(self, "could not transfer intermediate buffer contents to output buffer");
 		goto error;
