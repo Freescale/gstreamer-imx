@@ -244,7 +244,7 @@ finish:
 	return memory;
 
 error:
-	if (!qdata_set)
+	if (!qdata_set && (imx_dma_buffer != NULL))
 		imx_dma_buffer_deallocate(imx_dma_buffer);
 
 	goto finish;
