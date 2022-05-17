@@ -16,7 +16,10 @@ option('sysroot', type : 'string', value : '', description : 'sysroot path (if e
 option('imx2d-videosink', type : 'boolean', value : true)
 option('imx2d-compositor', type : 'feature', value : 'auto')
 
-option('v4l2', type : 'boolean', value : true, description : 'build mxc_v4l2 specific V4L2 source and sink elements')
+option('v4l2', type : 'boolean', value : true, description : 'build mxc_v4l2 specific V4L2 source and sink elements (deprecated; use v4l2-mxc-source-sink instead)')
+option('v4l2-mxc-source-sink', type : 'boolean', value : true, description : 'build mxc_v4l2 specific V4L2 source and sink elements')
+option('v4l2-isi', type : 'boolean', value : true, description : 'build V4L2 ISI video transform element')
+option('v4l2-amphion', type : 'feature', value : 'auto', description : 'build Amphion Windsor/Malone V4L2 mem2mem based en/decoders (requires G2D; "auto" skips this if G2D is not available)')
 
 option('package-name', type : 'string', value : 'Unknown package name', yield : true, description : 'package name to use in plugins')
 option('package-origin', type : 'string', value : 'Unknown package origin', yield : true, description : 'package origin URL to use in plugins')
