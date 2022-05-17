@@ -153,6 +153,8 @@ typedef enum
 	/* Tiled layouts */
 	IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128,
 	IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128,
+	IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128_10BIT,
+	IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128_10BIT,
 
 	IMX_2D_NUM_PIXEL_FORMATS
 }
@@ -225,6 +227,10 @@ typedef struct _Imx2dPixelFormatInfo Imx2dPixelFormatInfo;
  *     (Unused in grayscale and RGB(A) formats.)
  * @y_subsampling: Subsampling in Y direction for chroma planes.
  *     (Unused in grayscale and RGB(A) formats.)
+ * @is_semi_planar: Nonzero if this is a semi-planar YUV format
+ *     (= one plane for Y, one for interleaved UV), zero otherwise.
+ * @is_tiled: Nonzero if this is a tiled format, zero if it is
+ *     a linear format.
  *
  * Information about a pixel format.
  */
@@ -235,6 +241,7 @@ struct _Imx2dPixelFormatInfo
 	int num_first_plane_bpp;
 	int x_subsampling, y_subsampling;
 	int is_semi_planar;
+	int is_tiled;
 };
 
 

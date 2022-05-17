@@ -44,8 +44,12 @@ static Imx2dPixelFormat const supported_source_pixel_formats[] =
 	IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_YV12,
 	IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_I420,
 
+#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
 	IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128,
-	IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128
+	IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128,
+	IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128_10BIT,
+	IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128_10BIT,
+#endif
 };
 
 
@@ -123,6 +127,9 @@ static BOOL get_g2d_format(Imx2dPixelFormat imx_2d_format, enum g2d_format *fmt)
 		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128: *fmt = G2D_NV12; break;
 		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128: *fmt = G2D_NV21; break;
 
+		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128_10BIT: *fmt = G2D_NV12; break;
+		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128_10BIT: *fmt = G2D_NV21; break;
+
 		default: ret = FALSE;
 	}
 
@@ -167,6 +174,7 @@ static BOOL fill_g2d_surface_info(struct g2d_surface *g2d_surface, Imx2dSurface 
 {
 	int i;
 	imx_physical_address_t physical_address;
+	ImxDmaBuffer *dma_buffer;
 	Imx2dPixelFormatInfo const *fmt_info;
 	Imx2dSurfaceDesc const *desc = imx_2d_surface_get_desc(imx_2d_surface);
 
@@ -184,13 +192,25 @@ static BOOL fill_g2d_surface_info(struct g2d_surface *g2d_surface, Imx2dSurface 
 		return FALSE;
 	}
 
-	g2d_surface->stride = desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
+	/* Calculate G2D stride, which is given in pixels (instead of bytes). desc->plane_strides
+	 * values are given in bytes. With some formats, it is possible that pixels do not fit exactly
+	 * within the desc->plane_strides bytes. For example, with a 10-bit Y plane, a stride of
+	 * 31 bytes will not be able to exactly fit the 10-bit Y values. 31 bytes equal 248 bits.
+	 * This fits at most 24 10-bit Y pixel values, which amounts to 240 bits. For this reason,
+	 * we have to round up the G2D stride value, otherwise, we won't account for these extra bits.
+	 *
+	 * This uses the classic integer rounding-up formula to round up to the next integer multiple
+	 * of a given step size:   y = (x + (step-1)) / step   (integer division)   */
+	g2d_surface->stride = (desc->plane_strides[0] * 8 + (fmt_info->num_first_plane_bpp - 1)) / fmt_info->num_first_plane_bpp;
 	g2d_surface->width = g2d_surface->stride;
 	g2d_surface->height = desc->height + desc->num_padding_rows;
 
 	for (i = 0; i < fmt_info->num_planes; ++i)
 	{
-		physical_address = imx_dma_buffer_get_physical_address(imx_2d_surface_get_dma_buffer(imx_2d_surface, i));
+		dma_buffer = imx_2d_surface_get_dma_buffer(imx_2d_surface, i);
+		assert(dma_buffer != NULL);
+
+		physical_address = imx_dma_buffer_get_physical_address(dma_buffer);
 		if (physical_address == 0)
 		{
 			IMX_2D_LOG(ERROR, "could not get physical address from DMA buffer");
@@ -231,6 +251,11 @@ static BOOL fill_g2d_surfaceEx_info(struct g2d_surfaceEx *g2d_surfaceEx, Imx2dSu
 		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128:
 		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128:
 			g2d_surfaceEx->tiling = G2D_AMPHION_TILED;
+			break;
+
+		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128_10BIT:
+		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128_10BIT:
+			g2d_surfaceEx->tiling = G2D_AMPHION_TILED_10BIT;
 			break;
 
 		default:
