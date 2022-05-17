@@ -97,7 +97,7 @@ GType gst_imx_video_buffer_pool_get_type(void);
 /**
  * gst_imx_video_buffer_pool_new:
  * @imx_dma_buffer_allocator: ImxDmaBuffer allocator to use for allocating gstbuffers.
- * @query: Allocation query to parse.
+ * @query: Allocation query to parse and set up.
  * @intermediate_video_info: Video info of the intermediate frames.
  *
  * Returns: (transfer floating) A new video buffer pool.
@@ -116,6 +116,9 @@ gboolean gst_imx_video_buffer_pool_transfer_to_output_buffer(GstImxVideoBufferPo
 
 gboolean gst_imx_video_buffer_pool_are_both_pools_same(GstImxVideoBufferPool *imx_video_buffer_pool);
 gboolean gst_imx_video_buffer_pool_video_meta_supported(GstImxVideoBufferPool *imx_video_buffer_pool);
+
+GstVideoInfo const * gst_imx_video_buffer_pool_get_intermediate_video_info(GstImxVideoBufferPool *imx_video_buffer_pool);
+GstVideoInfo const * gst_imx_video_buffer_pool_get_output_video_info(GstImxVideoBufferPool *imx_video_buffer_pool);
 
 
 G_END_DECLS

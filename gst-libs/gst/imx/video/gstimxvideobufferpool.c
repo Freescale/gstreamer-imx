@@ -438,3 +438,17 @@ gboolean gst_imx_video_buffer_pool_video_meta_supported(GstImxVideoBufferPool *i
 	g_assert(imx_video_buffer_pool != NULL);
 	return imx_video_buffer_pool->video_meta_supported;
 }
+
+
+GstVideoInfo const * gst_imx_video_buffer_pool_get_intermediate_video_info(GstImxVideoBufferPool *imx_video_buffer_pool)
+{
+	g_assert(imx_video_buffer_pool != NULL);
+	return &(imx_video_buffer_pool->intermediate_video_info);
+}
+
+
+GstVideoInfo const * gst_imx_video_buffer_pool_get_output_video_info(GstImxVideoBufferPool *imx_video_buffer_pool)
+{
+	g_assert(imx_video_buffer_pool != NULL);
+	return &(imx_video_buffer_pool->output_video_info);
+}
