@@ -468,16 +468,16 @@ GstMemory* gst_imx_dmabuf_allocator_wrap_dmabuf(GstAllocator *allocator, int dma
 
 	GST_OBJECT_LOCK(self);
 
+	if (!gst_imx_dmabuf_allocator_activate(self))
+		goto error;
+
 	physical_address = klass->get_physical_address(self, dmabuf_fd);
 	if (physical_address == 0)
 	{
 		GST_ERROR_OBJECT(self, "could not open get physical address for DMA-BUF FD %d", dmabuf_fd);
 		goto error;
 	}
-	GST_DEBUG_OBJECT(self, "got physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " from DMA-BUF buffer", physical_address);
-
-	if (!gst_imx_dmabuf_allocator_activate(self))
-		goto error;
+	GST_DEBUG_OBJECT(self, "got physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " for DMA-BUF buffer", physical_address);
 
 	wrapped_dma_buffer = g_malloc(sizeof(ImxWrappedDmaBuffer));
 	imx_dma_buffer_init_wrapped_buffer(wrapped_dma_buffer);
