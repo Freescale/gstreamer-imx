@@ -1,10 +1,12 @@
 source = [
 	'gstimxvideobufferpool.c',
+	'gstimxvideodmabufferpool.c',
 	'gstimxvideouploader.c',
 	'gstimxvideoutils.c'
 ]
 public_headers = [
 	'gstimxvideobufferpool.h',
+	'gstimxvideodmabufferpool.h',
 	'gstimxvideouploader.h',
 	'gstimxvideoutils.h'
 ]
