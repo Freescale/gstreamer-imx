@@ -471,7 +471,7 @@ GstMemory* gst_imx_dmabuf_allocator_wrap_dmabuf(GstAllocator *allocator, int dma
 	physical_address = klass->get_physical_address(self, dmabuf_fd);
 	if (physical_address == 0)
 	{
-		GST_ERROR_OBJECT(self, "could not open get physical address from dmabuf FD %d", dmabuf_fd);
+		GST_ERROR_OBJECT(self, "could not open get physical address for DMA-BUF FD %d", dmabuf_fd);
 		goto error;
 	}
 	GST_DEBUG_OBJECT(self, "got physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " from DMA-BUF buffer", physical_address);

@@ -55,6 +55,7 @@ struct _GstImxDmaBufAllocatorClass
 {
     GstDmaBufAllocatorClass parent_class;
 
+    /* NOTE: Acquire the GstObject lock before accessing these vmethods. */
     gboolean (*activate)(GstImxDmaBufAllocator *allocator);
     guintptr (*get_physical_address)(GstImxDmaBufAllocator *allocator, int dmabuf_fd);
     ImxDmaBufferAllocator* (*get_allocator)(GstImxDmaBufAllocator *allocator);
