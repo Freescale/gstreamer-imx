@@ -344,6 +344,8 @@ GstCaps* gst_imx_2d_get_caps_from_imx2d_capabilities_full(Imx2dHardwareCapabilit
 			g_value_set_string(&format_string_gvalue, format_str);
 			gst_value_list_append_and_take_value(&format_list_gvalue, &format_string_gvalue);
 		}
+		else
+			g_value_unset(&format_string_gvalue);
 	}
 
 	g_value_init(&width_range_gvalue, GST_TYPE_INT_RANGE);
