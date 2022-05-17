@@ -64,6 +64,19 @@ struct _GstImxDmaBufAllocatorClass
 GType gst_imx_dmabuf_allocator_get_type(void);
 
 /**
+ * gst_imx_dmabuf_allocator_get_physical_address:
+ * @allocator: Allocator to use.
+ * @dmabuf_fd: DMA-BUF FD to get a physical address from. Must be valid.
+ *
+ * Retrieves a physical address for the given DMA-BUF file descriptor.
+ *
+ * Returns: The physical address to the physically contiguous DMA memory
+ *          block represented by the DMA-BUF FD, or 0 if retrieving the
+ *          physical address fails.
+ */
+guintptr gst_imx_dmabuf_allocator_get_physical_address(GstImxDmaBufAllocator *allocator, int dmabuf_fd);
+
+/**
  * gst_imx_dmabuf_allocator_wrap_dmabuf:
  * @allocator: Allocator to use.
  * @dmabuf_fd: DMA-BUF FD to wrap. Must be valid.

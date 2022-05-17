@@ -425,6 +425,35 @@ static void gst_imx_dmabuf_allocator_mem_unmap_full(GstMemory *memory, G_GNUC_UN
 /**** Public functions ****/
 
 
+guintptr gst_imx_dmabuf_allocator_get_physical_address(GstImxDmaBufAllocator *allocator, int dmabuf_fd)
+{
+	GstImxDmaBufAllocator *self = GST_IMX_DMABUF_ALLOCATOR_CAST(allocator);
+	GstImxDmaBufAllocatorClass *klass = GST_IMX_DMABUF_ALLOCATOR_CLASS(G_OBJECT_GET_CLASS(self));
+
+	g_assert(dmabuf_fd > 0);
+	g_assert(klass->get_physical_address != NULL);
+
+	imx_physical_address_t physical_address = 0;
+
+	GST_OBJECT_LOCK(self);
+
+	if (!gst_imx_dmabuf_allocator_activate(self))
+		goto finish;
+
+	physical_address = klass->get_physical_address(self, dmabuf_fd);
+	if (physical_address == 0)
+	{
+		GST_ERROR_OBJECT(self, "could not open get physical address for DMA-BUF FD %d", dmabuf_fd);
+		goto finish;
+	}
+	GST_DEBUG_OBJECT(self, "got physical address %" IMX_PHYSICAL_ADDRESS_FORMAT " for DMA-BUF FD", physical_address);
+
+finish:
+	GST_OBJECT_UNLOCK(self);
+	return physical_address;
+}
+
+
 GstMemory* gst_imx_dmabuf_allocator_wrap_dmabuf(GstAllocator *allocator, int dmabuf_fd, gsize dmabuf_size)
 {
 	GstImxDmaBufAllocator *self = GST_IMX_DMABUF_ALLOCATOR(allocator);
