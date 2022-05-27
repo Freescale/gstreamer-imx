@@ -1615,7 +1615,6 @@ static gboolean gst_imx_v4l2_amphion_dec_handle_resolution_change(GstImxV4L2Amph
 
 			GST_VIDEO_INFO_PLANE_STRIDE(&(self->detiler_output_info), plane_nr) = aligned_stride;
 			GST_VIDEO_INFO_PLANE_OFFSET(&(self->detiler_output_info), plane_nr) = plane_offset;
-			plane_offset += aligned_num_rows * GST_VIDEO_INFO_PLANE_STRIDE(&(self->detiler_output_info), plane_nr);
 
 			GST_CAT_DEBUG_OBJECT(
 				imx_v4l2_amphion_dec_out_debug,
@@ -1629,6 +1628,8 @@ static gboolean gst_imx_v4l2_amphion_dec_handle_resolution_change(GstImxV4L2Amph
 				unaligned_stride, aligned_stride,
 				plane_offset
 			);
+
+			plane_offset += aligned_num_rows * GST_VIDEO_INFO_PLANE_STRIDE(&(self->detiler_output_info), plane_nr);
 		}
 
 		GST_VIDEO_INFO_SIZE(&(self->detiler_output_info)) = plane_offset;
@@ -1772,15 +1773,35 @@ static gboolean gst_imx_v4l2_amphion_dec_handle_resolution_change(GstImxV4L2Amph
 	{
 		self->tiled_surface_desc.width = detiler_input_width;
 		self->tiled_surface_desc.height = detiler_input_height;
-		self->tiled_surface_desc.num_padding_rows =//TODO check if we really need this
+		self->tiled_surface_desc.num_padding_rows =
 			self->v4l2_capture_buffer_format.fmt.pix_mp.plane_fmt[0].sizeimage /
-			self->v4l2_capture_buffer_format.fmt.pix_mp.plane_fmt[0].bytesperline;
+			self->v4l2_capture_buffer_format.fmt.pix_mp.plane_fmt[0].bytesperline - detiler_input_height;
 		self->tiled_surface_desc.format = (v4l2_pixelformat == V4L2_PIX_FMT_NV12)
 			? IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128
 			: IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128_10BIT;
 
+		GST_CAT_DEBUG_OBJECT(
+			imx_v4l2_amphion_dec_out_debug,
+			self,
+			"tiled imx2d surface desc:"
+			"  width x height: %d x %d  format: %s  num padding rows: %d",
+			self->tiled_surface_desc.width, self->tiled_surface_desc.height,
+			imx_2d_pixel_format_to_string(self->tiled_surface_desc.format),
+			self->tiled_surface_desc.num_padding_rows
+		);
+
 		for (plane_nr = 0; plane_nr < num_planes; ++plane_nr)
+		{
 			self->tiled_surface_desc.plane_strides[plane_nr] = self->v4l2_capture_buffer_format.fmt.pix_mp.plane_fmt[plane_nr].bytesperline;
+			GST_CAT_DEBUG_OBJECT(
+				imx_v4l2_amphion_dec_out_debug,
+				self,
+				"  plane %d/%d stride: %d",
+				plane_nr,
+				num_planes,
+				self->tiled_surface_desc.plane_strides[plane_nr]
+			);
+		}
 
 		imx_2d_surface_set_desc(self->tiled_surface, &(self->tiled_surface_desc));
 	}
@@ -1798,12 +1819,34 @@ static gboolean gst_imx_v4l2_amphion_dec_handle_resolution_change(GstImxV4L2Amph
 			self->detiled_surface_desc.num_padding_rows =
 				(GST_VIDEO_INFO_PLANE_OFFSET(detiler_output_info, 1) - GST_VIDEO_INFO_PLANE_OFFSET(detiler_output_info, 0))
 				/ GST_VIDEO_INFO_PLANE_STRIDE(detiler_output_info, 0);
+			self->detiled_surface_desc.num_padding_rows -= detiler_output_height;
+			g_assert(self->detiled_surface_desc.num_padding_rows >= 0);
 		}
 		else
 			self->detiled_surface_desc.num_padding_rows = 0;
 
+		GST_CAT_DEBUG_OBJECT(
+			imx_v4l2_amphion_dec_out_debug,
+			self,
+			"detiled imx2d surface desc:"
+			"  width x height: %d x %d  format: %s  num padding rows: %d",
+			self->detiled_surface_desc.width, self->detiled_surface_desc.height,
+			imx_2d_pixel_format_to_string(self->detiled_surface_desc.format),
+			self->detiled_surface_desc.num_padding_rows
+		);
+
 		for (plane_nr = 0; plane_nr < num_planes; ++plane_nr)
+		{
 			self->detiled_surface_desc.plane_strides[plane_nr] = GST_VIDEO_INFO_PLANE_STRIDE(detiler_output_info, plane_nr);
+			GST_CAT_DEBUG_OBJECT(
+				imx_v4l2_amphion_dec_out_debug,
+				self,
+				"  plane %d/%d stride: %d",
+				plane_nr,
+				num_planes,
+				self->detiled_surface_desc.plane_strides[plane_nr]
+			);
+		}
 
 		imx_2d_surface_set_desc(self->detiled_surface, &(self->detiled_surface_desc));
 	}
