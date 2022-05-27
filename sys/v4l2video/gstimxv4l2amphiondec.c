@@ -236,7 +236,13 @@ struct _GstImxV4L2AmphionDec
 	gboolean fatal_error_cannot_decode;
 
 	/* imx2d G2D blitter and surfaces, needed for detiling decoded frames,
-	 * since the Amphion Malone VPU only produces Amphion-tiled frames. */
+	 * since the Amphion Malone VPU only produces Amphion-tiled frames.
+	 * Note that the tiled surface exists as a multi-buffer frame (that is,
+	 * one DMA-BUF FD per plane), while the detiled surface exists as a
+	 * single-buffer plane (one DMA-BUF FD for the whole frame). This
+	 * is done because the Amphion VPU driver can only handle multi-buffer
+	 * frames, while some other gstreamer-imx elements as well as elements
+	 * from other packages can only handle single-buffer frames. */
 	Imx2dBlitter *g2d_blitter;
 	Imx2dSurface *tiled_surface;
 	Imx2dSurface *detiled_surface;
@@ -1981,10 +1987,6 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_skipped_frame(GstImxV4L2Am
 
 static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2AmphionDec *self)
 {
-	// TODO:
-	// add documentation that the imx2d blitter outputs single-memory gstbuffers
-	// even though the blitter input is per-plane memory
-
 	gint plane_nr;
 	struct v4l2_buffer buffer;
 	struct v4l2_plane planes[DEC_NUM_CAPTURE_BUFFER_PLANES];
@@ -2113,7 +2115,10 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 		);
 	}
 
-	/* Perform the detiling. */
+	/* Perform the detiling. As mentioned in the imx2d G2D blitter and surfaces
+	 * documentation at the top, the blitter input is of a multi-buffer frame
+	 * (= 1 DMA-BUF FD per plane), while the output is a single-buffer frame.
+	 * Consult that documentation for details why this is done. */
 
 	if (G_UNLIKELY(imx_2d_blitter_start(self->g2d_blitter, self->detiled_surface) == 0))
 	{
