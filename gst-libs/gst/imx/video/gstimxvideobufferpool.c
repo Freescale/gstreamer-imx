@@ -363,6 +363,23 @@ gboolean gst_imx_video_buffer_pool_transfer_to_output_buffer(GstImxVideoBufferPo
 
 	if (imx_video_buffer_pool->both_pools_same)
 	{
+		if (imx_video_buffer_pool->video_meta_supported)
+		{
+			guint plane_nr;
+			GstVideoMeta *videometa;
+			GstVideoInfo *intermediate_video_info = &(imx_video_buffer_pool->intermediate_video_info);
+
+			videometa = gst_buffer_get_video_meta(intermediate_buffer);
+			g_assert(videometa != NULL);
+			g_assert(videometa->n_planes == GST_VIDEO_INFO_N_PLANES(intermediate_video_info));
+
+			for (plane_nr = 0; plane_nr < videometa->n_planes; ++plane_nr)
+			{
+				videometa->stride[plane_nr] = GST_VIDEO_INFO_PLANE_STRIDE(intermediate_video_info, plane_nr);
+				videometa->offset[plane_nr] = GST_VIDEO_INFO_PLANE_OFFSET(intermediate_video_info, plane_nr);
+			}
+		}
+
 		GST_LOG_OBJECT(
 			imx_video_buffer_pool,
 			"both buffer pools are the same -> no need to transfer anything, intermediate and output buffer are the same, just unref intermediate buffer"

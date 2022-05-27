@@ -297,7 +297,7 @@ GstCaps* gst_imx_v4l2_amphion_get_caps_for_format(guint32 v4l2_pixelformat)
 				g_value_set_static_string(&string_value, "main");
 				gst_value_list_append_value(&list_value, &string_value);
 
-				g_value_set_static_string(&string_value, "main10");
+				g_value_set_static_string(&string_value, "main-10");
 				gst_value_list_append_value(&list_value, &string_value);
 
 				gst_structure_set_value(structure, "profile", &list_value);
