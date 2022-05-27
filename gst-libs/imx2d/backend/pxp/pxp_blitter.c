@@ -198,9 +198,10 @@ static int imx_2d_backend_pxp_blitter_start(Imx2dBlitter *blitter)
 	/* The width & height parameters are set to values that include the
 	 * padding columns and rows. The drect rectangle then defines the
 	 * region inside the frame where the actual pixels are drawn to. */
-	out_param->width = dest_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
+	/* The PxP expects the stride in pixels, not bytes. Perform a bytes->pixels conversion. */
+	out_param->width = dest_surface_desc->plane_strides[0] / fmt_info->pixel_stride;
 	out_param->height = dest_surface_desc->height + dest_surface_desc->num_padding_rows;
-	out_param->stride = dest_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
+	out_param->stride = dest_surface_desc->plane_strides[0] / fmt_info->pixel_stride;
 
 	out_param->paddr = (dma_addr_t)(phys_address);
 
@@ -271,9 +272,10 @@ static int imx_2d_backend_pxp_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	/* The width & height parameters are set to values that include the
 	 * padding columns and rows. The srect rectangle then defines the
 	 * region inside the frame where the actual pixels are drawn from. */
-	src_param->width = src_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
+	/* The PxP expects the stride in pixels, not bytes. Perform a bytes->pixels conversion. */
+	src_param->width = src_surface_desc->plane_strides[0] / fmt_info->pixel_stride;
 	src_param->height = src_surface_desc->height + src_surface_desc->num_padding_rows;
-	src_param->stride = src_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
+	src_param->stride = src_surface_desc->plane_strides[0] / fmt_info->pixel_stride;
 	src_param->paddr = (dma_addr_t)(phys_address);
 	pconf->proc_data.srect.left = source_region->x1;
 	pconf->proc_data.srect.top = source_region->y1;

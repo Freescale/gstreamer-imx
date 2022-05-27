@@ -219,10 +219,11 @@ static int imx_2d_backend_ipu_blitter_start(Imx2dBlitter *blitter)
 
 	/* Set up the output width/height of main_task. The output width & height
 	 * contain the width & height _and_ any existing additional padding
-	 * rows & columns. The latter are excluded later when setting the
-	 * output crop rectangle. */
+	 * rows & columns (so, the width is actually the stride). The padding
+	 * rows and columns are excluded later when setting the output crop rectangle. */
 	memset(&(ipu_blitter->main_task), 0, sizeof(struct ipu_task));
-	ipu_blitter->main_task.output.width = dest_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
+	/* The IPU expects the stride in pixels, not bytes. Perform a bytes->pixels conversion. */
+	ipu_blitter->main_task.output.width = dest_surface_desc->plane_strides[0] / fmt_info->pixel_stride;
 	ipu_blitter->main_task.output.height = dest_surface_desc->height + dest_surface_desc->num_padding_rows;
 
 	ipu_blitter->main_task.output.paddr = (dma_addr_t)(phys_address);
@@ -313,10 +314,11 @@ static int imx_2d_backend_ipu_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 
 	/* Set up the input width/height of main_task. The input width & height
 	 * contain the width & height _and_ any existing additional padding
-	 * rows & columns. The latter are excluded later when setting the
-	 * input crop rectangle. */
+	 * rows & columns (so, the width is actually the stride). The padding
+	 * rows and columns are excluded later when setting the input crop rectangle. */
 	memset(&(ipu_blitter->main_task.input), 0, sizeof(struct ipu_input));
-	ipu_blitter->main_task.input.width = src_surface_desc->plane_strides[0] * 8 / fmt_info->num_first_plane_bpp;
+	/* The IPU expects the stride in pixels, not bytes. Perform a bytes->pixels conversion. */
+	ipu_blitter->main_task.input.width = src_surface_desc->plane_strides[0] / fmt_info->pixel_stride;
 	ipu_blitter->main_task.input.height = src_surface_desc->height + src_surface_desc->num_padding_rows;
 
 	ipu_blitter->main_task.input.paddr = (dma_addr_t)(phys_address);

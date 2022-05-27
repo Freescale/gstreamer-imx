@@ -220,9 +220,8 @@ typedef struct _Imx2dPixelFormatInfo Imx2dPixelFormatInfo;
  * @description: Human-readable description for this pixel format.
  * @num_planes: Number of planes in a frame with this format.
  *     Maximum number is 3.
- * @num_first_plane_bpp: Bits per pixel in the first plane. (BPP
- *     of other planes are not necessary, since in multiplanar
- *     formats, the BPP of all planes are the same.)
+ * @pixel_stride: How many bytes to go further in a pixel row until
+ *     the next pixel begins. Must be at least 1.
  * @x_subsampling: Subsampling in X direction for chroma planes.
  *     (Unused in grayscale and RGB(A) formats.)
  * @y_subsampling: Subsampling in Y direction for chroma planes.
@@ -238,7 +237,7 @@ struct _Imx2dPixelFormatInfo
 {
 	char const *description;
 	int num_planes;
-	int num_first_plane_bpp;
+	int pixel_stride;
 	int x_subsampling, y_subsampling;
 	int is_semi_planar;
 	int is_tiled;

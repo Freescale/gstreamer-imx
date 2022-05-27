@@ -192,16 +192,8 @@ static BOOL fill_g2d_surface_info(struct g2d_surface *g2d_surface, Imx2dSurface 
 		return FALSE;
 	}
 
-	/* Calculate G2D stride, which is given in pixels (instead of bytes). desc->plane_strides
-	 * values are given in bytes. With some formats, it is possible that pixels do not fit exactly
-	 * within the desc->plane_strides bytes. For example, with a 10-bit Y plane, a stride of
-	 * 31 bytes will not be able to exactly fit the 10-bit Y values. 31 bytes equal 248 bits.
-	 * This fits at most 24 10-bit Y pixel values, which amounts to 240 bits. For this reason,
-	 * we have to round up the G2D stride value, otherwise, we won't account for these extra bits.
-	 *
-	 * This uses the classic integer rounding-up formula to round up to the next integer multiple
-	 * of a given step size:   y = (x + (step-1)) / step   (integer division)   */
-	g2d_surface->stride = (desc->plane_strides[0] * 8 + (fmt_info->num_first_plane_bpp - 1)) / fmt_info->num_first_plane_bpp;
+	/* G2D expects the stride in pixels, not bytes. Perform a bytes->pixels conversion. */
+	g2d_surface->stride = desc->plane_strides[0] / fmt_info->pixel_stride;
 	g2d_surface->width = g2d_surface->stride;
 	g2d_surface->height = desc->height + desc->num_padding_rows;
 
