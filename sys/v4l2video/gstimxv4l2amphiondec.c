@@ -951,7 +951,6 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 		buffer.length = 1;
 		buffer.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 		buffer.memory = V4L2_MEMORY_MMAP;
-		// TODO: set timestamp to -1 ?
 
 		if (ioctl(self->v4l2_fd, VIDIOC_DQBUF, &buffer) < 0)
 		{
@@ -993,6 +992,13 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 
 
 	buffer.m.planes[0].bytesused = encoded_data_map_info.size;
+	if (GST_BUFFER_PTS_IS_VALID(cur_frame->input_buffer))
+	{
+		GstClockTime timestamp = GST_BUFFER_PTS(cur_frame->input_buffer);
+		GST_TIME_TO_TIMEVAL(timestamp, buffer.timestamp);
+	}
+	else
+		buffer.timestamp.tv_sec = -1;
 
 
 	/* Copy the encoded data into the output buffer. */
@@ -1684,6 +1690,7 @@ static gboolean gst_imx_v4l2_amphion_dec_handle_resolution_change(GstImxV4L2Amph
 		capture_buffer_item->buffer.index = i;
 		capture_buffer_item->buffer.m.planes = capture_buffer_item->planes;
 		capture_buffer_item->buffer.length = DEC_NUM_CAPTURE_BUFFER_PLANES;
+		capture_buffer_item->buffer.timestamp.tv_sec = -1;
 
 		if (ioctl(self->v4l2_fd, VIDIOC_QUERYBUF, &(capture_buffer_item->buffer)) < 0)
 		{
