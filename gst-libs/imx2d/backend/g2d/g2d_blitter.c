@@ -393,6 +393,15 @@ static int imx_2d_backend_g2d_blitter_start(Imx2dBlitter *blitter)
 
 static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 {
+#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+	/* When G2D is emulated on top of the DPU, g2d_finish() is
+	 * called after every blit. And, we can't call g2d_close()
+	 * here, because the DPU-emulated version of that function
+	 * is slow. (It is called in destroy().) So, when the
+	 * DPU-based emulation is used, do nothing here. */
+	IMX_2D_UNUSED_PARAM(blitter);
+	return TRUE;
+#else
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
 	int ret;
 
@@ -400,12 +409,11 @@ static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 
 	ret = (g2d_finish(g2d_blitter->g2d_handle) == 0);
 
-#ifndef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
 	if (g2d_close(g2d_blitter->g2d_handle) != 0)
 		IMX_2D_LOG(ERROR, "closing g2d device failed");
-#endif
 
 	return ret;
+#endif
 }
 
 
@@ -613,6 +621,14 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 
 	if (do_alpha)
 		g2d_disable(g2d_blitter->g2d_handle, G2D_BLEND);
+
+#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+	/* When G2D is emulated on top of the DPU, this must be called
+	 * after every blit. Otherwise, the next blit operation may
+	 * take place before the last one finished, causing visible
+	 * flickering and other frame corruptions. */
+	g2d_finish(g2d_blitter->g2d_handle);
+#endif
 
 	if (g2d_ret != 0)
 	{

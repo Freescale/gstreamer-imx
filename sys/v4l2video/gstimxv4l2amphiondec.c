@@ -185,10 +185,15 @@ struct _GstImxV4L2AmphionDec
 
 	/*< private >*/
 
-	/* Last flow return value of a decoder loop run. If this is not set
-	 * to GST_FLOW_OK, handle_frame must stop and return this value, since
-	 * then this indicates that something went wrong in the decoder loop. */
-	GstFlowReturn decoded_loop_flow_ret;
+	/* The flow error that was reported in the last decoder loop run.
+	 * GST_FLOW_OK indicates that no error happened. Any other value
+	 * implies that the decoder loop srcpad task is paused.
+	 * The recipient of these errors is handle_frame(). That function
+	 * reads the current value of this field, then sets it back to
+	 * GST_FLOW_OK. Afterwards, if the field contained a non-OK value,
+	 * handle_frame() exits immediately, returning that flow error.
+	 * start() and flush() reset this field to GST_FLOW_OK. */
+	GstFlowReturn decoder_loop_flow_error;
 
 	/* File descriptor for the V4L2 device. Opened in set_format(). */
 	int v4l2_fd;
@@ -231,7 +236,13 @@ struct _GstImxV4L2AmphionDec
 	gboolean fatal_error_cannot_decode;
 
 	/* imx2d G2D blitter and surfaces, needed for detiling decoded frames,
-	 * since the Amphion Malone VPU only produces Amphion-tiled frames. */
+	 * since the Amphion Malone VPU only produces Amphion-tiled frames.
+	 * Note that the tiled surface exists as a multi-buffer frame (that is,
+	 * one DMA-BUF FD per plane), while the detiled surface exists as a
+	 * single-buffer plane (one DMA-BUF FD for the whole frame). This
+	 * is done because the Amphion VPU driver can only handle multi-buffer
+	 * frames, while some other gstreamer-imx elements as well as elements
+	 * from other packages can only handle single-buffer frames. */
 	Imx2dBlitter *g2d_blitter;
 	Imx2dSurface *tiled_surface;
 	Imx2dSurface *detiled_surface;
@@ -376,7 +387,7 @@ static void gst_imx_v4l2_amphion_dec_class_init(GstImxV4L2AmphionDecClass *klass
 
 static void gst_imx_v4l2_amphion_dec_init(GstImxV4L2AmphionDec *self)
 {
-	self->decoded_loop_flow_ret = GST_FLOW_OK;
+	self->decoder_loop_flow_error = GST_FLOW_OK;
 
 	self->v4l2_fd = -1;
 
@@ -455,7 +466,7 @@ static gboolean gst_imx_v4l2_amphion_dec_start(GstVideoDecoder *decoder)
 
 	self->fatal_error_cannot_decode = FALSE;
 
-	self->decoded_loop_flow_ret = GST_FLOW_OK;
+	self->decoder_loop_flow_error = GST_FLOW_OK;
 
 	self->imx_dma_buffer_allocator = gst_imx_dmabuf_allocator_new();
 
@@ -864,7 +875,7 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 	GstMapInfo encoded_data_map_info;
 	gint poll_errno = 0;
 	gboolean input_buffer_mapped = FALSE;
-	GstFlowReturn decoded_loop_flow_ret;
+	GstFlowReturn decoder_loop_flow_error = GST_FLOW_OK;
 
 	if (G_UNLIKELY(self->v4l2_fd < 0))
 	{
@@ -873,9 +884,11 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 	}
 
 	GST_OBJECT_LOCK(self);
-	decoded_loop_flow_ret = self->decoded_loop_flow_ret;
-	// TODO evaluate if this is needed
-	self->decoded_loop_flow_ret = GST_FLOW_OK;
+	/* Retrieve the last reported decoder loop flow error (if any).
+	 * Reset the decoder_loop_flow_error field afterwards, otherwise
+	 * we'd handle the same flow error more than once. */
+	decoder_loop_flow_error = self->decoder_loop_flow_error;
+	self->decoder_loop_flow_error = GST_FLOW_OK;
 	GST_OBJECT_UNLOCK(self);
 
 	if (G_UNLIKELY(self->fatal_error_cannot_decode))
@@ -884,13 +897,13 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 		goto error;
 	}
 
-	if (G_UNLIKELY(decoded_loop_flow_ret != GST_FLOW_OK))
+	if (G_UNLIKELY(decoder_loop_flow_error != GST_FLOW_OK))
 	{
-		GST_DEBUG_OBJECT(self, "aborting handle_frame call; decoder output loop reported flow return value %s", gst_flow_get_name(decoded_loop_flow_ret));
+		GST_DEBUG_OBJECT(self, "aborting handle_frame call; decoder output loop reported flow return value %s", gst_flow_get_name(decoder_loop_flow_error));
 		// TODO is this really necessary?
-		if (decoded_loop_flow_ret == GST_FLOW_FLUSHING)
-			decoded_loop_flow_ret = GST_FLOW_OK;
-		flow_ret = decoded_loop_flow_ret;
+		if (decoder_loop_flow_error == GST_FLOW_FLUSHING)
+			decoder_loop_flow_error = GST_FLOW_OK;
+		flow_ret = decoder_loop_flow_error;
 		goto finish;
 	}
 
@@ -1102,6 +1115,9 @@ static gboolean gst_imx_v4l2_amphion_dec_flush(GstVideoDecoder *decoder)
 	// TODO: sync access to the capture_stream_was_enabled variable
 	capture_stream_was_enabled = self->v4l2_capture_stream_enabled;
 
+	/* Reset this. Otherwise, the next handle_frame call may incorrectly exit early. */
+	self->decoder_loop_flow_error = GST_FLOW_OK;
+
 	GST_DEBUG_OBJECT(self, "flush VPU decoder by disabling running V4L2 streams");
 	gst_imx_v4l2_amphion_dec_enable_stream(self, FALSE, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	gst_imx_v4l2_amphion_dec_enable_stream(self, FALSE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
@@ -1130,10 +1146,10 @@ static gboolean gst_imx_v4l2_amphion_dec_flush(GstVideoDecoder *decoder)
 		}
 	}
 
-	GST_DEBUG_OBJECT(self, "flush done");
-
 	if (capture_stream_was_enabled)
 		gst_imx_v4l2_amphion_dec_enable_stream(self, TRUE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+
+	GST_DEBUG_OBJECT(self, "flush done");
 
 	return TRUE;
 
@@ -1504,8 +1520,9 @@ static void gst_imx_v4l2_amphion_dec_decoder_output_loop(GstImxV4L2AmphionDec *s
 finish:
 	if (flow_ret != GST_FLOW_OK)
 	{
+		/* Report a non-OK flow return value back to the handle_frame() function. */
 		GST_OBJECT_LOCK(self);
-		self->decoded_loop_flow_ret = flow_ret;
+		self->decoder_loop_flow_error = flow_ret;
 		GST_OBJECT_UNLOCK(self);
 
 		gst_pad_pause_task(decoder->srcpad);				
@@ -1970,10 +1987,6 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_skipped_frame(GstImxV4L2Am
 
 static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2AmphionDec *self)
 {
-	// TODO:
-	// add documentation that the imx2d blitter outputs single-memory gstbuffers
-	// even though the blitter input is per-plane memory
-
 	gint plane_nr;
 	struct v4l2_buffer buffer;
 	struct v4l2_plane planes[DEC_NUM_CAPTURE_BUFFER_PLANES];
@@ -2102,7 +2115,10 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 		);
 	}
 
-	/* Perform the detiling. */
+	/* Perform the detiling. As mentioned in the imx2d G2D blitter and surfaces
+	 * documentation at the top, the blitter input is of a multi-buffer frame
+	 * (= 1 DMA-BUF FD per plane), while the output is a single-buffer frame.
+	 * Consult that documentation for details why this is done. */
 
 	if (G_UNLIKELY(imx_2d_blitter_start(self->g2d_blitter, self->detiled_surface) == 0))
 	{
