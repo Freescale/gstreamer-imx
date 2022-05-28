@@ -279,10 +279,6 @@ struct _GstImxV4L2AmphionDec
 	 * (requested with the VIDIOC_S_FMT ioctl), so we store the actual format here. */
 	struct v4l2_format v4l2_output_buffer_format;
 
-	/* Size in bytes of one V4L2 output buffer. This needs to be
-	 * passed to mmap() when writing encoded data to such a buffer. */
-	int v4l2_output_buffer_size;
-
 	/* How many of the output buffers have been pushed into the output queue
 	 * with the VIDIOC_QBUF ioctl and haven't yet been dequeued again. */
 	int num_v4l2_output_buffers_in_queue;
@@ -412,7 +408,6 @@ static void gst_imx_v4l2_amphion_dec_init(GstImxV4L2AmphionDec *self)
 	self->v4l2_output_buffer_items = NULL;
 	self->num_v4l2_output_buffers = 0;
 	self->v4l2_output_stream_enabled = FALSE;
-	self->v4l2_output_buffer_size = 0;
 	self->num_v4l2_output_buffers_in_queue = 0;
 
 	self->v4l2_capture_queue_poll = NULL;
@@ -583,6 +578,7 @@ static gboolean gst_imx_v4l2_amphion_dec_set_format(GstVideoDecoder *decoder, Gs
 	GstCaps *allowed_srccaps = NULL;
 	gboolean ret = TRUE;
 	gint i;
+	gint v4l2_actual_output_buffer_size;
 
 	supported_format_details = (GstImxV4L2AmphionDecSupportedFormatDetails const *)g_type_get_qdata(G_OBJECT_CLASS_TYPE(klass), gst_imx_v4l2_amphion_dec_format_details_quark());
 
@@ -716,12 +712,12 @@ static gboolean gst_imx_v4l2_amphion_dec_set_format(GstVideoDecoder *decoder, Gs
 
 	/* The driver may adjust the size of the output buffers. Retrieve
 	 * the sizeimage value (which contains what the driver picked). */
-	self->v4l2_output_buffer_size = requested_output_buffer_format.fmt.pix_mp.plane_fmt[0].sizeimage;
+	v4l2_actual_output_buffer_size = requested_output_buffer_format.fmt.pix_mp.plane_fmt[0].sizeimage;
 	GST_DEBUG_OBJECT(
 		self,
 		"V4L2 output buffer size in bytes:  requested: %d  actual: %d",
 		DEC_REQUESTED_OUTPUT_BUFFER_SIZE,
-		self->v4l2_output_buffer_size
+		v4l2_actual_output_buffer_size
 	);
 
 	/* Finished setting the format. Make a copy for later use. */
@@ -987,8 +983,6 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 		goto error;
 	}
 
-	// TODO: compare this with v4l2_output_buffer_size. If they
-	// are equal, remove v4l2_output_buffer_size as a decoder field.
 	available_space_for_encoded_data = buffer.m.planes[0].length;
 
 	/* Sanity check. This should never happen. */
