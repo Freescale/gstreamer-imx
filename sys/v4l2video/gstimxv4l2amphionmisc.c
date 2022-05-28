@@ -309,7 +309,7 @@ GstCaps* gst_imx_v4l2_amphion_get_caps_for_format(guint32 v4l2_pixelformat)
 			break;
 		}
 
-		case V4L2_PIX_FMT_VC1_ANNEX_L:
+		case V4L2_PIX_FMT_VC1_ANNEX_G:
 			structure = gst_structure_new(
 				"video/x-wmv",
 				"wmvversion", G_TYPE_INT, 3,
@@ -318,7 +318,7 @@ GstCaps* gst_imx_v4l2_amphion_get_caps_for_format(guint32 v4l2_pixelformat)
 			);
 			break;
 
-		case V4L2_PIX_FMT_VC1_ANNEX_G:
+		case V4L2_PIX_FMT_VC1_ANNEX_L:
 			structure = gst_structure_new(
 				"video/x-wmv",
 				"wmvversion", G_TYPE_INT, 3,
