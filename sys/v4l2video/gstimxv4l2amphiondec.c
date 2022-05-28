@@ -198,18 +198,22 @@ struct _GstImxV4L2AmphionDec
 	/* File descriptor for the V4L2 device. Opened in set_format(). */
 	int v4l2_fd;
 
-	/* Out-of-band codec data along with mapping information.
-	 * See the code in set_format() for details. */
-	// TODO: This is currently unused.
-	GstBuffer *codec_data;
-	GstMapInfo codecdata_map_info;
-	gboolean codec_data_is_mapped;
-
 	/* Input and output video codec states. The input state is
 	 * set in set_format(). The output state is set when the
 	 * V4L2_EVENT_SOURCE_CHANGE event is observed. */ 
 	GstVideoCodecState *input_state;
 	GstVideoCodecState *output_state;
+
+	/* If set to true, then the contents of the input_state's codec_data
+	 * buffer got pushed already. This flag is initially false. The codec
+	 * data is pushed before any other data the first time handle_frame()
+	 * is called. This is done by passing the codec data as if it were
+	 * part of the encoded bitstream, since V4L2 does not have a dedicated
+	 * API for out-of-band codec data. */
+	gboolean codec_data_pushed;
+	/* Size of the out-of-band codec data, in bytes. If this is 0, then
+	 * there is no codec data. */
+	gsize codec_data_size;
 
 	/* If set to true, frame reordering is enabled. This is set
 	 * in set_format and depends on the return value of the
@@ -387,11 +391,11 @@ static void gst_imx_v4l2_amphion_dec_init(GstImxV4L2AmphionDec *self)
 
 	self->v4l2_fd = -1;
 
-	self->codec_data = NULL;
-	self->codec_data_is_mapped = FALSE;
-
 	self->input_state = NULL;
 	self->output_state = NULL;
+
+	self->codec_data_pushed = FALSE;
+	self->codec_data_size = 0;
 
 	self->use_frame_reordering = FALSE;
 
@@ -593,6 +597,16 @@ static gboolean gst_imx_v4l2_amphion_dec_set_format(GstVideoDecoder *decoder, Gs
 	self->use_frame_reordering = (klass->is_frame_reordering_required == NULL)
 		                       || klass->is_frame_reordering_required(gst_caps_get_structure(state->caps, 0));
 	GST_DEBUG_OBJECT(self, "using frame reordering: %d", self->use_frame_reordering);
+
+	GST_DEBUG_OBJECT(self, "requires out-of-band codec data: %d", klass->requires_codec_data);
+	if (klass->requires_codec_data)
+	{
+		g_assert(state->codec_data != NULL);
+		self->codec_data_size = gst_buffer_get_size(state->codec_data);
+		GST_DEBUG_OBJECT(self, "out-of-band codec data is used (size: %" G_GSIZE_FORMAT ")", self->codec_data_size);
+	}
+	else
+		GST_DEBUG_OBJECT(self, "out-of-band codec data is not used");
 
 	/* Get the caps that downstream allows so we can decide
 	 * what format to use for the decoded and detiled output. */
@@ -867,7 +881,7 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 	struct v4l2_plane plane;
 	struct v4l2_buffer buffer;
 	int available_space_for_encoded_data;
-	void *mapped_v4l2_buffer_data = NULL;
+	int size_of_data_to_push;
 	GstMapInfo encoded_data_map_info;
 	gint poll_errno = 0;
 	gboolean input_buffer_mapped = FALSE;
@@ -984,21 +998,22 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 	}
 
 	available_space_for_encoded_data = buffer.m.planes[0].length;
+	size_of_data_to_push = encoded_data_map_info.size + self->codec_data_size;
 
 	/* Sanity check. This should never happen. */
-	if ((int)(encoded_data_map_info.size) > available_space_for_encoded_data)
+	if (size_of_data_to_push > available_space_for_encoded_data)
 	{
 		GST_ERROR_OBJECT(
 			self,
-			"encoded frame size %" G_GSIZE_FORMAT " exceeds available space for encoded data %d",
-			encoded_data_map_info.size,
+			"size of data to push %d exceeds available space for encoded data %d",
+			size_of_data_to_push,
 			available_space_for_encoded_data
 		);
 		goto error;
 	}
 
 
-	buffer.m.planes[0].bytesused = encoded_data_map_info.size;
+	buffer.m.planes[0].bytesused = size_of_data_to_push;
 	if (GST_BUFFER_PTS_IS_VALID(cur_frame->input_buffer))
 	{
 		GstClockTime timestamp = GST_BUFFER_PTS(cur_frame->input_buffer);
@@ -1010,21 +1025,37 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 
 	/* Copy the encoded data into the output buffer. */
 
-	mapped_v4l2_buffer_data = mmap(
-		NULL,
-		available_space_for_encoded_data,
-		PROT_READ | PROT_WRITE,
-		MAP_SHARED,
-		self->v4l2_fd,
-		buffer.m.planes[0].m.mem_offset
-	);
-	if (mapped_v4l2_buffer_data == MAP_FAILED)
 	{
-		GST_ERROR_OBJECT(self, "could not map V4L2 output buffer: %s (%d)", strerror(errno), errno);
-		goto error;
+		int offset = 0;
+		guint8 *mapped_v4l2_buffer_data = NULL;
+
+		mapped_v4l2_buffer_data = mmap(
+			NULL,
+			available_space_for_encoded_data,
+			PROT_READ | PROT_WRITE,
+			MAP_SHARED,
+			self->v4l2_fd,
+			buffer.m.planes[0].m.mem_offset
+		);
+		if (mapped_v4l2_buffer_data == MAP_FAILED)
+		{
+			GST_ERROR_OBJECT(self, "could not map V4L2 output buffer: %s (%d)", strerror(errno), errno);
+			goto error;
+		}
+
+		if ((self->codec_data_size > 0) && !(self->codec_data_pushed))
+		{
+			GST_DEBUG_OBJECT(self, "prepending out-of-band codec data (%" G_GSIZE_FORMAT " byte(s))", self->codec_data_size);
+
+			gst_buffer_extract(self->input_state->codec_data, 0, mapped_v4l2_buffer_data, self->codec_data_size);
+			offset += self->codec_data_size;
+			self->codec_data_pushed = TRUE;
+		}
+
+		memcpy(mapped_v4l2_buffer_data + offset, encoded_data_map_info.data, encoded_data_map_info.size);
+
+		munmap(mapped_v4l2_buffer_data, available_space_for_encoded_data);
 	}
-	memcpy(mapped_v4l2_buffer_data, encoded_data_map_info.data, encoded_data_map_info.size);
-	munmap(mapped_v4l2_buffer_data, available_space_for_encoded_data);
 
 
 	/* Finally, queue the buffer. */
@@ -1382,15 +1413,6 @@ static void gst_imx_v4l2_amphion_dec_cleanup_decoding_resources(GstImxV4L2Amphio
 
 	self->num_v4l2_output_buffers_in_queue = 0;
 
-	if (self->codec_data_is_mapped)
-	{
-		g_assert(self->codec_data != NULL);
-		gst_buffer_unmap(self->codec_data, &(self->codecdata_map_info));
-		self->codec_data_is_mapped = FALSE;
-	}
-
-	gst_buffer_replace(&(self->codec_data), NULL);
-
 	if (self->input_state != NULL)
 	{
 		gst_video_codec_state_unref(self->input_state);
@@ -1402,6 +1424,9 @@ static void gst_imx_v4l2_amphion_dec_cleanup_decoding_resources(GstImxV4L2Amphio
 		gst_video_codec_state_unref(self->output_state);
 		self->output_state = NULL;
 	}
+
+	self->codec_data_pushed = FALSE;
+	self->codec_data_size = 0;
 
 	if (self->video_buffer_pool != NULL)
 	{
