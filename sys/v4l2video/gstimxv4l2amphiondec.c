@@ -138,7 +138,7 @@ static gboolean frame_reordering_required_always(G_GNUC_UNUSED GstStructure *for
 
 static gboolean frame_reordering_required_never(G_GNUC_UNUSED GstStructure *format)
 {
-	return TRUE;
+	return FALSE;
 }
 
 static gboolean h264_is_frame_reordering_required(GstStructure *format)
@@ -2233,9 +2233,9 @@ error:
 static GstImxV4L2AmphionDecSupportedFormatDetails const gst_imx_v4l2_amphion_dec_supported_format_details[] =
 {
 	{ "jpeg",    "Jpeg",      "JPEG",                                              V4L2_PIX_FMT_MJPEG,       FALSE, frame_reordering_required_never   },
-	{ "mpeg2",   "Mpeg2",     "MPEG-1 & 2",                                        V4L2_PIX_FMT_MPEG2,       TRUE,  frame_reordering_required_never   },
+	{ "mpeg2",   "Mpeg2",     "MPEG-1 & 2",                                        V4L2_PIX_FMT_MPEG2,       TRUE,  frame_reordering_required_always  },
 	{ "mpeg4",   "Mpeg4",     "MPEG-4",                                            V4L2_PIX_FMT_MPEG4,       TRUE,  frame_reordering_required_always  },
-	{ "h263",    "H263",      "h.263",                                             V4L2_PIX_FMT_H263,        FALSE, frame_reordering_required_never   },
+	{ "h263",    "H263",      "h.263",                                             V4L2_PIX_FMT_H263,        FALSE, frame_reordering_required_always  },
 	{ "h264",    "H264",      "h.264 / AVC",                                       V4L2_PIX_FMT_H264,        FALSE, h264_is_frame_reordering_required },
 	{ "h265",    "H265",      "h.265 / HEVC",                                      V4L2_PIX_FMT_HEVC,        FALSE, frame_reordering_required_always  },
 	{ "wmv3",    "Wmv3",      "WMV3 / Window Media Video 9 / VC-1 simple profile", V4L2_PIX_FMT_VC1_ANNEX_L, TRUE,  frame_reordering_required_never   },
@@ -2245,7 +2245,7 @@ static GstImxV4L2AmphionDecSupportedFormatDetails const gst_imx_v4l2_amphion_dec
 	{ "cavs",    "Avs",       "AVS (Audio and Video Coding Standard)",             V4L2_VPU_PIX_FMT_AVS,     FALSE, frame_reordering_required_always  },
 	{ "rv",      "RV",        "RealVideo 8, 9, 10",                                V4L2_VPU_PIX_FMT_RV,      TRUE,  frame_reordering_required_always  },
 	{ "divx3",   "DivX3" ,    "DivX 3",                                            V4L2_VPU_PIX_FMT_DIV3,    FALSE, frame_reordering_required_never   },
-	{ "divx456", "DivX456",   "DivX 4 & 5 & 6",                                    V4L2_VPU_PIX_FMT_DIVX,    FALSE, frame_reordering_required_always  },
+	{ "divx456", "DivX456",   "DivX 4 & 5 & 6",                                    V4L2_VPU_PIX_FMT_DIVX,    TRUE,  frame_reordering_required_always  },
 	{ "sspark",  "SSpark",    "Sorenson Spark",                                    V4L2_VPU_PIX_FMT_SPK,     FALSE, frame_reordering_required_always  }
 };
 
