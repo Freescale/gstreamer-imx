@@ -1106,19 +1106,25 @@ static gboolean gst_imx_v4l2_amphion_dec_flush(GstVideoDecoder *decoder)
 	gst_imx_v4l2_amphion_dec_decoder_stop_output_loop(self);
 	GST_VIDEO_DECODER_STREAM_LOCK(self);
 
-	// TODO: sync access to the capture_stream_was_enabled variable
+	/* Decoder loop is no longer running at this point, so access to the
+	 * states that are touched by that loop (like vv4l2_capture_stream_enabled)
+	 * can be safely accessed here. */
 	capture_stream_was_enabled = self->v4l2_capture_stream_enabled;
 
 	/* Reset this. Otherwise, the next handle_frame call may incorrectly exit early. */
 	self->decoder_loop_flow_error = GST_FLOW_OK;
 
 	GST_DEBUG_OBJECT(self, "flush VPU decoder by disabling running V4L2 streams");
+	/* Disable both capture and output stream. If only one
+	 * is disabled, not all buffered data is flushed. */
 	gst_imx_v4l2_amphion_dec_enable_stream(self, FALSE, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	gst_imx_v4l2_amphion_dec_enable_stream(self, FALSE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 
 	/* There are no output buffers queued anymore. */
 	self->num_v4l2_output_buffers_in_queue = 0;
 
+	/* Reinsert all capture buffers into the capture queue before re-enabling
+	 * it to prepare it for new decoded frames after flushing is done. */
 	GST_DEBUG_OBJECT(self, "re-queuing all %d capture buffers", self->num_v4l2_capture_buffers);
 	for (i = 0; i < self->num_v4l2_capture_buffers; ++i)
 	{
@@ -1140,6 +1146,9 @@ static gboolean gst_imx_v4l2_amphion_dec_flush(GstVideoDecoder *decoder)
 		}
 	}
 
+	/* Re-enable the capture stream if it was previously running.
+	 * The decoder loop itself will be started in handle_frame(),
+	 * as will the output stream. */
 	if (capture_stream_was_enabled)
 		gst_imx_v4l2_amphion_dec_enable_stream(self, TRUE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 
@@ -1434,7 +1443,8 @@ static gboolean gst_imx_v4l2_amphion_dec_decoder_start_output_loop(GstImxV4L2Amp
 
 static void gst_imx_v4l2_amphion_dec_decoder_stop_output_loop(GstImxV4L2AmphionDec *self)
 {
-	/* Must be called with the decoder stream lock *released* (!). */
+	/* Must be called with the decoder stream lock *released* (!).
+	 * After this function finishes, the decoder loop is guaranteed to be stopped. */
 
 	gst_poll_set_flushing(self->v4l2_capture_queue_poll, TRUE);
 	gst_pad_stop_task(GST_VIDEO_DECODER_CAST(self)->srcpad);
