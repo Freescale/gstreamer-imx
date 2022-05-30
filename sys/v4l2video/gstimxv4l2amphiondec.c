@@ -909,12 +909,22 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 
 	if (G_UNLIKELY(decoder_loop_flow_error != GST_FLOW_OK))
 	{
-		GST_DEBUG_OBJECT(self, "aborting handle_frame call; decoder output loop reported flow return value %s", gst_flow_get_name(decoder_loop_flow_error));
-		// TODO is this really necessary?
-		if (decoder_loop_flow_error == GST_FLOW_FLUSHING)
-			decoder_loop_flow_error = GST_FLOW_OK;
 		flow_ret = decoder_loop_flow_error;
-		goto finish;
+
+		switch (decoder_loop_flow_error)
+		{
+			case GST_FLOW_EOS:
+				GST_DEBUG_OBJECT(self, "aborting handle_frame call; decoder output loop reported EOS");
+				goto finish;
+
+			case GST_FLOW_FLUSHING:
+				GST_DEBUG_OBJECT(self, "aborting handle_frame call; decoder output loop was interrupted because we are flushing");
+				goto finish;
+
+			default:
+				GST_ERROR_OBJECT(self, "aborting handle_frame call; decoder output loop reported flow error: %s", gst_flow_get_name(decoder_loop_flow_error));
+				goto error;
+		}
 	}
 
 	if (self->num_v4l2_output_buffers_in_queue == DEC_MIN_NUM_REQUIRED_OUTPUT_BUFFERS)
