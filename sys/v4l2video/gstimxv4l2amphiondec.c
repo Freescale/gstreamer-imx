@@ -239,6 +239,12 @@ struct _GstImxV4L2AmphionDec
 	 * is cleared once the decoder is restarted. */
 	gboolean fatal_error_cannot_decode;
 
+	/* Set to TRUE in finish(). If it is set to TRUE, the decoder loop
+	 * will return GST_FLOW_EOS to handle_frame() once the GstVideoDecoder
+	 * base class has no more queued GstVideoCodecFrame instances. This
+	 * is necessary for proper draining / finishing. */
+	gboolean finishing_decoding;
+
 	/* imx2d G2D blitter and surfaces, needed for detiling decoded frames,
 	 * since the Amphion Malone VPU only produces Amphion-tiled frames.
 	 * Note that the tiled surface exists as a multi-buffer frame (that is,
@@ -404,6 +410,8 @@ static void gst_imx_v4l2_amphion_dec_init(GstImxV4L2AmphionDec *self)
 
 	self->fatal_error_cannot_decode = FALSE;
 
+	self->finishing_decoding = FALSE;
+
 	self->g2d_blitter = NULL;
 	self->tiled_surface = NULL;
 	self->detiled_surface = NULL;
@@ -464,6 +472,8 @@ static gboolean gst_imx_v4l2_amphion_dec_start(GstVideoDecoder *decoder)
 	gst_imx_v4l2_amphion_device_filenames_init();
 
 	self->fatal_error_cannot_decode = FALSE;
+
+	self->finishing_decoding = FALSE;
 
 	self->decoder_loop_flow_error = GST_FLOW_OK;
 
@@ -1155,6 +1165,10 @@ static gboolean gst_imx_v4l2_amphion_dec_flush(GstVideoDecoder *decoder)
 	/* Reset this. Otherwise, the next handle_frame call may incorrectly exit early. */
 	self->decoder_loop_flow_error = GST_FLOW_OK;
 
+	/* Reset this since after the flush new data will come in,
+	 * so we can't be finishing/draining anything anymore. */
+	self->finishing_decoding = FALSE;
+
 	GST_DEBUG_OBJECT(self, "flush VPU decoder by disabling running V4L2 streams");
 	/* Disable both capture and output stream. If only one
 	 * is disabled, not all buffered data is flushed. */
@@ -1240,6 +1254,8 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_finish(GstVideoDecoder *decoder)
 		return GST_FLOW_ERROR;
 	}
 
+	self->finishing_decoding = TRUE;
+
 	GST_VIDEO_DECODER_STREAM_UNLOCK(decoder);
 
 	task = decoder->srcpad->task;
@@ -1257,6 +1273,8 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_finish(GstVideoDecoder *decoder)
 	gst_imx_v4l2_amphion_dec_decoder_stop_output_loop(self);
 
 	GST_VIDEO_DECODER_STREAM_LOCK(decoder);
+
+	self->finishing_decoding = FALSE;
 
 	return GST_FLOW_OK;
 }
@@ -2037,6 +2055,7 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 	GstFlowReturn flow_ret = GST_FLOW_OK;
 	gboolean buffer_transferred = FALSE;
 	ImxDmaBuffer *intermediate_gstbuffer_dma_buffer;
+	gboolean finishing_decoding;
 
 	GST_CAT_LOG_OBJECT(imx_v4l2_amphion_dec_out_debug, self, "processing new decoded frame");
 
@@ -2195,9 +2214,27 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 	}
 
 	GST_VIDEO_DECODER_STREAM_LOCK(decoder);
+
 	flow_ret = gst_video_decoder_finish_frame(decoder, video_codec_frame);
 	video_codec_frame = NULL;
+	finishing_decoding = self->finishing_decoding;
+
 	GST_VIDEO_DECODER_STREAM_UNLOCK(decoder);
+
+	/* If we are finishing decoding, we must check if there are any leftover
+	 * queued frames. Once that happens, we announce an EOS, because this
+	 * state implies that the VPU has fully decoded all pending frames.
+	 * Skip this check if we got a non-OK flow return value from finish_frame(),
+	 * since in such cases, we are supposed to immediately cease decoding. */
+	if ((flow_ret == GST_FLOW_OK) && finishing_decoding)
+	{
+		GstVideoCodecFrame *oldest_frame = gst_video_decoder_get_oldest_frame(decoder);
+
+		if (oldest_frame == NULL)
+			flow_ret = GST_FLOW_EOS;
+		else
+			gst_video_codec_frame_unref(oldest_frame);
+	}
 
 	switch (flow_ret)
 	{
@@ -2214,6 +2251,14 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 				imx_v4l2_amphion_dec_out_debug,
 				self,
 				"could not finish video codec frame because we are flushing"
+			);
+			break;
+
+		case GST_FLOW_EOS:
+			GST_CAT_DEBUG_OBJECT(
+				imx_v4l2_amphion_dec_out_debug,
+				self,
+				"announcing EOS after the final successfully decoded frame"
 			);
 			break;
 
