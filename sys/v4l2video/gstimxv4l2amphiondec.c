@@ -2099,8 +2099,9 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 	GST_CAT_LOG_OBJECT(
 		imx_v4l2_amphion_dec_out_debug,
 		self,
-		"dequeued V4L2 buffer with index %" G_GUINT32_FORMAT " from capture queue",
-		(guint32)(buffer.index)
+		"dequeued V4L2 buffer with index %" G_GUINT32_FORMAT " from capture queue; V4L2 buffer flags: %#010x",
+		(guint32)(buffer.index),
+		(guint32)(buffer.flags)
 	);
 
 	/* Get information about the dequeued buffer. */
