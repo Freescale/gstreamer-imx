@@ -138,7 +138,7 @@ static gboolean frame_reordering_required_always(G_GNUC_UNUSED GstStructure *for
 
 static gboolean frame_reordering_required_never(G_GNUC_UNUSED GstStructure *format)
 {
-	return TRUE;
+	return FALSE;
 }
 
 static gboolean h264_is_frame_reordering_required(GstStructure *format)
@@ -198,18 +198,22 @@ struct _GstImxV4L2AmphionDec
 	/* File descriptor for the V4L2 device. Opened in set_format(). */
 	int v4l2_fd;
 
-	/* Out-of-band codec data along with mapping information.
-	 * See the code in set_format() for details. */
-	// TODO: This is currently unused.
-	GstBuffer *codec_data;
-	GstMapInfo codecdata_map_info;
-	gboolean codec_data_is_mapped;
-
 	/* Input and output video codec states. The input state is
 	 * set in set_format(). The output state is set when the
 	 * V4L2_EVENT_SOURCE_CHANGE event is observed. */ 
 	GstVideoCodecState *input_state;
 	GstVideoCodecState *output_state;
+
+	/* If set to true, then the contents of the input_state's codec_data
+	 * buffer got pushed already. This flag is initially false. The codec
+	 * data is pushed before any other data the first time handle_frame()
+	 * is called. This is done by passing the codec data as if it were
+	 * part of the encoded bitstream, since V4L2 does not have a dedicated
+	 * API for out-of-band codec data. */
+	gboolean codec_data_pushed;
+	/* Size of the out-of-band codec data, in bytes. If this is 0, then
+	 * there is no codec data. */
+	gsize codec_data_size;
 
 	/* If set to true, frame reordering is enabled. This is set
 	 * in set_format and depends on the return value of the
@@ -234,6 +238,12 @@ struct _GstImxV4L2AmphionDec
 	 * gst_imx_v4l2_amphion_dec_handle_frame() will exit early. The flag
 	 * is cleared once the decoder is restarted. */
 	gboolean fatal_error_cannot_decode;
+
+	/* Set to TRUE in finish(). If it is set to TRUE, the decoder loop
+	 * will return GST_FLOW_EOS to handle_frame() once the GstVideoDecoder
+	 * base class has no more queued GstVideoCodecFrame instances. This
+	 * is necessary for proper draining / finishing. */
+	gboolean finishing_decoding;
 
 	/* imx2d G2D blitter and surfaces, needed for detiling decoded frames,
 	 * since the Amphion Malone VPU only produces Amphion-tiled frames.
@@ -278,10 +288,6 @@ struct _GstImxV4L2AmphionDec
 	 * The driver may pick a format that differs from the requested format
 	 * (requested with the VIDIOC_S_FMT ioctl), so we store the actual format here. */
 	struct v4l2_format v4l2_output_buffer_format;
-
-	/* Size in bytes of one V4L2 output buffer. This needs to be
-	 * passed to mmap() when writing encoded data to such a buffer. */
-	int v4l2_output_buffer_size;
 
 	/* How many of the output buffers have been pushed into the output queue
 	 * with the VIDIOC_QBUF ioctl and haven't yet been dequeued again. */
@@ -391,11 +397,11 @@ static void gst_imx_v4l2_amphion_dec_init(GstImxV4L2AmphionDec *self)
 
 	self->v4l2_fd = -1;
 
-	self->codec_data = NULL;
-	self->codec_data_is_mapped = FALSE;
-
 	self->input_state = NULL;
 	self->output_state = NULL;
+
+	self->codec_data_pushed = FALSE;
+	self->codec_data_size = 0;
 
 	self->use_frame_reordering = FALSE;
 
@@ -403,6 +409,8 @@ static void gst_imx_v4l2_amphion_dec_init(GstImxV4L2AmphionDec *self)
 	self->imx_dma_buffer_allocator = NULL;
 
 	self->fatal_error_cannot_decode = FALSE;
+
+	self->finishing_decoding = FALSE;
 
 	self->g2d_blitter = NULL;
 	self->tiled_surface = NULL;
@@ -412,7 +420,6 @@ static void gst_imx_v4l2_amphion_dec_init(GstImxV4L2AmphionDec *self)
 	self->v4l2_output_buffer_items = NULL;
 	self->num_v4l2_output_buffers = 0;
 	self->v4l2_output_stream_enabled = FALSE;
-	self->v4l2_output_buffer_size = 0;
 	self->num_v4l2_output_buffers_in_queue = 0;
 
 	self->v4l2_capture_queue_poll = NULL;
@@ -465,6 +472,8 @@ static gboolean gst_imx_v4l2_amphion_dec_start(GstVideoDecoder *decoder)
 	gst_imx_v4l2_amphion_device_filenames_init();
 
 	self->fatal_error_cannot_decode = FALSE;
+
+	self->finishing_decoding = FALSE;
 
 	self->decoder_loop_flow_error = GST_FLOW_OK;
 
@@ -583,6 +592,7 @@ static gboolean gst_imx_v4l2_amphion_dec_set_format(GstVideoDecoder *decoder, Gs
 	GstCaps *allowed_srccaps = NULL;
 	gboolean ret = TRUE;
 	gint i;
+	gint v4l2_actual_output_buffer_size;
 
 	supported_format_details = (GstImxV4L2AmphionDecSupportedFormatDetails const *)g_type_get_qdata(G_OBJECT_CLASS_TYPE(klass), gst_imx_v4l2_amphion_dec_format_details_quark());
 
@@ -597,6 +607,16 @@ static gboolean gst_imx_v4l2_amphion_dec_set_format(GstVideoDecoder *decoder, Gs
 	self->use_frame_reordering = (klass->is_frame_reordering_required == NULL)
 		                       || klass->is_frame_reordering_required(gst_caps_get_structure(state->caps, 0));
 	GST_DEBUG_OBJECT(self, "using frame reordering: %d", self->use_frame_reordering);
+
+	GST_DEBUG_OBJECT(self, "requires out-of-band codec data: %d", klass->requires_codec_data);
+	if (klass->requires_codec_data)
+	{
+		g_assert(state->codec_data != NULL);
+		self->codec_data_size = gst_buffer_get_size(state->codec_data);
+		GST_DEBUG_OBJECT(self, "out-of-band codec data is used (size: %" G_GSIZE_FORMAT ")", self->codec_data_size);
+	}
+	else
+		GST_DEBUG_OBJECT(self, "out-of-band codec data is not used");
 
 	/* Get the caps that downstream allows so we can decide
 	 * what format to use for the decoded and detiled output. */
@@ -716,12 +736,12 @@ static gboolean gst_imx_v4l2_amphion_dec_set_format(GstVideoDecoder *decoder, Gs
 
 	/* The driver may adjust the size of the output buffers. Retrieve
 	 * the sizeimage value (which contains what the driver picked). */
-	self->v4l2_output_buffer_size = requested_output_buffer_format.fmt.pix_mp.plane_fmt[0].sizeimage;
+	v4l2_actual_output_buffer_size = requested_output_buffer_format.fmt.pix_mp.plane_fmt[0].sizeimage;
 	GST_DEBUG_OBJECT(
 		self,
 		"V4L2 output buffer size in bytes:  requested: %d  actual: %d",
 		DEC_REQUESTED_OUTPUT_BUFFER_SIZE,
-		self->v4l2_output_buffer_size
+		v4l2_actual_output_buffer_size
 	);
 
 	/* Finished setting the format. Make a copy for later use. */
@@ -871,7 +891,7 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 	struct v4l2_plane plane;
 	struct v4l2_buffer buffer;
 	int available_space_for_encoded_data;
-	void *mapped_v4l2_buffer_data = NULL;
+	int size_of_data_to_push;
 	GstMapInfo encoded_data_map_info;
 	gint poll_errno = 0;
 	gboolean input_buffer_mapped = FALSE;
@@ -899,12 +919,22 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 
 	if (G_UNLIKELY(decoder_loop_flow_error != GST_FLOW_OK))
 	{
-		GST_DEBUG_OBJECT(self, "aborting handle_frame call; decoder output loop reported flow return value %s", gst_flow_get_name(decoder_loop_flow_error));
-		// TODO is this really necessary?
-		if (decoder_loop_flow_error == GST_FLOW_FLUSHING)
-			decoder_loop_flow_error = GST_FLOW_OK;
 		flow_ret = decoder_loop_flow_error;
-		goto finish;
+
+		switch (decoder_loop_flow_error)
+		{
+			case GST_FLOW_EOS:
+				GST_DEBUG_OBJECT(self, "aborting handle_frame call; decoder output loop reported EOS");
+				goto finish;
+
+			case GST_FLOW_FLUSHING:
+				GST_DEBUG_OBJECT(self, "aborting handle_frame call; decoder output loop was interrupted because we are flushing");
+				goto finish;
+
+			default:
+				GST_ERROR_OBJECT(self, "aborting handle_frame call; decoder output loop reported flow error: %s", gst_flow_get_name(decoder_loop_flow_error));
+				goto error;
+		}
 	}
 
 	if (self->num_v4l2_output_buffers_in_queue == DEC_MIN_NUM_REQUIRED_OUTPUT_BUFFERS)
@@ -987,24 +1017,23 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 		goto error;
 	}
 
-	// TODO: compare this with v4l2_output_buffer_size. If they
-	// are equal, remove v4l2_output_buffer_size as a decoder field.
 	available_space_for_encoded_data = buffer.m.planes[0].length;
+	size_of_data_to_push = encoded_data_map_info.size + self->codec_data_size;
 
 	/* Sanity check. This should never happen. */
-	if ((int)(encoded_data_map_info.size) > available_space_for_encoded_data)
+	if (size_of_data_to_push > available_space_for_encoded_data)
 	{
 		GST_ERROR_OBJECT(
 			self,
-			"encoded frame size %" G_GSIZE_FORMAT " exceeds available space for encoded data %d",
-			encoded_data_map_info.size,
+			"size of data to push %d exceeds available space for encoded data %d",
+			size_of_data_to_push,
 			available_space_for_encoded_data
 		);
 		goto error;
 	}
 
 
-	buffer.m.planes[0].bytesused = encoded_data_map_info.size;
+	buffer.m.planes[0].bytesused = size_of_data_to_push;
 	if (GST_BUFFER_PTS_IS_VALID(cur_frame->input_buffer))
 	{
 		GstClockTime timestamp = GST_BUFFER_PTS(cur_frame->input_buffer);
@@ -1016,21 +1045,37 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_handle_frame(GstVideoDecoder *deco
 
 	/* Copy the encoded data into the output buffer. */
 
-	mapped_v4l2_buffer_data = mmap(
-		NULL,
-		available_space_for_encoded_data,
-		PROT_READ | PROT_WRITE,
-		MAP_SHARED,
-		self->v4l2_fd,
-		buffer.m.planes[0].m.mem_offset
-	);
-	if (mapped_v4l2_buffer_data == MAP_FAILED)
 	{
-		GST_ERROR_OBJECT(self, "could not map V4L2 output buffer: %s (%d)", strerror(errno), errno);
-		goto error;
+		int offset = 0;
+		guint8 *mapped_v4l2_buffer_data = NULL;
+
+		mapped_v4l2_buffer_data = mmap(
+			NULL,
+			available_space_for_encoded_data,
+			PROT_READ | PROT_WRITE,
+			MAP_SHARED,
+			self->v4l2_fd,
+			buffer.m.planes[0].m.mem_offset
+		);
+		if (mapped_v4l2_buffer_data == MAP_FAILED)
+		{
+			GST_ERROR_OBJECT(self, "could not map V4L2 output buffer: %s (%d)", strerror(errno), errno);
+			goto error;
+		}
+
+		if ((self->codec_data_size > 0) && !(self->codec_data_pushed))
+		{
+			GST_DEBUG_OBJECT(self, "prepending out-of-band codec data (%" G_GSIZE_FORMAT " byte(s))", self->codec_data_size);
+
+			gst_buffer_extract(self->input_state->codec_data, 0, mapped_v4l2_buffer_data, self->codec_data_size);
+			offset += self->codec_data_size;
+			self->codec_data_pushed = TRUE;
+		}
+
+		memcpy(mapped_v4l2_buffer_data + offset, encoded_data_map_info.data, encoded_data_map_info.size);
+
+		munmap(mapped_v4l2_buffer_data, available_space_for_encoded_data);
 	}
-	memcpy(mapped_v4l2_buffer_data, encoded_data_map_info.data, encoded_data_map_info.size);
-	munmap(mapped_v4l2_buffer_data, available_space_for_encoded_data);
 
 
 	/* Finally, queue the buffer. */
@@ -1112,19 +1157,29 @@ static gboolean gst_imx_v4l2_amphion_dec_flush(GstVideoDecoder *decoder)
 	gst_imx_v4l2_amphion_dec_decoder_stop_output_loop(self);
 	GST_VIDEO_DECODER_STREAM_LOCK(self);
 
-	// TODO: sync access to the capture_stream_was_enabled variable
+	/* Decoder loop is no longer running at this point, so access to the
+	 * states that are touched by that loop (like vv4l2_capture_stream_enabled)
+	 * can be safely accessed here. */
 	capture_stream_was_enabled = self->v4l2_capture_stream_enabled;
 
 	/* Reset this. Otherwise, the next handle_frame call may incorrectly exit early. */
 	self->decoder_loop_flow_error = GST_FLOW_OK;
 
+	/* Reset this since after the flush new data will come in,
+	 * so we can't be finishing/draining anything anymore. */
+	self->finishing_decoding = FALSE;
+
 	GST_DEBUG_OBJECT(self, "flush VPU decoder by disabling running V4L2 streams");
+	/* Disable both capture and output stream. If only one
+	 * is disabled, not all buffered data is flushed. */
 	gst_imx_v4l2_amphion_dec_enable_stream(self, FALSE, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
 	gst_imx_v4l2_amphion_dec_enable_stream(self, FALSE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 
 	/* There are no output buffers queued anymore. */
 	self->num_v4l2_output_buffers_in_queue = 0;
 
+	/* Reinsert all capture buffers into the capture queue before re-enabling
+	 * it to prepare it for new decoded frames after flushing is done. */
 	GST_DEBUG_OBJECT(self, "re-queuing all %d capture buffers", self->num_v4l2_capture_buffers);
 	for (i = 0; i < self->num_v4l2_capture_buffers; ++i)
 	{
@@ -1146,6 +1201,9 @@ static gboolean gst_imx_v4l2_amphion_dec_flush(GstVideoDecoder *decoder)
 		}
 	}
 
+	/* Re-enable the capture stream if it was previously running.
+	 * The decoder loop itself will be started in handle_frame(),
+	 * as will the output stream. */
 	if (capture_stream_was_enabled)
 		gst_imx_v4l2_amphion_dec_enable_stream(self, TRUE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 
@@ -1196,6 +1254,8 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_finish(GstVideoDecoder *decoder)
 		return GST_FLOW_ERROR;
 	}
 
+	self->finishing_decoding = TRUE;
+
 	GST_VIDEO_DECODER_STREAM_UNLOCK(decoder);
 
 	task = decoder->srcpad->task;
@@ -1213,6 +1273,8 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_finish(GstVideoDecoder *decoder)
 	gst_imx_v4l2_amphion_dec_decoder_stop_output_loop(self);
 
 	GST_VIDEO_DECODER_STREAM_LOCK(decoder);
+
+	self->finishing_decoding = FALSE;
 
 	return GST_FLOW_OK;
 }
@@ -1379,15 +1441,6 @@ static void gst_imx_v4l2_amphion_dec_cleanup_decoding_resources(GstImxV4L2Amphio
 
 	self->num_v4l2_output_buffers_in_queue = 0;
 
-	if (self->codec_data_is_mapped)
-	{
-		g_assert(self->codec_data != NULL);
-		gst_buffer_unmap(self->codec_data, &(self->codecdata_map_info));
-		self->codec_data_is_mapped = FALSE;
-	}
-
-	gst_buffer_replace(&(self->codec_data), NULL);
-
 	if (self->input_state != NULL)
 	{
 		gst_video_codec_state_unref(self->input_state);
@@ -1399,6 +1452,9 @@ static void gst_imx_v4l2_amphion_dec_cleanup_decoding_resources(GstImxV4L2Amphio
 		gst_video_codec_state_unref(self->output_state);
 		self->output_state = NULL;
 	}
+
+	self->codec_data_pushed = FALSE;
+	self->codec_data_size = 0;
 
 	if (self->video_buffer_pool != NULL)
 	{
@@ -1440,7 +1496,8 @@ static gboolean gst_imx_v4l2_amphion_dec_decoder_start_output_loop(GstImxV4L2Amp
 
 static void gst_imx_v4l2_amphion_dec_decoder_stop_output_loop(GstImxV4L2AmphionDec *self)
 {
-	/* Must be called with the decoder stream lock *released* (!). */
+	/* Must be called with the decoder stream lock *released* (!).
+	 * After this function finishes, the decoder loop is guaranteed to be stopped. */
 
 	gst_poll_set_flushing(self->v4l2_capture_queue_poll, TRUE);
 	gst_pad_stop_task(GST_VIDEO_DECODER_CAST(self)->srcpad);
@@ -1998,6 +2055,7 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 	GstFlowReturn flow_ret = GST_FLOW_OK;
 	gboolean buffer_transferred = FALSE;
 	ImxDmaBuffer *intermediate_gstbuffer_dma_buffer;
+	gboolean finishing_decoding;
 
 	GST_CAT_LOG_OBJECT(imx_v4l2_amphion_dec_out_debug, self, "processing new decoded frame");
 
@@ -2060,8 +2118,9 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 	GST_CAT_LOG_OBJECT(
 		imx_v4l2_amphion_dec_out_debug,
 		self,
-		"dequeued V4L2 buffer with index %" G_GUINT32_FORMAT " from capture queue",
-		(guint32)(buffer.index)
+		"dequeued V4L2 buffer with index %" G_GUINT32_FORMAT " from capture queue; V4L2 buffer flags: %#010x",
+		(guint32)(buffer.index),
+		(guint32)(buffer.flags)
 	);
 
 	/* Get information about the dequeued buffer. */
@@ -2155,9 +2214,27 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 	}
 
 	GST_VIDEO_DECODER_STREAM_LOCK(decoder);
+
 	flow_ret = gst_video_decoder_finish_frame(decoder, video_codec_frame);
 	video_codec_frame = NULL;
+	finishing_decoding = self->finishing_decoding;
+
 	GST_VIDEO_DECODER_STREAM_UNLOCK(decoder);
+
+	/* If we are finishing decoding, we must check if there are any leftover
+	 * queued frames. Once that happens, we announce an EOS, because this
+	 * state implies that the VPU has fully decoded all pending frames.
+	 * Skip this check if we got a non-OK flow return value from finish_frame(),
+	 * since in such cases, we are supposed to immediately cease decoding. */
+	if ((flow_ret == GST_FLOW_OK) && finishing_decoding)
+	{
+		GstVideoCodecFrame *oldest_frame = gst_video_decoder_get_oldest_frame(decoder);
+
+		if (oldest_frame == NULL)
+			flow_ret = GST_FLOW_EOS;
+		else
+			gst_video_codec_frame_unref(oldest_frame);
+	}
 
 	switch (flow_ret)
 	{
@@ -2174,6 +2251,14 @@ static GstFlowReturn gst_imx_v4l2_amphion_dec_process_decoded_frame(GstImxV4L2Am
 				imx_v4l2_amphion_dec_out_debug,
 				self,
 				"could not finish video codec frame because we are flushing"
+			);
+			break;
+
+		case GST_FLOW_EOS:
+			GST_CAT_DEBUG_OBJECT(
+				imx_v4l2_amphion_dec_out_debug,
+				self,
+				"announcing EOS after the final successfully decoded frame"
 			);
 			break;
 
@@ -2229,19 +2314,19 @@ error:
 static GstImxV4L2AmphionDecSupportedFormatDetails const gst_imx_v4l2_amphion_dec_supported_format_details[] =
 {
 	{ "jpeg",    "Jpeg",      "JPEG",                                              V4L2_PIX_FMT_MJPEG,       FALSE, frame_reordering_required_never   },
-	{ "mpeg2",   "Mpeg2",     "MPEG-1 & 2",                                        V4L2_PIX_FMT_MPEG2,       TRUE,  frame_reordering_required_never   },
+	{ "mpeg2",   "Mpeg2",     "MPEG-1 & 2",                                        V4L2_PIX_FMT_MPEG2,       TRUE,  frame_reordering_required_always  },
 	{ "mpeg4",   "Mpeg4",     "MPEG-4",                                            V4L2_PIX_FMT_MPEG4,       TRUE,  frame_reordering_required_always  },
-	{ "h263",    "H263",      "h.263",                                             V4L2_PIX_FMT_H263,        FALSE, frame_reordering_required_never   },
+	{ "h263",    "H263",      "h.263",                                             V4L2_PIX_FMT_H263,        FALSE, frame_reordering_required_always  },
 	{ "h264",    "H264",      "h.264 / AVC",                                       V4L2_PIX_FMT_H264,        FALSE, h264_is_frame_reordering_required },
 	{ "h265",    "H265",      "h.265 / HEVC",                                      V4L2_PIX_FMT_HEVC,        FALSE, frame_reordering_required_always  },
-	{ "wmv3",    "Wmv3",      "WMV3 / Window Media Video 9 / VC-1 simple profile", V4L2_PIX_FMT_VC1_ANNEX_L, TRUE,  frame_reordering_required_never   },
-	{ "vc1",     "Vc1",       "VC-1 advanced profile",                             V4L2_PIX_FMT_VC1_ANNEX_G, TRUE,  frame_reordering_required_always  },
+	{ "wmv3",    "Wmv3",      "WMV3 / Window Media Video 9 / VC-1 simple profile", V4L2_PIX_FMT_VC1_ANNEX_G, TRUE,  frame_reordering_required_never   },
+	{ "vc1",     "Vc1",       "VC-1 advanced profile",                             V4L2_PIX_FMT_VC1_ANNEX_L, TRUE,  frame_reordering_required_always  },
 	{ "vp6",     "Vp6",       "VP6",                                               V4L2_VPU_PIX_FMT_VP6,     FALSE, frame_reordering_required_never   },
 	{ "vp8",     "Vp8",       "VP8",                                               V4L2_PIX_FMT_VP8,         FALSE, frame_reordering_required_always  },
 	{ "cavs",    "Avs",       "AVS (Audio and Video Coding Standard)",             V4L2_VPU_PIX_FMT_AVS,     FALSE, frame_reordering_required_always  },
 	{ "rv",      "RV",        "RealVideo 8, 9, 10",                                V4L2_VPU_PIX_FMT_RV,      TRUE,  frame_reordering_required_always  },
 	{ "divx3",   "DivX3" ,    "DivX 3",                                            V4L2_VPU_PIX_FMT_DIV3,    FALSE, frame_reordering_required_never   },
-	{ "divx456", "DivX456",   "DivX 4 & 5 & 6",                                    V4L2_VPU_PIX_FMT_DIVX,    FALSE, frame_reordering_required_always  },
+	{ "divx456", "DivX456",   "DivX 4 & 5 & 6",                                    V4L2_VPU_PIX_FMT_DIVX,    TRUE,  frame_reordering_required_always  },
 	{ "sspark",  "SSpark",    "Sorenson Spark",                                    V4L2_VPU_PIX_FMT_SPK,     FALSE, frame_reordering_required_always  }
 };
 
