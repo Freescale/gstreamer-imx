@@ -307,6 +307,9 @@ void imx_2d_linux_framebuffer_destroy(Imx2dLinuxFramebuffer *linux_framebuffer)
 	if (linux_framebuffer == NULL)
 		return;
 
+	if (linux_framebuffer->surface != NULL)
+		imx_2d_surface_destroy(linux_framebuffer->surface);
+
 	if (linux_framebuffer->fd > 0)
 	{
 		imx_2d_linux_framebuffer_restore_original_fb_height(linux_framebuffer);
