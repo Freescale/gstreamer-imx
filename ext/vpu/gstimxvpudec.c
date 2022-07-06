@@ -1794,6 +1794,7 @@ gboolean gst_imx_vpu_dec_register_decoder_type(GstPlugin *plugin, ImxVpuApiCompr
 	ret = gst_element_register(plugin, element_name, codec_details->rank, type);
 
 	g_free(type_name);
+	g_free(element_name);
 
 	return ret;
 }
