@@ -15,7 +15,7 @@ libm_dep  = cc.find_library('m', required : true)
 
 # test for libimxdmabuffer
 
-libimxdmabuffer_dep = dependency('libimxdmabuffer', version : '>=1.0.1', required : true, method : 'pkg-config')
+libimxdmabuffer_dep = dependency('libimxdmabuffer', version : '>=1.1.2', required : true, method : 'pkg-config')
 
 dmabuf_allocator_available = false
 
