@@ -2418,7 +2418,7 @@ gboolean gst_imx_v4l2_amphion_dec_register_decoder_types(GstPlugin *plugin)
 		GstImxV4L2AmphionDecSupportedFormatDetails const *supported_format_details = &(gst_imx_v4l2_amphion_dec_supported_format_details[i]);
 
 		element_name = g_strdup_printf("imxv4l2amphiondec_%s", supported_format_details->element_name_suffix);
-		type_name = g_strdup_printf("GstImxV4l2VideoDec%s", supported_format_details->class_name_suffix);
+		type_name = g_strdup_printf("GstImxV4L2AmphionDec%s", supported_format_details->class_name_suffix);
 		type = g_type_from_name(type_name);
 		if (!type)
 		{
