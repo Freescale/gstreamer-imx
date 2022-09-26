@@ -111,6 +111,9 @@ struct _GstImxV4L2ObjectClass
 };
 
 
+static GQuark gst_imx_v4l2_object_internal_imxdmabuffer_map_quark;
+
+
 G_DEFINE_TYPE(GstImxV4L2Object, gst_imx_v4l2_object, GST_TYPE_OBJECT)
 
 
@@ -127,6 +130,8 @@ static void gst_imx_v4l2_object_class_init(GstImxV4L2ObjectClass *klass)
 	GObjectClass *object_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_v4l2_object_debug, "imxv4l2videoobject", 0, "NXP i.MX V4L2 object");
+
+	gst_imx_v4l2_object_internal_imxdmabuffer_map_quark = g_quark_from_static_string("gst-imx-v4l2-imxdmabuffer-map");
 
 	object_class = G_OBJECT_CLASS(klass);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_imx_v4l2_object_finalize);
@@ -186,6 +191,8 @@ static void gst_imx_v4l2_object_finalize(GObject *object)
 			gst_buffer_unref(queued_gstbuffer);
 		}
 	}
+
+	g_free(self->queued_gstbuffers);
 
 	close(self->control_pipe_fds[0]);
 	close(self->control_pipe_fds[1]);
@@ -312,26 +319,76 @@ GstFlowReturn gst_imx_v4l2_object_queue_buffer(GstImxV4L2Object *imx_v4l2_object
 	}
 
 	v4l2_buf_index = GPOINTER_TO_INT(g_queue_pop_head(&(imx_v4l2_object->unused_v4l2_buffer_indices)));
-	GST_LOG_OBJECT(imx_v4l2_object, "will use V4L2 buffer index %d for queuing gstbuffer %" GST_PTR_FORMAT " (physical address %" IMX_PHYSICAL_ADDRESS_FORMAT ")", v4l2_buf_index, (gpointer)buffer, imx_dma_buffer_get_physical_address(dma_buffer));
-
 	g_assert(v4l2_buf_index < imx_v4l2_object->num_buffers);
 
 	memset(&v4l2_buf, 0, sizeof(v4l2_buf));
 
-	/* We use an NXP mxc_v4l2 driver specific hack. That driver
-	 * uses USERPTR in a non standard compliant way. the m.userptr
-	 * field isn't really used in the driver. Instead, m.offset
-	 * contains the physical address to the buffer we pass to
-	 * the driver. From the driver source's mxc_v4l2_prepare_bufs()
-	 * function:
-	 *
-	 * cam->frame[buf->index].buffer.m.offset = cam->frame[buf->index].paddress = buf->m.offset;
-	 */
 	v4l2_buf.type = imx_v4l2_object->v4l2_buffer_type;
 	v4l2_buf.memory = V4L2_MEMORY_USERPTR;
 	v4l2_buf.index = v4l2_buf_index;
-	v4l2_buf.m.offset = imx_dma_buffer_get_physical_address(dma_buffer);
-	v4l2_buf.length = imx_dma_buffer_get_size(dma_buffer);
+
+	if (imx_v4l2_object->probe_result.capture_chip != GST_IMX_V4L2_CAPTURE_CHIP_UNIDENTIFIED)
+	{
+		/* We use an NXP mxc_v4l2 driver specific hack. That driver
+		 * uses USERPTR in a non standard compliant way. the m.userptr
+		 * field isn't really used in the driver. Instead, m.offset
+		 * contains the physical address to the buffer we pass to
+		 * the driver. From the driver source's mxc_v4l2_prepare_bufs()
+		 * function:
+		 *
+		 * cam->frame[buf->index].buffer.m.offset = cam->frame[buf->index].paddress = buf->m.offset;
+		 */
+
+		GST_LOG_OBJECT(imx_v4l2_object, "will use V4L2 buffer index %d for queuing gstbuffer %" GST_PTR_FORMAT " (physical address %" IMX_PHYSICAL_ADDRESS_FORMAT ")", v4l2_buf_index, (gpointer)buffer, imx_dma_buffer_get_physical_address(dma_buffer));
+
+		v4l2_buf.m.offset = imx_dma_buffer_get_physical_address(dma_buffer);
+		v4l2_buf.length = imx_dma_buffer_get_size(dma_buffer);
+	}
+	else
+	{
+		/* If this is a device that doesn't use mxc_v4l2, we use
+		 * USERPTR in the standard compliant way. For this, we need
+		 * a virtual memory address to pass to V4L2 as the userptr
+		 * value. Memory-map the imxdmabuffer and store the memory
+		 * mapped virtual address as a buffer qdata so we can
+		 * retrieve this address later. (libimxdmabuffer unmaps
+		 * the buffer automatically when that buffer is deallocated.) */
+
+		gpointer mapped_virtual_address;
+
+		mapped_virtual_address = gst_mini_object_get_qdata(
+			GST_MINI_OBJECT_CAST(buffer),
+			gst_imx_v4l2_object_internal_imxdmabuffer_map_quark
+			);
+		if (mapped_virtual_address == NULL)
+		{
+			int err;
+
+			mapped_virtual_address = imx_dma_buffer_map(
+				dma_buffer,
+				IMX_DMA_BUFFER_MAPPING_FLAG_READ |
+				IMX_DMA_BUFFER_MAPPING_FLAG_WRITE |
+				IMX_DMA_BUFFER_MAPPING_FLAG_MANUAL_SYNC,
+				&err
+			);
+			if (G_UNLIKELY(mapped_virtual_address == NULL))
+			{
+				GST_ERROR_OBJECT(imx_v4l2_object, "imx_dma_buffer_map() failure: %s (%d)", strerror(err), err);
+				flow_ret = GST_FLOW_ERROR;
+				goto finish;
+			}
+
+			gst_mini_object_set_qdata(
+				GST_MINI_OBJECT_CAST(buffer),
+				gst_imx_v4l2_object_internal_imxdmabuffer_map_quark,
+				mapped_virtual_address,
+				NULL
+			);
+		}
+
+		v4l2_buf.m.userptr = (unsigned long)mapped_virtual_address;
+		v4l2_buf.length = imx_dma_buffer_get_size(dma_buffer);
+	}
 
 	/* XXX: The mxc_vout driver expects the buffer length to be
 	 * page aligned. However, it does not actually do anything
@@ -349,6 +406,7 @@ GstFlowReturn gst_imx_v4l2_object_queue_buffer(GstImxV4L2Object *imx_v4l2_object
 	if (imx_v4l2_object->device_type == GST_IMX_V4L2_DEVICE_TYPE_OUTPUT)
 		v4l2_buf.length = GST_IMX_V4L2_PAGE_ALIGN(v4l2_buf.length);
 
+	if (imx_v4l2_object->probe_result.capture_chip != GST_IMX_V4L2_CAPTURE_CHIP_UNIDENTIFIED)
 	{
 		struct v4l2_buffer temp_v4l2_buf = v4l2_buf;
 
@@ -695,42 +753,46 @@ static gboolean setup_device(GstImxV4L2Object *self)
 		 * Failure is not a fatal error; the operation may be unsupported or
 		 * simply not be implemented, so we continue regardless. */
 		if (ioctl(self->v4l2_fd, VIDIOC_QUERYSTD, &video_standard_id) < 0)
-			GST_DEBUG_OBJECT(self, "could not query video standard: %s (%d)", strerror(errno), errno);
-
-		/* Now try to get the current video standard (if there is any).
-		 * Some devices may need a while to configure themselves, so we
-		 * have to try several times to get the video standard. */
-		video_standard_id = V4L2_STD_ALL;
-		while ((video_standard_id == V4L2_STD_ALL) && (count > 0))
 		{
-			if (ioctl(self->v4l2_fd, VIDIOC_G_STD, &video_standard_id) < 0)
+			GST_DEBUG_OBJECT(self, "could not query video standard: %s (%d)", strerror(errno), errno);
+		}
+		else
+		{
+			/* Now try to get the current video standard (if there is any).
+			 * Some devices may need a while to configure themselves, so we
+			 * have to try several times to get the video standard. */
+			video_standard_id = V4L2_STD_ALL;
+			while ((video_standard_id == V4L2_STD_ALL) && (count > 0))
 			{
-				switch (errno)
+				if (ioctl(self->v4l2_fd, VIDIOC_G_STD, &video_standard_id) < 0)
 				{
-					case ENODATA:
-						video_standard_id = V4L2_STD_UNKNOWN;
-						break;
+					switch (errno)
+					{
+						case ENODATA:
+							video_standard_id = V4L2_STD_UNKNOWN;
+							break;
 
-					default:
-						GST_ERROR_OBJECT(self, "could not get video standard: %s (%d)", strerror(errno), errno);
-						goto error;
+						default:
+							GST_ERROR_OBJECT(self, "could not get video standard: %s (%d)", strerror(errno), errno);
+							goto error;
+					}
 				}
+
+				if (video_standard_id != V4L2_STD_ALL)
+					break;
+
+				g_usleep(G_USEC_PER_SEC / 10);
+
+				--count;
 			}
 
-			if (video_standard_id != V4L2_STD_ALL)
-				break;
-
-			g_usleep(G_USEC_PER_SEC / 10);
-
-			--count;
+			/* If video_standard_id is still set to V4L2_STD_ALL, it
+			 * means the loop above exited without successfully getting
+			 * the video standard. It is therefore unknown if there is
+			 * any standard present. */
+			if (video_standard_id == V4L2_STD_ALL)
+				video_standard_id = V4L2_STD_UNKNOWN;
 		}
-
-		/* If video_standard_id is still set to V4L2_STD_ALL, it
-		 * means the loop above exited without successfully getting
-		 * the video standard. It is therefore unknown if there is
-		 * any standard present. */
-		if (video_standard_id == V4L2_STD_ALL)
-			video_standard_id = V4L2_STD_UNKNOWN;
 
 		if (video_standard_id != V4L2_STD_UNKNOWN)
 		{
@@ -875,11 +937,12 @@ static gboolean setup_device(GstImxV4L2Object *self)
 		}
 	}
 
-	if (self->device_type == GST_IMX_V4L2_DEVICE_TYPE_CAPTURE)
+	if ((self->device_type == GST_IMX_V4L2_DEVICE_TYPE_CAPTURE)
+	 && (self->probe_result.capture_chip != GST_IMX_V4L2_CAPTURE_CHIP_UNIDENTIFIED))
 	{
 		/* Select input #1. This is the input with the image converter (IC)
 		 * inserted. Without it, it is not possible to capture 720p and 1080p
-		 * video, so enable it always. */
+		 * video, so enable it always. This is mxc_v4l2 specific behavior. */
 
 		int input = 1;
 

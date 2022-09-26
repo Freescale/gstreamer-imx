@@ -263,9 +263,8 @@ gboolean gst_imx_v4l2_context_probe_device(GstImxV4L2Context *imx_v4l2_context)
 		}
 		else
 		{
-			GST_ERROR_OBJECT(imx_v4l2_context, "capture chip cannot be identified");
+			GST_DEBUG_OBJECT(imx_v4l2_context, "capture chip cannot be identified; may not be mxc_v4l2 specific hardware");
 			probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_UNIDENTIFIED;
-			goto error;
 		}
 
 		if (!probe_device_caps(imx_v4l2_context, fd))

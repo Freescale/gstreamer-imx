@@ -53,8 +53,6 @@ struct _GstImxV4L2VideoSrc
 	guint calculated_output_buffer_size;
 	gint current_framerate[2];
 	GstClockTime current_frame_duration;
-
-	GstClock *realtime_clock;
 };
 
 
@@ -181,9 +179,6 @@ void gst_imx_v4l2_video_src_init(GstImxV4L2VideoSrc *self)
 	gst_imx_v4l2_context_set_num_buffers(self->context, DEFAULT_NUM_V4L2_BUFFERS);
 
 	self->current_v4l2_object = NULL;
-
-	self->realtime_clock = gst_system_clock_obtain();
-	gst_util_set_object_arg(G_OBJECT(self->realtime_clock), "clock-type", "GST_CLOCK_TYPE_REALTIME");
 }
 
 
@@ -206,12 +201,6 @@ static void gst_imx_v4l2_video_src_dispose(GObject *object)
 	{
 		gst_object_unref(GST_OBJECT(self->context));
 		self->context = NULL;
-	}
-
-	if (self->realtime_clock != NULL)
-	{
-		gst_object_unref(GST_OBJECT(self->realtime_clock));
-		self->realtime_clock = NULL;
 	}
 
 	G_OBJECT_CLASS(gst_imx_v4l2_video_src_parent_class)->dispose(object);
@@ -506,7 +495,7 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 	GstCaps *negotiated_caps;
 	GstAllocator *selected_allocator = NULL;
 	GstAllocationParams allocation_params;
-	GstBufferPool *selected_buffer_pool = NULL;
+	GstBufferPool *new_buffer_pool = NULL;
 	guint buffer_size = 0, min_num_buffers = 0, max_num_buffers = 0;
 	GstImxV4L2VideoSrc *self = GST_IMX_V4L2_VIDEO_SRC(src);
 
@@ -557,61 +546,19 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 		selected_allocator = gst_imx_allocator_new();
 	}
 
-	/* Look for a buffer pool with both video meta and video alignment options. */
-	num = gst_query_get_n_allocation_pools(query);
-	GST_DEBUG_OBJECT(self, "evaluating %u allocation pool(s) from query", num);
-	for (i = 0; i < num; ++i)
-	{
-		GstBufferPool *buffer_pool = NULL;
-		gboolean has_video_meta_option = FALSE;
-
-		gst_query_parse_nth_allocation_pool(query, i, &buffer_pool, &buffer_size, &min_num_buffers, &max_num_buffers);
-		GST_DEBUG_OBJECT(
-			self,
-			"allocation pool #%u from query:  buffer pool: %" GST_PTR_FORMAT "  buffer size: %u  min/max num buffers: %u/%u",
-			i,
-			(gpointer)buffer_pool,
-			buffer_size,
-			min_num_buffers, max_num_buffers
-		);
-		if (buffer_pool == NULL)
-			continue;
-
-		has_video_meta_option = gst_buffer_pool_has_option(buffer_pool, GST_BUFFER_POOL_OPTION_VIDEO_META);
-
-		if (has_video_meta_option)
-		{
-			GST_DEBUG_OBJECT(self, "buffer pool #%u in allocation query fits our needs", i);
-			selected_buffer_pool = buffer_pool;
-			break;
-		}
-		else
-			gst_object_unref(GST_OBJECT(buffer_pool));
-	}
-
-	/* If no such pool is found, create our own, and use the calculated
-	 * buffer size as its buffer size. Otherwise, we pick either the
-	 * buffer pool's own proposed buffer size, or our calculated size,
-	 * whichever is the larger one. */
-	if (selected_buffer_pool == NULL)
-	{
-		selected_buffer_pool = gst_video_buffer_pool_new();
-		GST_DEBUG_OBJECT(
-			self,
-			"found no buffer pool in query that fits our needs; created new one, using calculated buffer size %u; new pool %p: %" GST_PTR_FORMAT,
-			self->calculated_output_buffer_size,
-			(gpointer)selected_buffer_pool,
-			(gpointer)selected_buffer_pool
-		);
-		min_num_buffers = max_num_buffers = 0;
-		buffer_size = self->calculated_output_buffer_size;
-	}
-	else
-	{
-		guint proposed_buffer_size = buffer_size;
-		buffer_size = MAX(proposed_buffer_size, self->calculated_output_buffer_size);
-		GST_DEBUG_OBJECT(self, "buffer pool proposed buffer size: %u  buffer size calculated from imxv4l2 video info: %u  picking size %u", proposed_buffer_size, self->calculated_output_buffer_size, buffer_size);
-	}
+	/* Create our own buffer pool, and use the calculated buffer size
+	 * as its buffer size. This ensures that it allocates DMA memory;
+	 * other pools are not required to use the allocators from this query. */
+	new_buffer_pool = gst_video_buffer_pool_new();
+	GST_DEBUG_OBJECT(
+		self,
+		"created new video buffer pool, using calculated buffer size %u; new pool %p: %" GST_PTR_FORMAT,
+		self->calculated_output_buffer_size,
+		(gpointer)new_buffer_pool,
+		(gpointer)new_buffer_pool
+	);
+	min_num_buffers = max_num_buffers = 0;
+	buffer_size = self->calculated_output_buffer_size;
 
 	/* Make sure the selected allocator is picked by setting
 	 * it as the first entry in the allocation param list. */
@@ -626,29 +573,29 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 		gst_query_set_nth_allocation_param(query, 0, selected_allocator, &allocation_params);
 	}
 
-	/* Make sure the selected buffer pool is picked by setting
+	/* Make sure our custom buffer pool is picked by setting
 	 * it as the first entry in the allocation pool list. */
 	if (gst_query_get_n_allocation_pools(query) == 0)
 	{
 		GST_DEBUG_OBJECT(self, "there are no allocation pools in the allocation query; adding our buffer pool to it");
-		gst_query_add_allocation_pool(query, selected_buffer_pool, buffer_size, min_num_buffers, max_num_buffers);
+		gst_query_add_allocation_pool(query, new_buffer_pool, buffer_size, min_num_buffers, max_num_buffers);
 	}
 	else
 	{
 		GST_DEBUG_OBJECT(self, "there are allocation pools in the allocation query; setting our buffer pool as the first one in the query");
-		gst_query_set_nth_allocation_pool(query, 0, selected_buffer_pool, buffer_size, min_num_buffers, max_num_buffers);
+		gst_query_set_nth_allocation_pool(query, 0, new_buffer_pool, buffer_size, min_num_buffers, max_num_buffers);
 	}
 
 	/* Enable the videometa and videoalignment options in the
 	 * buffer pool to make sure they get added. */
-	pool_config = gst_buffer_pool_get_config(selected_buffer_pool);
+	pool_config = gst_buffer_pool_get_config(new_buffer_pool);
 	gst_buffer_pool_config_set_params(pool_config, negotiated_caps, buffer_size, 0, 0);
 	gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_VIDEO_META);
-	gst_buffer_pool_set_config(selected_buffer_pool, pool_config);
+	gst_buffer_pool_set_config(new_buffer_pool, pool_config);
 
 	/* Unref these, since we passed them to the query. */
 	gst_object_unref(GST_OBJECT(selected_allocator));
-	gst_object_unref(GST_OBJECT(selected_buffer_pool));
+	gst_object_unref(GST_OBJECT(new_buffer_pool));
 
 	/* Chain up to the base class. */
 	return GST_BASE_SRC_CLASS(gst_imx_v4l2_video_src_parent_class)->decide_allocation(src, query);
@@ -790,6 +737,10 @@ static GstFlowReturn gst_imx_v4l2_video_src_create(GstPushSrc *src, GstBuffer **
 					GST_DEBUG_OBJECT(self, "imxv4l2 object needs more buffers queued");
 					break;
 
+				case GST_FLOW_FLUSHING:
+					GST_DEBUG_OBJECT(self, "we are flushing; dequeue aborted");
+					goto finish;
+
 				default:
 					GST_ERROR_OBJECT(self, "error while dequeuing buffer: %s", gst_flow_get_name(flow_ret));
 					goto error;
@@ -800,10 +751,12 @@ static GstFlowReturn gst_imx_v4l2_video_src_create(GstPushSrc *src, GstBuffer **
 			GstClock *pipeline_clock;
 			GstClockTime pipeline_clock_now = GST_CLOCK_TIME_NONE;
 			GstClockTime pipeline_base_time;
-			GstClockTime realtime_clock_now;
+			GstClockTime current_sysclock_time;
 			GstClockTimeDiff capture_delay;
 			GstClockTime capture_timestamp;
 			GstClockTime final_timestamp;
+
+			capture_timestamp = GST_BUFFER_PTS(*buf);
 
 			/* Note that the buffer returned by gst_imx_v4l2_object_dequeue_buffer()
 			 * is NOT unref'd here. That's because at this point, we have the only
@@ -814,10 +767,10 @@ static GstFlowReturn gst_imx_v4l2_video_src_create(GstPushSrc *src, GstBuffer **
 			/* The timestamp of the captured buffer needs to be adjusted to account
 			 * for the delay between the moment it was captured and the moment it
 			 * was dequeued. We can assume that the timestamp from V4L2 is one from
-			 * the realtime clock. So, by getting the realtime clock's current time,
-			 * we just subtract the captured timestamp from the current timestamp,
-			 * and we get the delay. Also, for a final timestamp, we also have to
-			 * subtract the base-time to translate the timestamp from clock-time
+			 * the realtime clock or the monotonic clock. So, by getting that clock's
+			 * current time, we just subtract the captured timestamp from the current
+			 * timestamp, and we get the delay. Also, for a final timestamp, we also
+			 * have to subtract the base-time to translate the timestamp from clock-time
 			 * to running-time (which is what the pipeline expects from us). */
 
 			GST_OBJECT_LOCK(self);
@@ -839,18 +792,44 @@ static GstFlowReturn gst_imx_v4l2_video_src_create(GstPushSrc *src, GstBuffer **
 				gst_object_unref(pipeline_clock);
 			}
 
-			realtime_clock_now = gst_clock_get_time(self->realtime_clock);
+			if (GST_CLOCK_TIME_IS_VALID(capture_timestamp))
+			{
+				/* Get the current time of the system clock. That's the clock the driver used
+				 * for getting the v4l2_buffer timestamp. Most newer drivers use the monotonic
+				 * system clock, while older ones use the realtime clock (mxc_v4l2 does as well).
+				 * Try the monotonic clock first, and if using it results in bogus deltas
+				 * between its current time and the v4l2 timestamp, try the realtime one.
+				 * (This trick is originally from the v4l2src gst_v4l2src_create() vfunc.) */
 
-			capture_timestamp = GST_BUFFER_PTS(*buf);
-			capture_delay = GST_CLOCK_DIFF(capture_timestamp, realtime_clock_now);
+				struct timespec now;
+				clock_gettime(CLOCK_MONOTONIC, &now);
+				current_sysclock_time = GST_TIMESPEC_TO_TIME(now);
 
-			GST_LOG_OBJECT(
-				self,
-				"captured buffer V4L2 timestamp: %" GST_TIME_FORMAT " current realtime sysclock time: %" GST_TIME_FORMAT " -> capture delay: %" GST_STIME_FORMAT,
-				GST_TIME_ARGS(capture_timestamp),
-				GST_TIME_ARGS(realtime_clock_now),
-				GST_STIME_ARGS(capture_delay)
-			);
+				if ((capture_timestamp > current_sysclock_time) || (GST_CLOCK_DIFF(capture_timestamp, current_sysclock_time) > (10 * GST_SECOND)))
+				{
+					clock_gettime(CLOCK_REALTIME, &now);
+					current_sysclock_time = GST_TIMESPEC_TO_TIME(now);
+				}
+
+				capture_delay = GST_CLOCK_DIFF(capture_timestamp, current_sysclock_time);
+
+				GST_LOG_OBJECT(
+					self,
+					"captured buffer V4L2 timestamp: %" GST_TIME_FORMAT " current sysclock time: %" GST_TIME_FORMAT " -> capture delay: %" GST_STIME_FORMAT,
+					GST_TIME_ARGS(capture_timestamp),
+					GST_TIME_ARGS(current_sysclock_time),
+					GST_STIME_ARGS(capture_delay)
+				);
+			}
+			else
+			{
+				/* If there is no V4L2 timestamp, assume a delay of 1 frame,
+				 * or set delay to 0 if we don't know the frame duration. */
+				if (GST_CLOCK_TIME_IS_VALID(self->current_frame_duration))
+					capture_delay = self->current_frame_duration;
+				else
+					capture_delay = 0;
+			}
 
 			if (G_LIKELY(GST_CLOCK_TIME_IS_VALID(pipeline_clock_now)))
 			{
@@ -863,7 +842,7 @@ static GstFlowReturn gst_imx_v4l2_video_src_create(GstPushSrc *src, GstBuffer **
 
 				GST_LOG_OBJECT(
 					self,
-					"pipeline clock time %" GST_TIME_FORMAT " - base time %" GST_TIME_FORMAT " - capture_delay -> final timestamp: %" GST_TIME_FORMAT,
+					"pipeline clock time %" GST_TIME_FORMAT " - base time %" GST_TIME_FORMAT " - capture delay -> final timestamp: %" GST_TIME_FORMAT,
 					GST_TIME_ARGS(pipeline_clock_now),
 					GST_TIME_ARGS(pipeline_base_time),
 					GST_TIME_ARGS(final_timestamp)
