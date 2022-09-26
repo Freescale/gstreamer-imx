@@ -791,6 +791,7 @@ static GstFlowReturn gst_imx_v4l2_video_src_create(GstPushSrc *src, GstBuffer **
 					break;
 
 				default:
+					GST_ERROR_OBJECT(self, "error while dequeuing buffer: %s", gst_flow_get_name(flow_ret));
 					goto error;
 			}
 		}

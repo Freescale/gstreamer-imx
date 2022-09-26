@@ -512,7 +512,7 @@ GstFlowReturn gst_imx_v4l2_object_dequeue_buffer(GstImxV4L2Object *imx_v4l2_obje
 		/* Do the actual dequeuing. */
 		if (G_UNLIKELY(ioctl(imx_v4l2_object->v4l2_fd, VIDIOC_DQBUF, &v4l2_buf) < 0))
 		{
-			GST_DEBUG_OBJECT(imx_v4l2_object, "could not dequeue V4L2 buffer: %s (%d)", strerror(errno), errno);
+			GST_ERROR_OBJECT(imx_v4l2_object, "could not dequeue V4L2 buffer: %s (%d)", strerror(errno), errno);
 			flow_ret = GST_FLOW_ERROR;
 			goto finish;
 		}
