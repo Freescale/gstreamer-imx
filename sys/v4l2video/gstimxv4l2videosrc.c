@@ -19,6 +19,7 @@
 #include <gst/gst.h>
 #include <gst/base/gstpushsrc.h>
 #include <gst/video/video.h>
+#include <gst/allocators/allocators.h>
 #include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "gstimxv4l2videosrc.h"
 #include "gstimxv4l2videoformat.h"
@@ -53,6 +54,7 @@ struct _GstImxV4L2VideoSrc
 	guint calculated_output_buffer_size;
 	gint current_framerate[2];
 	GstClockTime current_frame_duration;
+	GstAllocator *imx_dma_buffer_allocator;
 };
 
 
@@ -374,7 +376,11 @@ static gboolean gst_imx_v4l2_video_src_negotiate(GstBaseSrc *src)
 		goto error;
 	}
 
-	v4l2_object = gst_imx_v4l2_object_new(self->context, &initial_video_info);
+	v4l2_object = gst_imx_v4l2_object_new(
+		self->context,
+		&initial_video_info,
+		GST_IS_DMABUF_ALLOCATOR(self->imx_dma_buffer_allocator)
+	);
 	if (v4l2_object == NULL)
 	{
 		GST_ERROR_OBJECT(self, "could not create imxv4l2 object");
@@ -491,7 +497,6 @@ error:
 static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQuery *query)
 {
 	GstStructure *pool_config;
-	guint i, num;
 	GstCaps *negotiated_caps;
 	GstAllocator *selected_allocator = NULL;
 	GstAllocationParams allocation_params;
@@ -507,44 +512,14 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 	 * convert those caps here. We just use them for the buffer pool config. */
 	gst_query_parse_allocation(query, &negotiated_caps, NULL);
 
-	/* See if there's an allocator that can allocate DMA memory. */
-	num = gst_query_get_n_allocation_params(query);
-	GST_DEBUG_OBJECT(self, "evaluating %u allocation param(s) from query", num);
-	for (i = 0; i < num; ++i)
-	{
-		GstAllocator *allocator = NULL;
-
-		gst_query_parse_nth_allocation_param(query, i, &allocator, &allocation_params);
-		GST_DEBUG_OBJECT(
-			self,
-			"allocation pool param #%u from query:  allocator: %" GST_PTR_FORMAT "  flags: %#08x align: %" G_GSIZE_FORMAT " prefix: %" G_GSIZE_FORMAT " padding: %" G_GSIZE_FORMAT,
-			i,
-			(gpointer)allocator,
-			allocation_params.flags,
-			allocation_params.align,
-			allocation_params.prefix,
-			allocation_params.padding
-		);
-		if (allocator == NULL)
-			continue;
-
-		if (GST_IS_IMX_DMA_BUFFER_ALLOCATOR(allocator))
-		{
-			GST_DEBUG_OBJECT(self, "allocator #%u in allocation query can allocate DMA memory", i);
-			selected_allocator = allocator;
-			break;
-		}
-		else
-			gst_object_unref(GST_OBJECT_CAST(allocator));
-	}
-
-	/* If no suitable allocator was found, create our own. */
-	if (selected_allocator == NULL)
-	{
-		GST_DEBUG_OBJECT(self, "found no allocator in query that can allocate DMA memory, creating new one");
-		gst_allocation_params_init(&allocation_params);
-		selected_allocator = gst_imx_allocator_new();
-	}
+	/* Select our own allocator. This ensures that we allocate physically
+	 * contiguous memory, which is currently a strict requirement.
+	 * XXX: See if for non-mxc_v4l2 devices regular virtual memory can be
+	 * used in case downstream offers its own custom buffer pool and/or
+	 * allocator. */
+	gst_allocation_params_init(&allocation_params);
+	selected_allocator = self->imx_dma_buffer_allocator;
+	gst_object_ref(GST_OBJECT_CAST(self->imx_dma_buffer_allocator));
 
 	/* Create our own buffer pool, and use the calculated buffer size
 	 * as its buffer size. This ensures that it allocates DMA memory;
@@ -604,24 +579,26 @@ static gboolean gst_imx_v4l2_video_src_decide_allocation(GstBaseSrc *src, GstQue
 
 static gboolean gst_imx_v4l2_video_src_start(GstBaseSrc *src)
 {
-	gboolean retval = TRUE;
 	GstImxV4L2VideoSrc *self = GST_IMX_V4L2_VIDEO_SRC(src);
 
 	/* Lock the object mutex, since get_caps() may run concurrently,
 	 * and object properties may also be set concurrently. */
 	GST_OBJECT_LOCK(self->context);
 
+	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
+	if (G_UNLIKELY(self->imx_dma_buffer_allocator == NULL))
+		goto error;
+
 	if (!gst_imx_v4l2_context_probe_device(self->context))
 		goto error;
 
-finish:
 	GST_OBJECT_UNLOCK(self->context);
-	return retval;
+	return TRUE;
 
 error:
+	GST_OBJECT_UNLOCK(self->context);
 	gst_imx_v4l2_video_src_stop(src);
-	retval = FALSE;
-	goto finish;
+	return FALSE;
 }
 
 
@@ -633,6 +610,12 @@ static gboolean gst_imx_v4l2_video_src_stop(GstBaseSrc *src)
 	{
 		gst_object_unref(GST_OBJECT(self->current_v4l2_object));
 		self->current_v4l2_object = NULL;
+	}
+
+	if (self->imx_dma_buffer_allocator != NULL)
+	{
+		gst_object_unref(GST_OBJECT(self->imx_dma_buffer_allocator));
+		self->imx_dma_buffer_allocator = NULL;
 	}
 
 	return TRUE;

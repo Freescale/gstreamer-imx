@@ -74,6 +74,7 @@ GType gst_imx_v4l2_object_get_type(void);
  * @imx_v4l2_context: @GstImxV4L2Context to use for setting up the object.
  * @video_info: @GstImxV4L2VideoInfo for configuring the capture frame size,
  *     video format etc.
+ * @use_dma_buf: Whether or not to use DMA-BUF import.
  *
  * Creates a new @GstImxV4L2Object. An internal copy of the the probe result
  * from imx_v4l2_context is made with @gst_imx_v4l2_copy_probe_result,
@@ -85,9 +86,19 @@ GType gst_imx_v4l2_object_get_type(void);
  * video format, frame width/height, framerate. The object keeps an internal
  * copy of video_info.
  *
+ * Normally, memory blocks will be imported through USERPTR. If use_dma_buf
+ * is set to TRUE, the DMA-BUF import memory mode is used instead. This
+ * requires that the gstbuffer that is passed to gst_imx_v4l2_object_queue_buffer()
+ * contains one gstmemory block, and that gst_is_dmabuf_memory() returns
+ * TRUE if it is given that block. Note that the value of use_dma_buf is
+ * ignored if an mxc_v4l2 based device is used - in that case, USERPTR
+ * is always used instead, and the memory block in the gstbuffers that get
+ * queued must be compatible with GstPhysMemory (= gst_is_phys_memory()
+ * must return TRUE if passed the gstbuffer's memory block).
+ *
  * Returns: Pointer to a newly created object, or NULL in case of an error.
  */
-GstImxV4L2Object* gst_imx_v4l2_object_new(GstImxV4L2Context *imx_v4l2_context, GstImxV4L2VideoInfo const *video_info);
+GstImxV4L2Object* gst_imx_v4l2_object_new(GstImxV4L2Context *imx_v4l2_context, GstImxV4L2VideoInfo const *video_info, gboolean use_dma_buf);
 
 /**
  * gst_imx_v4l2_object_get_video_info:

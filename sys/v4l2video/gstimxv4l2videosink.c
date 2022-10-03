@@ -307,7 +307,8 @@ static gboolean gst_imx_v4l2_video_sink_set_caps(GstBaseSink *sink, GstCaps *cap
 		goto error;
 	}
 
-	v4l2_object = gst_imx_v4l2_object_new(self->context, &initial_video_info);
+	/* Set use_dma_buf to FALSE since mxc_v4l2 devices don't support DMA-BUF. */
+	v4l2_object = gst_imx_v4l2_object_new(self->context, &initial_video_info, FALSE);
 	if (v4l2_object == NULL)
 	{
 		GST_ERROR_OBJECT(self, "could not create imxv4l2 object");

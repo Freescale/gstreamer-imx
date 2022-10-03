@@ -25,8 +25,8 @@
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>
 #include <gst/gst.h>
+#include <gst/allocators/allocators.h>
 #include <gst/video/video.h>
-#include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "gstimxv4l2object.h"
 
 
@@ -102,6 +102,9 @@ struct _GstImxV4L2Object
 	gboolean dequeuing_finished;
 	GMutex dequeuing_mutex;
 	GCond dequeuing_cond;
+
+	/* Copy of the argument that is passed to gst_imx_v4l2_object_new(). */
+	gboolean use_dma_buf;
 };
 
 
@@ -109,9 +112,6 @@ struct _GstImxV4L2ObjectClass
 {
 	GstObjectClass parent_class;
 };
-
-
-static GQuark gst_imx_v4l2_object_internal_imxdmabuffer_map_quark;
 
 
 G_DEFINE_TYPE(GstImxV4L2Object, gst_imx_v4l2_object, GST_TYPE_OBJECT)
@@ -130,8 +130,6 @@ static void gst_imx_v4l2_object_class_init(GstImxV4L2ObjectClass *klass)
 	GObjectClass *object_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_v4l2_object_debug, "imxv4l2videoobject", 0, "NXP i.MX V4L2 object");
-
-	gst_imx_v4l2_object_internal_imxdmabuffer_map_quark = g_quark_from_static_string("gst-imx-v4l2-imxdmabuffer-map");
 
 	object_class = G_OBJECT_CLASS(klass);
 	object_class->finalize = GST_DEBUG_FUNCPTR(gst_imx_v4l2_object_finalize);
@@ -209,7 +207,7 @@ static void gst_imx_v4l2_object_finalize(GObject *object)
 }
 
 
-GstImxV4L2Object* gst_imx_v4l2_object_new(GstImxV4L2Context *imx_v4l2_context, GstImxV4L2VideoInfo const *video_info)
+GstImxV4L2Object* gst_imx_v4l2_object_new(GstImxV4L2Context *imx_v4l2_context, GstImxV4L2VideoInfo const *video_info, gboolean use_dma_buf)
 {
 	gint i;
 	GstImxV4L2Object *imx_v4l2_object;
@@ -220,8 +218,9 @@ GstImxV4L2Object* gst_imx_v4l2_object_new(GstImxV4L2Context *imx_v4l2_context, G
 
 
 	imx_v4l2_object = (GstImxV4L2Object *)g_object_new(gst_imx_v4l2_object_get_type(), NULL);
+	imx_v4l2_object->use_dma_buf = use_dma_buf;
 
-	GST_DEBUG_OBJECT(imx_v4l2_object, "created new imxv4l2 object %" GST_PTR_FORMAT, (gpointer)(imx_v4l2_object));
+	GST_DEBUG_OBJECT(imx_v4l2_object, "created new imxv4l2 object %" GST_PTR_FORMAT "; use_dma_buf: %d", (gpointer)(imx_v4l2_object), use_dma_buf);
 
 
 	memcpy(&(imx_v4l2_object->video_info), video_info, sizeof(GstImxV4L2VideoInfo));
@@ -291,7 +290,8 @@ GstFlowReturn gst_imx_v4l2_object_queue_buffer(GstImxV4L2Object *imx_v4l2_object
 	GstFlowReturn flow_ret = GST_FLOW_OK;
 	struct v4l2_buffer v4l2_buf;
 	gint v4l2_buf_index;
-	ImxDmaBuffer *dma_buffer;
+	GstMemory *memblock;
+	guint num_memory_blocks;
 
 	g_assert(imx_v4l2_object != NULL);
 	g_assert(buffer != NULL);
@@ -310,24 +310,27 @@ GstFlowReturn gst_imx_v4l2_object_queue_buffer(GstImxV4L2Object *imx_v4l2_object
 		goto finish;
 	}
 
-	dma_buffer = gst_imx_get_dma_buffer_from_buffer(buffer);
-	if (G_UNLIKELY(dma_buffer == NULL))
+	num_memory_blocks = gst_buffer_n_memory(buffer);
+	if (G_UNLIKELY(num_memory_blocks != 1))
 	{
-		GST_ERROR_OBJECT(imx_v4l2_object, "supplied gstbuffer does not contain a DMA buffer");
+		GST_ERROR_OBJECT(
+			imx_v4l2_object,
+			"supplied gstbuffer needs to contain 1 memory block, actually contains %u; buffer: %" GST_PTR_FORMAT,
+			num_memory_blocks,
+			(gpointer)buffer
+		);
 		flow_ret = GST_FLOW_ERROR;
 		goto finish;
 	}
+	memblock = gst_buffer_peek_memory(buffer, 0);
+	g_assert(memblock != NULL);
 
 	v4l2_buf_index = GPOINTER_TO_INT(g_queue_pop_head(&(imx_v4l2_object->unused_v4l2_buffer_indices)));
 	g_assert(v4l2_buf_index < imx_v4l2_object->num_buffers);
 
 	memset(&v4l2_buf, 0, sizeof(v4l2_buf));
 
-	v4l2_buf.type = imx_v4l2_object->v4l2_buffer_type;
-	v4l2_buf.memory = V4L2_MEMORY_USERPTR;
-	v4l2_buf.index = v4l2_buf_index;
-
-	if (imx_v4l2_object->probe_result.capture_chip != GST_IMX_V4L2_CAPTURE_CHIP_UNIDENTIFIED)
+	if ((imx_v4l2_object->device_type == GST_IMX_V4L2_DEVICE_TYPE_OUTPUT) || (imx_v4l2_object->probe_result.capture_chip != GST_IMX_V4L2_CAPTURE_CHIP_UNIDENTIFIED))
 	{
 		/* We use an NXP mxc_v4l2 driver specific hack. That driver
 		 * uses USERPTR in a non standard compliant way. the m.userptr
@@ -337,57 +340,66 @@ GstFlowReturn gst_imx_v4l2_object_queue_buffer(GstImxV4L2Object *imx_v4l2_object
 		 * function:
 		 *
 		 * cam->frame[buf->index].buffer.m.offset = cam->frame[buf->index].paddress = buf->m.offset;
+		 *
+		 * Note that we do this even if use_dma_buf is TRUE. That's
+		 * because mxc_v4l2 has no support for DMA-BUF.
 		 */
 
-		GST_LOG_OBJECT(imx_v4l2_object, "will use V4L2 buffer index %d for queuing gstbuffer %" GST_PTR_FORMAT " (physical address %" IMX_PHYSICAL_ADDRESS_FORMAT ")", v4l2_buf_index, (gpointer)buffer, imx_dma_buffer_get_physical_address(dma_buffer));
+		guintptr physical_address;
 
-		v4l2_buf.m.offset = imx_dma_buffer_get_physical_address(dma_buffer);
-		v4l2_buf.length = imx_dma_buffer_get_size(dma_buffer);
+		if (G_UNLIKELY(!gst_is_phys_memory(memblock)))
+		{
+			GST_ERROR_OBJECT(imx_v4l2_object, "supplied gstbuffer's memory block is not backed by physical memory");
+			flow_ret = GST_FLOW_ERROR;
+			goto finish;
+		}
+
+		physical_address = gst_phys_memory_get_phys_addr(memblock);
+
+		GST_LOG_OBJECT(
+			imx_v4l2_object,
+			"will use V4L2 buffer index %d for queuing gstbuffer; physical address %" G_GUINTPTR_FORMAT " buffer %" GST_PTR_FORMAT,
+			v4l2_buf_index,
+			physical_address,
+			(gpointer)buffer
+		);
+
+		v4l2_buf.type = imx_v4l2_object->v4l2_buffer_type;
+		v4l2_buf.memory = V4L2_MEMORY_USERPTR;
+		v4l2_buf.index = v4l2_buf_index;
+		v4l2_buf.m.offset = physical_address;
+		v4l2_buf.length = memblock->size;
+	}
+	else if (imx_v4l2_object->use_dma_buf)
+	{
+		gint dmabuf_fd;
+
+		dmabuf_fd = gst_dmabuf_memory_get_fd(memblock);
+		if (G_UNLIKELY(dmabuf_fd < 0))
+		{
+			GST_ERROR_OBJECT(imx_v4l2_object, "supplied gstbuffer's memory block is not DMA-BUF backed memory");
+			flow_ret = GST_FLOW_ERROR;
+			goto finish;
+		}
+
+		GST_LOG_OBJECT(
+			imx_v4l2_object,
+			"will use V4L2 buffer index %d for queuing gstbuffer; DMA-BUF FD %d buffer %" GST_PTR_FORMAT,
+			v4l2_buf_index,
+			dmabuf_fd,
+			(gpointer)buffer
+		);
+
+		v4l2_buf.type = imx_v4l2_object->v4l2_buffer_type;
+		v4l2_buf.memory = V4L2_MEMORY_DMABUF;
+		v4l2_buf.index = v4l2_buf_index;
+		v4l2_buf.m.fd = dmabuf_fd;
 	}
 	else
 	{
-		/* If this is a device that doesn't use mxc_v4l2, we use
-		 * USERPTR in the standard compliant way. For this, we need
-		 * a virtual memory address to pass to V4L2 as the userptr
-		 * value. Memory-map the imxdmabuffer and store the memory
-		 * mapped virtual address as a buffer qdata so we can
-		 * retrieve this address later. (libimxdmabuffer unmaps
-		 * the buffer automatically when that buffer is deallocated.) */
-
-		gpointer mapped_virtual_address;
-
-		mapped_virtual_address = gst_mini_object_get_qdata(
-			GST_MINI_OBJECT_CAST(buffer),
-			gst_imx_v4l2_object_internal_imxdmabuffer_map_quark
-			);
-		if (mapped_virtual_address == NULL)
-		{
-			int err;
-
-			mapped_virtual_address = imx_dma_buffer_map(
-				dma_buffer,
-				IMX_DMA_BUFFER_MAPPING_FLAG_READ |
-				IMX_DMA_BUFFER_MAPPING_FLAG_WRITE |
-				IMX_DMA_BUFFER_MAPPING_FLAG_MANUAL_SYNC,
-				&err
-			);
-			if (G_UNLIKELY(mapped_virtual_address == NULL))
-			{
-				GST_ERROR_OBJECT(imx_v4l2_object, "imx_dma_buffer_map() failure: %s (%d)", strerror(err), err);
-				flow_ret = GST_FLOW_ERROR;
-				goto finish;
-			}
-
-			gst_mini_object_set_qdata(
-				GST_MINI_OBJECT_CAST(buffer),
-				gst_imx_v4l2_object_internal_imxdmabuffer_map_quark,
-				mapped_virtual_address,
-				NULL
-			);
-		}
-
-		v4l2_buf.m.userptr = (unsigned long)mapped_virtual_address;
-		v4l2_buf.length = imx_dma_buffer_get_size(dma_buffer);
+		GST_FIXME_OBJECT(imx_v4l2_object, "currently, using non-mxc_v4l2 devices without DMA-BUF enabled is not supported");
+		flow_ret = GST_FLOW_ERROR;
+		goto finish;
 	}
 
 	/* XXX: The mxc_vout driver expects the buffer length to be
@@ -507,12 +519,10 @@ GstFlowReturn gst_imx_v4l2_object_dequeue_buffer(GstImxV4L2Object *imx_v4l2_obje
 	g_mutex_lock(&(imx_v4l2_object->dequeuing_mutex));
 	imx_v4l2_object->dequeuing_finished = FALSE;
 
-	/* Prepare the v4l2_buffer. We'll use the USERPTR IO method
-	 * for informing V4L2 to write to our buffer, since that's
-	 * the method used in gst_imx_v4l2_object_queue_buffer(). */
+	/* Prepare the v4l2_buffer. */
 	memset(&v4l2_buf, 0, sizeof(v4l2_buf));
 	v4l2_buf.type = imx_v4l2_object->v4l2_buffer_type;
-	v4l2_buf.memory = V4L2_MEMORY_USERPTR;
+	v4l2_buf.memory = imx_v4l2_object->use_dma_buf ? V4L2_MEMORY_DMABUF : V4L2_MEMORY_USERPTR;
 
 	/* Prepare the pollfd array. The first entry will contain the
 	 * control pipe that we'll use to wake up a poll() call
@@ -1137,17 +1147,11 @@ static gboolean setup_device(GstImxV4L2Object *self)
 	/* Request v4l2 buffers. */
 
 	{
-		/* We request USERPTR buffers. This allows us
-		 * to use an NXP specific hack for passing
-		 * physical addresses to the driver. See the
-		 * gst_imx_v4l2_object_queue_buffer() code
-		 * for more details about this. */
-
 		struct v4l2_requestbuffers v4l2_bufrequest;
 
 		memset(&v4l2_bufrequest, 0, sizeof(v4l2_bufrequest));
 		v4l2_bufrequest.type = self->v4l2_buffer_type;
-		v4l2_bufrequest.memory = V4L2_MEMORY_USERPTR;
+		v4l2_bufrequest.memory = self->use_dma_buf ? V4L2_MEMORY_DMABUF : V4L2_MEMORY_USERPTR;
 		v4l2_bufrequest.count = self->num_buffers;
 
 		if (ioctl(self->v4l2_fd, VIDIOC_REQBUFS, &v4l2_bufrequest) < 0)
