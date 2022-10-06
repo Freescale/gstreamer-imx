@@ -1115,6 +1115,7 @@ static gboolean setup_device(GstImxV4L2Object *self)
 		{
 			case GST_IMX_V4L2_VIDEO_FORMAT_TYPE_RAW:
 			{
+				guint plane_index;
 				GstVideoInfo *gst_info = &(self->video_info.info.gst_info);
 
 				/* Cannot use gst_video_info_set_format() here, since that function
@@ -1124,8 +1125,14 @@ static gboolean setup_device(GstImxV4L2Object *self)
 				gst_info->finfo = gst_video_format_get_info(actual_imxv4l2_vidfmt->format.gst_format);
 				GST_VIDEO_INFO_WIDTH(gst_info) = v4l2_fmt.fmt.pix.width;
 				GST_VIDEO_INFO_HEIGHT(gst_info) = v4l2_fmt.fmt.pix.height;
-
+				GST_VIDEO_INFO_SIZE(gst_info) = v4l2_fmt.fmt.pix.sizeimage;
 				GST_VIDEO_INFO_INTERLACE_MODE(gst_info) = actual_interlace_mode;
+
+				for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(gst_info); ++plane_index)
+				{
+					gint w_sub = GST_VIDEO_FORMAT_INFO_W_SUB(gst_info->finfo, plane_index);
+					GST_VIDEO_INFO_PLANE_STRIDE(gst_info, plane_index) = GST_VIDEO_SUB_SCALE(w_sub, v4l2_fmt.fmt.pix.bytesperline);
+				}
 
 				break;
 			}

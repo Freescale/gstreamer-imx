@@ -416,6 +416,7 @@ static gboolean gst_imx_v4l2_video_src_negotiate(GstBaseSrc *src)
 	/* Get the size of a buffer that can hold one frame. This is used in
 	 * decide_allocation() and when creating new buffers in create(). */
 	self->calculated_output_buffer_size = gst_imx_v4l2_calculate_buffer_size_from_video_info(&(self->current_video_info));
+	GST_DEBUG_OBJECT(self, "calculated output buffer size: %u", self->calculated_output_buffer_size);
 
 	switch (self->current_video_info.type)
 	{
