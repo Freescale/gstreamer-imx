@@ -970,7 +970,7 @@ static gboolean setup_device(GstImxV4L2Object *self)
 		GstImxV4L2VideoFormat const *actual_imxv4l2_vidfmt;
 		GstVideoInterlaceMode requested_interlace_mode;
 		GstVideoInterlaceMode actual_interlace_mode;
-		guint32 original_fmt_fourcc, new_fmt_fourcc;
+		guint32 original_fmt_fourcc, fmt_fourcc_after_s_fmt, fmt_fourcc_from_g_fmt;
 
 		memset(&v4l2_fmt, 0, sizeof(v4l2_fmt));
 		v4l2_fmt.type = self->v4l2_buffer_type;
@@ -1069,14 +1069,7 @@ static gboolean setup_device(GstImxV4L2Object *self)
 			GST_ERROR_OBJECT(self, "could not set video format: %s (%d)", strerror(errno), errno);
 			goto error;
 		}
-		new_fmt_fourcc = v4l2_fmt.fmt.pix.pixelformat;
-
-		GST_DEBUG_OBJECT(
-			self,
-			"fourCC passed to S_FMT: %" GST_FOURCC_FORMAT "  fourCC received from G_FMT: %" GST_FOURCC_FORMAT,
-			GST_FOURCC_ARGS(original_fmt_fourcc),
-			GST_FOURCC_ARGS(new_fmt_fourcc)
-		);
+		fmt_fourcc_after_s_fmt = v4l2_fmt.fmt.pix.pixelformat;
 
 		/* Read back the current format parameters. Usually, the driver should set any changes
 		 * in the parameters right in the VIDIOC_S_FMT call, but some don't (they return
@@ -1086,6 +1079,15 @@ static gboolean setup_device(GstImxV4L2Object *self)
 			GST_ERROR_OBJECT(self, "could not get video format: %s (%d)", strerror(errno), errno);
 			goto error;
 		}
+		fmt_fourcc_from_g_fmt = v4l2_fmt.fmt.pix.pixelformat;
+
+		GST_DEBUG_OBJECT(
+			self,
+			"original fourCC passed to S_FMT: %" GST_FOURCC_FORMAT "  fourCC set by driver after S_FMT: %" GST_FOURCC_FORMAT "  fourCC from G_FMT: %" GST_FOURCC_FORMAT,
+			GST_FOURCC_ARGS(original_fmt_fourcc),
+			GST_FOURCC_ARGS(fmt_fourcc_after_s_fmt),
+			GST_FOURCC_ARGS(fmt_fourcc_from_g_fmt)
+		);
 
 		/* Evaluate the parameters in case they were changed by the driver. */
 
