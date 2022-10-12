@@ -376,6 +376,14 @@ static gboolean gst_imx_v4l2_video_src_negotiate(GstBaseSrc *src)
 		goto error;
 	}
 
+	/* Unref an old V4L2 object if one exists. The old object cannot
+	 * be used anymore, since it is configured for different caps. */
+	if (self->current_v4l2_object != NULL)
+	{
+		gst_object_unref(GST_OBJECT(self->current_v4l2_object));
+		self->current_v4l2_object = NULL;
+	}
+
 	v4l2_object = gst_imx_v4l2_object_new(
 		self->context,
 		&initial_video_info,
@@ -458,11 +466,6 @@ static gboolean gst_imx_v4l2_video_src_negotiate(GstBaseSrc *src)
 		);
 		self->current_frame_duration = GST_CLOCK_TIME_NONE;
 	}
-
-	/* Unref an old V4L2 object if one exists. The old object cannot
-	 * be used anymore, since it is configured for different caps. */
-	if (self->current_v4l2_object != NULL)
-		gst_object_unref(GST_OBJECT(self->current_v4l2_object));
 
 	self->current_v4l2_object = v4l2_object;
 
