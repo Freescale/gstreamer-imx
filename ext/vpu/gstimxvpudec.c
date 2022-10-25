@@ -108,6 +108,9 @@ struct _GstImxVpuDec
 	 * DMA-BUF backed GstImxIonAllocator. */
 	GstAllocator *default_dma_buf_allocator;
 
+	/* TRUE if the color format fromcurrent_stream_info is a tiled format. */
+	gboolean output_is_tiled;
+
 	/* Sometimes, even after one of the GstVideoDecoder vfunctions
 	 * reports an error, processing continues. This flag is intended
 	 * to handle such cases. If set to TRUE, several functions such as
@@ -120,7 +123,7 @@ struct _GstImxVpuDec
 	 * they do, and downstream can't handle videometas, then frames have to
 	 * be copied into a form that *is* tightly packed, otherwise downstream
 	 * will get frames with padding bytes and not know that these need to be
-	 * skipped. */
+	 * skipped. Tiled formats are assumed to always be "tightly packed". */
 	gboolean need_to_copy_output_frames;
 };
 
@@ -199,6 +202,8 @@ static void gst_imx_vpu_dec_init(GstImxVpuDec *imx_vpu_dec)
 	imx_vpu_dec->dec_global_info = imx_vpu_api_dec_get_global_info();
 	memset(&(imx_vpu_dec->open_params), 0, sizeof(imx_vpu_dec->open_params));
 	imx_vpu_dec->default_dma_buf_allocator = NULL;
+
+	imx_vpu_dec->output_is_tiled = FALSE;
 
 	imx_vpu_dec->fatal_error_cannot_decode = FALSE;
 }
@@ -424,6 +429,12 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 		open_params->flags |= IMX_VPU_API_DEC_OPEN_PARAMS_FLAG_USE_10BIT_DECODING;
 		GST_DEBUG_OBJECT(imx_vpu_dec, "format %s detected in list of supported srccaps formats; enabling 10-bit decoding", gst_video_format_to_string(downstream_format));
 	}
+
+
+	/* Turn on tiling if needed. */
+
+	if (GST_VIDEO_FORMAT_INFO_IS_TILED(gst_video_format_get_info(downstream_format)))
+		open_params->flags |= IMX_VPU_API_DEC_OPEN_PARAMS_FLAG_USE_TILED_OUTPUT;
 
 
 	/* Check if fully planar or semi planar frames shall be produced. */
@@ -763,36 +774,46 @@ static gboolean gst_imx_vpu_dec_decide_allocation(GstVideoDecoder *decoder, GstQ
 		gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_IMX_VPU_DEC_BUFFER_POOL);
 		gst_buffer_pool_set_config(buffer_pool, pool_config);
 
-		/* Check if the plane stride & plane offset values are "tightly packed".
-		 * See the vpu_output_buffers_are_tightly_packed for more details. */
-		dma_bufpool_video_info = gst_imx_vpu_dec_buffer_pool_get_video_info(imx_vpu_dec->dma_buffer_pool);
-		vpu_output_buffers_are_tightly_packed = TRUE;
-		for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(dma_bufpool_video_info); ++plane_index)
+		if (imx_vpu_dec->output_is_tiled)
 		{
-			gint negotiated_info_stride = GST_VIDEO_INFO_PLANE_STRIDE(&negotiated_video_info, plane_index);
-			gint dma_bufpool_info_stride = GST_VIDEO_INFO_PLANE_STRIDE(dma_bufpool_video_info, plane_index);
-
-			if (negotiated_info_stride != dma_bufpool_info_stride)
-			{
-				GST_DEBUG_OBJECT(
-					imx_vpu_dec,
-					"found difference in stride values for plane #%d:  negotiated video info stride: %d  DMA buffer pool video info stride: %d",
-					plane_index,
-					negotiated_info_stride,
-					dma_bufpool_info_stride
-				);
-
-				vpu_output_buffers_are_tightly_packed = FALSE;
-				break;
-			}
+			GST_DEBUG_OBJECT(imx_vpu_dec, "VPU output buffers use a tiled format; always considering them to be tightly packed");
+			vpu_output_buffers_are_tightly_packed = TRUE;
 		}
-		GST_DEBUG_OBJECT(imx_vpu_dec, "VPU output buffers are tightly packed: %d", vpu_output_buffers_are_tightly_packed);
+		else
+		{
+			/* Check if the plane stride & plane offset values are "tightly packed".
+			 * See the vpu_output_buffers_are_tightly_packed for more details. */
+			dma_bufpool_video_info = gst_imx_vpu_dec_buffer_pool_get_video_info(imx_vpu_dec->dma_buffer_pool);
+			vpu_output_buffers_are_tightly_packed = TRUE;
+			for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(dma_bufpool_video_info); ++plane_index)
+			{
+				gint negotiated_info_stride = GST_VIDEO_INFO_PLANE_STRIDE(&negotiated_video_info, plane_index);
+				gint dma_bufpool_info_stride = GST_VIDEO_INFO_PLANE_STRIDE(dma_bufpool_video_info, plane_index);
+
+				if (negotiated_info_stride != dma_bufpool_info_stride)
+				{
+					GST_DEBUG_OBJECT(
+						imx_vpu_dec,
+						"found difference in stride values for plane #%d:  negotiated video info stride: %d  DMA buffer pool video info stride: %d",
+						plane_index,
+						negotiated_info_stride,
+						dma_bufpool_info_stride
+					);
+
+					vpu_output_buffers_are_tightly_packed = FALSE;
+					break;
+				}
+			}
+			GST_DEBUG_OBJECT(imx_vpu_dec, "VPU output buffers are tightly packed: %d", vpu_output_buffers_are_tightly_packed);
+		}
 
 		/* If the plane stride & plane offset values aren't "tightly packed",
 		 * _and_ downstream does not support meta, then we must copy the VPU's
 		 * output frames into a form that _is_ "tightly packed", because without
 		 * video meta, downstream cannot know which parts of the frame contain
-		 * actual pixels and which ones contain padding bytes. */
+		 * actual pixels and which ones contain padding bytes.
+		 * Note that this does not apply to tiled pixel formats - with these,
+		 * we always assume that the frames are tightly packed. */
 		imx_vpu_dec->need_to_copy_output_frames = !(downstream_supports_video_meta || vpu_output_buffers_are_tightly_packed);
 
 		GST_DEBUG_OBJECT(imx_vpu_dec, "need to copy output frames: %d", imx_vpu_dec->need_to_copy_output_frames);
@@ -1055,6 +1076,8 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 
 				video_format = GST_VIDEO_FORMAT_UNKNOWN;
 
+				imx_vpu_dec->output_is_tiled = imx_vpu_api_is_color_format_tiled(new_stream_info->color_format);
+
 				switch (new_stream_info->color_format)
 				{
 					case IMX_VPU_API_COLOR_FORMAT_FULLY_PLANAR_YUV420_8BIT:
@@ -1154,6 +1177,14 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 						 * is not possible to be sure. */
 						GST_ELEMENT_ERROR(imx_vpu_dec, STREAM, FORMAT, ("GStreamer does not support 10-bit grayscale data"), (NULL));
 						flow_ret = GST_FLOW_ERROR;
+						break;
+
+					case IMX_VPU_API_HANTRO_COLOR_FORMAT_YUV420_SEMI_PLANAR_4x4TILED_8BIT:
+						video_format = GST_VIDEO_FORMAT_NV12_4L4;
+						break;
+
+					case IMX_VPU_API_HANTRO_COLOR_FORMAT_YUV420_SEMI_PLANAR_8x4TILED_8BIT:
+						video_format = GST_VIDEO_FORMAT_NV12_4L4;
 						break;
 
 					default:

@@ -425,6 +425,8 @@ gboolean gst_imx_vpu_color_format_to_gstvidfmt(GstVideoFormat *gst_video_format,
 		case IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_P010_10BIT: *gst_video_format = GST_VIDEO_FORMAT_P010_10LE; break;
 		case IMX_VPU_API_COLOR_FORMAT_YUV400_8BIT: *gst_video_format = GST_VIDEO_FORMAT_GRAY8; break;
 
+		case IMX_VPU_API_HANTRO_COLOR_FORMAT_YUV420_SEMI_PLANAR_4x4TILED_8BIT: *gst_video_format = GST_VIDEO_FORMAT_NV12_4L4; break;
+
 		case IMX_VPU_API_COLOR_FORMAT_PACKED_YUV422_UYVY_8BIT: *gst_video_format = GST_VIDEO_FORMAT_UYVY; break;
 		case IMX_VPU_API_COLOR_FORMAT_PACKED_YUV422_YUYV_8BIT: *gst_video_format = GST_VIDEO_FORMAT_YUY2; break;
 
@@ -463,6 +465,8 @@ gboolean gst_imx_vpu_color_format_from_gstvidfmt(ImxVpuApiColorFormat *imxvpuapi
 		case GST_VIDEO_FORMAT_NV24: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_YUV444_8BIT; break;
 		case GST_VIDEO_FORMAT_P010_10LE: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_SEMI_PLANAR_P010_10BIT; break;
 		case GST_VIDEO_FORMAT_GRAY8: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_YUV400_8BIT; break;
+
+		case GST_VIDEO_FORMAT_NV12_4L4: *imxvpuapi_format = IMX_VPU_API_HANTRO_COLOR_FORMAT_YUV420_SEMI_PLANAR_4x4TILED_8BIT; break;
 
 		case GST_VIDEO_FORMAT_UYVY: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_PACKED_YUV422_UYVY_8BIT; break;
 		case GST_VIDEO_FORMAT_YUY2: *imxvpuapi_format = IMX_VPU_API_COLOR_FORMAT_PACKED_YUV422_YUYV_8BIT; break;

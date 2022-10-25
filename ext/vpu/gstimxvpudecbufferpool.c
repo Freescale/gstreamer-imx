@@ -50,6 +50,7 @@ struct _GstImxVpuDecBufferPool
 	GMutex selected_buffer_mutex;
 	GstVideoInfo video_info;
 	gboolean add_videometa;
+	gboolean output_is_tiled;
 };
 
 
@@ -184,13 +185,22 @@ static gboolean gst_imx_vpu_dec_buffer_pool_set_config(GstBufferPool *pool, GstS
 	 * width/height to exclude padding rows and columns. */
 	imx_vpu_dec_buffer_pool->video_info.width = fb_metrics->actual_frame_width;
 	imx_vpu_dec_buffer_pool->video_info.height = fb_metrics->actual_frame_height;
-	/* Set up the stride sizes according to the framebuffer metrics.
-	 * The framebuffer_sizes struct can contain different stride values,
-	 * depending on the needs of the VPU. */
-	imx_vpu_dec_buffer_pool->video_info.stride[0] = fb_metrics->y_stride;
-	imx_vpu_dec_buffer_pool->video_info.stride[1] = fb_metrics->uv_stride;
-	imx_vpu_dec_buffer_pool->video_info.stride[2] = fb_metrics->uv_stride;
-	/* Set up the stride sizes according to the framebuffer offsets. */
+
+	/* With linear formats: Set up the stride sizes according to the
+	 * framebuffer metrics. The framebuffer_sizes struct can contain
+	 * different stride values, depending on the needs of the VPU.
+	 *
+	 * With tiled formats: Don't alter the video info strides, since
+	 * GstVideoInfo strides are different to fb_metrics strides.
+	 * Just keep the ones computed by gst_video_info_from_caps(). */
+	if (!imx_vpu_dec_buffer_pool->output_is_tiled)
+	{
+		imx_vpu_dec_buffer_pool->video_info.stride[0] = fb_metrics->y_stride;
+		imx_vpu_dec_buffer_pool->video_info.stride[1] = fb_metrics->uv_stride;
+		imx_vpu_dec_buffer_pool->video_info.stride[2] = fb_metrics->uv_stride;
+	}
+
+	/* Set up the plane sizes according to the framebuffer offsets. */
 	imx_vpu_dec_buffer_pool->video_info.offset[0] = 0;
 	imx_vpu_dec_buffer_pool->video_info.offset[1] = fb_metrics->y_size;
 	imx_vpu_dec_buffer_pool->video_info.offset[2] = fb_metrics->y_size + fb_metrics->uv_size;
@@ -201,17 +211,22 @@ static gboolean gst_imx_vpu_dec_buffer_pool_set_config(GstBufferPool *pool, GstS
 	GST_DEBUG_OBJECT(
 		imx_vpu_dec_buffer_pool,
 		"configuring buffer pool with stream info:"
-		"  Y/Cb/Cr strides: %d/%d/%d"
+		"  Y/Cb/Cr strides according to gst video info: %d/%d/%d"
+		"  Y/CbCr strides according to stream info: %zu/%zu"
 		"  Y/Cb/Cr offsets: %" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT "/%" G_GSIZE_FORMAT
 		"  frame size: %" G_GSIZE_FORMAT " bytes"
+		"  output is tiled: %d"
 		"  with videometa: %d",
 		imx_vpu_dec_buffer_pool->video_info.stride[0],
 		imx_vpu_dec_buffer_pool->video_info.stride[1],
 		imx_vpu_dec_buffer_pool->video_info.stride[2],
+		fb_metrics->y_stride,
+		fb_metrics->uv_stride,
 		imx_vpu_dec_buffer_pool->video_info.offset[0],
 		imx_vpu_dec_buffer_pool->video_info.offset[1],
 		imx_vpu_dec_buffer_pool->video_info.offset[2],
 		imx_vpu_dec_buffer_pool->video_info.size,
+		imx_vpu_dec_buffer_pool->output_is_tiled,
 		imx_vpu_dec_buffer_pool->add_videometa
 	);
 
@@ -398,6 +413,7 @@ GstImxVpuDecBufferPool* gst_imx_vpu_dec_buffer_pool_new(ImxVpuApiDecStreamInfo *
 	imx_vpu_dec_buffer_pool = g_object_new(gst_imx_vpu_dec_buffer_pool_get_type(), NULL);
 	imx_vpu_dec_buffer_pool->decoder_context = decoder_context;
 	imx_vpu_dec_buffer_pool->stream_info = *stream_info;
+	imx_vpu_dec_buffer_pool->output_is_tiled = imx_vpu_api_is_color_format_tiled(stream_info->color_format);
 
 	// Clear the floating flag, since it is not useful
 	// with buffer pools, and could lead to subtle
