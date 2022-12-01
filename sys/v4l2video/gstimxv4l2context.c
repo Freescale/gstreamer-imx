@@ -245,6 +245,11 @@ gboolean gst_imx_v4l2_context_probe_device(GstImxV4L2Context *imx_v4l2_context)
 				GST_DEBUG_OBJECT(imx_v4l2_context, "this is an OmniVision 5640 capture chip with MIPI interface");
 				probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_OV5640_MIPI;
 			}
+			else if (g_strcmp0(chip_identifier.match.name, "ov5645_mipi_camera") == 0)
+			{
+				GST_DEBUG_OBJECT(imx_v4l2_context, "this is an OmniVision 5645 capture chip with MIPI interface");
+				probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_OV5645_MIPI;
+			}
 			else if (g_strcmp0(chip_identifier.match.name, "adv7180") == 0)
 			{
 				GST_DEBUG_OBJECT(imx_v4l2_context, "this is an Analog Devices ADV7180 capture chip");
@@ -477,6 +482,7 @@ static gboolean enum_v4l2_format(GstImxV4L2Context *self, int fd, struct v4l2_fm
 		case GST_IMX_V4L2_CAPTURE_CHIP_UNRECOGNIZED_MXC_V4L2_BASED:
 		case GST_IMX_V4L2_CAPTURE_CHIP_OV5640:
 		case GST_IMX_V4L2_CAPTURE_CHIP_OV5640_MIPI:
+		case GST_IMX_V4L2_CAPTURE_CHIP_OV5645_MIPI:
 			selected_mxc_v4l2_format_descriptions = default_mxc_v4l2_format_descriptions;
 			num_selected_mxc_v4l2_format_descriptions = num_default_mxc_v4l2_format_descriptions;
 			break;
@@ -687,6 +693,7 @@ static gboolean probe_device_caps(GstImxV4L2Context *self, int fd)
 			{
 				case GST_IMX_V4L2_CAPTURE_CHIP_OV5640:
 				case GST_IMX_V4L2_CAPTURE_CHIP_OV5640_MIPI:
+				case GST_IMX_V4L2_CAPTURE_CHIP_OV5645_MIPI:
 				case GST_IMX_V4L2_CAPTURE_CHIP_OV5647:
 					v4l2_framesize.type = V4L2_FRMSIZE_TYPE_DISCRETE;
 					break;
@@ -793,6 +800,7 @@ static gboolean probe_device_caps(GstImxV4L2Context *self, int fd)
 	{
 		case GST_IMX_V4L2_CAPTURE_CHIP_OV5640:
 		case GST_IMX_V4L2_CAPTURE_CHIP_OV5640_MIPI:
+		case GST_IMX_V4L2_CAPTURE_CHIP_OV5645_MIPI:
 		case GST_IMX_V4L2_CAPTURE_CHIP_OV5647:
 		{
 			gint i;
@@ -901,6 +909,7 @@ static gboolean fill_caps_with_probed_info(GstImxV4L2Context *self, int fd, GstC
 		case GST_IMX_V4L2_CAPTURE_CHIP_UNRECOGNIZED_MXC_V4L2_BASED:
 		case GST_IMX_V4L2_CAPTURE_CHIP_OV5640:
 		case GST_IMX_V4L2_CAPTURE_CHIP_OV5640_MIPI:
+		case GST_IMX_V4L2_CAPTURE_CHIP_OV5645_MIPI:
 		case GST_IMX_V4L2_CAPTURE_CHIP_OV5647:
 		{
 			gboolean can_handle_30fps = TRUE;
@@ -924,6 +933,7 @@ static gboolean fill_caps_with_probed_info(GstImxV4L2Context *self, int fd, GstC
 			{
 				case GST_IMX_V4L2_CAPTURE_CHIP_OV5640:
 				case GST_IMX_V4L2_CAPTURE_CHIP_OV5640_MIPI:
+				case GST_IMX_V4L2_CAPTURE_CHIP_OV5645_MIPI:
 				case GST_IMX_V4L2_CAPTURE_CHIP_OV5647:
 				{
 					if (width == 2592)
