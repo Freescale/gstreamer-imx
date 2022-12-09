@@ -87,7 +87,7 @@ static void gst_imx_vpu_enc_mpeg4_class_init(GstImxVpuEncMPEG4Class *klass)
 	imx_vpu_enc_class->set_open_params = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_mpeg4_set_open_params);
 	imx_vpu_enc_class->get_output_caps = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_mpeg4_get_output_caps);
 
-	gst_imx_vpu_enc_common_class_init(imx_vpu_enc_class, IMX_VPU_API_COMPRESSION_FORMAT_MPEG4, TRUE, TRUE, TRUE, FALSE);
+	gst_imx_vpu_enc_common_class_init(imx_vpu_enc_class, IMX_VPU_API_COMPRESSION_FORMAT_MPEG4, TRUE, TRUE, TRUE, FALSE, FALSE);
 
 	g_object_class_install_property(
 		object_class,

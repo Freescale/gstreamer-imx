@@ -57,15 +57,17 @@ enum
 {
 	PROP_0,
 	PROP_GOP_SIZE,
+	PROP_CLOSED_GOP_INTERVAL,
 	PROP_BITRATE,
 	PROP_QUANTIZATION,
 	PROP_INTRA_REFRESH
 };
 
 
-#define DEFAULT_GOP_SIZE          16
-#define DEFAULT_BITRATE           0
-#define DEFAULT_INTRA_REFRESH     0
+#define DEFAULT_GOP_SIZE            16
+#define DEFAULT_CLOSED_GOP_INTERVAL 0
+#define DEFAULT_BITRATE             0
+#define DEFAULT_INTRA_REFRESH       0
 
 
 
@@ -118,6 +120,7 @@ static void gst_imx_vpu_enc_class_init(GstImxVpuEncClass *klass)
 static void gst_imx_vpu_enc_init(GstImxVpuEnc *imx_vpu_enc)
 {
 	imx_vpu_enc->gop_size = DEFAULT_GOP_SIZE;
+	imx_vpu_enc->closed_gop_interval = DEFAULT_CLOSED_GOP_INTERVAL;
 	imx_vpu_enc->bitrate = DEFAULT_BITRATE;
 	imx_vpu_enc->intra_refresh = DEFAULT_INTRA_REFRESH;
 
@@ -164,6 +167,12 @@ static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue 
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
+		case PROP_CLOSED_GOP_INTERVAL:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			imx_vpu_enc->closed_gop_interval = g_value_get_uint(value);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
 		case PROP_BITRATE:
 			GST_OBJECT_LOCK(imx_vpu_enc);
 			imx_vpu_enc->bitrate = g_value_get_uint(value);
@@ -204,6 +213,12 @@ static void gst_imx_vpu_enc_get_property(GObject *object, guint prop_id, GValue 
 		case PROP_GOP_SIZE:
 			GST_OBJECT_LOCK(imx_vpu_enc);
 			g_value_set_uint(value, imx_vpu_enc->gop_size);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
+		case PROP_CLOSED_GOP_INTERVAL:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			g_value_set_uint(value, imx_vpu_enc->closed_gop_interval);
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
@@ -401,6 +416,7 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 	GST_OBJECT_LOCK(imx_vpu_enc);
 	open_params->bitrate = imx_vpu_enc->bitrate;
 	open_params->gop_size = imx_vpu_enc->gop_size;
+	open_params->closed_gop_interval = imx_vpu_enc->closed_gop_interval;
 	open_params->quantization = imx_vpu_enc->quantization;
 	open_params->min_intra_refresh_mb_count = imx_vpu_enc->intra_refresh;
 	GST_OBJECT_UNLOCK(imx_vpu_enc);
@@ -839,7 +855,7 @@ finish:
 }
 
 
-void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompressionFormat compression_format, gboolean with_rate_control, gboolean with_constant_quantization, gboolean with_gop_support, gboolean with_intra_refresh)
+void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompressionFormat compression_format, gboolean with_rate_control, gboolean with_constant_quantization, gboolean with_gop_support, gboolean with_open_closed_gop_support, gboolean with_intra_refresh)
 {
 	GObjectClass *object_class;
 	GstElementClass *element_class;
@@ -891,6 +907,21 @@ void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompre
 				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 			)
 		);
+		if (with_open_closed_gop_support)
+		{
+			g_object_class_install_property(
+				object_class,
+				PROP_CLOSED_GOP_INTERVAL,
+				g_param_spec_uint(
+					"closed-gop-interval",
+					"Closed GOP interval",
+					"Interval between GOPs that are closed to previous GOPs; 0 = no closed GOPs",
+					0, G_MAXUINT,
+					DEFAULT_GOP_SIZE,
+					G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+				)
+			);
+		}
 	}
 	if (with_rate_control)
 	{

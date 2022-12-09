@@ -56,7 +56,7 @@ static void gst_imx_vpu_enc_h264_class_init(GstImxVpuEncH264Class *klass)
 	imx_vpu_enc_class->set_open_params = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_h264_set_open_params);
 	imx_vpu_enc_class->get_output_caps = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_h264_get_output_caps);
 
-	gst_imx_vpu_enc_common_class_init(imx_vpu_enc_class, IMX_VPU_API_COMPRESSION_FORMAT_H264, TRUE, TRUE, TRUE, TRUE);
+	gst_imx_vpu_enc_common_class_init(imx_vpu_enc_class, IMX_VPU_API_COMPRESSION_FORMAT_H264, TRUE, TRUE, TRUE, TRUE, TRUE);
 
 	imx_vpu_enc_class->use_idr_frame_type_for_keyframes = TRUE;
 }
