@@ -552,6 +552,7 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 		ImxVpuApiRawFrame raw_frame;
 		ImxVpuApiEncReturnCodes enc_ret;
 		GstBuffer *uploaded_input_buffer;
+		gboolean force_keyframe;
 
 		GST_LOG_OBJECT(imx_vpu_enc, "about to prepare and queue frame with number #%" G_GUINT32_FORMAT " for encoding", cur_frame->system_frame_number);
 
@@ -577,8 +578,29 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 
 		if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME(cur_frame))
 		{
-			GST_LOG_OBJECT(imx_vpu_enc, "force-keyframe flag set; forcing VPU to encode this frame as an %s frame", klass->use_idr_frame_type_for_keyframes ? "IDR" : "I");
+			GST_LOG_OBJECT(
+				imx_vpu_enc,
+				"force-keyframe flag set; forcing VPU to encode this frame as an %s frame",
+				klass->use_idr_frame_type_for_keyframes ? "IDR" : "I"
+			);
+			force_keyframe = TRUE;
+		}
+		else if (GST_VIDEO_CODEC_FRAME_IS_FORCE_KEYFRAME_HEADERS(cur_frame))
+		{
+			GST_LOG_OBJECT(
+				imx_vpu_enc,
+				"force-keyframe-headers flag set; forcing VPU to encode this frame as an %s frame",
+				klass->use_idr_frame_type_for_keyframes ? "IDR" : "I"
+			);
+			force_keyframe = TRUE;
+		}
+		else
+			force_keyframe = FALSE;
+
+		if (force_keyframe)
+		{
 			raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
+			GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(cur_frame);
 		}
 
 		/* The actual encoding */
