@@ -22,6 +22,16 @@
 #include "gstimxvpuench264.h"
 
 
+enum
+{
+	PROP_0 = GST_IMX_VPU_ENC_BASE_PROP_VALUE,
+	PROP_ENABLE_AUD
+};
+
+
+#define DEFAULT_ENABLE_AUD TRUE
+
+
 GST_DEBUG_CATEGORY_STATIC(imx_vpu_enc_h264_debug);
 #define GST_CAT_DEFAULT imx_vpu_enc_h264_debug
 
@@ -29,6 +39,8 @@ GST_DEBUG_CATEGORY_STATIC(imx_vpu_enc_h264_debug);
 struct _GstImxVpuEncH264
 {
 	GstImxVpuEnc parent;
+
+	gboolean enable_aud;
 };
 
 
@@ -41,30 +53,85 @@ struct _GstImxVpuEncH264Class
 G_DEFINE_TYPE(GstImxVpuEncH264, gst_imx_vpu_enc_h264, GST_TYPE_IMX_VPU_ENC)
 
 
-gboolean gst_imx_vpu_enc_h264_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncOpenParams *open_params);
-GstCaps* gst_imx_vpu_enc_h264_get_output_caps(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncStreamInfo const *stream_info);
+static void gst_imx_vpu_enc_h264_set_encoder_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec);
+static void gst_imx_vpu_enc_h264_get_encoder_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec);
+static gboolean gst_imx_vpu_enc_h264_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncOpenParams *open_params);
+static GstCaps* gst_imx_vpu_enc_h264_get_output_caps(GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncStreamInfo const *stream_info);
 
 
 static void gst_imx_vpu_enc_h264_class_init(GstImxVpuEncH264Class *klass)
 {
+	GObjectClass *object_class;
 	GstImxVpuEncClass *imx_vpu_enc_class;
 
 	GST_DEBUG_CATEGORY_INIT(imx_vpu_enc_h264_debug, "imxvpuenc_h264", 0, "NXP i.MX VPU h.264 video encoder");
 
+	object_class = G_OBJECT_CLASS(klass);
 	imx_vpu_enc_class = GST_IMX_VPU_ENC_CLASS(klass);
 
+	imx_vpu_enc_class->set_encoder_property = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_h264_set_encoder_property);
+	imx_vpu_enc_class->get_encoder_property = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_h264_get_encoder_property);
 	imx_vpu_enc_class->set_open_params = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_h264_set_open_params);
 	imx_vpu_enc_class->get_output_caps = GST_DEBUG_FUNCPTR(gst_imx_vpu_enc_h264_get_output_caps);
 
 	gst_imx_vpu_enc_common_class_init(imx_vpu_enc_class, IMX_VPU_API_COMPRESSION_FORMAT_H264, TRUE, TRUE, TRUE, TRUE, TRUE);
 
 	imx_vpu_enc_class->use_idr_frame_type_for_keyframes = TRUE;
+
+	g_object_class_install_property(
+		object_class,
+		PROP_ENABLE_AUD,
+		g_param_spec_boolean(
+			"enable-aud",
+			"Enable access unit delimiters",
+			"Enable the generation of access unit delimiters in the encoded output",
+			DEFAULT_ENABLE_AUD,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 }
 
 
 static void gst_imx_vpu_enc_h264_init(GstImxVpuEncH264 *imx_vpu_enc_h264)
 {
 	gst_imx_vpu_enc_common_init(GST_IMX_VPU_ENC_CAST(imx_vpu_enc_h264));
+	imx_vpu_enc_h264->enable_aud = DEFAULT_ENABLE_AUD;
+}
+
+
+static void gst_imx_vpu_enc_h264_set_encoder_property(GObject *object, guint prop_id, GValue const *value, GParamSpec *pspec)
+{
+	GstImxVpuEncH264 *imx_vpu_enc_h264 = GST_IMX_VPU_ENC_H264(object);
+
+	switch (prop_id)
+	{
+		case PROP_ENABLE_AUD:
+			GST_OBJECT_LOCK(imx_vpu_enc_h264);
+			imx_vpu_enc_h264->enable_aud = g_value_get_boolean(value);
+			GST_OBJECT_UNLOCK(imx_vpu_enc_h264);
+			break;
+
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+	}
+}
+
+
+static void gst_imx_vpu_enc_h264_get_encoder_property(GObject *object, guint prop_id, GValue *value, GParamSpec *pspec)
+{
+	GstImxVpuEncH264 *imx_vpu_enc_h264 = GST_IMX_VPU_ENC_H264(object);
+
+	switch (prop_id)
+	{
+		case PROP_ENABLE_AUD:
+			GST_OBJECT_LOCK(imx_vpu_enc_h264);
+			g_value_set_boolean(value, imx_vpu_enc_h264->enable_aud);
+			GST_OBJECT_UNLOCK(imx_vpu_enc_h264);
+			break;
+
+		default:
+			G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
+	}
 }
 
 
@@ -142,8 +209,11 @@ gboolean gst_imx_vpu_enc_h264_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuA
 		}
 	}
 
-	str = gst_imx_vpu_get_string_from_structure_field(s, "alignment");
-	h264_params->enable_access_unit_delimiters = ((str == NULL) || (g_strcmp0(str, "au") == 0));
+	GST_OBJECT_LOCK(imx_vpu_enc);
+	h264_params->enable_access_unit_delimiters = GST_IMX_VPU_ENC_H264_CAST(imx_vpu_enc)->enable_aud;
+	GST_OBJECT_UNLOCK(imx_vpu_enc);
+
+	GST_INFO_OBJECT(imx_vpu_enc, "access unit delimiters enabled: %d", h264_params->enable_access_unit_delimiters);
 
 
 finish:
@@ -157,9 +227,7 @@ finish:
 GstCaps* gst_imx_vpu_enc_h264_get_output_caps(G_GNUC_UNUSED GstImxVpuEnc *imx_vpu_enc, ImxVpuApiEncStreamInfo const *stream_info)
 {
 	GstCaps *caps;
-	gchar const *alignment_str, *level_str, *profile_str;
-
-	alignment_str = (stream_info->format_specific_open_params.h264_open_params.enable_access_unit_delimiters) ? "au" : "nal";
+	gchar const *level_str, *profile_str;
 
 	switch (stream_info->format_specific_open_params.h264_open_params.level)
 	{
@@ -199,7 +267,10 @@ GstCaps* gst_imx_vpu_enc_h264_get_output_caps(G_GNUC_UNUSED GstImxVpuEnc *imx_vp
 	caps = gst_caps_new_simple(
 		"video/x-h264",
 		"stream-format", G_TYPE_STRING,     "byte-stream",
-		"alignment",     G_TYPE_STRING,     alignment_str,
+		/* "au" refers to "access unit". This is unrelated to access unit delimiters,
+		 * and instead means that the encoder always produces entire access unit,
+		 * which the CODA VPU does. */
+		"alignment",     G_TYPE_STRING,     "au",
 		"level",         G_TYPE_STRING,     level_str,
 		"profile",       G_TYPE_STRING,     profile_str,
 		"width",         G_TYPE_INT,        (gint)(stream_info->frame_encoding_framebuffer_metrics.actual_frame_width),

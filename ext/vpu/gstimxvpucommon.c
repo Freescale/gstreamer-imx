@@ -134,38 +134,9 @@ gboolean gst_imx_vpu_get_caps_for_format(ImxVpuApiCompressionFormat compression_
 					"video/x-h264",
 					"parsed", G_TYPE_BOOLEAN, TRUE,
 					"stream-format", G_TYPE_STRING, "byte-stream",
+					"alignment", G_TYPE_STRING, "au",
 					NULL
 				);
-
-				{
-					g_value_init(&list_value, GST_TYPE_LIST);
-					g_value_init(&string_value, G_TYPE_STRING);
-
-					/* Add au alignment. All known i.MX decoders support access units. */
-					if (h264_support_details->flags & IMX_VPU_API_H264_FLAG_ACCESS_UNITS_SUPPORTED)
-					{
-						g_value_set_static_string(&string_value, "au");
-						gst_value_list_append_value(&list_value, &string_value);
-					}
-
-					/* Only add nal alignment to encoders. That's because nal alignment
-					 * does not guarantee that upstream delivers complete h.264 frames.
-					 * In case of a decoder, complete frames are a requirement, so we
-					 * disable nal alignment in decoders to always meet that requirement. */
-					if (for_encoder)
-					{
-						if (!(h264_support_details->flags & IMX_VPU_API_H264_FLAG_ACCESS_UNITS_REQUIRED))
-						{
-							g_value_set_static_string(&string_value, "nal");
-							gst_value_list_append_value(&list_value, &string_value);
-						}
-					}
-
-					gst_structure_set_value(structure, "alignment", &list_value);
-
-					g_value_unset(&list_value);
-					g_value_unset(&string_value);
-				}
 
 				{
 					g_value_init(&list_value, GST_TYPE_LIST);
@@ -206,30 +177,9 @@ gboolean gst_imx_vpu_get_caps_for_format(ImxVpuApiCompressionFormat compression_
 					"video/x-h265",
 					"parsed", G_TYPE_BOOLEAN, TRUE,
 					"stream-format", G_TYPE_STRING, "byte-stream",
+					"alignment", G_TYPE_STRING, "au",
 					NULL
 				);
-
-				{
-					g_value_init(&list_value, GST_TYPE_LIST);
-					g_value_init(&string_value, G_TYPE_STRING);
-
-					if (h265_support_details->flags & IMX_VPU_API_H265_FLAG_ACCESS_UNITS_SUPPORTED)
-					{
-						g_value_set_static_string(&string_value, "au");
-						gst_value_list_append_value(&list_value, &string_value);
-					}
-
-					if (!(h265_support_details->flags & IMX_VPU_API_H265_FLAG_ACCESS_UNITS_REQUIRED))
-					{
-						g_value_set_static_string(&string_value, "nal");
-						gst_value_list_append_value(&list_value, &string_value);
-					}
-
-					gst_structure_set_value(structure, "alignment", &list_value);
-
-					g_value_unset(&list_value);
-					g_value_unset(&string_value);
-				}
 
 				{
 					g_value_init(&list_value, GST_TYPE_LIST);
