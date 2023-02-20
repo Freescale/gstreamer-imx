@@ -66,6 +66,9 @@ if imx2d_backend_ipu_dep.found()
 	backend_source += [
 		'gstimxipuvideotransform.c'
 	]
+	if imx2d_videosink_enabled
+		source += ['gstimxipuvideosink.c']
+	endif
 	backend_deps += [imx2d_backend_ipu_dep]
 endif
 

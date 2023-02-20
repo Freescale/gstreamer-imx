@@ -25,6 +25,7 @@
 
 #ifdef WITH_GST_IMX2D_VIDEOSINK
 #include "gstimxg2dvideosink.h"
+#include "gstimxipuvideosink.h"
 #include "gstimxpxpvideosink.h"
 #endif
 
@@ -48,6 +49,9 @@ static gboolean plugin_init(GstPlugin *plugin)
 #endif
 
 #ifdef WITH_IMX2D_IPU_BACKEND
+#ifdef WITH_GST_IMX2D_VIDEOSINK
+	ret = ret && gst_element_register(plugin, "imxipuvideosink", GST_RANK_NONE, gst_imx_ipu_video_sink_get_type());
+#endif
 	ret = ret && gst_element_register(plugin, "imxipuvideotransform", GST_RANK_NONE, gst_imx_ipu_video_transform_get_type());
 #endif
 
