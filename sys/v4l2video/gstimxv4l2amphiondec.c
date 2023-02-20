@@ -16,6 +16,8 @@
  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include "gstimxv4l2prelude.h"
+
 #include <time.h>
 #include <linux/videodev2.h>
 #include <sys/ioctl.h>

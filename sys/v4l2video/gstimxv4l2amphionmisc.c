@@ -1,3 +1,5 @@
+#include "gstimxv4l2prelude.h"
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <dirent.h>

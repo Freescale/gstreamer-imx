@@ -16,6 +16,8 @@
  * Software Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include "gstimxv4l2prelude.h"
+
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include "gst/imx/common/gstimxdmabufferallocator.h"
