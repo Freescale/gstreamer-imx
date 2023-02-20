@@ -229,36 +229,42 @@ gboolean gst_imx_v4l2_context_probe_device(GstImxV4L2Context *imx_v4l2_context)
 		{
 			if (G_UNLIKELY(ioctl(fd, VIDIOC_DBG_G_CHIP_IDENT, &chip_identifier) < 0))
 			{
-				GST_ERROR_OBJECT(imx_v4l2_context, "failed to identify capture chip: %s (%d)", strerror(errno), errno);
-				goto error;
-			}
-
-			GST_DEBUG_OBJECT(imx_v4l2_context, "chip identifier: [%s]", chip_identifier.match.name);
-
-			if (g_strcmp0(chip_identifier.match.name, "ov5640_camera") == 0)
-			{
-				GST_DEBUG_OBJECT(imx_v4l2_context, "this is an OmniVision 5640 capture chip");
-				probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_OV5640;
-			}
-			else if (g_strcmp0(chip_identifier.match.name, "ov5640_mipi_camera") == 0)
-			{
-				GST_DEBUG_OBJECT(imx_v4l2_context, "this is an OmniVision 5640 capture chip with MIPI interface");
-				probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_OV5640_MIPI;
-			}
-			else if (g_strcmp0(chip_identifier.match.name, "ov5645_mipi_camera") == 0)
-			{
-				GST_DEBUG_OBJECT(imx_v4l2_context, "this is an OmniVision 5645 capture chip with MIPI interface");
-				probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_OV5645_MIPI;
-			}
-			else if (g_strcmp0(chip_identifier.match.name, "adv7180") == 0)
-			{
-				GST_DEBUG_OBJECT(imx_v4l2_context, "this is an Analog Devices ADV7180 capture chip");
-				probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_ADV7180;
+				GST_WARNING_OBJECT(
+					imx_v4l2_context,
+					"could not get capture chip identifier: %s (%d); treating this as an unrecognized mxc_v4l2 based capture chip",
+					strerror(errno), errno
+				);
+				probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_UNRECOGNIZED_MXC_V4L2_BASED;
 			}
 			else
 			{
-				GST_DEBUG_OBJECT(imx_v4l2_context, "unrecognized mxc_v4l2 based capture chip");
-				probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_UNRECOGNIZED_MXC_V4L2_BASED;
+				GST_DEBUG_OBJECT(imx_v4l2_context, "chip identifier: [%s]", chip_identifier.match.name);
+
+				if (g_strcmp0(chip_identifier.match.name, "ov5640_camera") == 0)
+				{
+					GST_DEBUG_OBJECT(imx_v4l2_context, "this is an OmniVision 5640 capture chip");
+					probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_OV5640;
+				}
+				else if (g_strcmp0(chip_identifier.match.name, "ov5640_mipi_camera") == 0)
+				{
+					GST_DEBUG_OBJECT(imx_v4l2_context, "this is an OmniVision 5640 capture chip with MIPI interface");
+					probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_OV5640_MIPI;
+				}
+				else if (g_strcmp0(chip_identifier.match.name, "ov5645_mipi_camera") == 0)
+				{
+					GST_DEBUG_OBJECT(imx_v4l2_context, "this is an OmniVision 5645 capture chip with MIPI interface");
+					probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_OV5645_MIPI;
+				}
+				else if (g_strcmp0(chip_identifier.match.name, "adv7180") == 0)
+				{
+					GST_DEBUG_OBJECT(imx_v4l2_context, "this is an Analog Devices ADV7180 capture chip");
+					probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_ADV7180;
+				}
+				else
+				{
+					GST_DEBUG_OBJECT(imx_v4l2_context, "unrecognized mxc_v4l2 based capture chip");
+					probe_result->capture_chip = GST_IMX_V4L2_CAPTURE_CHIP_UNRECOGNIZED_MXC_V4L2_BASED;
+				}
 			}
 		}
 		else if (strncmp((char const *)(v4l2_caps.card), "tw6869", 6) == 0)
