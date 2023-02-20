@@ -1179,6 +1179,7 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 						flow_ret = GST_FLOW_ERROR;
 						break;
 
+#if GST_CHECK_VERSION(1, 18, 0)
 					case IMX_VPU_API_HANTRO_COLOR_FORMAT_YUV420_SEMI_PLANAR_4x4TILED_8BIT:
 						video_format = GST_VIDEO_FORMAT_NV12_4L4;
 						break;
@@ -1186,6 +1187,7 @@ static GstFlowReturn gst_imx_vpu_dec_decode_queued_frames(GstImxVpuDec *imx_vpu_
 					case IMX_VPU_API_HANTRO_COLOR_FORMAT_YUV420_SEMI_PLANAR_8x4TILED_8BIT:
 						video_format = GST_VIDEO_FORMAT_NV12_4L4;
 						break;
+#endif
 
 					default:
 						break;
