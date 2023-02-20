@@ -1133,7 +1133,9 @@ static void log_capabilities(GstObject *object, guint32 capabilities)
 	if ((capabilities & V4L2_CAP_MODULATOR) != 0)            GST_DEBUG_OBJECT(object, "    V4L2_CAP_MODULATOR");
 	if ((capabilities & V4L2_CAP_SDR_CAPTURE) != 0)          GST_DEBUG_OBJECT(object, "    V4L2_CAP_SDR_CAPTURE");
 	if ((capabilities & V4L2_CAP_EXT_PIX_FORMAT) != 0)       GST_DEBUG_OBJECT(object, "    V4L2_CAP_EXT_PIX_FORMAT");
+#ifdef V4L2_CAP_SDR_OUTPUT
 	if ((capabilities & V4L2_CAP_SDR_OUTPUT) != 0)           GST_DEBUG_OBJECT(object, "    V4L2_CAP_SDR_OUTPUT");
+#endif
 #ifdef V4L2_CAP_META_CAPTURE
 	if ((capabilities & V4L2_CAP_META_CAPTURE) != 0)         GST_DEBUG_OBJECT(object, "    V4L2_CAP_META_CAPTURE");
 #endif
@@ -1143,6 +1145,8 @@ static void log_capabilities(GstObject *object, guint32 capabilities)
 #ifdef V4L2_CAP_META_OUTPUT
 	if ((capabilities & V4L2_CAP_META_OUTPUT) != 0)          GST_DEBUG_OBJECT(object, "    V4L2_CAP_META_OUTPUT");
 #endif
+#ifdef V4L2_CAP_TOUCH
 	if ((capabilities & V4L2_CAP_TOUCH) != 0)                GST_DEBUG_OBJECT(object, "    V4L2_CAP_TOUCH");
+#endif
 	if ((capabilities & V4L2_CAP_DEVICE_CAPS) != 0)          GST_DEBUG_OBJECT(object, "    V4L2_CAP_DEVICE_CAPS");
 }
