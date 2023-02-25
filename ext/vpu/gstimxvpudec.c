@@ -549,6 +549,51 @@ static GstFlowReturn gst_imx_vpu_dec_handle_frame(GstVideoDecoder *decoder, GstV
 		GstMapInfo in_map_info;
 		ImxVpuApiEncodedFrame encoded_frame;
 		ImxVpuApiDecReturnCodes dec_ret;
+		GstClockTimeDiff decoding_deadline;
+
+		/* Drop the frame if QoS events determined that it arrived
+		 * too late and consequently cannot be decoded anymore. */
+		decoding_deadline = gst_video_decoder_get_max_decode_time(decoder, cur_frame);
+		if (G_UNLIKELY(decoding_deadline < 0))
+		{
+			/* There are two cases where the frame must be pushed into the VPU in spite of QoS:
+			 *
+			 * 1. The decoder has just been started, and the VPU did not yet
+			 *    received the data it requires to produce stream information
+			 *    (see IMX_VPU_API_DEC_OUTPUT_CODE_NEW_STREAM_INFO_AVAILABLE below).
+			 *    When we received that info, output_state is initialized, so
+			 *    check its value to determine if the VPU got that initial data.
+			 *    If it didn't, don't drop any data just yet.
+			 * 2. Current frame is marked as a sync point. Some streams can have
+			 *    large amounts of delta frames in between sync points, so dropping
+			 *    the latter could cause problems.
+			 */
+			if (imx_vpu_dec->output_state == NULL)
+			{
+				GST_DEBUG_OBJECT(
+					imx_vpu_dec,
+					"frame is too late (deadline: %" GST_STIME_FORMAT "), but VPU did not yet produce stream info; still pushing frame into VPU",
+					GST_STIME_ARGS(decoding_deadline)
+				);
+			}
+			else if (GST_VIDEO_CODEC_FRAME_IS_SYNC_POINT(cur_frame))
+			{
+				GST_DEBUG_OBJECT(
+					imx_vpu_dec,
+					"frame is too late (deadline: %" GST_STIME_FORMAT "), but it is marked as a sync point; still pushing frame into VPU",
+					GST_STIME_ARGS(decoding_deadline)
+				);
+			}
+			else
+			{
+				GST_DEBUG_OBJECT(
+					imx_vpu_dec,
+					"dropping frame because it is too late (deadline: %" GST_STIME_FORMAT ")",
+					GST_STIME_ARGS(decoding_deadline)
+				);
+				return gst_video_decoder_drop_frame(decoder, cur_frame);
+			}
+		}
 
 		gst_buffer_map(cur_frame->input_buffer, &in_map_info, GST_MAP_READ);
 
