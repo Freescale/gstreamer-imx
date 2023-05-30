@@ -304,17 +304,28 @@ static gboolean gst_imx_vpu_dec_set_format(GstVideoDecoder *decoder, GstVideoCod
 	ImxVpuApiDecGlobalInfo const *dec_global_info = imx_vpu_dec->dec_global_info;
 	ImxVpuApiDecOpenParams *open_params = &(imx_vpu_dec->open_params);
 	GstCaps *allowed_srccaps = NULL;
+	GstFlowReturn drain_flow_ret;
 	ImxVpuApiCompressionFormat compression_format = GST_IMX_VPU_GET_ELEMENT_COMPRESSION_FORMAT(decoder);
 
 	GST_DEBUG_OBJECT(decoder, "setting decoder format");
 
 
 	/* Drain frames that are already decoded but not yet displayed. */
-	GST_DEBUG_OBJECT(decoder, "draining remaining frames from decoder");
-	if ((imx_vpu_dec->decoder != NULL) && (gst_imx_vpu_dec_decode_queued_frames(imx_vpu_dec) != GST_FLOW_OK))
+	if (imx_vpu_dec->decoder != NULL)
 	{
-		ret = FALSE;
-		goto finish;
+		GST_DEBUG_OBJECT(decoder, "draining remaining frames from decoder");
+		drain_flow_ret = gst_imx_vpu_dec_decode_queued_frames(imx_vpu_dec);
+		switch (drain_flow_ret)
+		{
+			/* EOS is not an error, so handle it here along with OK. */
+			case GST_FLOW_OK:
+			case GST_FLOW_EOS:
+				break;
+
+			default:
+				ret = FALSE;
+				goto finish;
+		}
 	}
 
 
