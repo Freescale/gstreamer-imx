@@ -29,13 +29,37 @@
 
 
 
-/**
- * Some functions here may be called before the GstImxDmaBufferUploaderClass
- * class_init function is called. And since this is part of a library, not
- * a plugin, there is no equivalent to a plugin_init function where the
- * GST_DEBUG_CATEGORY_INIT() macro could be called. For this reason, the
- * debug category here is set up in this unusual manner.
- */
+static GQuark gst_imx_dmabuf_upload_method_refd_memory_quark;
+
+/* Some variables need to be initialized once, and may be accessed even before
+ * the GstImxDmaBufferUploaderClass class_init function is called. Also, since
+ * this is a library, not a plugin, there is no equivalent to a plugin_init
+ * function where this global initialization could take place. For this reason,
+ * this global_init function is called in multiple places, but only actually
+ * does something in its first run. */
+
+static gpointer gst_imx_dma_buffer_uploader_global_init()
+{
+	static gsize gonce_result = 0;
+
+	if (g_once_init_enter(&gonce_result))
+	{
+		gsize result = 0;
+
+#ifndef GST_DISABLE_GST_DEBUG
+		GstDebugCategory *cat = NULL;
+		GST_DEBUG_CATEGORY_INIT(cat, "imxdmabufferupload", 0, "NXP i.MX DMA buffer upload");
+		result = (gsize)cat;
+#endif
+
+		gst_imx_dmabuf_upload_method_refd_memory_quark = g_quark_from_static_string("gst-imx-dmabuf-upload-method-refd-memory");
+
+		g_once_init_leave(&gonce_result, result);
+	}
+
+	return (gpointer)gonce_result;
+}
+
 
 #ifndef GST_DISABLE_GST_DEBUG
 
@@ -43,26 +67,15 @@
 
 static GstDebugCategory* gst_imx_dma_buffer_uploader_ensure_debug_category()
 {
-	static gsize cat_gonce = 0;
-
-	if (g_once_init_enter(&cat_gonce))
-	{
-		GstDebugCategory *cat = NULL;
-		GST_DEBUG_CATEGORY_INIT(cat, "imxdmabufferupload", 0, "NXP i.MX DMA buffer upload");
-		g_once_init_leave(&cat_gonce, (gsize)cat);
-	}
-
-	return (GstDebugCategory *)cat_gonce;
+	return (GstDebugCategory *)gst_imx_dma_buffer_uploader_global_init();
 }
 
-#endif /* GST_DISABLE_GST_DEBUG */
+#endif
 
 
 
 
 #define GST_FLOW_COULD_NOT_UPLOAD  GST_FLOW_CUSTOM_SUCCESS
-
-
 
 
 struct _GstImxDmaBufferUploader
@@ -111,7 +124,13 @@ struct RawBufferUploadMethodContext
 
 static GstImxDmaBufferUploadMethodContext* raw_buffer_upload_method_create(GstImxDmaBufferUploader *uploader)
 {
-	struct RawBufferUploadMethodContext *upload_method_context = g_new0(struct RawBufferUploadMethodContext, 1);
+	struct RawBufferUploadMethodContext *upload_method_context;
+
+	g_assert(GST_IS_IMX_DMABUF_ALLOCATOR(uploader->imx_dma_buffer_allocator));
+
+	gst_imx_dma_buffer_uploader_global_init();
+
+	upload_method_context = g_new0(struct RawBufferUploadMethodContext, 1);
 
 	upload_method_context->parent.uploader = uploader;
 
@@ -200,6 +219,8 @@ static GstImxDmaBufferUploadMethodContext* dmabuf_upload_method_create(GstImxDma
 
 	g_assert(GST_IS_IMX_DMABUF_ALLOCATOR(uploader->imx_dma_buffer_allocator));
 
+	gst_imx_dma_buffer_uploader_global_init();
+
 	upload_method_context = g_new0(struct DmabufUploadMethodContext, 1);
 
 	upload_method_context->parent.uploader = uploader;
@@ -226,42 +247,55 @@ static void dmabuf_upload_method_destroy(GstImxDmaBufferUploadMethodContext *upl
 
 static GstFlowReturn dmabuf_upload_method_perform(GstImxDmaBufferUploadMethodContext *upload_method_context, GstMemory *input_memory, GstMemory **output_memory)
 {
-	int dmabuf_fd, dup_dmabuf_fd;
+	int dmabuf_fd;
 	gsize size;
 	struct DmabufUploadMethodContext *self = (struct DmabufUploadMethodContext *)upload_method_context;
 
+	/* This upload method does not actually copy bytes. Instead, it refs
+	 * the input dmabuf gstmemory. This ensures that other parts of the
+	 * GStreamer pipeline know that this memory is in use, and thus can't
+	 * be written to without invoking copy-on-write. This avoids data races
+	 * where a consumer is still processing the memory while a producer
+	 * wants to reuse the gstmemory and writes into it at the same time. */
+
 	if (!gst_is_dmabuf_memory(input_memory))
 		return GST_FLOW_COULD_NOT_UPLOAD;
-
-	/* We do not actually copy the bytes, like the raw upload method does.
-	 * Instead, we dup() the DMA-BUF FD so we can share ownership over it
-	 * and close() our FD when we are done with it. Then, we wrap the FD
-	 * in an GstImxDmaBufAllocator-allocated GstMemory. In other words,
-	 * the FD is wrapped in a custom ImxDmaBuffer. This is how we "upload". */
 
 	size = input_memory->size;
 	dmabuf_fd = gst_dmabuf_memory_get_fd(input_memory);
 	g_assert(dmabuf_fd > 0);
 
-	dup_dmabuf_fd = dup(dmabuf_fd);
-	if (G_UNLIKELY(dup_dmabuf_fd < 0))
+	*output_memory = gst_imx_dmabuf_allocator_wrap_dmabuf(self->parent.uploader->imx_dma_buffer_allocator, dmabuf_fd, size);
+	if (*output_memory == NULL)
 	{
-		GST_ERROR_OBJECT(self->parent.uploader, "could not duplicate dmabuf FD: %s (%d)", strerror(errno), errno);
-			return GST_FLOW_ERROR;
+		GST_ERROR_OBJECT(self, "could not allocate GstMemory for uploading to DMA-BUF");
+		return GST_FLOW_COULD_NOT_UPLOAD;
 	}
 
 	GST_LOG_OBJECT(
 		self->parent.uploader,
-		"wrapping duplicated DMA-BUF FD as part of the upload process; original FD: %d duplicated FD: %d size: %" G_GSIZE_FORMAT " maxsize: %" G_GSIZE_FORMAT " align: %" G_GSIZE_FORMAT " offset: %" G_GSIZE_FORMAT,
+		"wrapping input dmabuf gstmemory %p with DMA-BUF FD %d and size %" G_GSIZE_FORMAT " maxsize %" G_GSIZE_FORMAT " align %" G_GSIZE_FORMAT " offset %" G_GSIZE_FORMAT,
+		(gpointer)input_memory,
 		dmabuf_fd,
-		dup_dmabuf_fd,
-		size,
+		input_memory->size,
 		input_memory->maxsize,
 		input_memory->align,
 		input_memory->offset
 	);
 
-	*output_memory = gst_imx_dmabuf_allocator_wrap_dmabuf(self->parent.uploader->imx_dma_buffer_allocator, dup_dmabuf_fd, size);
+	/* Ref the input gstmemory and attach it to the output gstmemory
+	 * as qdata. That way, once the output gstmemory is discarded,
+	 * the input gstmemory is automatically unref'd, ensuring that
+	 * the lifetime of the input gstmemory is at least as long as
+	 * that of the output gstmemory's. */
+	gst_memory_ref(input_memory);
+	gst_mini_object_set_qdata(
+		GST_MINI_OBJECT_CAST(*output_memory),
+		gst_imx_dmabuf_upload_method_refd_memory_quark,
+		(gpointer)input_memory,
+		(GDestroyNotify)gst_memory_unref
+	);
+
 	(*output_memory)->maxsize = input_memory->maxsize;
 	(*output_memory)->align = input_memory->align;
 	(*output_memory)->offset = input_memory->offset;
