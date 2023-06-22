@@ -162,7 +162,7 @@ static void gst_imx_2d_video_transform_class_init(GstImx2dVideoTransformClass *k
 			"disable-passthrough",
 			"Disable passthrough",
 			"Disable passthrough, forcing processing to occur even if there are no changes in the format",
-			DEFAULT_INPUT_CROP,
+			DEFAULT_DISABLE_PASSTHROUGH,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
 	);
