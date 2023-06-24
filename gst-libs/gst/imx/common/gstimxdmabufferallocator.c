@@ -119,7 +119,7 @@ GstAllocator* gst_imx_allocator_new(void)
 
 GType gst_imx_dma_buffer_allocator_get_type(void)
 {
-	static volatile gsize imxdmabufferallocator_type = 0;
+	static gsize imxdmabufferallocator_type = 0;
 
 	if (g_once_init_enter(&imxdmabufferallocator_type))
 	{
