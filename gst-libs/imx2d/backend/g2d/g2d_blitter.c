@@ -317,15 +317,19 @@ static Imx2dBlitterClass imx_2d_backend_g2d_blitter_class =
 };
 
 
-/* NOTE: Some code bits are enclosed in IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
- * #ifdef blocks. This is because on the i.MX8qm and the i.MX8qxp, there
- * actually isn't a 2D GPU core. Instead, G2D is emulated via a different
- * subsystem - the DPU, which does not exist in other i.MX8 variants. The
- * DPU behaves somewhat differently than a "real" 2D GPU core. In particular,
- * it does not require all calls to come from the same thread, and its
- * implementations of the g2d_open() and g2d_close() function are slower.
- * therefore, if we are dealing with such a G2D-on-top-of-DPU implementation,
- * we call g2d_open() (and g2d_close()) only once to improve performance.
+/* NOTE: Some parts are enclosed in IMX2D_G2D_CALLS_RESTRICTED_TO_ONE_THREAD
+ * #ifdef blocks. This is because older G2D versions required all G2D calls
+ * to be made from one and the same thread. Newer G2D versions do not require
+ * this anymore, and in fact work less efficiently when these workarounds for
+ * the older G2D implementations are applied (because g2d_open() is called
+ * for every frame then, and in newer versions, g2d_open() is a rather slow
+ * function, since it sets up OpenCL resources). DPU-based G2D implementations
+ * (present on the i.MX8qm and the i.MX8qxp) also do not have this limitation
+ * and also behave worse when these workarounds are used.
+ *
+ * This means that for DPU-based G2D versions and for G2D versions >= 2.0,
+ * IMX2D_G2D_CALLS_RESTRICTED_TO_ONE_THREAD is _not_ defined. For all other
+ * versions, it is.
  *
  * This enhances https://github.com/Freescale/gstreamer-imx/pull/282 . */
 
@@ -338,7 +342,7 @@ static void imx_2d_backend_g2d_blitter_destroy(Imx2dBlitter *blitter)
 
 	assert(blitter != NULL);
 
-#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+#ifndef IMX2D_G2D_CALLS_RESTRICTED_TO_ONE_THREAD
 	if (g2d_blitter->g2d_handle != NULL)
 	{
 		if (g2d_close(g2d_blitter->g2d_handle) != 0)
@@ -367,7 +371,7 @@ static int imx_2d_backend_g2d_blitter_start(Imx2dBlitter *blitter)
 {
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
 
-#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+#ifndef IMX2D_G2D_CALLS_RESTRICTED_TO_ONE_THREAD
 	if (g2d_blitter->g2d_handle == NULL)
 #endif
 	{
@@ -393,15 +397,6 @@ static int imx_2d_backend_g2d_blitter_start(Imx2dBlitter *blitter)
 
 static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 {
-#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
-	/* When G2D is emulated on top of the DPU, g2d_finish() is
-	 * called after every blit. And, we can't call g2d_close()
-	 * here, because the DPU-emulated version of that function
-	 * is slow. (It is called in destroy().) So, when the
-	 * DPU-based emulation is used, do nothing here. */
-	IMX_2D_UNUSED_PARAM(blitter);
-	return TRUE;
-#else
 	Imx2dG2DBlitter *g2d_blitter = (Imx2dG2DBlitter *)blitter;
 	int ret;
 
@@ -409,11 +404,12 @@ static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 
 	ret = (g2d_finish(g2d_blitter->g2d_handle) == 0);
 
+#ifdef IMX2D_G2D_CALLS_RESTRICTED_TO_ONE_THREAD
 	if (g2d_close(g2d_blitter->g2d_handle) != 0)
 		IMX_2D_LOG(ERROR, "closing g2d device failed");
+#endif
 
 	return ret;
-#endif
 }
 
 
@@ -621,14 +617,6 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 
 	if (do_alpha)
 		g2d_disable(g2d_blitter->g2d_handle, G2D_BLEND);
-
-#ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
-	/* When G2D is emulated on top of the DPU, this must be called
-	 * after every blit. Otherwise, the next blit operation may
-	 * take place before the last one finished, causing visible
-	 * flickering and other frame corruptions. */
-	g2d_finish(g2d_blitter->g2d_handle);
-#endif
 
 	if (g2d_ret != 0)
 	{
