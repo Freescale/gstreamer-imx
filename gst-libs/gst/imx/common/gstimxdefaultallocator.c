@@ -44,6 +44,7 @@ struct _GstImxDefaultDmaMemory
 {
 	GstMemory parent;
 	ImxDmaBuffer *dmabuffer;
+	GMutex lock;
 };
 
 
@@ -191,16 +192,21 @@ static void gst_imx_default_allocator_free(G_GNUC_UNUSED GstAllocator *allocator
 
 	imx_dma_buffer_deallocate(imx_dma_memory->dmabuffer);
 
+	g_mutex_clear(&(imx_dma_memory->lock));
+
 	g_slice_free1(sizeof(GstImxDefaultDmaMemory), imx_dma_memory);
 }
 
 
-static gpointer gst_imx_default_allocator_map(GstMemory *memory, GstMapInfo *info, G_GNUC_UNUSED gsize maxsize)
+static gpointer gst_imx_default_allocator_map(GstMemory *memory, GstMapInfo *info, gsize maxsize)
 {
 	GstImxDefaultDmaMemory *imx_dma_memory = (GstImxDefaultDmaMemory *)memory;
 	unsigned int flags = 0;
 	int error;
 	uint8_t *mapped_virtual_address;
+
+	if (memory->parent != NULL)
+		return gst_imx_default_allocator_map(memory->parent, info, maxsize);
 
 	if (info->flags & GST_MAP_READ)
 		flags |= IMX_DMA_BUFFER_MAPPING_FLAG_READ;
@@ -209,7 +215,10 @@ static gpointer gst_imx_default_allocator_map(GstMemory *memory, GstMapInfo *inf
 	if (info->flags & GST_MAP_FLAG_IMX_MANUAL_SYNC)
 		flags |= IMX_DMA_BUFFER_MAPPING_FLAG_MANUAL_SYNC;
 
+	g_mutex_lock(&(imx_dma_memory->lock));
 	mapped_virtual_address = imx_dma_buffer_map(imx_dma_memory->dmabuffer, flags, &error);
+	g_mutex_unlock(&(imx_dma_memory->lock));
+
 	if (mapped_virtual_address == NULL)
 		GST_ERROR_OBJECT(memory->allocator, "could not map memory: %s (%d)", strerror(error), error);
 
@@ -220,7 +229,9 @@ static gpointer gst_imx_default_allocator_map(GstMemory *memory, GstMapInfo *inf
 static void gst_imx_default_allocator_unmap(GstMemory *memory, G_GNUC_UNUSED GstMapInfo *info)
 {
 	GstImxDefaultDmaMemory *imx_dma_memory = (GstImxDefaultDmaMemory *)memory;
+	g_mutex_lock(&(imx_dma_memory->lock));
 	imx_dma_buffer_unmap(imx_dma_memory->dmabuffer);
+	g_mutex_unlock(&(imx_dma_memory->lock));
 }
 
 
@@ -231,6 +242,8 @@ static GstMemory * gst_imx_default_allocator_copy(GstMemory *memory, gssize offs
 	GstImxDefaultDmaMemory *new_imx_dma_memory = NULL;
 	uint8_t *mapped_src_data = NULL, *mapped_dest_data = NULL;
 	int error;
+
+	g_mutex_lock(&(imx_dma_memory->lock));
 
 	if (size == -1)
 	{
@@ -276,6 +289,7 @@ finish:
 		imx_dma_buffer_unmap(imx_dma_memory->dmabuffer);
 	if (mapped_dest_data != NULL)
 		imx_dma_buffer_unmap(new_imx_dma_memory->dmabuffer);
+	g_mutex_unlock(&(imx_dma_memory->lock));
 
 	return GST_MEMORY_CAST(new_imx_dma_memory);
 
@@ -296,6 +310,8 @@ static GstMemory * gst_imx_default_allocator_share(GstMemory *memory, gssize off
 	GstImxDefaultAllocator *imx_default_allocator = GST_IMX_DEFAULT_ALLOCATOR(memory->allocator);
 	GstImxDefaultDmaMemory *new_imx_dma_memory = NULL;
 	GstMemory *parent;
+
+	g_mutex_lock(&(imx_dma_memory->lock));
 
 	if (size == -1)
 	{
@@ -318,6 +334,7 @@ static GstMemory * gst_imx_default_allocator_share(GstMemory *memory, gssize off
 	new_imx_dma_memory->dmabuffer = imx_dma_memory->dmabuffer;
 
 finish:
+	g_mutex_unlock(&(imx_dma_memory->lock));
 	return GST_MEMORY_CAST(new_imx_dma_memory);
 
 cleanup:

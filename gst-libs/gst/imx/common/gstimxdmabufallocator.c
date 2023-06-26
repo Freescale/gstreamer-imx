@@ -46,9 +46,57 @@ GST_DEBUG_CATEGORY_STATIC(imx_dmabuf_allocator_debug);
 #define GST_IMX_DMABUF_MEMORY_TYPE "ImxDmaBufMemory"
 
 
-/* We store the ImxDmaBuffer (or rather, a derived type called InternalImxDmaBuffer)
- * as a qdata in the GstMemory. */
+/* We store the ImxDmaBuffer as a qdata in the GstMemory,
+ * and the associated mutex as another qdata. */
 static GQuark gst_imx_dmabuf_memory_internal_imxdmabuffer_quark;
+static GQuark gst_imx_dmabuf_memory_internal_imxdmabuffer_mutex_quark;
+
+
+static void clear_imx_dmabuf_memory_mutex(GMutex *mutex)
+{
+	g_mutex_clear(mutex);
+	g_free(mutex);
+}
+
+
+static void add_imx_dmabuf_memory_mutex(GstMemory *memory)
+{
+	GMutex *mutex = g_malloc(sizeof(GMutex));
+	g_mutex_init(mutex);
+
+	gst_mini_object_set_qdata(
+		GST_MINI_OBJECT_CAST(memory),
+		gst_imx_dmabuf_memory_internal_imxdmabuffer_mutex_quark,
+		(gpointer)mutex,
+		(GDestroyNotify)clear_imx_dmabuf_memory_mutex
+	);
+}
+
+
+static void lock_imx_dmabuf_memory_mutex(GstMemory *memory)
+{
+	gpointer qdata;
+	GMutex *mutex;
+
+	qdata = gst_mini_object_get_qdata(GST_MINI_OBJECT_CAST(memory), gst_imx_dmabuf_memory_internal_imxdmabuffer_mutex_quark);
+	g_assert(qdata != NULL);
+	mutex = (GMutex *)qdata;
+
+	g_mutex_lock(mutex);
+}
+
+
+static void unlock_imx_dmabuf_memory_mutex(GstMemory *memory)
+{
+	gpointer qdata;
+	GMutex *mutex;
+
+	qdata = gst_mini_object_get_qdata(GST_MINI_OBJECT_CAST(memory), gst_imx_dmabuf_memory_internal_imxdmabuffer_mutex_quark);
+	g_assert(qdata != NULL);
+	mutex = (GMutex *)qdata;
+
+	g_mutex_unlock(mutex);
+}
 
 
 static void gst_imx_dmabuf_allocator_phys_mem_allocator_iface_init(gpointer iface, gpointer iface_data);
@@ -92,6 +140,7 @@ static void gst_imx_dmabuf_allocator_class_init(GstImxDmaBufAllocatorClass *klas
 	GST_DEBUG_CATEGORY_INIT(imx_dmabuf_allocator_debug, "imxdmabufallocator", 0, "physical memory allocator which allocates DMA-BUF memory");
 
 	gst_imx_dmabuf_memory_internal_imxdmabuffer_quark = g_quark_from_static_string("gst-imxdmabuffer-dmabuf-memory");
+	gst_imx_dmabuf_memory_internal_imxdmabuffer_mutex_quark = g_quark_from_static_string("gst-imxdmabuffer-dmabuf-memory-mutex");
 
 	object_class = G_OBJECT_CLASS(klass);
 	allocator_class = GST_ALLOCATOR_CLASS(klass);
@@ -229,6 +278,8 @@ static GstMemory* gst_imx_dmabuf_allocator_alloc(GstAllocator *allocator, gsize 
 	);
 	qdata_set = TRUE;
 
+	add_imx_dmabuf_memory_mutex(memory);
+
 	GST_DEBUG_OBJECT(
 		self,
 		"allocated new DMA-BUF buffer;  FD: %d  imxdmabuffer: %p  total size: %" G_GSIZE_FORMAT "  alignment: %zu  gstmemory: %p",
@@ -304,6 +355,8 @@ static GstMemory * gst_imx_dmabuf_allocator_mem_copy(GstMemory *original_memory,
 
 	orig_imx_dma_buffer = get_dma_buffer_from_memory(original_memory);
 
+	lock_imx_dmabuf_memory_mutex(original_memory);
+
 	if (size == -1)
 	{
 		size = imx_dma_buffer_get_size(orig_imx_dma_buffer);
@@ -342,6 +395,8 @@ finish:
 	if (mapped_dest_data != NULL)
 		imx_dma_buffer_unmap(copy_imx_dma_buffer);
 
+	unlock_imx_dmabuf_memory_mutex(original_memory);
+
 	return copy_memory;
 
 error:
@@ -376,6 +431,8 @@ static gpointer gst_imx_dmabuf_allocator_mem_map_full(GstMemory *memory, GstMapI
 	flags |= (info->flags & GST_MAP_WRITE) ? IMX_DMA_BUFFER_MAPPING_FLAG_WRITE : 0;
 	flags |= (info->flags & GST_MAP_FLAG_IMX_MANUAL_SYNC) ? IMX_DMA_BUFFER_MAPPING_FLAG_MANUAL_SYNC : 0;
 
+	lock_imx_dmabuf_memory_mutex(memory);
+
 	mapped_virtual_address = imx_dma_buffer_map(imx_dma_buffer, flags, &error);
 	if (G_UNLIKELY(mapped_virtual_address == NULL))
 	{
@@ -398,6 +455,7 @@ static gpointer gst_imx_dmabuf_allocator_mem_map_full(GstMemory *memory, GstMapI
 	);
 
 finish:
+	unlock_imx_dmabuf_memory_mutex(memory);
 	return mapped_virtual_address;
 }
 
@@ -409,6 +467,8 @@ static void gst_imx_dmabuf_allocator_mem_unmap_full(GstMemory *memory, G_GNUC_UN
 	imx_dma_buffer = get_dma_buffer_from_memory(memory);
 	g_assert(imx_dma_buffer != NULL);
 
+	lock_imx_dmabuf_memory_mutex(memory);
+
 	GST_LOG_OBJECT(
 		memory->allocator,
 		"unmapped imxdmabuffer %p with FD %d",
@@ -417,6 +477,8 @@ static void gst_imx_dmabuf_allocator_mem_unmap_full(GstMemory *memory, G_GNUC_UN
 	);
 
 	imx_dma_buffer_unmap(imx_dma_buffer);
+
+	unlock_imx_dmabuf_memory_mutex(memory);
 }
 
 
@@ -500,6 +562,8 @@ GstMemory* gst_imx_dmabuf_allocator_wrap_dmabuf(GstAllocator *allocator, int dma
 		(gpointer)wrapped_dma_buffer,
 		g_free
 	);
+
+	add_imx_dmabuf_memory_mutex(memory);
 
 	GST_DEBUG_OBJECT(
 		self,
