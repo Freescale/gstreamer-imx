@@ -126,7 +126,7 @@ static GstImxDmaBufferUploadMethodContext* raw_buffer_upload_method_create(GstIm
 {
 	struct RawBufferUploadMethodContext *upload_method_context;
 
-	g_assert(GST_IS_IMX_DMABUF_ALLOCATOR(uploader->imx_dma_buffer_allocator));
+	g_assert(GST_IS_IMX_DMA_BUFFER_ALLOCATOR(uploader->imx_dma_buffer_allocator));
 
 	gst_imx_dma_buffer_uploader_global_init();
 
