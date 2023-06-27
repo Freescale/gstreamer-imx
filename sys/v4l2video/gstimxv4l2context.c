@@ -636,7 +636,6 @@ static gboolean probe_device_caps(GstImxV4L2Context *self, int fd)
 						"width", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 						"height", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 						"framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1,
-						"pixel-aspect-ratio", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1,
 						"interlace-mode", G_TYPE_STRING, "progressive",
 						NULL
 					);
@@ -650,7 +649,6 @@ static gboolean probe_device_caps(GstImxV4L2Context *self, int fd)
 						"width", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 						"height", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 						"framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1,
-						"pixel-aspect-ratio", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1,
 						"interlace-mode", G_TYPE_STRING, "progressive",
 						NULL
 					);
@@ -663,7 +661,6 @@ static gboolean probe_device_caps(GstImxV4L2Context *self, int fd)
 						"width", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 						"height", GST_TYPE_INT_RANGE, 16, G_MAXINT,
 						"framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1,
-						"pixel-aspect-ratio", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1,
 						NULL
 					);
 					GST_DEBUG_OBJECT(self, "Codec media type:    %s", gst_imx_v4l2_get_media_type_for_format(imx_v4l2_format));
