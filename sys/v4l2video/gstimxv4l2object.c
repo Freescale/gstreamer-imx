@@ -1129,8 +1129,38 @@ static gboolean setup_device(GstImxV4L2Object *self)
 				gst_info->finfo = gst_video_format_get_info(actual_imxv4l2_vidfmt->format.gst_format);
 				GST_VIDEO_INFO_WIDTH(gst_info) = v4l2_fmt.fmt.pix.width;
 				GST_VIDEO_INFO_HEIGHT(gst_info) = v4l2_fmt.fmt.pix.height;
-				GST_VIDEO_INFO_SIZE(gst_info) = v4l2_fmt.fmt.pix.sizeimage;
 				GST_VIDEO_INFO_INTERLACE_MODE(gst_info) = actual_interlace_mode;
+
+				/* Use sizeimage only if this is a multi-planar pixel format. The
+				 * mxc_v4l2 driver sometimes specifies a size that is larger than
+				 * what the frame would need (even with padding). Sometimes, for
+				 * example a 320x240 UYVY frame might actually end up with 155648
+				 * bytes instead of the expected 153600, and at a stride
+				 * (= bytesperline) of 320, 155648 bytes with UYVY data (= 2 bytes
+				 * per pixel) would have 155648/2/320 = 243.2 rows, which is clearly
+				 * wrong. However, downstream might look up the image size (specified
+				 * in video meta) to figure out how many excess padding rows there
+				 * are, which would in the example above cause that logic to
+				 * incorrectly calculate 3 padding rows. This in turn can lead to
+				 * CPU based frame copies. Avoid all this by not using the
+				 * sizeimage figure as the image size in single planar cases. */
+				if (GST_VIDEO_INFO_N_PLANES(gst_info) != 1)
+				{
+					GST_VIDEO_INFO_SIZE(gst_info) = v4l2_fmt.fmt.pix.sizeimage;
+					GST_DEBUG_OBJECT(
+						self,
+						"multi-planar pixel format; using V4L2 sizeimage as the video info size (%" G_GSIZE_FORMAT " byte(s))",
+						GST_VIDEO_INFO_SIZE(gst_info)
+					);
+				}
+				else
+				{
+					GST_DEBUG_OBJECT(
+						self,
+						"single-planar pixel format; keeping the original video info size (%" G_GSIZE_FORMAT " byte(s)) instead of using V4L2 sizeimage",
+						GST_VIDEO_INFO_SIZE(gst_info)
+					);
+				}
 
 				for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(gst_info); ++plane_index)
 				{
