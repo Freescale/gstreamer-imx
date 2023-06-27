@@ -1120,6 +1120,7 @@ static gboolean setup_device(GstImxV4L2Object *self)
 			case GST_IMX_V4L2_VIDEO_FORMAT_TYPE_RAW:
 			{
 				guint plane_index;
+				gsize plane_offset;
 				GstVideoInfo *gst_info = &(self->video_info.info.gst_info);
 
 				/* Cannot use gst_video_info_set_format() here, since that function
@@ -1162,10 +1163,35 @@ static gboolean setup_device(GstImxV4L2Object *self)
 					);
 				}
 
+				/* Explicitly calculate and set the plane stride and offset values in the
+				 * video info in case the bytesperline figure contains extra padding bytes. */
+				plane_offset = 0;
 				for (plane_index = 0; plane_index < GST_VIDEO_INFO_N_PLANES(gst_info); ++plane_index)
 				{
+					gint plane_stride;
+					gint plane_height;
+					gsize plane_size;
 					gint w_sub = GST_VIDEO_FORMAT_INFO_W_SUB(gst_info->finfo, plane_index);
-					GST_VIDEO_INFO_PLANE_STRIDE(gst_info, plane_index) = GST_VIDEO_SUB_SCALE(w_sub, v4l2_fmt.fmt.pix.bytesperline);
+					gint h_sub = GST_VIDEO_FORMAT_INFO_H_SUB(gst_info->finfo, plane_index);
+
+					plane_stride = GST_VIDEO_SUB_SCALE(w_sub, v4l2_fmt.fmt.pix.bytesperline);
+					plane_height = GST_VIDEO_SUB_SCALE(h_sub, v4l2_fmt.fmt.pix.height);
+					plane_size = plane_stride * plane_height;
+
+					GST_VIDEO_INFO_PLANE_STRIDE(gst_info, plane_index) = plane_stride;
+					GST_VIDEO_INFO_PLANE_OFFSET(gst_info, plane_index) = plane_offset;
+
+					GST_DEBUG_OBJECT(
+						self,
+						"plane #%u: stride %d height %d size %" G_GSIZE_FORMAT " offset %" G_GSIZE_FORMAT,
+						plane_index,
+						plane_stride,
+						plane_height,
+						plane_size,
+						plane_offset
+					);
+
+					plane_offset += plane_size;
 				}
 
 				break;
