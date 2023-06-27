@@ -76,6 +76,8 @@ Imx2dRotation gst_imx_2d_convert_from_video_orientation_method(GstVideoOrientati
 
 gboolean gst_imx_2d_orientation_from_image_direction_tag(GstTagList const *taglist, GstVideoOrientationMethod *orientation);
 
+Imx2dColorimetry gst_imx_2d_convert_colorimetry(GstVideoColorimetry const *colorimetry);
+
 
 G_END_DECLS
 

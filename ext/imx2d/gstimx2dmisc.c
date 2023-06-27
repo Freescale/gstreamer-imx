@@ -805,3 +805,23 @@ gboolean gst_imx_2d_orientation_from_image_direction_tag(GstTagList const *tagli
 	else
 		return FALSE;
 }
+
+
+Imx2dColorimetry gst_imx_2d_convert_colorimetry(GstVideoColorimetry const *colorimetry)
+{
+	gboolean full_range;
+
+	full_range = (colorimetry->range == GST_VIDEO_COLOR_RANGE_0_255);
+
+	switch (colorimetry->matrix)
+	{
+		case GST_VIDEO_COLOR_MATRIX_BT601:
+			return full_range ? IMX2D_COLORIMETRY_BT_601_FULL_RANGE : IMX2D_COLORIMETRY_BT_601;
+
+		case GST_VIDEO_COLOR_MATRIX_BT709:
+			return full_range ? IMX2D_COLORIMETRY_BT_709_FULL_RANGE : IMX2D_COLORIMETRY_BT_709;
+
+		default:
+			return IMX2D_COLORIMETRY_UNKNOWN;
+	}
+}

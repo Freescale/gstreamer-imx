@@ -60,6 +60,19 @@ char const * imx_2d_rotation_to_string(Imx2dRotation rotation)
 }
 
 
+char const * imx_2d_colorimetry_to_string(Imx2dColorimetry colorimetry)
+{
+	switch (colorimetry)
+	{
+		case IMX2D_COLORIMETRY_BT_601: return "BT.601";
+		case IMX2D_COLORIMETRY_BT_709: return "BT.709";
+		case IMX2D_COLORIMETRY_BT_601_FULL_RANGE: return "BT.601 full range";
+		case IMX2D_COLORIMETRY_BT_709_FULL_RANGE: return "BT.709 full range";
+		default: return "<unknown>";
+	}
+}
+
+
 Imx2dPixelFormatInfo const * imx_2d_get_pixel_format_info(Imx2dPixelFormat format)
 {
 #define PIXEL_FORMAT_DESC(DESC, FMT, NUM_PLANES, PIXEL_STRIDE, X_SS, Y_SS, IS_SEMI_PLANAR, IS_TILED) \
@@ -299,7 +312,8 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dBli
 		.source_region = NULL,
 		.dest_region = NULL,
 		.rotation = IMX_2D_ROTATION_NONE,
-		.alpha = 255
+		.alpha = 255,
+		.colorimetry = IMX2D_COLORIMETRY_BT_601
 	};
 
 	Imx2dBlitParams const *params_in_use = (params != NULL) ? params : &default_params;
@@ -495,7 +509,8 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dBli
 					params_in_use->rotation,
 					expanded_dest_region_to_use,
 					params_in_use->alpha,
-					margin_fill_color
+					margin_fill_color,
+					params_in_use->colorimetry
 				};
 
 				/* We can blit with zero adjustments, since the dest
@@ -639,7 +654,8 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dBli
 						params_in_use->rotation,
 						expanded_dest_region_to_use,
 						params_in_use->alpha,
-						margin_fill_color
+						margin_fill_color,
+						params_in_use->colorimetry
 					};
 					return blitter->blitter_class->do_blit(blitter, &params);
 				}
@@ -668,7 +684,8 @@ int imx_2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dSurface *source, Imx2dBli
 			NULL,
 			params_in_use->alpha,
 			/* Setting the margin fill color to 0 since the margin is anyway not present in this case */
-			0x00000000
+			0x00000000,
+			params_in_use->colorimetry
 		};
 
 		return blitter->blitter_class->do_blit(blitter, &params);

@@ -91,6 +91,7 @@ struct _Imx2dInternalBlitParams
 	Imx2dRegion const *expanded_dest_region;
 	int dest_surface_alpha;
 	uint32_t margin_fill_color;
+	Imx2dColorimetry colorimetry;
 };
 
 

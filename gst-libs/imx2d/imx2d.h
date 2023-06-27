@@ -212,6 +212,41 @@ Imx2dRotation;
 char const * imx_2d_rotation_to_string(Imx2dRotation rotation);
 
 
+/**
+ * Imx2dColorimetry:
+ * @IMX2D_COLORIMETRY_BT_601: ITU-R BT.601, standard range (16-235 for luma, 16-240 for chroma).
+ * @IMX2D_COLORIMETRY_BT_709: ITU-R BT.709, standard range (16-235 for luma, 16-240 for chroma).
+ * @IMX2D_COLORIMETRY_BT_601_FULL_RANGE: ITU-R BT.601, full range (0-255 for luma and chroma).
+ * @IMX2D_COLORIMETRY_BT_709_FULL_RANGE: ITU-R BT.709, full range (0-255 for luma and chroma).
+ * @IMX2D_NUM_COLORIMETRY_ITEMS: Special enum specifying the number of valid colorimetry items.
+ * @IMX2D_COLORIMETRY_UNKNOWN: Special enum for specifying an unknown colorimetry.
+ */
+typedef enum
+{
+	IMX2D_COLORIMETRY_BT_601 = 0,
+	IMX2D_COLORIMETRY_BT_709,
+	IMX2D_COLORIMETRY_BT_601_FULL_RANGE,
+	IMX2D_COLORIMETRY_BT_709_FULL_RANGE,
+
+	IMX2D_NUM_COLORIMETRY_ITEMS,
+
+	IMX2D_COLORIMETRY_UNKNOWN
+}
+Imx2dColorimetry;
+
+/**
+ * imx_2d_colorimetry_to_string:
+ * @format: Colorimetry to return a string for.
+ *
+ * Returns a human-readable string representation of the given colorimetry.
+ *
+ * This string is not suitable as an ID and is meant purely for logging and for information on user interfaces.
+ *
+ * Returns: Human-readable string representation
+ */
+char const * imx_2d_colorimetry_to_string(Imx2dColorimetry colorimetry);
+
+
 typedef struct _Imx2dPixelFormatInfo Imx2dPixelFormatInfo;
 
 
@@ -696,6 +731,9 @@ struct _Imx2dBlitMargin
  *     is only used if @dest_region is not NULL.
  * @alpha: Global alpha value. Valid range goes from 0 (fully transparent)
  *     to 255 (fully opaque).
+ * @colorimetry: Colorimetry to use for source->destination color
+ *     space conversions. Blitters that do not support colorimetry
+ *     specifiers ignore this.
  */
 struct _Imx2dBlitParams
 {
@@ -707,6 +745,8 @@ struct _Imx2dBlitParams
 	Imx2dBlitMargin const *margin;
 
 	int alpha;
+
+	Imx2dColorimetry colorimetry;
 };
 
 

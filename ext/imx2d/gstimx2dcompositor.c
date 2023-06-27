@@ -65,6 +65,7 @@ struct _GstImx2dCompositorPad
 	 * plane strides / offsets _can_ change in between
 	 * buffers, so those are filled in later. */
 	Imx2dSurfaceDesc input_surface_desc;
+	Imx2dColorimetry colorimetry;
 
 	/* Terminology:
 	 *
@@ -678,6 +679,8 @@ static GstPadProbeReturn gst_imx_2d_compositor_downstream_event_probe(GstPad *pa
 			compositor_pad->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&video_info);
 			compositor_pad->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&video_info);
 			compositor_pad->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&video_info), &input_video_tile_layout);
+
+			compositor_pad->colorimetry = gst_imx_2d_convert_colorimetry(&(GST_VIDEO_INFO_COLORIMETRY(&video_info)));
 
 			compositor_pad->region_coords_need_update = TRUE;
 
@@ -1592,6 +1595,7 @@ static GstFlowReturn gst_imx_2d_compositor_aggregate_frames(GstVideoAggregator *
 		blit_params.dest_region = &inner_region;
 		blit_params.rotation = gst_imx_2d_convert_from_video_orientation_method(video_direction);
 		blit_params.alpha = alpha;
+		blit_params.colorimetry = compositor_pad->colorimetry;
 
 		if (input_crop)
 		{

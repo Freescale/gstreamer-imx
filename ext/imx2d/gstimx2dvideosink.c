@@ -875,6 +875,7 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 	blit_params.dest_region = &inner_region;
 	blit_params.rotation = gst_imx_2d_convert_from_video_orientation_method(video_direction);
 	blit_params.alpha = 255;
+	blit_params.colorimetry = gst_imx_2d_convert_colorimetry(&(GST_VIDEO_INFO_COLORIMETRY(&(self->input_video_info))));
 
 	if (input_crop)
 	{

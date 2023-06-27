@@ -137,6 +137,19 @@ static BOOL get_g2d_format(Imx2dPixelFormat imx_2d_format, enum g2d_format *fmt)
 }
 
 
+static enum g2d_cap_mode colorimetry_to_g2d_cap_mode(Imx2dColorimetry colorimetry)
+{
+	switch (colorimetry)
+	{
+		case IMX2D_COLORIMETRY_BT_601: return G2D_YUV_BT_601;
+		case IMX2D_COLORIMETRY_BT_709: return G2D_YUV_BT_709;
+		case IMX2D_COLORIMETRY_BT_601_FULL_RANGE: return G2D_YUV_BT_601FR;
+		case IMX2D_COLORIMETRY_BT_709_FULL_RANGE: return G2D_YUV_BT_709FR;
+		default: assert(FALSE);
+	}
+}
+
+
 static void copy_region_to_g2d_surface(struct g2d_surface *surface, Imx2dSurface *imx2d_surface, Imx2dRegion const *region)
 {
 	if (region == NULL)
@@ -289,6 +302,8 @@ struct _Imx2dG2DBlitter
 	ImxDmaBuffer *fill_g2d_surface_dmabuffer;
 
 	ImxDmaBufferAllocator *internal_dmabuffer_allocator;
+
+	Imx2dColorimetry current_colorimetry, pending_colorimetry;
 };
 
 
@@ -301,6 +316,8 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 static int imx_2d_backend_g2d_blitter_fill_region(Imx2dBlitter *blitter, Imx2dInternalFillRegionParams *internal_fill_region_params);
 
 static Imx2dHardwareCapabilities const * imx_2d_backend_g2d_blitter_get_hardware_capabilities(Imx2dBlitter *blitter);
+
+static void imx_2d_backend_g2d_blitter_set_colorimetry(Imx2dG2DBlitter *g2d_blitter);
 
 
 static Imx2dBlitterClass imx_2d_backend_g2d_blitter_class =
@@ -407,6 +424,9 @@ static int imx_2d_backend_g2d_blitter_finish(Imx2dBlitter *blitter)
 #ifdef IMX2D_G2D_CALLS_RESTRICTED_TO_ONE_THREAD
 	if (g2d_close(g2d_blitter->g2d_handle) != 0)
 		IMX_2D_LOG(ERROR, "closing g2d device failed");
+	/* Set this back to UNKNOWN to force the set_colorimetry
+	 * call in _start() to set the colorimetry cap modes. */
+	g2d_blitter->current_colorimetry = IMX2D_COLORIMETRY_UNKNOWN;
 #endif
 
 	return ret;
@@ -461,6 +481,9 @@ static int imx_2d_backend_g2d_blitter_do_blit(Imx2dBlitter *blitter, Imx2dIntern
 	DUMP_G2D_SURFACE_TO_LOG("blit dest", &g2d_dest_surf);
 
 	IMX_2D_LOG(TRACE, "source tile layout: %s", g2d_tile_layout_to_string(g2d_source_surf.tiling));
+
+	g2d_blitter->pending_colorimetry = internal_blit_params->colorimetry;
+	imx_2d_backend_g2d_blitter_set_colorimetry(g2d_blitter);
 
 	/* If there is an expanded_dest_region, it means that
 	 * there is a margin that must be drawn. */
@@ -671,6 +694,29 @@ static Imx2dHardwareCapabilities const * imx_2d_backend_g2d_blitter_get_hardware
 }
 
 
+static void imx_2d_backend_g2d_blitter_set_colorimetry(Imx2dG2DBlitter *g2d_blitter)
+{
+	int i;
+
+	if (g2d_blitter->current_colorimetry == g2d_blitter->pending_colorimetry)
+		return;
+
+	g2d_blitter->current_colorimetry = g2d_blitter->pending_colorimetry;
+
+	for (i = 0; i < IMX2D_NUM_COLORIMETRY_ITEMS; ++i)
+	{
+		Imx2dColorimetry colorimetry = (Imx2dColorimetry)i;
+		BOOL do_enable = (g2d_blitter->current_colorimetry == colorimetry);
+		IMX_2D_LOG(DEBUG, "%s G2D %s mode", do_enable ? "enabling" : "disabling", imx_2d_colorimetry_to_string(colorimetry));
+
+		if (do_enable)
+			g2d_enable(g2d_blitter->g2d_handle, colorimetry_to_g2d_cap_mode(colorimetry));
+		else
+			g2d_disable(g2d_blitter->g2d_handle, colorimetry_to_g2d_cap_mode(colorimetry));
+	}
+}
+
+
 
 
 Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void)
@@ -722,6 +768,9 @@ Imx2dBlitter* imx_2d_backend_g2d_blitter_create(void)
 	IMX_2D_LOG(DEBUG, "created new G2D fill surface DMA buffer %p; buffer size: %zu byte(s)", (void *)(g2d_blitter->fill_g2d_surface_dmabuffer), fill_surface_dmabuffer_size);
 
 	g2d_blitter->fill_g2d_surface.planes[0] = imx_dma_buffer_get_physical_address(g2d_blitter->fill_g2d_surface_dmabuffer);
+
+	g2d_blitter->current_colorimetry = IMX2D_COLORIMETRY_UNKNOWN;
+	g2d_blitter->pending_colorimetry = IMX2D_COLORIMETRY_BT_601;
 
 finish:
 	return (Imx2dBlitter *)g2d_blitter;
