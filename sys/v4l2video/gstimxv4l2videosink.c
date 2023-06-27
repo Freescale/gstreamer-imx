@@ -289,6 +289,8 @@ static GstCaps* gst_imx_v4l2_video_sink_get_caps(GstBaseSink *sink, GstCaps *fil
 
 	gst_caps_unref(sink_caps);
 
+	GST_DEBUG_OBJECT(self, "result: %" GST_PTR_FORMAT, (gpointer)result);
+
 	GST_OBJECT_UNLOCK(self->context);
 
 	return result;

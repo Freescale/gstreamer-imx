@@ -689,6 +689,7 @@ static GstCaps* gst_imx_2d_video_transform_fixate_size_caps(GstBaseTransform *tr
 		}
 
 		/* Calculate input DAR */
+		GST_DEBUG_OBJECT(transform, "input: width/height: %d/%d PAR: %d/%d", from_w, from_h, from_par_n, from_par_d);
 		if (!gst_util_fraction_multiply(from_w, from_h, from_par_n, from_par_d, &from_dar_n, &from_dar_d))
 		{
 			GST_ELEMENT_ERROR(transform, CORE, NEGOTIATION, (NULL),
@@ -696,7 +697,7 @@ static GstCaps* gst_imx_2d_video_transform_fixate_size_caps(GstBaseTransform *tr
 			goto done;
 		}
 
-		GST_DEBUG_OBJECT(transform, "Input DAR is %d/%d", from_dar_n, from_dar_d);
+		GST_DEBUG_OBJECT(transform, "input DAR is %d/%d", from_dar_n, from_dar_d);
 
 		/* If either width or height are fixed there's not much we
 		 * can do either except choosing a height or width and PAR
