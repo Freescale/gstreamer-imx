@@ -22,7 +22,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <poll.h>
-#include <time.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <linux/videodev2.h>

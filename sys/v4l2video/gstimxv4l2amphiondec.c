@@ -18,7 +18,7 @@
 
 #include "gstimxv4l2prelude.h"
 
-#include <time.h>
+#include <sys/time.h>
 #include <linux/videodev2.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>

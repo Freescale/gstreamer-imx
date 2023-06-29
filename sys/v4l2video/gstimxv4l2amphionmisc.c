@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
-#include <time.h>
+#include <sys/time.h>
 #include <linux/videodev2.h>
 #include <gst/gst.h>
 #include "gstimxv4l2amphionmisc.h"
