@@ -44,8 +44,22 @@ if v4l2_amphion_option.disabled()
 	message('Amphion Malone Video4Linux2 mem2mem decoder element disabled')
 else
 	if imx2d_backend_g2d_dep.found()
-		message('Amphion Malone Video4Linux2 mem2mem decoder element enabled')
-		v4l2_amphion_enabled = true
+		if not conf_data.get('IMX2D_G2D_AMPHION_TILE_LAYOUT_SUPPORTED')
+			if v4l2_amphion_option.enabled()
+				error('Amphion Malone Video4Linux2 mem2mem decoder element enabled, but G2D does not support the Amphion tile layout')
+			else
+				message('Amphion Malone Video4Linux2 mem2mem decoder element enabled, but G2D does not support the Amphion tile layout; disabling decoder element')
+			endif
+		elif not conf_data.get('IMX2D_G2D_AMPHION_10BIT_TILE_LAYOUT_SUPPORTED')
+			if v4l2_amphion_option.enabled()
+				error('Amphion Malone Video4Linux2 mem2mem decoder element enabled, but G2D does not support the 10-bit Amphion tile layout')
+			else
+				message('Amphion Malone Video4Linux2 mem2mem decoder element enabled, but G2D does not support the 10-bit Amphion tile layout; disabling decoder element')
+			endif
+		else
+			message('Amphion Malone Video4Linux2 mem2mem decoder element enabled')
+			v4l2_amphion_enabled = true
+		endif
 	else
 		if v4l2_amphion_option.enabled()
 			error('Amphion Malone Video4Linux2 mem2mem decoder element enabled, but G2D is not available')
