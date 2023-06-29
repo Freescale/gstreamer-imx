@@ -146,6 +146,7 @@ static BOOL get_g2d_format(Imx2dPixelFormat imx_2d_format, enum g2d_format *fmt)
 }
 
 
+#ifdef IMX2D_G2D_COLORIMETRY_SUPPORTED
 static enum g2d_cap_mode colorimetry_to_g2d_cap_mode(Imx2dColorimetry colorimetry)
 {
 	switch (colorimetry)
@@ -157,6 +158,7 @@ static enum g2d_cap_mode colorimetry_to_g2d_cap_mode(Imx2dColorimetry colorimetr
 		default: assert(FALSE);
 	}
 }
+#endif
 
 
 static void copy_region_to_g2d_surface(struct g2d_surface *surface, Imx2dSurface *imx2d_surface, Imx2dRegion const *region)
@@ -716,6 +718,7 @@ static Imx2dHardwareCapabilities const * imx_2d_backend_g2d_blitter_get_hardware
 
 static void imx_2d_backend_g2d_blitter_set_colorimetry(Imx2dG2DBlitter *g2d_blitter)
 {
+#ifdef IMX2D_G2D_COLORIMETRY_SUPPORTED
 	int i;
 
 	if (g2d_blitter->current_colorimetry == g2d_blitter->pending_colorimetry)
@@ -734,6 +737,7 @@ static void imx_2d_backend_g2d_blitter_set_colorimetry(Imx2dG2DBlitter *g2d_blit
 		else
 			g2d_disable(g2d_blitter->g2d_handle, colorimetry_to_g2d_cap_mode(colorimetry));
 	}
+#endif
 }
 
 
