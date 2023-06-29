@@ -12,11 +12,12 @@
 #include "g2d_blitter.h"
 
 
-/* Disabled YVYU, since there is a bug in G2D - G2D_YUYV and G2D_YVYU
- * actually refer to the same pixel format (G2D_YUYV)
+/* Disabled YVYU in G2D 1.x, since there is a bug in those older
+ * versions - G2D_YUYV and G2D_YVYU actually refer to the same
+ * pixel format (G2D_YUYV).
  *
- * Disabled NV16, since the formats are corrupted, and it appears
- * to be a problem with G2D itself
+ * Disabled NV16 in G2D 1.x as well, since this format
+ * is broken in those older versions.
  */
 static Imx2dPixelFormat const supported_source_pixel_formats[] =
 {
@@ -33,12 +34,16 @@ static Imx2dPixelFormat const supported_source_pixel_formats[] =
 
 	IMX_2D_PIXEL_FORMAT_PACKED_YUV422_UYVY,
 	IMX_2D_PIXEL_FORMAT_PACKED_YUV422_YUYV,
-	/*IMX_2D_PIXEL_FORMAT_PACKED_YUV422_YVYU,*/
+#if G2D_VERSION_MAJOR < 1
+	IMX_2D_PIXEL_FORMAT_PACKED_YUV422_YVYU,
+#endif
 	IMX_2D_PIXEL_FORMAT_PACKED_YUV422_VYUY,
 
 	IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV12,
 	IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV21,
-	/*IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV16,*/
+#if G2D_VERSION_MAJOR < 1
+	IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV16,
+#endif
 	IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV61,
 
 	IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_YV12,
