@@ -45,10 +45,14 @@ static Imx2dPixelFormat const supported_source_pixel_formats[] =
 	IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_I420,
 
 #ifdef IMX2D_G2D_IMPLEMENTATION_BASED_ON_DPU
+#ifdef IMX2D_G2D_AMPHION_TILE_LAYOUT_SUPPORTED
 	IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128,
 	IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128,
+#endif
+#ifdef IMX2D_G2D_AMPHION_10BIT_TILE_LAYOUT_SUPPORTED
 	IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128_10BIT,
 	IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128_10BIT,
+#endif
 #endif
 };
 
@@ -176,8 +180,15 @@ static char const * g2d_tile_layout_to_string(enum g2d_tiling tiling)
 	switch (tiling)
 	{
 		case G2D_LINEAR: return "linear (none)";
+#ifdef IMX2D_G2D_AMPHION_TILE_LAYOUT_SUPPORTED
 		case G2D_AMPHION_TILED: return "Amphion 8x128";
+#endif
+#ifdef IMX2D_G2D_AMPHION_10BIT_TILE_LAYOUT_SUPPORTED
+		case G2D_AMPHION_TILED_10BIT: return "Amphion 8x128 10-bit";
+#endif
+#ifdef IMX2D_G2D_AMPHION_INTERLACED_TILE_LAYOUT_SUPPORTED
 		case G2D_AMPHION_INTERLACED: return "Amphion 8x128 interlaced";
+#endif
 		default: return "<unknown>";
 	}
 }
@@ -253,15 +264,19 @@ static BOOL fill_g2d_surfaceEx_info(struct g2d_surfaceEx *g2d_surfaceEx, Imx2dSu
 
 	switch (desc->format)
 	{
+#ifdef IMX2D_G2D_AMPHION_TILE_LAYOUT_SUPPORTED
 		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128:
 		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128:
 			g2d_surfaceEx->tiling = G2D_AMPHION_TILED;
 			break;
+#endif
 
+#ifdef IMX2D_G2D_AMPHION_10BIT_TILE_LAYOUT_SUPPORTED
 		case IMX_2D_PIXEL_FORMAT_TILED_NV12_AMPHION_8x128_10BIT:
 		case IMX_2D_PIXEL_FORMAT_TILED_NV21_AMPHION_8x128_10BIT:
 			g2d_surfaceEx->tiling = G2D_AMPHION_TILED_10BIT;
 			break;
+#endif
 
 		default:
 			g2d_surfaceEx->tiling = G2D_LINEAR;

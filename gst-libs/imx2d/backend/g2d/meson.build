@@ -33,6 +33,28 @@ if g2d_dep.found()
 		)
 	)
 
+	g2d_amphion_support_details = {
+		'G2D_AMPHION_TILED' : {'define': 'IMX2D_G2D_AMPHION_TILE_LAYOUT_SUPPORTED', 'name': 'G2D Amphion tile layout'},
+		'G2D_AMPHION_TILED_10BIT' : {'define': 'IMX2D_G2D_AMPHION_10BIT_TILE_LAYOUT_SUPPORTED', 'name': 'G2D Amphion 10-bit tile layout'},
+		'G2D_AMPHION_INTERLACED' : {'define': 'IMX2D_G2D_AMPHION_INTERLACED_TILE_LAYOUT_SUPPORTED', 'name': 'G2D Amphion interlaced tile layout'},
+	}
+	foreach enum, details : g2d_amphion_support_details
+		g2d_amphion_support = cc.compiles(
+			'''
+			#include <g2d.h>
+			#include <g2dExt.h>
+			int main(void)
+			{
+				int i = @0@;
+				return 0;
+			}
+			'''.format(enum),
+			dependencies : [g2d_dep],
+			name : '@0@ support'.format(details['name'])
+		)
+		conf_data.set(details['define'], g2d_amphion_support)
+	endforeach
+
 	g2d_based_on_dpu = get_option('g2d-based-on-dpu')
 	if g2d_based_on_dpu
 		message('G2D implementation is based on the i.MX8qm / i.MX8qxp DPU')
