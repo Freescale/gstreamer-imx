@@ -335,7 +335,7 @@ gboolean gst_imx_video_uploader_set_input_video_info(GstImxVideoUploader *upload
 {
 	gint stride_remainder, plane_row_remainder;
 	gint num_plane_rows, stride;
-	guint i, num_planes;
+	guint plane_index, num_planes;
 	GstVideoAlignment video_alignment;
 	GstStructure *pool_config;
 	GstCaps *input_caps;
@@ -372,8 +372,11 @@ gboolean gst_imx_video_uploader_set_input_video_info(GstImxVideoUploader *upload
 	/* Align the stride and number of plane rows. */
 
 	gst_video_alignment_reset(&video_alignment);
-	for (i = 0; i < num_planes; ++i)
-		video_alignment.stride_align[i] = uploader->stride_alignment - 1;
+	for (plane_index = 0; plane_index < num_planes; ++plane_index)
+	{
+		gint w_sub = GST_VIDEO_FORMAT_INFO_W_SUB(input_video_info->finfo, plane_index);
+		video_alignment.stride_align[plane_index] = GST_VIDEO_SUB_SCALE(w_sub, uploader->stride_alignment) - 1;
+	}
 
 	video_alignment.padding_bottom = plane_row_remainder;
 
@@ -392,16 +395,16 @@ gboolean gst_imx_video_uploader_set_input_video_info(GstImxVideoUploader *upload
 	if (uploader->aligned_frames_buffer_pool != NULL)
 		gst_object_unref(GST_OBJECT(uploader->aligned_frames_buffer_pool));
 
-	for (i = 0; i < num_planes; ++i)
+	for (plane_index = 0; plane_index < num_planes; ++plane_index)
 	{
 		GST_DEBUG_OBJECT(
 			uploader,
 			"plane %u  plane stride: original: %d aligned: %d  plane offset: original: %" G_GSIZE_FORMAT " aligned: %" G_GSIZE_FORMAT,
-			i,
-			GST_VIDEO_INFO_PLANE_STRIDE(&(uploader->original_input_video_info), i),
-			GST_VIDEO_INFO_PLANE_STRIDE(&(uploader->aligned_input_video_info), i),
-			GST_VIDEO_INFO_PLANE_OFFSET(&(uploader->original_input_video_info), i),
-			GST_VIDEO_INFO_PLANE_OFFSET(&(uploader->aligned_input_video_info), i)
+			plane_index,
+			GST_VIDEO_INFO_PLANE_STRIDE(&(uploader->original_input_video_info), plane_index),
+			GST_VIDEO_INFO_PLANE_STRIDE(&(uploader->aligned_input_video_info), plane_index),
+			GST_VIDEO_INFO_PLANE_OFFSET(&(uploader->original_input_video_info), plane_index),
+			GST_VIDEO_INFO_PLANE_OFFSET(&(uploader->aligned_input_video_info), plane_index)
 		);
 	}
 
