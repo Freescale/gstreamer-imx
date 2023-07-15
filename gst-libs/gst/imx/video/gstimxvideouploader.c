@@ -217,6 +217,41 @@ GstFlowReturn gst_imx_video_uploader_perform(GstImxVideoUploader *uploader, GstB
 			goto error;
 		}
 
+		/* Copy everything from the input buffer that's not the main buffer data
+		 * (since these are pixels, and we take care of those further below).
+		 * This includes GstMeta values such as the videometa. */
+		if (!gst_buffer_copy_into(
+			*output_buffer,
+			input_buffer,
+			GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS | GST_BUFFER_COPY_META,
+			0,
+			-1
+		))
+		{
+			GST_ERROR_OBJECT(uploader, "could not copy extra buffer data (metadata, gstmetas, timestamps ..)");
+			goto error;
+		}
+
+		/* The output buffer's videometa needs to be adjusted, since it does not
+		 * yet have the plane stride / offset values from our aligned video info. */
+		{
+			GstVideoInfo *aligned_video_info = &(uploader->aligned_input_video_info);
+			GstVideoMeta *output_video_meta;
+
+			output_video_meta = gst_buffer_get_video_meta(*output_buffer);
+			g_assert(output_video_meta != NULL);
+
+			for (i = 0; i < GST_VIDEO_INFO_N_PLANES(aligned_video_info); ++i)
+			{
+				output_video_meta->stride[i] = GST_VIDEO_INFO_PLANE_STRIDE(aligned_video_info, i);
+				output_video_meta->offset[i] = GST_VIDEO_INFO_PLANE_OFFSET(aligned_video_info, i);
+			}
+		}
+
+		/* Map the frames and perform the actual frame copy. We do this _after_
+		 * adjusting the videometa above, since gst_video_frame_map() makes
+		 * use of the videometa's stride and offset values during the copy. */
+
 		if (!gst_video_frame_map(
 			&input_buffer_frame,
 			&(uploader->original_input_video_info),
@@ -252,39 +287,10 @@ GstFlowReturn gst_imx_video_uploader_perform(GstImxVideoUploader *uploader, GstB
 			"copied pixels from input buffer into output buffer"
 		);
 
+		gst_video_frame_unmap(&input_buffer_frame);
+		input_buffer_frame_mapped = FALSE;
 		gst_video_frame_unmap(&uploaded_buffer_frame);
 		uploaded_buffer_frame_mapped = FALSE;
-
-		/* Copy everything from the input buffer that's not the main buffer data
-		 * (since these are pixels, and we already took care of those above).
-		 * This includes GstMeta values such as the videometa. */
-		if (!gst_buffer_copy_into(
-			*output_buffer,
-			input_buffer,
-			GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS | GST_BUFFER_COPY_META,
-			0,
-			-1
-		))
-		{
-			GST_ERROR_OBJECT(uploader, "could not copy extra buffer data (metadata, gstmetas, timestamps ..)");
-			goto error;
-		}
-
-		/* The output buffer's videometa needs to be adjusted, since it does not
-		 * yet have the plane stride / offset values from our aligned video info. */
-		{
-			GstVideoInfo *aligned_video_info = &(uploader->aligned_input_video_info);
-			GstVideoMeta *output_video_meta;
-
-			output_video_meta = gst_buffer_get_video_meta(*output_buffer);
-			g_assert(output_video_meta != NULL);
-
-			for (i = 0; i < GST_VIDEO_INFO_N_PLANES(aligned_video_info); ++i)
-			{
-				output_video_meta->stride[i] = GST_VIDEO_INFO_PLANE_STRIDE(aligned_video_info, i);
-				output_video_meta->offset[i] = GST_VIDEO_INFO_PLANE_OFFSET(aligned_video_info, i);
-			}
-		}
 	}
 	else
 	{
