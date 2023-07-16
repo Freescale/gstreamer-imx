@@ -20,9 +20,12 @@
 
 #include <sys/ioctl.h>
 #include <string.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <linux/videodev2.h>
 
@@ -38,6 +41,9 @@
 
 GST_DEBUG_CATEGORY_STATIC(imx_v4l2_isi_video_transform_debug);
 #define GST_CAT_DEFAULT imx_v4l2_isi_video_transform_debug
+
+
+#define GST_IMX_V4L2_ISI_DEVICE_FILENAME_LENGTH 512
 
 
 /* Enforce with to a 16-pixel alignment, since resizing is only
@@ -73,8 +79,7 @@ enum
 };
 
 
-// TODO: Probe for the ISI
-#define DEFAULT_DEVICE "/dev/video1"
+#define DEFAULT_DEVICE NULL
 
 
 typedef struct
@@ -166,6 +171,7 @@ static gboolean gst_imx_v4l2_isi_video_transform_copy_metadata(GstBaseTransform 
 static gboolean gst_imx_v4l2_isi_video_transform_open(GstImxV4L2ISIVideoTransform *self);
 static void gst_imx_v4l2_isi_video_transform_close(GstImxV4L2ISIVideoTransform *self);
 
+static int gst_imx_v4l2_isi_video_transform_scan_for_and_open_isi_device(GstImxV4L2ISIVideoTransform *self);
 static gboolean gst_imx_v4l2_isi_video_transform_probe_available_caps(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue);
 
 static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue, GstVideoInfo const *video_info);
@@ -216,7 +222,7 @@ static void gst_imx_v4l2_isi_video_transform_class_init(GstImxV4L2ISIVideoTransf
 		g_param_spec_string(
 			"device",
 			"Device",
-			"Device location",
+			"Device location (NULL = let element autodetect device)",
 			DEFAULT_DEVICE,
 			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 		)
@@ -1451,12 +1457,7 @@ static gboolean gst_imx_v4l2_isi_video_transform_copy_metadata(G_GNUC_UNUSED Gst
 
 static gboolean gst_imx_v4l2_isi_video_transform_open(GstImxV4L2ISIVideoTransform *self)
 {
-	gchar *device = NULL;
 	gboolean ret = TRUE;
-
-	GST_OBJECT_LOCK(self);
-	device = g_strdup(self->device);
-	GST_OBJECT_UNLOCK(self);
 
 	self->imx_dma_buffer_allocator = gst_imx_dmabuf_allocator_new();
 	if (self->imx_dma_buffer_allocator == NULL)
@@ -1465,12 +1466,11 @@ static gboolean gst_imx_v4l2_isi_video_transform_open(GstImxV4L2ISIVideoTransfor
 		goto error;
 	}
 
-	self->v4l2_fd = open(self->device, O_RDWR);
+	GST_OBJECT_LOCK(self);
+	self->v4l2_fd = gst_imx_v4l2_isi_video_transform_scan_for_and_open_isi_device(self);
+	GST_OBJECT_UNLOCK(self);
 	if (self->v4l2_fd < 0)
-	{
-		GST_ERROR_OBJECT(self, "could not open V4L2 device: %s (%d)", strerror(errno), errno);
 		goto error;
-	}
 
 	if (!gst_imx_v4l2_isi_video_transform_probe_available_caps(self, &(self->v4l2_output_queue)))
 	{
@@ -1484,7 +1484,6 @@ static gboolean gst_imx_v4l2_isi_video_transform_open(GstImxV4L2ISIVideoTransfor
 	}
 
 finish:
-	g_free(device);
 	return ret;
 
 error:
@@ -1522,6 +1521,196 @@ static void gst_imx_v4l2_isi_video_transform_close(GstImxV4L2ISIVideoTransform *
 		gst_object_unref(GST_OBJECT(self->output_buffer_pool));
 		self->output_buffer_pool = NULL;
 	}
+}
+
+
+static int gst_imx_v4l2_isi_video_transform_scan_for_and_open_isi_device(GstImxV4L2ISIVideoTransform *self)
+{
+	int device_fd = -1;
+	DIR *dir = NULL;
+	char tempstr[GST_IMX_V4L2_ISI_DEVICE_FILENAME_LENGTH];
+	static char const device_node_fn_prefix[] = "/dev/video";
+	static size_t const device_node_fn_prefix_length = sizeof(device_node_fn_prefix) - 1;
+	struct dirent *dir_entry;
+
+	/* If the user set a device node name, use that instead of performing a scan. */
+	{
+		gchar *device = NULL;
+
+		device = g_strdup(self->device);
+
+		if (device != NULL)
+		{
+			GST_DEBUG_OBJECT(self, "opening user specified device node \"%s\"", device);
+
+			device_fd = open(device, O_RDWR);
+			g_free(device);
+
+			if (device_fd < 0)
+				GST_ERROR_OBJECT(self, "could not open V4L2 device: %s (%d)", strerror(errno), errno);
+
+			goto finish;
+		}
+	}
+
+	GST_DEBUG_OBJECT(self, "scanning for V4L2 ISI transform device node");
+
+	dir = opendir("/dev");
+	if (dir == NULL)
+	{
+		GST_ERROR_OBJECT(self, "could not open /dev/ directory to look for V4L2 ISI transform device node: %s (%d)", strerror(errno), errno);
+		goto finish;
+	}
+
+	while ((dir_entry = readdir(dir)) != NULL)
+	{
+		int index;
+		int buf_type_index;
+		int fd = -1;
+
+		struct stat entry_stat;
+		struct v4l2_capability capability;
+		struct v4l2_fmtdesc format_desc;
+
+#define NUM_V4L2_BUF_TYPES 2
+		static guint32 const buf_types[NUM_V4L2_BUF_TYPES] = { V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE };
+		static gchar const *inout_names[NUM_V4L2_BUF_TYPES] = { "input", "output" };
+
+		snprintf(tempstr, sizeof(tempstr), "/dev/%s", dir_entry->d_name);
+
+		/* Run stat() on the file with filename tempstr, and perform
+		 * checks on that call's output to filter out candidates. */
+
+		if (stat(tempstr, &entry_stat) < 0)
+		{
+			switch (errno)
+			{
+				case EACCES:
+					GST_DEBUG_OBJECT(self, "skipping \"%s\" while looking for V4L2 ISI transform device node since access was denied", tempstr);
+					break;
+				default:
+					GST_ERROR_OBJECT(self, "stat() call on \"%s\" failed: %s (%d)", tempstr, strerror(errno), errno);
+					break;
+			}
+
+			goto next;
+		}
+
+		if (!S_ISCHR(entry_stat.st_mode))
+			goto next;
+
+		if (strncmp(tempstr, device_node_fn_prefix, device_node_fn_prefix_length) != 0)
+			goto next;
+
+		/* This might be a valid ISI transform device. Open a FD and
+		 * perform V4L2 queries to further analyze this device node. */
+
+		fd = open(tempstr, O_RDWR);
+		if (fd < 0)
+		{
+			GST_DEBUG("could not open device node \"%s\": %s (%d) - skipping", tempstr, strerror(errno), errno);
+			goto next;
+		}
+
+		if (ioctl(fd, VIDIOC_QUERYCAP, &capability) < 0)
+		{
+			GST_DEBUG("could not query V4L2 capability from device node \"%s\": %s (%d) - skipping", tempstr, strerror(errno), errno);
+			goto next;
+		}
+
+		if ((capability.capabilities & V4L2_CAP_VIDEO_M2M_MPLANE) == 0)
+		{
+			GST_DEBUG("skipping V4L2 device \"%s\" since it does not support multi-planar mem2mem processing", tempstr);
+			goto next;
+		}
+
+		if ((capability.capabilities & V4L2_CAP_STREAMING) == 0)
+		{
+			GST_DEBUG("skipping V4L2 device \"%s\" since it does not support frame streaming", tempstr);
+			goto next;
+		}
+
+		GST_DEBUG_OBJECT(self, "analyzing device node \"%s\"", tempstr);
+
+		/* Check if this device node is a valid ISI video transform device.
+		 * Do this by looking at the formats it supports. If any
+		 * compressed formats are listed, then this is probably an en-
+		 * or decoder. If no capture or no output formats are listed at
+		 * all, then this is probably a capture or output device. */
+
+		for (buf_type_index = 0; buf_type_index < NUM_V4L2_BUF_TYPES; ++buf_type_index)
+		{
+			gchar const *inout_name = inout_names[buf_type_index];
+			int num_listed_raw_formats = 0;
+
+			for (index = 0; ; ++index)
+			{
+				memset(&format_desc, 0, sizeof(format_desc));
+				format_desc.type = buf_types[buf_type_index];
+				format_desc.index = index;
+
+				if (ioctl(fd, VIDIOC_ENUM_FMT, &format_desc) < 0)
+				{
+					/* EINVAL is not an actual error. It just denotes that
+					 * we have reached the list of supported formats. */
+					if (errno != EINVAL)
+					{
+						GST_DEBUG_OBJECT(
+							self,
+							"could not query %s format (index %d) ISI transform device node candidate \"%s\": %s (%d) - skipping",
+							inout_name,
+							index,
+							tempstr,
+							strerror(errno),
+							errno
+						);
+					}
+
+					break;
+				}
+
+				GST_DEBUG_OBJECT(
+					self,
+					"  %s format query returned fourCC for format at index %d: %" GST_FOURCC_FORMAT,
+					inout_name,
+					index,
+					GST_FOURCC_ARGS(format_desc.pixelformat)
+				);
+				if (format_desc.flags & V4L2_FMT_FLAG_COMPRESSED)
+				{
+					GST_DEBUG_OBJECT(self, "  this is a compressed format -> most likely not an ISI transform device node");
+					goto next;
+				}
+
+				num_listed_raw_formats++;
+			}
+
+			if (num_listed_raw_formats == 0)
+			{
+				GST_DEBUG_OBJECT(self, "zero raw %s formats found -> most likely not an ISI transform device node", inout_name);
+				goto next;
+			}
+		}
+
+#undef NUM_V4L2_BUF_TYPES
+
+		GST_DEBUG_OBJECT(self, "found ISI transform device node \"%s\"", tempstr);
+		device_fd = fd;
+		break;
+
+next:
+		if (fd >= 0)
+			close(fd);
+	}
+
+	if (device_fd < 0)
+		GST_ERROR_OBJECT(self, "scanning did not find any viable ISI transform device node candidates");
+
+finish:
+	if (dir != NULL)
+		closedir(dir);
+
+	return device_fd;
 }
 
 
