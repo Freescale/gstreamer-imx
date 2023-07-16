@@ -7,7 +7,7 @@ About
 This is a set of [GStreamer 1.0](http://gstreamer.freedesktop.org/) plugins for NXP's
 i.MX platform, which make use of the i.MX multimedia capabilities.
 
-Currently tested on: i.MX6DL, i.MX6Q, i.MX8m, i.MX8m mini, i.MX8 QuadMax
+Currently tested on: i.MX6DL, i.MX6Q, i.MX7, i.MX8m quad/mini/plus, i.MX8 QuadMax/QuadXPlus
 
 
 License
@@ -69,8 +69,8 @@ The following blitters are supported by these elements:
         There are videosink and videotransform elements that use this API. Alpha blending
         with this API is currently tricky, which is why there is no compositor element (yet).
 * IPU : Image Processing Unit. Available on some i.MX6 SoCs.
-        Due to serious limitations of the driver, only a videotransform element based
-        on this hardware is available.
+        Due to serious limitations of the driver, there is no compositor element available
+        with this API.
 
 All elements use internal "uploader" code that uploads frames into DMA memory if necessary. If
 incoming frames are not aligned in a way that is compatible with what the blitters require, internal
@@ -96,8 +96,36 @@ driver issues. These elements are:
 is impractical. They are not meant to be used on any newer i.MX platform, since starting with the
 i.MX8, a different (and better) driver is used.
 
-The `-Dv4l2` command line switch can be passed to meson to enable / disable this V4L2 plugin.
-If set to `true` (the default value), it will be enabled. `false` will disable it.
+The `-Dv4l2-mxc-source-sink` Meson option can be passed to meson to enable / disable these two elements.
+If set to `true` (the default value), they will be enabled. `false` will disable them.
+
+
+Special Video4Linux2 memory-to-memory elements for i.MX8 QuadMax/QuadXPlus
+--------------------------------------------------------------------------
+
+The imx-kernels support the Amphion VPU that is present on the i.MX8 QuadMax/QuadXPlus through the
+V4L2 memory-to-memory API. However, imx-kernels 5.4 and older have a VPU driver that is riddled
+with severe bugs that required substantial patching of GStreamer's V4L2 stack, causing the v4l2
+elements to not behave in a stable manner. To be able to use the decoder, code was added to
+the gstreamer-imx v4l2 plugin that enabkes Amphion decoder elements. Their names start with
+`imxv4l2amphiondec_`. For example, an h264 decoder is called `imxv4l2amphiondec_h264`. With this,
+it becomes possible to use the Amphion Malone decoder on the i.MX8 QuadMax/QuadXPlus even with
+an unpatched GStreamer.
+
+NOTE: Newer imx-kernels (5.15 and above) come with an entirely new Amphion VPU driver that
+works correctly, obviating the need for these special elements.
+
+To enable/disable the Amphion decoder elements, use the `v4l2-amphion` Meson feature option.
+
+Also, the i.MX8 QuadMax/QuadXPlus SoCs contain the ISI (Image Sensing Interface), which can be
+used for colorspace conversions and downscaling (but not upscaling). This functionality is
+available through the V4L2 memory-to-memory API. But, like with the Amphion VPU driver situation,
+the support for it in imx-kernels <= 5.4 is plagued with bugs, thus requiring patches on top
+of GStreamer - or, as it is the case here, a custom transform element that takes care of
+applying bug workarounds. And, just like with the VPU driver, newer imx-kernels (>= 5.15)
+have an ISI mem-2-mem driver that works correctly, so this is mostly interesting for older
+systems. The transform element is called `imxv4l2isivideotransform`, and can be enabled and
+disabled by setting the `v4l2-isi` Meson option to `true` or `false`, respectively.
 
 
 Other elements
@@ -120,7 +148,7 @@ access the underlying DMA buffer by its DMA-BUF file descriptor and also by its 
 integration even easier.
 
 This is also why the old `imxeglvivsink` element from the earlier "v1" branch is not present anymore -
-it is now unnecessary, since glimagesink and waylandsink both are full replacements.
+it is now unnecessary, since `glimagesink` and `waylandsink` both are full replacements.
 
 Furthermore, if applications or other GStreamer elements wish to access some of the gstreamer-imx specific
 functionality (particularly its allocators and interfaces), the gstimxcommon library can be used for this
@@ -130,9 +158,10 @@ purpose, since its API is public.
 Dependencies
 ------------
 
-* GStreamer version 1.14 or later (compositor elements and NV12_10LE40 format support require 1.16 or later)
-* [libimxdmabuffer](https://github.com/Freescale/libimxdmabuffer) version 1.0.1 or later
-* [libimxvpuapi](https://github.com/Freescale/libimxvpuapi) version 2.1.1 or later
+* GStreamer version 1.14 or later; compositor elements and NV12_10LE40 format support require 1.16 or later,
+  and support for the Hantro G2 style NV12_4L4 tiled format requires 1.18 or later
+* [libimxdmabuffer](https://github.com/Freescale/libimxdmabuffer) version 1.1.2 or later
+* [libimxvpuapi](https://github.com/Freescale/libimxvpuapi) version 2.2.2 or later
 
 Also, the `videoparsersbad` plugin from the `gst-plugins-bad` package in GStreamer is needed, since
 this plugin contains video parsers like `h265parse`, `h264parse`, `mpegvideoparse` (for MPEG1 and MPEG2),
@@ -201,8 +230,14 @@ type is explicitly defined in the list below.
   since rendering to the framebuffer is not possible on those. Type: `boolean`.
 * `imx2d-compositor`: Enables/disables building 2D blitter compositor elements.
   Type: `boolean`.
-* `v4l2`: Enables/disables building the custom Video4Linux2 source / sink elements.
-  See the Video4Linux2 section above for details. Type: `boolean`.
+* `v4l2-mxc-source-sink`: Enables/disables building the custom Video4Linux2
+  source / sink elements. See the Video4Linux2 section above for details. Type: `boolean`.
+* `v4l2-isi`: Enables/disables building the custom Video4Linux2 video transform element
+  that uses the ISI mem-2-mem device. See the Video4Linux2 section above for details.
+  Type: `boolean`.
+* `v4l2-amphion`: Enables/disables building the custom Video4Linux2 Amphion Malone VPU
+  decoder that uses the Amphion mem-2-mem device. See the Video4Linux2 section above for
+  details. Type: `feature`.
 * `package-name`: GStreamer package name to use in the plugins. Type: `string`.
 * `package-origin`: GStreamer package origin to use in the plugins. Type: `string`.
 
