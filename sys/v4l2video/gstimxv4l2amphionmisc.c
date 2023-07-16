@@ -130,7 +130,7 @@ void gst_imx_v4l2_amphion_device_filenames_init(void)
 				/* EINVAL is not an actual error. It just denotes that
 				 * we have reached the list of supported formats. */
 				if (errno != EINVAL)
-					GST_DEBUG("could not query output format (index %d) from from decoder candidate \"%s\": %s (%d) - skipping", index, tempstr, strerror(errno), errno);
+					GST_DEBUG("could not query output format (index %d) from decoder candidate \"%s\": %s (%d) - skipping", index, tempstr, strerror(errno), errno);
 
 				break;
 			}
@@ -161,7 +161,7 @@ void gst_imx_v4l2_amphion_device_filenames_init(void)
 				/* EINVAL is not an actual error. It just denotes that
 				 * we have reached the list of supported formats. */
 				if (errno != EINVAL)
-					GST_DEBUG("could not query capture format (index %d) from from encoder candidate \"%s\": %s (%d) - skipping", index, tempstr, strerror(errno), errno);
+					GST_DEBUG("could not query capture format (index %d) from encoder candidate \"%s\": %s (%d) - skipping", index, tempstr, strerror(errno), errno);
 
 				break;
 			}
