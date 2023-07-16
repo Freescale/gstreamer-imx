@@ -1577,6 +1577,37 @@ static gboolean gst_imx_v4l2_isi_video_transform_probe_available_caps(GstImxV4L2
 			format_desc.description
 		);
 
+		if (queue->buf_type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE)
+		{
+			gboolean skip_format;
+
+			switch (format_desc.pixelformat)
+			{
+				case V4L2_PIX_FMT_NV12:
+					GST_DEBUG_OBJECT(
+						self,
+						"skipping V4L2_PIX_FMT_NV12 since it does not work well with multi-planar API"
+					);
+					skip_format = TRUE;
+					break;
+
+				case V4L2_PIX_FMT_NV12M:
+					GST_FIXME_OBJECT(
+						self,
+						"skipping V4L2_PIX_FMT_NV12M since it currently produces broken results during "
+						"BGRx -> NV12 conversions (the input RGB channels are read in incorrect order)"
+					);
+					skip_format = TRUE;
+					break;
+
+				default:
+					skip_format = FALSE;
+			}
+
+			if (G_UNLIKELY(skip_format))
+				continue;
+		}
+
 		v4l2_video_format = gst_imx_v4l2_get_by_v4l2_pixelformat(format_desc.pixelformat);
 		if (G_UNLIKELY((v4l2_video_format == NULL) || (v4l2_video_format->type != GST_IMX_V4L2_VIDEO_FORMAT_TYPE_RAW)))
 		{
@@ -1642,6 +1673,13 @@ static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIV
 		return FALSE;
 	}
 	g_assert(gst_imx_format->type == GST_IMX_V4L2_VIDEO_FORMAT_TYPE_RAW);
+
+	GST_DEBUG_OBJECT(
+		self,
+		"using V4L2 format with fourCC \"%" GST_FOURCC_FORMAT "\" (gst format \"%s\")",
+		GST_FOURCC_ARGS(gst_imx_format->v4l2_pixelformat),
+		gst_video_format_to_string(gst_imx_format->format.gst_format)
+	);
 
 	num_planes = (gint)(GST_VIDEO_INFO_N_PLANES(video_info));
 	memcpy(&(queue->video_info), video_info, sizeof(GstVideoInfo));
