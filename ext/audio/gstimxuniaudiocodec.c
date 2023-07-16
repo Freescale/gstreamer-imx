@@ -118,9 +118,7 @@ static GstImxAudioUniaudioCodec* gst_imx_audio_uniaudio_codec_load_codec(gchar c
 	}
 
 	codec->caps = gst_caps_copy(caps);
-#if GST_CHECK_VERSION(1, 10, 0)
 	GST_MINI_OBJECT_FLAG_SET(codec->caps, GST_MINI_OBJECT_FLAG_MAY_BE_LEAKED);
-#endif
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
