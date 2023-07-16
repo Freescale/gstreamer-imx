@@ -69,6 +69,20 @@ if g2d_dep.found()
 	)
 	conf_data.set('IMX2D_G2D_COLORIMETRY_SUPPORTED', g2d_colorimetry_support)
 
+	g2d_full_range_colorimetry_support = cc.compiles(
+		'''
+		#include <g2d.h>
+		int main(void)
+		{
+			int i = G2D_YUV_BT_601FR;
+			return 0;
+		}
+		''',
+		dependencies : [g2d_dep],
+		name : 'G2D full range colorimetry support'
+	)
+	conf_data.set('IMX2D_G2D_FULL_RANGE_COLORIMETRY_SUPPORTED', g2d_full_range_colorimetry_support)
+
 	g2d_based_on_dpu = get_option('g2d-based-on-dpu')
 	if g2d_based_on_dpu
 		message('G2D implementation is based on the i.MX8qm / i.MX8qxp DPU')

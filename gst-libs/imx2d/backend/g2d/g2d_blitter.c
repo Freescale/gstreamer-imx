@@ -147,15 +147,17 @@ static BOOL get_g2d_format(Imx2dPixelFormat imx_2d_format, enum g2d_format *fmt)
 
 
 #ifdef IMX2D_G2D_COLORIMETRY_SUPPORTED
-static enum g2d_cap_mode colorimetry_to_g2d_cap_mode(Imx2dColorimetry colorimetry)
+static BOOL colorimetry_to_g2d_cap_mode(Imx2dColorimetry colorimetry, enum g2d_cap_mode *cap_mode)
 {
 	switch (colorimetry)
 	{
-		case IMX2D_COLORIMETRY_BT_601: return G2D_YUV_BT_601;
-		case IMX2D_COLORIMETRY_BT_709: return G2D_YUV_BT_709;
-		case IMX2D_COLORIMETRY_BT_601_FULL_RANGE: return G2D_YUV_BT_601FR;
-		case IMX2D_COLORIMETRY_BT_709_FULL_RANGE: return G2D_YUV_BT_709FR;
-		default: assert(FALSE);
+		case IMX2D_COLORIMETRY_BT_601: *cap_mode = G2D_YUV_BT_601; return TRUE;
+		case IMX2D_COLORIMETRY_BT_709: *cap_mode = G2D_YUV_BT_709; return TRUE;
+#ifdef IMX2D_G2D_FULL_RANGE_COLORIMETRY_SUPPORTED
+		case IMX2D_COLORIMETRY_BT_601_FULL_RANGE: *cap_mode = G2D_YUV_BT_601FR; return TRUE;
+		case IMX2D_COLORIMETRY_BT_709_FULL_RANGE: *cap_mode = G2D_YUV_BT_709FR; return TRUE;
+#endif
+		default: return FALSE;
 	}
 }
 #endif
@@ -729,13 +731,20 @@ static void imx_2d_backend_g2d_blitter_set_colorimetry(Imx2dG2DBlitter *g2d_blit
 	for (i = 0; i < IMX2D_NUM_COLORIMETRY_ITEMS; ++i)
 	{
 		Imx2dColorimetry colorimetry = (Imx2dColorimetry)i;
-		BOOL do_enable = (g2d_blitter->current_colorimetry == colorimetry);
+		enum g2d_cap_mode cap_mode;
+		BOOL do_enable;
+
+		if (!colorimetry_to_g2d_cap_mode(colorimetry, &cap_mode))
+			continue;
+
+		do_enable = (g2d_blitter->current_colorimetry == colorimetry);
+
 		IMX_2D_LOG(DEBUG, "%s G2D %s mode", do_enable ? "enabling" : "disabling", imx_2d_colorimetry_to_string(colorimetry));
 
 		if (do_enable)
-			g2d_enable(g2d_blitter->g2d_handle, colorimetry_to_g2d_cap_mode(colorimetry));
+			g2d_enable(g2d_blitter->g2d_handle, cap_mode);
 		else
-			g2d_disable(g2d_blitter->g2d_handle, colorimetry_to_g2d_cap_mode(colorimetry));
+			g2d_disable(g2d_blitter->g2d_handle, cap_mode);
 	}
 #endif
 }
