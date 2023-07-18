@@ -87,11 +87,18 @@ typedef struct
 	enum v4l2_buf_type buf_type;
 	gchar const *name;
 
+	/* If TRUE, then all planes are stored in the same v4l2 buffer.
+	 * Otherwise, there is one buffer per plane. Single-buffer frames
+	 * can exist even when using the multi-planar API and the format
+	 * is multi-planar (like NV12). */
+	gboolean planes_are_contiguous;
+
 	GstBuffer **queued_gstbuffers;
 	gint *unqueued_buffer_indices;
 	gint num_buffers;
 	gint num_queued_buffers;
 
+	/* Plane sizes in bytes. Only used when planes_are_contiguous is FALSE. */
 	gsize driver_plane_sizes[3];
 
 	GstVideoInfo video_info;
@@ -174,7 +181,7 @@ static void gst_imx_v4l2_isi_video_transform_close(GstImxV4L2ISIVideoTransform *
 static int gst_imx_v4l2_isi_video_transform_scan_for_and_open_isi_device(GstImxV4L2ISIVideoTransform *self);
 static gboolean gst_imx_v4l2_isi_video_transform_probe_available_caps(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue);
 
-static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue, GstVideoInfo const *video_info);
+static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue, GstVideoInfo const *original_video_info);
 static void gst_imx_v4l2_isi_video_transform_teardown_v4l2_queue(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue);
 static gboolean gst_imx_v4l2_isi_video_transform_queue_buffer(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue, GstBuffer *gstbuffer);
 static GstBuffer* gst_imx_v4l2_isi_video_transform_dequeue_buffer(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue);
@@ -1195,16 +1202,16 @@ static gboolean gst_imx_v4l2_isi_video_transform_set_caps(GstBaseTransform *tran
 	self->input_buffer_pool = gst_imx_video_dma_buffer_pool_new(
 		self->imx_dma_buffer_allocator,
 		&(self->v4l2_output_queue.video_info),
-		TRUE,
-		self->v4l2_output_queue.driver_plane_sizes
+		!(self->v4l2_output_queue.planes_are_contiguous),
+		self->v4l2_output_queue.planes_are_contiguous ? NULL : self->v4l2_output_queue.driver_plane_sizes
 	);
 	gst_buffer_pool_set_active(self->input_buffer_pool, TRUE);
 
 	self->output_buffer_pool = gst_imx_video_dma_buffer_pool_new(
 		self->imx_dma_buffer_allocator,
 		&(self->v4l2_capture_queue.video_info),
-		TRUE,
-		self->v4l2_capture_queue.driver_plane_sizes
+		!(self->v4l2_capture_queue.planes_are_contiguous),
+		self->v4l2_capture_queue.planes_are_contiguous ? NULL : self->v4l2_capture_queue.driver_plane_sizes
 	);
 	gst_buffer_pool_set_active(self->output_buffer_pool, TRUE);
 
@@ -1772,14 +1779,6 @@ static gboolean gst_imx_v4l2_isi_video_transform_probe_available_caps(GstImxV4L2
 
 			switch (format_desc.pixelformat)
 			{
-				case V4L2_PIX_FMT_NV12:
-					GST_DEBUG_OBJECT(
-						self,
-						"skipping V4L2_PIX_FMT_NV12 since it does not work well with multi-planar API"
-					);
-					skip_format = TRUE;
-					break;
-
 				case V4L2_PIX_FMT_NV12M:
 					GST_FIXME_OBJECT(
 						self,
@@ -1841,20 +1840,21 @@ error:
 }
 
 
-static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue, GstVideoInfo const *video_info)
+static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIVideoTransform *self, GstImxV4L2ISIVideoTransformQueue *queue, GstVideoInfo const *original_video_info)
 {
 	gint buffer_index, plane_index, num_planes;
 	struct v4l2_format v4l2_fmt;
 	struct v4l2_control v4l2_ctrl;
 	struct v4l2_requestbuffers v4l2_reqbuf;
 	GstImxV4L2VideoFormat const *gst_imx_format;
+	GstVideoInfo *queue_video_info;
 	GstVideoFormat gst_format;
 
 	g_assert(!queue->initialized);
 
 	GST_DEBUG_OBJECT(self, "setting up V4L2 %s queue", queue->name);
 
-	gst_format = GST_VIDEO_INFO_FORMAT(video_info);
+	gst_format = GST_VIDEO_INFO_FORMAT(original_video_info);
 	gst_imx_format = gst_imx_v4l2_get_by_gst_video_format(gst_format);
 	if (G_UNLIKELY(gst_imx_format == NULL))
 	{
@@ -1870,13 +1870,15 @@ static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIV
 		gst_video_format_to_string(gst_imx_format->format.gst_format)
 	);
 
-	num_planes = (gint)(GST_VIDEO_INFO_N_PLANES(video_info));
-	memcpy(&(queue->video_info), video_info, sizeof(GstVideoInfo));
+	num_planes = (gint)(GST_VIDEO_INFO_N_PLANES(original_video_info));
+
+	queue_video_info = &(queue->video_info);
+	memcpy(queue_video_info, original_video_info, sizeof(GstVideoInfo));
 
 	memset(&v4l2_fmt, 0, sizeof(v4l2_fmt));
 	v4l2_fmt.type = queue->buf_type;
-	v4l2_fmt.fmt.pix_mp.width = GST_VIDEO_INFO_WIDTH(video_info);
-	v4l2_fmt.fmt.pix_mp.height = GST_VIDEO_INFO_HEIGHT(video_info);
+	v4l2_fmt.fmt.pix_mp.width = GST_VIDEO_INFO_WIDTH(queue_video_info);
+	v4l2_fmt.fmt.pix_mp.height = GST_VIDEO_INFO_HEIGHT(queue_video_info);
 	v4l2_fmt.fmt.pix_mp.pixelformat = gst_imx_format->v4l2_pixelformat;
 	v4l2_fmt.fmt.pix_mp.field = V4L2_FIELD_NONE;
 	v4l2_fmt.fmt.pix_mp.colorspace = V4L2_COLORSPACE_DEFAULT;
@@ -1889,8 +1891,8 @@ static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIV
 	{
 		struct v4l2_plane_pix_format *plane_fmt = &(v4l2_fmt.fmt.pix_mp.plane_fmt[plane_index]);
 
-		plane_fmt->bytesperline = GST_VIDEO_INFO_PLANE_STRIDE(video_info, plane_index);
-		plane_fmt->sizeimage = plane_fmt->bytesperline * GST_VIDEO_INFO_HEIGHT(video_info);
+		plane_fmt->bytesperline = GST_VIDEO_INFO_PLANE_STRIDE(queue_video_info, plane_index);
+		plane_fmt->sizeimage = plane_fmt->bytesperline * GST_VIDEO_INFO_HEIGHT(queue_video_info);
 	}
 
 	if (ioctl(self->v4l2_fd, VIDIOC_S_FMT, &v4l2_fmt) < 0)
@@ -1899,11 +1901,31 @@ static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIV
 		return FALSE;
 	}
 
+	queue->planes_are_contiguous = FALSE;
+	if ((num_planes > 1) && (v4l2_fmt.fmt.pix_mp.num_planes == 1))
+	{
+		GST_DEBUG_OBJECT(
+			self,
+			"format is multiplanar, but V4L2 query indicates only one plane is allocated -> "
+			"planes are contiguous and exist in a single buffer"
+		);
+		queue->planes_are_contiguous = TRUE;
+	}
+
+	/* This is important when we queue v4l2 buffers later and the planes
+	 * are contiguous. The ISI driver seems to require a size that goes
+	 * beyond what's really needed for a frame in that case, and attempting
+	 * to use any smaller size than that results in an error. For example,
+	 * a 320x240 NV12 frame should only require 115200 bytes, but the
+	 * driver actually requires 192000 bytes. */
+	if (queue->planes_are_contiguous)
+		GST_VIDEO_INFO_SIZE(queue_video_info) = v4l2_fmt.fmt.pix.sizeimage;
+
 	GST_DEBUG_OBJECT(self, "configured format for V4L2 %s queue", queue->name);
 
 	memset(&v4l2_ctrl, 0, sizeof(v4l2_ctrl));
 	v4l2_ctrl.id = (queue->buf_type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) ? V4L2_CID_MIN_BUFFERS_FOR_OUTPUT
-                                                                        : V4L2_CID_MIN_BUFFERS_FOR_CAPTURE;
+	                                                                      : V4L2_CID_MIN_BUFFERS_FOR_CAPTURE;
 	if (ioctl(self->v4l2_fd, VIDIOC_G_CTRL, &v4l2_ctrl) < 0)
 	{
 		GST_ERROR_OBJECT(self, "could not query min required number of V4L2 %s buffers: %s (%d)", queue->name, strerror(errno), errno);
@@ -1954,16 +1976,26 @@ static gboolean gst_imx_v4l2_isi_video_transform_setup_v4l2_queue(GstImxV4L2ISIV
 			return FALSE;
 		}
 
-		for (plane_index = 0; plane_index < num_planes; ++plane_index)
+		/* Record the plane sizes given by the driver when the planes aren't contiguous
+		 * (that is, there is one memory buffer for each plane). We assume that the
+		 * plane sizes don't vary between v4l2 buffers, so we can just record those
+		 * sizes given for buffer #0 and use these for all other buffers as well.
+		 * (Varying plane sizes are very uncommon in general and do not happen with
+		 * the ISI driver.) */
+		if (!queue->planes_are_contiguous && (buffer_index == 0))
 		{
-			queue->driver_plane_sizes[plane_index] = planes[plane_index].length;
-			GST_DEBUG_OBJECT(
-				self,
-				"driver query result: buffer with index %d has plane %d with size %" G_GSIZE_FORMAT,
-				buffer_index,
-				plane_index,
-				queue->driver_plane_sizes[plane_index]
-			);
+			for (plane_index = 0; plane_index < num_planes; ++plane_index)
+			{
+				queue->driver_plane_sizes[plane_index] = planes[plane_index].length;
+
+				GST_DEBUG_OBJECT(
+					self,
+					"driver query result: non-contiguous buffer with index %d has plane %d with size %" G_GSIZE_FORMAT,
+					buffer_index,
+					plane_index,
+					queue->driver_plane_sizes[plane_index]
+				);
+			}
 		}
 	}
 
