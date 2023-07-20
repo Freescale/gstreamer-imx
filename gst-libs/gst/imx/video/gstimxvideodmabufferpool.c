@@ -228,7 +228,7 @@ GstBufferPool* gst_imx_video_dma_buffer_pool_new(
 				total_size,
 				GST_VIDEO_INFO_SIZE(video_info)
 			);
-			GST_VIDEO_INFO_SIZE(video_info) = total_size;
+			GST_VIDEO_INFO_SIZE(&(pool->video_info)) = total_size;
 		}
 	}
 	else
@@ -258,7 +258,7 @@ GstBufferPool* gst_imx_video_dma_buffer_pool_new(
 	}
 
 	pool_config = gst_buffer_pool_get_config(GST_BUFFER_POOL_CAST(pool));
-	gst_buffer_pool_config_set_params(pool_config, video_caps, GST_VIDEO_INFO_SIZE(video_info), 0, 0);
+	gst_buffer_pool_config_set_params(pool_config, video_caps, GST_VIDEO_INFO_SIZE(&(pool->video_info)), 0, 0);
 	gst_buffer_pool_config_add_option(pool_config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 	gst_buffer_pool_set_config(GST_BUFFER_POOL_CAST(pool), pool_config);
 
