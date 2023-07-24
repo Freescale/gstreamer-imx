@@ -362,7 +362,10 @@ gboolean gst_imx_video_uploader_set_input_video_info(GstImxVideoUploader *upload
 	/* Analyze the input video info to see if stride and plane row count are already aligned.
 	 * The remainders are computed by calculating the aligned version of the quantity and
 	 * then subtracting that from the unaligned one. If the remainder is 0, this means
-	 * that the quantity is already aligned. */
+	 * that the quantity is already aligned. A non-zero remainder specifies how many
+	 * stride bytes or plane rows go beyond the aligned portion of the quantity. For
+	 * example, stride 620 and alignment 16 results in an aligned portion of 608 and
+	 * a remainder of 12 (620 = 608 + 12). */
 
 	stride_remainder = ((stride + (uploader->stride_alignment - 1)) / uploader->stride_alignment) * uploader->stride_alignment - stride;
 
@@ -382,6 +385,7 @@ gboolean gst_imx_video_uploader_set_input_video_info(GstImxVideoUploader *upload
 	{
 		gint w_sub = GST_VIDEO_FORMAT_INFO_W_SUB(input_video_info->finfo, plane_index);
 		video_alignment.stride_align[plane_index] = GST_VIDEO_SUB_SCALE(w_sub, uploader->stride_alignment) - 1;
+		GST_DEBUG_OBJECT(uploader, "plane #%u gstvideoalignment stride_align value: %u", plane_index, video_alignment.stride_align[plane_index]);
 	}
 
 	video_alignment.padding_bottom = plane_row_remainder;
@@ -438,4 +442,20 @@ gboolean gst_imx_video_uploader_set_input_video_info(GstImxVideoUploader *upload
 	gst_caps_unref(input_caps);
 
 	return TRUE;
+}
+
+
+void gst_imx_video_uploader_set_alignments(GstImxVideoUploader *uploader, guint stride_alignment, guint plane_row_alignment)
+{
+	g_assert(uploader != NULL);
+
+	uploader->stride_alignment = (stride_alignment == 0) ? 1 : stride_alignment;
+	uploader->plane_row_alignment = (plane_row_alignment == 0) ? 1 : plane_row_alignment;
+
+	GST_DEBUG_OBJECT(
+		uploader,
+		"set stride alignment to %u and plane alignment to %u",
+		uploader->stride_alignment,
+		uploader->plane_row_alignment
+	);
 }

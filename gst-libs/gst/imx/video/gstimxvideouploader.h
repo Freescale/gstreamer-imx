@@ -149,6 +149,17 @@ GstFlowReturn gst_imx_video_uploader_perform(GstImxVideoUploader *uploader, GstB
  */
 gboolean gst_imx_video_uploader_set_input_video_info(GstImxVideoUploader *uploader, GstVideoInfo const *input_video_info);
 
+/**
+ * gst_imx_video_uploader_set_alignments:
+ * @uploader: Video uploader instance that shall have new alignment values set.
+ *
+ * Sets new stride and plane row alignment values. These have the same semantics as the values
+ * that are passed to @gst_imx_video_uploader_new. This is useful if later, after creating the
+ * video uploader, updated alignment information becomes available. The new alignments will be
+ * used starting with the next @gst_imx_video_uploader_perform call.
+ */
+void gst_imx_video_uploader_set_alignments(GstImxVideoUploader *uploader, guint stride_alignment, guint plane_row_alignment);
+
 
 G_END_DECLS
 
