@@ -35,6 +35,7 @@ enum
 	PROP_VIDEO_DIRECTION,
 	PROP_CLEAR_AT_NULL,
 	PROP_CLEAR_ON_RELOCATE,
+	PROP_RENDER_OVERLAYS,
 	PROP_USE_VSYNC,
 	PROP_FORCE_ASPECT_RATIO,
 	PROP_WINDOW_X_COORD,
@@ -54,6 +55,7 @@ enum
 #define DEFAULT_VIDEO_DIRECTION GST_VIDEO_ORIENTATION_IDENTITY
 #define DEFAULT_CLEAR_AT_NULL FALSE
 #define DEFAULT_CLEAR_ON_RELOCATE FALSE
+#define DEFAULT_RENDER_OVERLAYS FALSE
 #define DEFAULT_USE_VSYNC FALSE
 #define DEFAULT_FORCE_ASPECT_RATIO TRUE
 #define DEFAULT_WINDOW_X_COORD 0
@@ -196,6 +198,17 @@ static void gst_imx_2d_video_sink_class_init(GstImx2dVideoSinkClass *klass)
 	);
 	g_object_class_install_property(
 		object_class,
+		PROP_RENDER_OVERLAYS,
+		g_param_spec_boolean(
+			"render-overlays",
+			"Render overlays",
+			"Render overlays described in GstVideoOverlayCompositionMeta structures",
+			DEFAULT_USE_VSYNC,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
+	g_object_class_install_property(
+		object_class,
 		PROP_USE_VSYNC,
 		g_param_spec_boolean(
 			"use-vsync",
@@ -327,12 +340,15 @@ static void gst_imx_2d_video_sink_init(GstImx2dVideoSink *self)
 
 	self->framebuffer = NULL;
 
+	self->overlay_handler = NULL;
+
 	self->drop_frames = DEFAULT_DROP_FRAMES;
 	self->framebuffer_name = g_strdup(DEFAULT_FRAMEBUFFER_NAME);
 	self->input_crop = DEFAULT_INPUT_CROP;
 	self->video_direction = DEFAULT_VIDEO_DIRECTION;
 	self->clear_at_null = DEFAULT_CLEAR_AT_NULL;
 	self->clear_on_relocate = DEFAULT_CLEAR_ON_RELOCATE;
+	self->render_overlays = DEFAULT_RENDER_OVERLAYS;
 	self->use_vsync = DEFAULT_USE_VSYNC;
 	self->force_aspect_ratio = DEFAULT_FORCE_ASPECT_RATIO;
 	self->window_x_coord = DEFAULT_WINDOW_X_COORD;
@@ -422,6 +438,14 @@ static void gst_imx_2d_video_sink_set_property(GObject *object, guint prop_id, G
 		{
 			GST_OBJECT_LOCK(self);
 			self->clear_on_relocate = g_value_get_boolean(value);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_RENDER_OVERLAYS:
+		{
+			GST_OBJECT_LOCK(self);
+			self->render_overlays = g_value_get_boolean(value);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -573,6 +597,14 @@ static void gst_imx_2d_video_sink_get_property(GObject *object, guint prop_id, G
 		{
 			GST_OBJECT_LOCK(self);
 			g_value_set_boolean(value, self->clear_on_relocate);
+			GST_OBJECT_UNLOCK(self);
+			break;
+		}
+
+		case PROP_RENDER_OVERLAYS:
+		{
+			GST_OBJECT_LOCK(self);
+			g_value_set_boolean(value, self->render_overlays);
 			GST_OBJECT_UNLOCK(self);
 			break;
 		}
@@ -778,6 +810,8 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 
 	memcpy(&(self->input_video_info), &input_video_info, sizeof(GstVideoInfo));
 
+	gst_imx_2d_video_overlay_handler_clear_cached_overlays(self->overlay_handler);
+
 	return TRUE;
 
 error:
@@ -785,11 +819,40 @@ error:
 }
 
 
-static gboolean gst_imx_2d_video_sink_propose_allocation(G_GNUC_UNUSED GstBaseSink *sink, GstQuery *query)
+static gboolean gst_imx_2d_video_sink_propose_allocation(GstBaseSink *sink, GstQuery *query)
 {
-	/* Not chaining up to the base class since it does not have
-	 * its own propose_allocation implementation - its vmethod
-	 * propose_allocation pointer is set to NULL. */
+	GstImx2dVideoSink *self = GST_IMX_2D_VIDEO_SINK_CAST(sink);
+	gboolean render_overlays;
+
+	GST_OBJECT_LOCK(self);
+	render_overlays = self->render_overlays;
+	GST_OBJECT_UNLOCK(self);
+
+	if (render_overlays)
+	{
+		GstStructure *allocation_meta_structure = NULL;
+		guint output_width, output_height;
+
+		/* Not chaining up to the base class since it does not have
+		 * its own propose_allocation implementation - its vmethod
+		 * propose_allocation pointer is set to NULL. */
+
+		output_width = self->framebuffer_surface_desc->width;
+		output_height = self->framebuffer_surface_desc->height;
+
+		GST_DEBUG_OBJECT(self, "proposing overlay composition meta to allocation query with output video size %ux%u", output_width, output_height);
+
+		allocation_meta_structure = gst_structure_new(
+			"GstVideoOverlayCompositionMeta",
+			"width", G_TYPE_UINT, output_width,
+			"height", G_TYPE_UINT, output_height,
+			NULL
+		);
+
+		gst_query_add_allocation_meta(query, GST_VIDEO_OVERLAY_COMPOSITION_META_API_TYPE, allocation_meta_structure);
+
+		gst_structure_free(allocation_meta_structure);
+	}
 
 	/* Let upstream know that we can handle GstVideoMeta and GstVideoCropMeta. */
 	gst_query_add_allocation_meta(query, GST_VIDEO_META_API_TYPE, 0);
@@ -928,6 +991,12 @@ static GstFlowReturn gst_imx_blitter_video_sink_show_frame(GstVideoSink *video_s
 		goto error;
 	}
 
+	if (!gst_imx_2d_video_overlay_handler_render(self->overlay_handler, input_buffer))
+	{
+		GST_ERROR_OBJECT(self, "rendering overlay(s) failed");
+		goto error;
+	}
+
 	if (!imx_2d_blitter_finish(self->blitter))
 	{
 		GST_ERROR_OBJECT(self, "finishing blitter failed");
@@ -961,6 +1030,7 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 	GstImx2dVideoSinkClass *klass = GST_IMX_2D_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(self));
 	gboolean use_vsync;
 	gchar *framebuffer_name = NULL;
+	GstImxDmaBufferUploader *dma_buffer_uploader;
 
 	self->imx_dma_buffer_allocator = gst_imx_allocator_new();
 	self->uploader = gst_imx_video_uploader_new(self->imx_dma_buffer_allocator, klass->hardware_capabilities->stride_alignment, klass->hardware_capabilities->total_row_count_alignment);
@@ -1035,6 +1105,15 @@ static gboolean gst_imx_2d_video_sink_start(GstImx2dVideoSink *self)
 
 	self->framebuffer_surface_desc = imx_2d_surface_get_desc(self->framebuffer_surface);
 
+	dma_buffer_uploader = gst_imx_video_uploader_get_dma_buffer_uploader(self->uploader);
+	self->overlay_handler = gst_imx_2d_video_overlay_handler_new(dma_buffer_uploader, self->blitter);
+	gst_object_unref(GST_OBJECT(dma_buffer_uploader));
+	if (self->overlay_handler == NULL)
+	{
+		GST_ERROR_OBJECT(self, "creating overlay handler failed");
+		goto error;
+	}
+
 	GST_INFO_OBJECT(self, "framebuffer using device \"%s\" set up", framebuffer_name);
 
 finish:
@@ -1054,6 +1133,12 @@ static void gst_imx_2d_video_sink_stop(GstImx2dVideoSink *self)
 
 	if ((klass->stop != NULL) && !(klass->stop(self)))
 		GST_ERROR_OBJECT(self, "stop() failed");
+
+	if (self->overlay_handler != NULL)
+	{
+		gst_object_unref(GST_OBJECT(self->overlay_handler));
+		self->overlay_handler = NULL;
+	}
 
 	if (self->input_surface != NULL)
 	{
@@ -1320,7 +1405,7 @@ void gst_imx_2d_video_sink_common_class_init(GstImx2dVideoSinkClass *klass, Imx2
 
 	klass->hardware_capabilities = capabilities;
 
-	sink_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities(capabilities, GST_PAD_SINK);
+	sink_template_caps = gst_imx_2d_get_caps_from_imx2d_capabilities_full(capabilities, GST_PAD_SINK, TRUE);
 	sink_template = gst_pad_template_new("sink", GST_PAD_SINK, GST_PAD_ALWAYS, sink_template_caps);
 	gst_element_class_add_pad_template(element_class, sink_template);
 }

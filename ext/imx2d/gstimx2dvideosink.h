@@ -24,6 +24,7 @@
 #include "gst/imx/video/gstimxvideouploader.h"
 #include "imx2d/imx2d.h"
 #include "imx2d/linux_framebuffer.h"
+#include "gstimx2dvideooverlayhandler.h"
 
 
 G_BEGIN_DECLS
@@ -61,13 +62,16 @@ struct _GstImx2dVideoSink
 	Imx2dSurface *framebuffer_surface;
 	Imx2dSurfaceDesc const *framebuffer_surface_desc;
 
+	GstImx2dVideoOverlayHandler *overlay_handler;
+
 	gboolean drop_frames;
 	gchar *framebuffer_name;
 	gboolean input_crop;
 	GstVideoOrientationMethod video_direction;
-	gboolean use_vsync;
 	gboolean clear_at_null;
 	gboolean clear_on_relocate;
+	gboolean render_overlays;
+	gboolean use_vsync;
 	gboolean force_aspect_ratio;
 	gint window_x_coord, window_y_coord;
 	guint window_width, window_height;

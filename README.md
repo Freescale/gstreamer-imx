@@ -43,10 +43,11 @@ The following element types are available (not all are possible with all 2D blit
   it is possible to configure these elements to auto-rotate images according to the information
   in [image-orientation tags](https://developer.gnome.org/gstreamer/stable/gstreamer-GstTagList.html#GST-TAG-IMAGE-ORIENTATION:CAPS).
 * videosink : Render video frames to the Linux framebuffer. All operations that videotransform
-  elements can handle (currently except for overlay compositions) can also be handled by these
-  sinks. In addition, tearing-free playback is possible by making use of framebuffer page flipping
-  that is tied to vsync. Aspect ratio can be preserved - excess space on the framebuffer is then
-  letterboxed.
+  elements can handle can also be handled by these sinks. In addition, tearing-free playback is
+  possible by making use of framebuffer page flipping that is tied to vsync. (Set the `use-vsync`
+  property to TRUE to make use of this.) Aspect ratio can be preserved - excess space on the
+  framebuffer is then letterboxed. Just like the videotransform elements, these video sinks can
+  handle GstVideoOverlayCompositionMeta data. However, see the notes below.
 * compositor : Assembles multiple input video streams into one output frame, just like the standard
   GStreamer compositor element. Its properties match those of GStreamer's standard compositor, making
   these 2D blitter compositor elements drop-in replacements for the standard compositor (which doe
@@ -76,6 +77,28 @@ All elements use internal "uploader" code that uploads frames into DMA memory if
 incoming frames are not aligned in a way that is compatible with what the blitters require, internal
 frame copies are automatically done. These frame copies are CPU-based, so performance may suffer,
 but otherwise, such frames could not be processed at all.
+
+
+Notes about 2D video sinks and overlay composition
+--------------------------------------------------
+
+GstVideoOverlayCompositionMeta support in video sinks needs to be explicitly enabled by setting
+the `render-overlays` property to TRUE. This is both for backwards compatibility and because of
+flickering artifacts when vsync is not used. With vsync is turned off, that flickering appears,
+because it is actually caused by tearing.
+
+Consider the following example: A video frame is to be shown with a small overlay at the top left
+corner. Without vsync, it is possible that the scanout driver scans and displays the contents of
+the framebuffer after the main video frame was written to it but _before_ the overlay is painted.
+Then, the next frame is written to the framebuffer, and this time, the scanout driver scans and
+displays the contents just _after_ the overlay is finished. Due to this asynchronicity between
+overlay painting and scanout driver, the overlay sometimes is shown, sometimes is not shown,
+and flickering is the outcome.
+
+Tearing is fixed by enabling vsync. So is this timing problem. VSync makes sure that the contents
+that were written to the framebuffer are shown only after _all_ of the rendering is done.
+Consequently, when a video sink shall do the overlay composition, it is _strongly_ recommended
+to also turn on vsync.
 
 
 Special Video4Linux2 elements for i.MX6
