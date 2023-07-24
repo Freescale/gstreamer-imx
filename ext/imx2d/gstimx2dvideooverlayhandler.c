@@ -47,9 +47,7 @@ struct _GstImx2dVideoOverlayHandler
 	GstAllocator *dma_buffer_allocator;
 
 	Imx2dBlitter *blitter;
-
-	/* The stride_alignment value from the imx2d blitter's hardware capabilities. */
-	int stride_alignment;
+	Imx2dHardwareCapabilities const *blitter_capabilities;
 
 	/* Reference to the last composition we saw. This ensures that this
 	 * composition cannot be altered (in-place modifications cannot happen
@@ -142,7 +140,6 @@ static void gst_imx_2d_video_overlay_handler_dispose(GObject *object)
 GstImx2dVideoOverlayHandler* gst_imx_2d_video_overlay_handler_new(GstImxDmaBufferUploader *uploader, Imx2dBlitter *blitter)
 {
 	GstImx2dVideoOverlayHandler *video_overlay_handler;
-	Imx2dHardwareCapabilities const *capabilities;
 
 	g_assert(uploader != NULL);
 	g_assert(blitter != NULL);
@@ -151,10 +148,8 @@ GstImx2dVideoOverlayHandler* gst_imx_2d_video_overlay_handler_new(GstImxDmaBuffe
 	video_overlay_handler->uploader = gst_object_ref(uploader);
 	video_overlay_handler->dma_buffer_allocator = gst_imx_dma_buffer_uploader_get_allocator(uploader);
 	video_overlay_handler->blitter = blitter;
-
-	capabilities = imx_2d_blitter_get_hardware_capabilities(blitter);
-	g_assert(capabilities != NULL);
-	video_overlay_handler->stride_alignment = capabilities->stride_alignment;
+	video_overlay_handler->blitter_capabilities = imx_2d_blitter_get_hardware_capabilities(blitter);
+	g_assert(video_overlay_handler->blitter_capabilities != NULL);
 
 	return video_overlay_handler;
 }
@@ -376,6 +371,8 @@ static gboolean gst_imx_2d_video_overlay_handler_cache_buffers(GstImx2dVideoOver
 		GstVideoInfo video_info, adjusted_video_info;
 		GstVideoAlignment video_alignment;
 		gboolean must_copy_frame = FALSE;
+		Imx2dPixelFormat imx2d_format;
+		gint stride_alignment;
 
 		GST_DEBUG_OBJECT(self, "uploading gstbuffer of overlay #%u", rectangle_idx);
 
@@ -388,6 +385,8 @@ static gboolean gst_imx_2d_video_overlay_handler_cache_buffers(GstImx2dVideoOver
 			return FALSE;
 		}
 
+		imx2d_format = gst_imx_2d_convert_from_gst_video_format(video_meta->format, NULL);
+		stride_alignment = gst_imx_2d_get_stride_alignment_for(imx2d_format, self->blitter_capabilities);
 
 		/* Fill video_info, make a copy of it, and then align the copy's
 		 * stride values to the alignment the imx2d blitter requires.
@@ -402,11 +401,15 @@ static gboolean gst_imx_2d_video_overlay_handler_cache_buffers(GstImx2dVideoOver
 
 		for (plane_idx = 0; plane_idx < video_meta->n_planes; ++plane_idx)
 		{
+			gint w_sub = GST_VIDEO_FORMAT_INFO_W_SUB(video_info.finfo, plane_idx);
+
 			if (G_LIKELY(video_meta->stride[plane_idx] > 0))
 				GST_VIDEO_INFO_PLANE_STRIDE(&video_info, plane_idx) = video_meta->stride[plane_idx];
 			if (G_LIKELY(video_meta->offset[plane_idx] > 0))
 				GST_VIDEO_INFO_PLANE_OFFSET(&video_info, plane_idx) = video_meta->offset[plane_idx];
-			video_alignment.stride_align[plane_idx] = self->stride_alignment - 1;
+
+			video_alignment.stride_align[plane_idx] = GST_VIDEO_SUB_SCALE(w_sub, stride_alignment) - 1;
+			GST_DEBUG_OBJECT(self, "plane #%u gstvideoalignment stride_align value: %u", plane_idx, video_alignment.stride_align[plane_idx]);
 		}
 
 		/* Create the video_info copy and adjust it by aligning the strides. */
@@ -494,7 +497,7 @@ static gboolean gst_imx_2d_video_overlay_handler_cache_buffers(GstImx2dVideoOver
 		memset(&surface_desc, 0, sizeof(surface_desc));
 		surface_desc.width = video_meta->width;
 		surface_desc.height = video_meta->height;
-		surface_desc.format = gst_imx_2d_convert_from_gst_video_format(video_meta->format, NULL);
+		surface_desc.format = imx2d_format;
 
 		gst_imx_2d_assign_input_buffer_to_surface(
 			uploaded_buffer,

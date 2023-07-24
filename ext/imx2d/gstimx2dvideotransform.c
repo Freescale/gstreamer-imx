@@ -1217,6 +1217,7 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	gboolean output_has_overlay_meta;
 	Imx2dSurfaceDesc output_surface_desc;
 	GstImx2dVideoTransform *self = GST_IMX_2D_VIDEO_TRANSFORM(transform);
+	GstImx2dVideoTransformClass *klass = GST_IMX_2D_VIDEO_TRANSFORM_CLASS(G_OBJECT_GET_CLASS(self));
 
 	g_assert(self->blitter != NULL);
 
@@ -1234,13 +1235,6 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	if (!gst_video_info_from_caps(&output_video_info, output_caps))
 	{
 		GST_ERROR_OBJECT(self, "cannot convert output caps to video info; output caps: %" GST_PTR_FORMAT, (gpointer)output_caps);
-		self->inout_info_set = FALSE;
-		return FALSE;
-	}
-
-	if (!gst_imx_video_uploader_set_input_video_info(self->uploader, &input_video_info))
-	{
-		GST_ERROR_OBJECT(self, "could not configure uploader with new caps / video info");
 		self->inout_info_set = FALSE;
 		return FALSE;
 	}
@@ -1295,6 +1289,24 @@ static gboolean gst_imx_2d_video_transform_set_caps(GstBaseTransform *transform,
 	self->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&input_video_info);
 	self->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&input_video_info);
 	self->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&input_video_info), &input_video_tile_layout);
+
+	/* Set the alignment _before_ the input video info,
+	 * since the latter needs to be aligned to the former. */
+	gst_imx_video_uploader_set_alignments(
+		self->uploader,
+		gst_imx_2d_get_stride_alignment_for(
+			self->input_surface_desc.format,
+			klass->hardware_capabilities
+		),
+		klass->hardware_capabilities->total_row_count_alignment
+	);
+
+	if (!gst_imx_video_uploader_set_input_video_info(self->uploader, &input_video_info))
+	{
+		GST_ERROR_OBJECT(self, "could not configure uploader with new caps / video info");
+		self->inout_info_set = FALSE;
+		return FALSE;
+	}
 
 	/* Fill the output surface description. None of its values can change
 	 * in between buffers, since we allocate the output buffers ourselves.

@@ -131,6 +131,8 @@ struct _GstImx2dCompositorPad
 
 	GstImxVideoUploader *uploader;
 
+	Imx2dHardwareCapabilities const *hardware_capabilities;
+
 	gint xpos, ypos;
 	gint width, height;
 	Imx2dBlitMargin extra_margin;
@@ -684,6 +686,17 @@ static GstPadProbeReturn gst_imx_2d_compositor_downstream_event_probe(GstPad *pa
 
 			compositor_pad->region_coords_need_update = TRUE;
 
+			/* Set the alignment _before_ the input video info,
+			 * since the latter needs to be aligned to the former. */
+			gst_imx_video_uploader_set_alignments(
+				compositor_pad->uploader,
+				gst_imx_2d_get_stride_alignment_for(
+					compositor_pad->input_surface_desc.format,
+					compositor_pad->hardware_capabilities
+				),
+				compositor_pad->hardware_capabilities->total_row_count_alignment
+			);
+
 			/* TODO: There is currently no way to report an error if this call fails. */
 			gst_imx_video_uploader_set_input_video_info(compositor_pad->uploader, &video_info);
 
@@ -1091,6 +1104,7 @@ static GstPad* gst_imx_2d_compositor_request_new_pad(GstElement *element, GstPad
 		goto error;
 	}
 	GST_IMX_2D_COMPOSITOR_PAD(new_pad)->uploader = uploader;
+	GST_IMX_2D_COMPOSITOR_PAD(new_pad)->hardware_capabilities = klass->hardware_capabilities;
 
 	GST_DEBUG_OBJECT(element, "created and added new request pad %s:%s", GST_DEBUG_PAD_NAME(new_pad));
 

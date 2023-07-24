@@ -72,6 +72,8 @@ void gst_imx_2d_assign_output_buffer_to_surface(Imx2dSurface *surface, GstBuffer
 
 void gst_imx_2d_align_output_video_info(GstVideoInfo *output_video_info, gint *num_padding_rows, Imx2dHardwareCapabilities const *hardware_capabilities);
 
+gint gst_imx_2d_get_stride_alignment_for(Imx2dPixelFormat imx2d_format, Imx2dHardwareCapabilities const *hardware_capabilities);
+
 Imx2dRotation gst_imx_2d_convert_from_video_orientation_method(GstVideoOrientationMethod method);
 
 gboolean gst_imx_2d_orientation_from_image_direction_tag(GstTagList const *taglist, GstVideoOrientationMethod *orientation);

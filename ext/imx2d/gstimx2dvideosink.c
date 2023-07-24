@@ -738,6 +738,7 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 	GstVideoInfo input_video_info;
 	GstImx2dTileLayout tile_layout;
 	GstImx2dVideoSink *self = GST_IMX_2D_VIDEO_SINK(sink);
+	GstImx2dVideoSinkClass *klass = GST_IMX_2D_VIDEO_SINK_CLASS(G_OBJECT_GET_CLASS(self));
 
 	g_assert(self->blitter != NULL);
 
@@ -751,6 +752,24 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 		goto error;
 	}
 
+	/* Fill the input surface description with values that can't change
+	 * in between buffers. (Plane stride and offset values can change.
+	 * This is unlikely to happen, but it is not impossible.) */
+	self->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&input_video_info);
+	self->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&input_video_info);
+	self->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&input_video_info), &tile_layout);
+
+	/* Set the alignment _before_ the input video info,
+	 * since the latter needs to be aligned to the former. */
+	gst_imx_video_uploader_set_alignments(
+		self->uploader,
+		gst_imx_2d_get_stride_alignment_for(
+			self->input_surface_desc.format,
+			klass->hardware_capabilities
+		),
+		klass->hardware_capabilities->total_row_count_alignment
+	);
+
 	if (!gst_imx_video_uploader_set_input_video_info(self->uploader, &input_video_info))
 	{
 		GST_ERROR_OBJECT(self, "could not configure uploader with new caps / video info");
@@ -758,13 +777,6 @@ static gboolean gst_imx_2d_video_sink_set_caps(GstBaseSink *sink, GstCaps *caps)
 	}
 
 	memcpy(&(self->input_video_info), &input_video_info, sizeof(GstVideoInfo));
-
-	/* Fill the input surface description with values that can't change
-	 * in between buffers. (Plane stride and offset values can change.
-	 * This is unlikely to happen, but it is not impossible.) */
-	self->input_surface_desc.width = GST_VIDEO_INFO_WIDTH(&input_video_info);
-	self->input_surface_desc.height = GST_VIDEO_INFO_HEIGHT(&input_video_info);
-	self->input_surface_desc.format = gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(&input_video_info), &tile_layout);
 
 	return TRUE;
 

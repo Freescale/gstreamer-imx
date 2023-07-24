@@ -708,7 +708,10 @@ void gst_imx_2d_align_output_video_info(GstVideoInfo *output_video_info, gint *n
 
 	memcpy(&original_output_video_info, output_video_info, sizeof(GstVideoInfo));
 
-	stride_alignment = hardware_capabilities->stride_alignment;
+	stride_alignment = gst_imx_2d_get_stride_alignment_for(
+		gst_imx_2d_convert_from_gst_video_format(GST_VIDEO_INFO_FORMAT(output_video_info), NULL),
+		hardware_capabilities
+	);
 	total_row_count_alignment = hardware_capabilities->total_row_count_alignment;
 
 	num_planes = GST_VIDEO_INFO_N_PLANES(output_video_info);
@@ -748,6 +751,21 @@ void gst_imx_2d_align_output_video_info(GstVideoInfo *output_video_info, gint *n
 
 	if (num_padding_rows != NULL)
 		*num_padding_rows = plane_row_remainder;
+}
+
+
+gint gst_imx_2d_get_stride_alignment_for(Imx2dPixelFormat imx2d_format, Imx2dHardwareCapabilities const *hardware_capabilities)
+{
+	int alignment_index;
+
+	for (alignment_index = 0; alignment_index < hardware_capabilities->num_special_format_stride_alignments; ++alignment_index)
+	{
+		Imx2dFormatAlignment const *alignment = &(hardware_capabilities->special_format_stride_alignments[alignment_index]);
+		if (alignment->format == imx2d_format)
+			return alignment->alignment;
+	}
+
+	return hardware_capabilities->stride_alignment;
 }
 
 
