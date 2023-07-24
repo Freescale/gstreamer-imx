@@ -592,7 +592,10 @@ static Imx2dHardwareCapabilities const capabilities = {
 	.stride_alignment = 16,
 	.total_row_count_alignment = 8,
 
-	.can_handle_multi_buffer_surfaces = 0
+	.can_handle_multi_buffer_surfaces = 0,
+
+	.special_format_stride_alignments = NULL,
+	.num_special_format_stride_alignments = 0
 };
 
 Imx2dHardwareCapabilities const * imx_2d_backend_ipu_get_hardware_capabilities(void)

@@ -815,6 +815,27 @@ error:
 }
 
 
+/* RGB formats require 16-byte alignments according to the G2D documentation,
+ * but this is covered by the default stride_alignment value further below. */
+static Imx2dFormatAlignment const special_format_alignments[] = {
+	{ .format = IMX_2D_PIXEL_FORMAT_PACKED_YUV422_UYVY, .alignment = 8 },
+	{ .format = IMX_2D_PIXEL_FORMAT_PACKED_YUV422_YUYV, .alignment = 8 },
+	{ .format = IMX_2D_PIXEL_FORMAT_PACKED_YUV422_YVYU, .alignment = 8 },
+	{ .format = IMX_2D_PIXEL_FORMAT_PACKED_YUV422_VYUY, .alignment = 8 },
+
+	{ .format = IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV12, .alignment = 8 },
+	{ .format = IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV21, .alignment = 8 },
+	{ .format = IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV16, .alignment = 8 },
+	{ .format = IMX_2D_PIXEL_FORMAT_SEMI_PLANAR_NV61, .alignment = 8 },
+
+	/* XXX: G2D does not work if I420 and YV12 frame strides aren't 32-byte
+	 * aligned, even though other YUV formats only require an 8-byte alignment.
+	 * This is not document, and it is unknown why this alignment is different. */
+	{ .format = IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_I420, .alignment = 32 },
+	{ .format = IMX_2D_PIXEL_FORMAT_FULLY_PLANAR_YV12, .alignment = 32 }
+};
+
+
 static Imx2dHardwareCapabilities const capabilities = {
 	.supported_source_pixel_formats = supported_source_pixel_formats,
 	.num_supported_source_pixel_formats = sizeof(supported_source_pixel_formats) / sizeof(Imx2dPixelFormat),
@@ -825,10 +846,13 @@ static Imx2dHardwareCapabilities const capabilities = {
 	.min_width = 4, .max_width = INT_MAX, .width_step_size = 1,
 	.min_height = 4, .max_height = INT_MAX, .height_step_size = 1,
 
-	.stride_alignment = 32,
-	.total_row_count_alignment = 8,
+	.stride_alignment = 16,
+	.total_row_count_alignment = 2,
 
-	.can_handle_multi_buffer_surfaces = 1
+	.can_handle_multi_buffer_surfaces = 1,
+
+	.special_format_stride_alignments = special_format_alignments,
+	.num_special_format_stride_alignments = sizeof(special_format_alignments) / sizeof(Imx2dFormatAlignment)
 };
 
 Imx2dHardwareCapabilities const * imx_2d_backend_g2d_get_hardware_capabilities(void)

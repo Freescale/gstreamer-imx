@@ -289,6 +289,24 @@ struct _Imx2dPixelFormatInfo
 Imx2dPixelFormatInfo const * imx_2d_get_pixel_format_info(Imx2dPixelFormat format);
 
 
+typedef struct _Imx2dFormatAlignment Imx2dFormatAlignment;
+
+
+/**
+ * Imx2dFormatAlignment:
+ * @format: Pixel format to specify an alignment for.
+ * @alignment: Format specific alignment, in bytes.
+ *
+ * Alignment for a specific format. Used when a blitter requires
+ * a different alignment for a certain format.
+ */
+struct _Imx2dFormatAlignment
+{
+	Imx2dPixelFormat format;
+	int alignment;
+};
+
+
 typedef struct _Imx2dHardwareCapabilities Imx2dHardwareCapabilities;
 
 
@@ -318,6 +336,11 @@ typedef struct _Imx2dHardwareCapabilities Imx2dHardwareCapabilities;
  *     supports blitting from/to multi-buffer surfaces. If a
  *     surface uses a different DMA buffer for at least one
  *     of its planes, it is considered a multi-buffer surface.
+ * @special_format_stride_alignments: Format specific stride
+ *     alignments, or NULL if the blitter has none.
+ * @num_special_format_stride_alignments: Number of items in
+ *     the @special_format_stride_alignments array. If this
+ *     0, then @special_format_stride_alignments is NULL.
  *
  * Describes the capabilities of the underlying 2D hardware.
  *
@@ -325,6 +348,12 @@ typedef struct _Imx2dHardwareCapabilities Imx2dHardwareCapabilities;
  * sizes (or increments) for width and height values. For
  * example, if @width_step_size is set to 4, and @min_height
  * is set to 8, then valid widths are 8, 12, 16, 20, 24 etc.
+ *
+ * A blitter may require a special stride alignment for a
+ * specific format. In such cases, this specific alignment
+ * is available through @special_format_stride_alignments.
+ * Any alignment from special_format_stride_alignments
+ * overrides the default one from @stride_alignment.
  */
 struct _Imx2dHardwareCapabilities
 {
@@ -341,6 +370,9 @@ struct _Imx2dHardwareCapabilities
 	int total_row_count_alignment;
 
 	int can_handle_multi_buffer_surfaces;
+
+	Imx2dFormatAlignment const *special_format_stride_alignments;
+	int num_special_format_stride_alignments;
 };
 
 
