@@ -3,7 +3,7 @@ dependencies = [gstimxcommon_dep, gstreamer_video_dep]
 
 # mxc_v4l2 elements, available on i.MX6 and i.MX7 SoCs
 
-v4l2_mxc_source_sink_enabled = get_option('v4l2') or get_option('v4l2-mxc-source-sink')
+v4l2_mxc_source_sink_enabled = get_option('v4l2') and get_option('v4l2-mxc-source-sink')
 if v4l2_mxc_source_sink_enabled
 	message('mxc_v4l2 Video4Linux2 source and sink elements enabled')
 
