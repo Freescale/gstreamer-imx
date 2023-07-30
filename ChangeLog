@@ -1,3 +1,123 @@
+==== version 2.2.0 (2023-07-30) ===
+
+* imx2d:
+  * Add 10-bit tiled NV12/21 formats and extend Imx2dPixelFormatInfo
+  * Fix corner case when imx2d format has no GStreamer counterpart
+    In such a case, no GStreamer format string exists, so format_str stays
+    NULL, and the format_string_gvalue is not taken into the format_list_gvalue
+    array. Unset it to prevent followup g_value_init() calls from failing.
+  * Replace num_first_plane_bpp with pixel_stride
+    pixel_stride is more useful and more intuitive in calculations,
+    and works properly with tiled 10-bit formats.
+  * Fix flickering when using DPU-emulated G2D rendering
+  * Free surface during destroy
+  * Add support for specifying colorimetry
+  * Take into account chroma subsampling in alignments
+  * Add special format specific stride alignment specifier
+  * Add overlay composition support to imx2d video sinks
+  * ipu: Add support for YUY2 (aka YUYV)
+  * ipu: Add video sink
+    Even though the IPU isn't actually flexible enough for use in a video
+    sink, it can be useful for diagnostics and debugging, so add one.
+  * g2d: Don't restrict calls to one thread if G2D is new enough
+  * g2d: Check if Amphion tile enums are present
+  * g2d: Enable YVYU and NV61 when using G2D newer than 1.x
+  * g2d: Check for colorimetry support
+
+* vpu:
+  * Raise minimum required libimxvpuapi version to 2.3.0
+    A number of API additions and critical bug fixes in libimxvpuapi
+    make it essential to raise the minimum required version.
+  * Fix case when a gap event arrives before the caps event does
+  * Fix gst_imx_vpu_dec_drain() return type
+  * Free element_name after registering
+  * encoder: Add closed-gop-interval property
+  * encoder: Handle force-keyframe-headers flag and add sync points
+  * encoder: Fix h264/h265 AUD handling and add enable-aud property
+    AUDs are not enabled by "au" caps. "au" instead means that buffers
+    contain entire access units, which is what all imx6 and imx8 VPUs produce.
+    Fix this by always setting "au" in the output caps and adding an
+    "enable-aud" GObject property.
+  * decoder: Add support for producing 4x4 tiled frames
+    The 4x4 tile format is available with Hantro VPUs. Especially when using
+    formats that are produced by the G2 VPU, using tiled formats can yield
+    significant performance improvements, because the VPU does not have to
+    perform internal detiling before handing over the decoded frame to the
+    caller. The 4x4 tile format corresponds to the GStreamer NV12_4L4 format.
+    If GStreamer is older than 1.18, this is disabled, sinceNV12_4L4 was
+    introduced in 1.18.0.
+  * decoder: When draining before setting format, don't treat EOS as error
+
+* v4l2video:
+  * Add ISI transform and Amphion decoder elements
+    These are meant for older imx-kernels (<5.15) that have broken drivers
+    for V4L2 mem2mem ISI and Amphion decoder devices. These custom elements
+    use workarounds to address the issues these drivers have. Newer kernels
+    use different drivers that aren't broken, so the custom elements are
+    not needed there.
+  * v4l2videosrc: Minor logging fixes
+  * v4l2videosrc: Support non-mxc_v4l2 devices (like USB cameras)
+    This enables support for devices that aren't based on the mxc_v4l2 driver.
+    Useful for being able to use the same imxv4l2videosrc element with both
+    MIPI/CSI and USB cameras.
+  * v4l2videosrc: Read back format with G_FMT after having set it with S_FMT
+    Usually, the driver should set any changes in the parameters right in the
+    S_FMT call, but some don't (they return defaults instead), so to
+    be safe, actually issue the G_FMT ioctl instead.
+  * v4l2videosrc: Copy bytesperline and sizeimage into videoinfo struct
+    This is important if the driver picked a different format, since then,
+    the originally chosen sizes and the new ones can differ significantly.
+  * v4l2videosrc: Unref old v4l2 object before creating new one
+    This fixes cases where a caps renegotiation happens and the old object
+    still keeps the V4L2 device open, preventing some of the new object's
+    ioctls from succeeding.
+  * Added ov5645 mipi camera
+  * v4l2videosrc: Check for V4L2_CAP_SDR_OUTPUT and V4L2_CAP_TOUCH presence
+  * v4l2videosrc: Don't exit with error if mxc_v4l2 chip ID is not available
+  * Add prelude header
+    This fixes build errors due to undeclared symbols
+  * v4l2videosrc: Don't use V4L2 sizeimage for single-planar pixel formats
+  * Explicitly calculate plane stride and offset values
+  * Remove pixel-aspect-ratio from probed device caps
+    These unfixated template caps can mislead downstream fixation logic,
+    leading to it using a PAR of 1/maxint, which in turn causes integer
+    overflow errors. Elements do not normally specify that kind of
+    pixel aspect ratio range, and just omit it from the template caps.
+  * Use sys/time.h instead of time.h
+
+* imx-gst-libs:
+  * common: Fix incorrect imx_dma_buffer_deallocate() calls
+    If the gst_imx_dmabuf_allocator_activate() call inside alloc() fails,
+    imx_dma_buffer_deallocate() would be called even though no imxdmabuffer
+    was allocated. Fix this by adding an imx_dma_buffer check.
+  * common: Add gst_imx_dmabuf_allocator_get_physical_address()
+  * common: Misc GstImxDmaBufAllocator improvements
+  * common: Fix gst_imx_dmabuf_allocator_wrap_dmabuf() call
+    This function tries to get a physical address before activating the
+    allocator. Switch this around to make this call work with allocators
+    like the ION allocator.
+  * common: Replace dup() with memory ref'ing in dmabuf uploader
+    Using dup() was causing an FD leak because the dup'ed FD was not being
+    closed correctly. But also, just using dup() risks data races because
+    producers can still write to the same dma-buf memory that consumers are
+    processing. Instead, ref the input dmabuf gstmemory to let the rest of
+    the pipeline know that the gstmemory is in use.
+  * common: Remove volatile qualifier in allocator GType
+    This addresses the warning:
+    warning: argument 2 of ‘__atomic_load’ discards ‘volatile’ qualifier
+  * common: Fix assertion in raw_buffer_upload_method_create()
+  * common: Synchronize imx gstmemory access with mutexes
+  * video: Move GstImx2dVideoBufferPool to video/
+    GstImx2dVideoBufferPool is not actually imx2d specific, and can be reused
+    in other plugins. Move it to gst-libs/gst/imx/video/ for that purpose.
+  * video: Add functions to videobufferpool for getting info
+  * video: Add GstImxVideoDmaBufferPool
+  * video: Set videometa plane stride & offset values in pool
+  * video: Take into account chroma subsampling in alignments
+  * video: Adjust video meta before doing a CPU based frame copy
+  * video: Fix video dma buffer pool info size modifications
+  * video: Add function for setting new video uploader alignments
+
 ==== version 2.1.0 (2022-05-10) ===
 
 * meson:
