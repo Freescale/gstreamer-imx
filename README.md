@@ -150,6 +150,30 @@ have an ISI mem-2-mem driver that works correctly, so this is mostly interesting
 systems. The transform element is called `imxv4l2isivideotransform`, and can be enabled and
 disabled by setting the `v4l2-isi` Meson option to `true` or `false`, respectively.
 
+NOTE: The ISI transform device is typically not available by default. To enable it, modify
+the devicetree, for example like here (on a Toradex apalis-imx8 module):
+
+```
+--- a/arch/arm64/boot/dts/freescale/imx8qm-apalis-v1.1-eval.dts
++++ b/arch/arm64/boot/dts/freescale/imx8qm-apalis-v1.1-eval.dts
+@@ -15,3 +15,15 @@
+ 		     "toradex,apalis-imx8",
+ 		     "fsl,imx8qm";
+ };
++
++&isi_0 {
++    status = "okay";
++
++    cap_device {
++        status = "okay";
++    };
++
++    m2m_device {
++        status = "okay";
++    };
++};
+```
+
 
 Other elements
 --------------
