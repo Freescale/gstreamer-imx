@@ -24,7 +24,7 @@ the i.MX variant. For example, if h.264 is supported, there will be a `imxvpudec
 The same is true of the encoder elements.
 
 For the full list of formats that could theoretically be supported, check out the [libimxvpuapi library](https://github.com/Freescale/libimxvpuapi)
-version 2.1.2 or later.
+version 2.3.0 or later.
 
 
 Elements for hardware accelerated 2D processing

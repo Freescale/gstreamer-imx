@@ -3,7 +3,7 @@ if not gstreamer_video_dep.found()
 	subdir_done()
 endif
 
-libimxvpuapi2_dep = dependency('libimxvpuapi2', version : '>=2.2.2', required : get_option('vpu'))
+libimxvpuapi2_dep = dependency('libimxvpuapi2', version : '>=2.3.0', required : get_option('vpu'))
 
 if libimxvpuapi2_dep.found()
 	message('Found installed imxvpuapi library - VPU elements will be built')
