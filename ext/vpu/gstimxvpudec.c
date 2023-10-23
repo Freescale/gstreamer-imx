@@ -206,6 +206,11 @@ static void gst_imx_vpu_dec_init(GstImxVpuDec *imx_vpu_dec)
 	imx_vpu_dec->output_is_tiled = FALSE;
 
 	imx_vpu_dec->fatal_error_cannot_decode = FALSE;
+
+	GST_PAD_SET_ACCEPT_TEMPLATE(GST_VIDEO_DECODER_SINK_PAD(imx_vpu_dec));
+	gst_video_decoder_set_use_default_pad_acceptcaps(GST_VIDEO_DECODER_CAST(imx_vpu_dec), TRUE);
+
+	gst_video_decoder_set_needs_format(GST_VIDEO_DECODER_CAST(imx_vpu_dec), TRUE);
 }
 
 
