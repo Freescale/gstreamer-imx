@@ -39,7 +39,7 @@ if mp3encoder_dep.found()
 endif
 
 if source != []
-	library(
+	gstimxaudio = library(
 		'gstimxaudio',
 		source,
 		install : true,
@@ -48,5 +48,6 @@ if source != []
 		dependencies : [gstreamer_dep, gstreamer_base_dep, gstreamer_audio_dep, libdl_dep, libfslaudiocodec_dep, mp3encoder_dep],
 		link_with : [gstimxcommon]
 	)
+	plugins += [gstimxaudio]
 endif
 

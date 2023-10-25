@@ -27,7 +27,7 @@ source = [
 ]
 
 
-library(
+gstimxvpu = library(
 	'gstimxvpu',
 	source,
 	install : true,
@@ -36,3 +36,4 @@ library(
 	dependencies : [gstimxcommon_dep, gstreamer_video_dep, libimxvpuapi2_dep],
 	link_with : [gstimxcommon]
 )
+plugins += [gstimxvpu]

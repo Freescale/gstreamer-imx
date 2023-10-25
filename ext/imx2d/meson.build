@@ -83,7 +83,7 @@ if imx2d_backend_pxp_dep.found()
 endif
 
 if backend_source.length() > 0
-	library(
+	gstimx2d = library(
 		'gstimx2d',
 		source + backend_source,
 		install : true,
@@ -91,4 +91,5 @@ if backend_source.length() > 0
 		include_directories: [configinc, libsinc],
 		dependencies : [gstimxcommon_dep, gstimxvideo_dep, gstreamer_video_dep, imx2d_dep] + backend_deps
 	)
+	plugins += [gstimx2d]
 endif

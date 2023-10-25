@@ -89,7 +89,7 @@ if v4l2_mxc_source_sink_enabled or v4l2_isi_enabled or v4l2_amphion_enabled
 endif
 
 if source != []
-	library(
+	gstimxv4l2video = library(
 		'gstimxv4l2video',
 		source,
 		install : true,
@@ -97,4 +97,5 @@ if source != []
 		include_directories: [configinc, libsinc],
 		dependencies: dependencies
 	)
+	plugins += [gstimxv4l2video]
 endif

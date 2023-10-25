@@ -5,6 +5,7 @@ message('Setting up build configuration for gstreamer-imx version ' + meson.proj
 
 cc = meson.get_compiler('c')
 pkg = import('pkgconfig')
+plugins = []
 
 
 # test for miscellaneous system libraries
@@ -95,9 +96,18 @@ endif
 configinc = include_directories('.')
 libsinc = include_directories('gst-libs')
 
+gst_package_name = get_option('package-name')
+if gst_package_name == ''
+  fs = import('fs')
+  if fs.is_dir('.git')
+    gst_package_name = 'GStreamer i.MX Plug-ins git'
+  else
+    gst_package_name = 'GStreamer i.MX Plug-ins source release'
+  endif
+endif
 
 conf_data = configuration_data()
-conf_data.set_quoted('GST_PACKAGE_NAME', get_option('package-name'))
+conf_data.set_quoted('GST_PACKAGE_NAME', gst_package_name)
 conf_data.set_quoted('GST_PACKAGE_ORIGIN', get_option('package-origin'))
 conf_data.set_quoted('PACKAGE', 'gstreamer-imx')
 conf_data.set_quoted('PACKAGE_BUGREPORT', 'https://github.com/Freescale/gstreamer-imx')
@@ -123,3 +133,12 @@ subdir('sys/v4l2video')
 
 
 configure_file(output : 'config.h', configuration : conf_data)
+
+if meson.version().version_compare('>=0.54')
+  gst_plugins = []
+  foreach plugin: plugins
+    dep = declare_dependency(link_with: plugin, variables: {'full_path': plugin.full_path()})
+    meson.override_dependency(plugin.name(), dep)
+    gst_plugins += [dep]
+  endforeach
+endif
