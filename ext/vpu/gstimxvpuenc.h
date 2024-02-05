@@ -110,6 +110,8 @@ struct _GstImxVpuEnc
 	guint bitrate;
 	guint quantization;
 	guint intra_refresh;
+	guint fixed_intra_quantization;
+	gboolean allow_frameskipping;
 };
 
 

@@ -60,14 +60,16 @@ enum
 	PROP_CLOSED_GOP_INTERVAL,
 	PROP_BITRATE,
 	PROP_QUANTIZATION,
-	PROP_INTRA_REFRESH
+	PROP_INTRA_REFRESH,
+	PROP_ALLOW_FRAMESKIPPING
 };
 
 
-#define DEFAULT_GOP_SIZE            16
-#define DEFAULT_CLOSED_GOP_INTERVAL 0
-#define DEFAULT_BITRATE             0
-#define DEFAULT_INTRA_REFRESH       0
+#define DEFAULT_GOP_SIZE                 16
+#define DEFAULT_CLOSED_GOP_INTERVAL      0
+#define DEFAULT_BITRATE                  0
+#define DEFAULT_INTRA_REFRESH            0
+#define DEFAULT_ALLOW_FRAMESKIPPING      FALSE
 
 
 
@@ -123,6 +125,7 @@ static void gst_imx_vpu_enc_init(GstImxVpuEnc *imx_vpu_enc)
 	imx_vpu_enc->closed_gop_interval = DEFAULT_CLOSED_GOP_INTERVAL;
 	imx_vpu_enc->bitrate = DEFAULT_BITRATE;
 	imx_vpu_enc->intra_refresh = DEFAULT_INTRA_REFRESH;
+	imx_vpu_enc->allow_frameskipping = DEFAULT_ALLOW_FRAMESKIPPING;
 
 	imx_vpu_enc->stream_buffer = NULL;
 	imx_vpu_enc->encoder = NULL;
@@ -193,6 +196,12 @@ static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue 
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
+		case PROP_ALLOW_FRAMESKIPPING:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			imx_vpu_enc->allow_frameskipping = g_value_get_boolean(value);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
 		default:
 			if (klass->set_encoder_property != NULL)
 				klass->set_encoder_property(object, prop_id, value, pspec);
@@ -237,6 +246,12 @@ static void gst_imx_vpu_enc_get_property(GObject *object, guint prop_id, GValue 
 		case PROP_INTRA_REFRESH:
 			GST_OBJECT_LOCK(imx_vpu_enc);
 			g_value_set_uint(value, imx_vpu_enc->intra_refresh);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
+		case PROP_ALLOW_FRAMESKIPPING:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			g_value_set_boolean(value, imx_vpu_enc->allow_frameskipping);
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
@@ -422,6 +437,7 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 	open_params->closed_gop_interval = imx_vpu_enc->closed_gop_interval;
 	open_params->quantization = imx_vpu_enc->quantization;
 	open_params->min_intra_refresh_mb_count = imx_vpu_enc->intra_refresh;
+	open_params->flags = (imx_vpu_enc->allow_frameskipping ? IMX_VPU_API_ENC_OPEN_PARAMS_FLAG_ALLOW_FRAMESKIPPING : 0);
 	GST_OBJECT_UNLOCK(imx_vpu_enc);
 
 	GST_DEBUG_OBJECT(encoder, "setting bitrate to %u kbps and GOP size to %u", open_params->bitrate, open_params->gop_size);
@@ -854,6 +870,37 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 				break;
 			}
 
+			case IMX_VPU_API_ENC_OUTPUT_CODE_FRAME_SKIPPED:
+			{
+				guint32 system_frame_number;
+				void *skipped_frame_context;
+				uint64_t skipped_frame_pts, skipped_frame_dts;
+				GstVideoCodecFrame *out_frame;
+
+				enc_ret = imx_vpu_api_enc_get_skipped_frame_info(imx_vpu_enc->encoder, &skipped_frame_context, &skipped_frame_pts, &skipped_frame_dts);
+				g_assert(enc_ret == IMX_VPU_API_ENC_RETURN_CODE_OK);
+
+				system_frame_number = (guint32)((guintptr)skipped_frame_context);
+				out_frame = gst_video_encoder_get_frame(encoder, system_frame_number);
+				if (G_UNLIKELY(out_frame == NULL))
+				{
+					GST_WARNING_OBJECT(imx_vpu_enc, "no gstframe exists with number #%" G_GUINT32_FORMAT " - ignoring skipped frame", system_frame_number);
+					goto finish;
+				}
+
+				GST_DEBUG_OBJECT(imx_vpu_enc, "encoder skipped gstframe with number #%" G_GUINT32_FORMAT, system_frame_number);
+
+				/* Let gst_video_encoder_finish_frame() know that this frame was skipped/dropped
+				 * by ensuring that the out_frame->output_buffer field is set to NULL. */
+				out_frame->output_buffer = NULL;
+
+				flow_ret = gst_video_encoder_finish_frame(encoder, out_frame);
+
+				g_hash_table_remove(imx_vpu_enc->uploaded_buffers_table, (gpointer)(gintptr)system_frame_number);
+
+				break;
+			}
+
 			case IMX_VPU_API_ENC_OUTPUT_CODE_MORE_INPUT_DATA_NEEDED:
 				GST_LOG_OBJECT(imx_vpu_enc, "VPU has no more data to encode");
 				do_loop = FALSE;
@@ -992,6 +1039,18 @@ void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompre
 			)
 		);
 	}
+
+	g_object_class_install_property(
+		object_class,
+		PROP_ALLOW_FRAMESKIPPING,
+		g_param_spec_boolean(
+			"allow-frameskipping",
+			"Allow frameskipping",
+			"Allow rate control to skip frames if necessary to maintain bitrate; not used if bitrate is set to 0",
+			DEFAULT_ALLOW_FRAMESKIPPING,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 
 	longname = g_strdup_printf("i.MX VPU %s video encoder", codec_details->desc_name);
 	classification = g_strdup("Codec/Encoder/Video/Hardware");
