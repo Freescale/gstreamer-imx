@@ -141,6 +141,7 @@ gboolean gst_imx_vpu_enc_h264_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuA
 	GstStructure *s;
 	gchar const *str;
 	GstCaps *allowed_srccaps;
+	gboolean full_video_range;
 	ImxVpuApiEncH264OpenParams *h264_params = &(open_params->format_specific_open_params.h264_open_params);
 
 	allowed_srccaps = gst_pad_get_allowed_caps(GST_VIDEO_DECODER_SRC_PAD(imx_vpu_enc));
@@ -214,6 +215,9 @@ gboolean gst_imx_vpu_enc_h264_set_open_params(GstImxVpuEnc *imx_vpu_enc, ImxVpuA
 	GST_OBJECT_UNLOCK(imx_vpu_enc);
 
 	GST_INFO_OBJECT(imx_vpu_enc, "access unit delimiters enabled: %d", h264_params->enable_access_unit_delimiters);
+
+	full_video_range = (GST_VIDEO_INFO_COLORIMETRY(&(imx_vpu_enc->in_video_info)).range == GST_VIDEO_COLOR_RANGE_0_255);
+	open_params->flags |= (full_video_range ? IMX_VPU_API_ENC_H264_OPEN_PARAMS_FLAG_FULL_VIDEO_RANGE : 0);
 
 
 finish:
