@@ -61,6 +61,7 @@ enum
 	PROP_BITRATE,
 	PROP_QUANTIZATION,
 	PROP_INTRA_REFRESH,
+	PROP_FIXED_INTRA_QUANTIZATION,
 	PROP_ALLOW_FRAMESKIPPING
 };
 
@@ -69,6 +70,7 @@ enum
 #define DEFAULT_CLOSED_GOP_INTERVAL      0
 #define DEFAULT_BITRATE                  0
 #define DEFAULT_INTRA_REFRESH            0
+#define DEFAULT_FIXED_INTRA_QUANTIZATION 0
 #define DEFAULT_ALLOW_FRAMESKIPPING      FALSE
 
 
@@ -125,6 +127,7 @@ static void gst_imx_vpu_enc_init(GstImxVpuEnc *imx_vpu_enc)
 	imx_vpu_enc->closed_gop_interval = DEFAULT_CLOSED_GOP_INTERVAL;
 	imx_vpu_enc->bitrate = DEFAULT_BITRATE;
 	imx_vpu_enc->intra_refresh = DEFAULT_INTRA_REFRESH;
+	imx_vpu_enc->fixed_intra_quantization = DEFAULT_FIXED_INTRA_QUANTIZATION;
 	imx_vpu_enc->allow_frameskipping = DEFAULT_ALLOW_FRAMESKIPPING;
 
 	imx_vpu_enc->stream_buffer = NULL;
@@ -196,6 +199,12 @@ static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue 
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
+		case PROP_FIXED_INTRA_QUANTIZATION:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			imx_vpu_enc->fixed_intra_quantization = g_value_get_uint(value);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
 		case PROP_ALLOW_FRAMESKIPPING:
 			GST_OBJECT_LOCK(imx_vpu_enc);
 			imx_vpu_enc->allow_frameskipping = g_value_get_boolean(value);
@@ -246,6 +255,12 @@ static void gst_imx_vpu_enc_get_property(GObject *object, guint prop_id, GValue 
 		case PROP_INTRA_REFRESH:
 			GST_OBJECT_LOCK(imx_vpu_enc);
 			g_value_set_uint(value, imx_vpu_enc->intra_refresh);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
+		case PROP_FIXED_INTRA_QUANTIZATION:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			g_value_set_uint(value, imx_vpu_enc->fixed_intra_quantization);
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
@@ -437,6 +452,7 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 	open_params->closed_gop_interval = imx_vpu_enc->closed_gop_interval;
 	open_params->quantization = imx_vpu_enc->quantization;
 	open_params->min_intra_refresh_mb_count = imx_vpu_enc->intra_refresh;
+	open_params->fixed_intra_quantization = imx_vpu_enc->fixed_intra_quantization;
 	open_params->flags = (imx_vpu_enc->allow_frameskipping ? IMX_VPU_API_ENC_OPEN_PARAMS_FLAG_ALLOW_FRAMESKIPPING : 0);
 	GST_OBJECT_UNLOCK(imx_vpu_enc);
 
@@ -1040,6 +1056,17 @@ void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompre
 		);
 	}
 
+	g_object_class_install_property(
+		object_class,
+		PROP_FIXED_INTRA_QUANTIZATION,
+		g_param_spec_uint(
+			"fixed-intra-quantization",
+			"Fixed intra quantization",
+			"Fixed quantization factor to use for intra frames; 0 = let rate control calculate quantization factors of intra frames instead; not used if bitrate is set to 0",
+			0, format_support_details->max_quantization, DEFAULT_FIXED_INTRA_QUANTIZATION,
+			G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+		)
+	);
 	g_object_class_install_property(
 		object_class,
 		PROP_ALLOW_FRAMESKIPPING,
