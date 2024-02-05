@@ -98,6 +98,12 @@ struct _GstImxVpuEnc
 	/* Copy of the GstVideoInfo that describes the raw input frames. */
 	GstVideoInfo in_video_info;
 
+	/* The frame type that identifies a keyframe. If the codec supports
+	 * IDR frames, then this is set to IMX_VPU_API_FRAME_TYPE_IDR,
+	 * otherwise it is set to IMX_VPU_API_FRAME_TYPE_I. This field is
+	 * used for checking if a GstVideoFrame sync point needs to be set. */
+	ImxVpuApiFrameType keyframe_type;
+
 	/* GObject property values. */
 	guint gop_size;
 	guint closed_gop_interval;

@@ -254,12 +254,15 @@ static gboolean gst_imx_vpu_enc_start(GstVideoEncoder *encoder)
 {
 	gboolean ret = TRUE;
 	GstImxVpuEnc *imx_vpu_enc = GST_IMX_VPU_ENC(encoder);
+	GstImxVpuEncClass *klass = GST_IMX_VPU_ENC_CLASS(G_OBJECT_GET_CLASS(encoder));
 	size_t stream_buffer_size, stream_buffer_alignment;
 	GstAllocationParams alloc_params;
 	ImxVpuApiCompressionFormat compression_format = GST_IMX_VPU_GET_ELEMENT_COMPRESSION_FORMAT(encoder);
 	GstImxVpuCodecDetails const * codec_details = gst_imx_vpu_get_codec_details(compression_format);
 
 	imx_vpu_enc->fatal_error_cannot_encode = FALSE;
+
+	imx_vpu_enc->keyframe_type = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
 
 	stream_buffer_size = imx_vpu_enc->enc_global_info->min_required_stream_buffer_size;
 	stream_buffer_alignment = imx_vpu_enc->enc_global_info->required_stream_buffer_physaddr_alignment;
@@ -598,10 +601,7 @@ static GstFlowReturn gst_imx_vpu_enc_handle_frame(GstVideoEncoder *encoder, GstV
 			force_keyframe = FALSE;
 
 		if (force_keyframe)
-		{
 			raw_frame.frame_types[0] = klass->use_idr_frame_type_for_keyframes ? IMX_VPU_API_FRAME_TYPE_IDR : IMX_VPU_API_FRAME_TYPE_I;
-			GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(cur_frame);
-		}
 
 		/* The actual encoding */
 		if ((enc_ret = imx_vpu_api_enc_push_raw_frame(imx_vpu_enc->encoder, &raw_frame)) != IMX_VPU_API_ENC_RETURN_CODE_OK)
@@ -843,6 +843,9 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 					goto finish;
 				}
 				out_frame->output_buffer = output_buffer;
+
+				if (encoded_frame.frame_type == imx_vpu_enc->keyframe_type)
+					GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(out_frame);
 
 				flow_ret = gst_video_encoder_finish_frame(encoder, out_frame);
 
