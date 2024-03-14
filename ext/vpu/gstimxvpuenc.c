@@ -62,7 +62,8 @@ enum
 	PROP_QUANTIZATION,
 	PROP_INTRA_REFRESH,
 	PROP_FIXED_INTRA_QUANTIZATION,
-	PROP_ALLOW_FRAMESKIPPING
+	PROP_ALLOW_FRAMESKIPPING,
+	PROP_USE_INTRA_REFRESH
 };
 
 
@@ -72,6 +73,7 @@ enum
 #define DEFAULT_INTRA_REFRESH            0
 #define DEFAULT_FIXED_INTRA_QUANTIZATION 0
 #define DEFAULT_ALLOW_FRAMESKIPPING      FALSE
+#define DEFAULT_USE_INTRA_REFRESH        FALSE
 
 
 
@@ -129,6 +131,7 @@ static void gst_imx_vpu_enc_init(GstImxVpuEnc *imx_vpu_enc)
 	imx_vpu_enc->intra_refresh = DEFAULT_INTRA_REFRESH;
 	imx_vpu_enc->fixed_intra_quantization = DEFAULT_FIXED_INTRA_QUANTIZATION;
 	imx_vpu_enc->allow_frameskipping = DEFAULT_ALLOW_FRAMESKIPPING;
+	imx_vpu_enc->use_intra_refresh = DEFAULT_USE_INTRA_REFRESH;
 
 	imx_vpu_enc->stream_buffer = NULL;
 	imx_vpu_enc->encoder = NULL;
@@ -211,6 +214,12 @@ static void gst_imx_vpu_enc_set_property(GObject *object, guint prop_id, GValue 
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
+		case PROP_USE_INTRA_REFRESH:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			imx_vpu_enc->use_intra_refresh = g_value_get_boolean(value);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
 		default:
 			if (klass->set_encoder_property != NULL)
 				klass->set_encoder_property(object, prop_id, value, pspec);
@@ -267,6 +276,12 @@ static void gst_imx_vpu_enc_get_property(GObject *object, guint prop_id, GValue 
 		case PROP_ALLOW_FRAMESKIPPING:
 			GST_OBJECT_LOCK(imx_vpu_enc);
 			g_value_set_boolean(value, imx_vpu_enc->allow_frameskipping);
+			GST_OBJECT_UNLOCK(imx_vpu_enc);
+			break;
+
+		case PROP_USE_INTRA_REFRESH:
+			GST_OBJECT_LOCK(imx_vpu_enc);
+			g_value_set_boolean(value, imx_vpu_enc->use_intra_refresh);
 			GST_OBJECT_UNLOCK(imx_vpu_enc);
 			break;
 
@@ -453,7 +468,8 @@ static gboolean gst_imx_vpu_enc_set_format(GstVideoEncoder *encoder, GstVideoCod
 	open_params->quantization = imx_vpu_enc->quantization;
 	open_params->min_intra_refresh_mb_count = imx_vpu_enc->intra_refresh;
 	open_params->fixed_intra_quantization = imx_vpu_enc->fixed_intra_quantization;
-	open_params->flags = (imx_vpu_enc->allow_frameskipping ? IMX_VPU_API_ENC_OPEN_PARAMS_FLAG_ALLOW_FRAMESKIPPING : 0);
+	open_params->flags = (imx_vpu_enc->allow_frameskipping ? IMX_VPU_API_ENC_OPEN_PARAMS_FLAG_ALLOW_FRAMESKIPPING : 0)
+	                   | (imx_vpu_enc->use_intra_refresh ? IMX_VPU_API_ENC_OPEN_PARAMS_FLAG_USE_INTRA_REFRESH : 0);
 	GST_OBJECT_UNLOCK(imx_vpu_enc);
 
 	GST_DEBUG_OBJECT(encoder, "setting bitrate to %u kbps and GOP size to %u", open_params->bitrate, open_params->gop_size);
@@ -1049,8 +1065,19 @@ void gst_imx_vpu_enc_common_class_init(GstImxVpuEncClass *klass, ImxVpuApiCompre
 			g_param_spec_uint(
 				"intra-refresh",
 				"Intra Refresh",
-				"Minimum number of MBs to encode as intra MB",
+				"Minimum number of MBs to encode as intra MB (DEPRECATED: use use-intra-refresh instead)",
 				0, G_MAXUINT, DEFAULT_INTRA_REFRESH,
+				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
+			)
+		);
+		g_object_class_install_property(
+			object_class,
+			PROP_USE_INTRA_REFRESH,
+			g_param_spec_boolean(
+				"use-intra-refresh",
+				"Use intra refresh",
+				"Use intra refresh instead of I/IDR frames and group-of-picture (GOP)",
+				DEFAULT_USE_INTRA_REFRESH,
 				G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS
 			)
 		);

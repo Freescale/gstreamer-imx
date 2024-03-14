@@ -112,6 +112,7 @@ struct _GstImxVpuEnc
 	guint intra_refresh;
 	guint fixed_intra_quantization;
 	gboolean allow_frameskipping;
+	gboolean use_intra_refresh;
 };
 
 
