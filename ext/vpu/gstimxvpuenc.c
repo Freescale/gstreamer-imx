@@ -21,6 +21,9 @@
 #include <gst/video/gstvideometa.h>
 #include <imxdmabuffer/imxdmabuffer.h>
 #include <imxdmabuffer/imxdmabuffer_config.h>
+
+#include <config.h>
+
 #include "gst/imx/common/gstimxdmabufferallocator.h"
 #include "gstimxvpucommon.h"
 #include "gstimxvpuenc.h"
@@ -856,6 +859,7 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 				GstBuffer *output_buffer;
 				ImxVpuApiEncodedFrame encoded_frame;
 				GstVideoCodecFrame *out_frame;
+				int is_sync_point;
 
 				if ((output_buffer = gst_video_encoder_allocate_output_buffer(encoder, encoded_frame_size)) == NULL)
 				{
@@ -871,7 +875,7 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 				encoded_frame.data = map_info.data;
 				encoded_frame.data_size = encoded_frame_size;
 
-				enc_ret = imx_vpu_api_enc_get_encoded_frame(imx_vpu_enc->encoder, &encoded_frame);
+				enc_ret = imx_vpu_api_enc_get_encoded_frame_ext(imx_vpu_enc->encoder, &encoded_frame, &is_sync_point);
 
 				gst_buffer_unmap(output_buffer, &map_info);
 
@@ -892,7 +896,7 @@ static GstFlowReturn gst_imx_vpu_enc_encode_queued_frames(GstImxVpuEnc *imx_vpu_
 				}
 				out_frame->output_buffer = output_buffer;
 
-				if (encoded_frame.frame_type == imx_vpu_enc->keyframe_type)
+				if (is_sync_point)
 					GST_VIDEO_CODEC_FRAME_SET_SYNC_POINT(out_frame);
 
 				flow_ret = gst_video_encoder_finish_frame(encoder, out_frame);
