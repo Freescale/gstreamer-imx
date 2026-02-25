@@ -204,7 +204,11 @@ static gboolean gst_imx_vpu_dec_buffer_pool_set_config(GstBufferPool *pool, GstS
 	imx_vpu_dec_buffer_pool->video_info.offset[0] = 0;
 	imx_vpu_dec_buffer_pool->video_info.offset[1] = fb_metrics->y_size;
 	imx_vpu_dec_buffer_pool->video_info.offset[2] = fb_metrics->y_size + fb_metrics->uv_size;
-	imx_vpu_dec_buffer_pool->video_info.size = MAX(stream_info->min_output_framebuffer_size, size);
+	/* Advertise the minimum required size of DMA buffer memory for the
+	 * frame size. The buffer pool size can be larger to include reserved
+	 * space on some SoCs, but advertising it will confuse downstream
+	 * interpretation of the buffer contents. */
+	imx_vpu_dec_buffer_pool->video_info.size = stream_info->min_output_framebuffer_size;
 
 	imx_vpu_dec_buffer_pool->add_videometa = gst_buffer_pool_config_has_option(config, GST_BUFFER_POOL_OPTION_VIDEO_META);
 
