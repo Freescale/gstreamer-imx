@@ -30,7 +30,7 @@ else
 endif
 
 
-source = ['plugin.c']
+source = []
 if libfslaudiocodec_dep.found()
 	source += ['gstimxuniaudiocodec.c', 'gstimxuniaudiodecoder.c']
 endif
@@ -39,6 +39,8 @@ if mp3encoder_dep.found()
 endif
 
 if source != []
+	source += ['plugin.c']
+
 	gstimxaudio = library(
 		'gstimxaudio',
 		source,
